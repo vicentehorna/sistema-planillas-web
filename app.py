@@ -209,7 +209,7 @@ def _telecredito_params_from_json(body):
 
 def _pago_haberes_cargar_personas_temp(cursor, persons, temp_table):
     """Carga tabla temporal #TelecreditoPersonas o #InterbankPersonas en lotes."""
-    allowed = {'TelecreditoPersonas', 'InterbankPersonas'}
+    allowed = {'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas'}
     if temp_table not in allowed:
         raise ValueError('Tabla temporal no permitida.')
     cursor.execute(
@@ -322,6 +322,12 @@ def _interbank_filename(period):
     periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
     stamp = datetime.now().strftime('%Y%m%d%H%M')
     return f'Interbank_{periodo}_{stamp}.txt'
+
+
+def _continental_filename(period):
+    periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
+    stamp = datetime.now().strftime('%Y%m%d%H%M')
+    return f'Continental_{periodo}_{stamp}.txt'
 
 
 def _report_params_from_json(req):
@@ -1292,6 +1298,173 @@ def pago_haberes_interbank_page():
 @login_required
 def pago_haberes_bbva_page():
     return render_template('pago_haberes_bbva.html')
+
+
+@app.route('/api/pago-haberes/continental/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_continental_listado():
+    """sp_pr_listacontinental_web: trabajadores con abono Continental/BBVA."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    log_sp = (
+        '[continental listado] EXEC sp_pr_listacontinental_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@cesados={cesados!r}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listacontinental_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], cesados,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        filas_detalle = []
+        for r in rows:
+            person = str(r.get('person') or '').strip()
+            dni = str(r.get('dni') or '').strip()
+            nombre = str(r.get('nombre') or '').strip()
+            tipodoc = str(r.get('tipodoc') or '').strip()
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            filas_detalle.append({
+                "person": person,
+                "dni": dni,
+                "tipodoc": tipodoc,
+                "nombre": nombre,
+                "importe": importe_num,
+            })
+        log_result = f'[continental listado] registros devueltos={len(filas_detalle)}'
+        logging.info(log_result)
+        print(log_result, flush=True)
+        return jsonify({
+            "headers": ['DNI', 'Tipo doc.', 'Nombre'],
+            "data": [[r['dni'], r['tipodoc'], r['nombre']] for r in filas_detalle],
+            "rows": filas_detalle,
+            "meta": {
+                "total": len(filas_detalle),
+                "paydate": p['paydate'].strftime('%d/%m/%Y'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_continental_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/continental/generar-txt', methods=['POST'])
+@login_required
+def api_pago_haberes_continental_generar_txt():
+    """sp_pr_generar_continental_web → archivo TXT Continental/BBVA."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    log_sp = (
+        '[continental generar] EXEC sp_pr_generar_continental_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'trabajadores_seleccionados={len(persons)}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    t0 = time.perf_counter()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        t_conn = time.perf_counter()
+        _pago_haberes_cargar_personas_temp(cursor, persons, 'ContinentalPersonas')
+        t_temp = time.perf_counter()
+        cursor.execute(
+            "EXEC sp_pr_generar_continental_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'],
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        t_sp = time.perf_counter()
+        lineas = []
+        for r in rows:
+            txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+            if txt:
+                lineas.append(txt)
+
+        detalle_count = max(len(lineas) - 1, 0)
+        t_done = time.perf_counter()
+        log_result = (
+            f'[continental generar] seleccionados={len(persons)} '
+            f'detalle_txt={detalle_count} '
+            f'ms_conexion={int((t_conn - t0) * 1000)} '
+            f'ms_temp={int((t_temp - t_conn) * 1000)} '
+            f'ms_sp={int((t_sp - t_temp) * 1000)} '
+            f'ms_total={int((t_done - t0) * 1000)}'
+        )
+        logging.info(log_result)
+        print(log_result, flush=True)
+
+        if len(lineas) < 2:
+            return jsonify({
+                "error": (
+                    f"No se pudo generar el archivo (sin líneas de detalle). "
+                    f"Seleccionados: {len(persons)}."
+                ),
+            }), 400
+
+        contenido = '\r\n'.join(lineas) + '\r\n'
+        filename = _continental_filename(p['period'])
+
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_continental_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/generar_boletas')

@@ -166,7 +166,7 @@
                     </a>
                 </li>
 
-                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page') %}
+                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"
                        class="sidebar-parent-link"
@@ -185,6 +185,11 @@
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_interbank_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_interbank_page') }}">
                                 <i class="bi bi-bank"></i> Archivo Interbank
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_bbva_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_bbva_page') }}">
+                                <i class="bi bi-bank"></i> Archivo Continental
                             </a>
                         </li>
                     </ul>

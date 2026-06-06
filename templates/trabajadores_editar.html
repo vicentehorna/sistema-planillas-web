@@ -1,0 +1,261 @@
+{% extends "layout.html" %}
+
+{% block title %}Editar trabajador{% endblock %}
+
+{% block extra_css %}
+<style>
+    .edit-tabs .nav-link {
+        text-align: left;
+        border-radius: 0.375rem;
+        color: #495057;
+        padding: 0.75rem 1rem;
+    }
+
+    .edit-tabs .nav-link.active {
+        background-color: #3498db;
+        color: #fff;
+    }
+
+    .edit-tabs .nav-link.disabled {
+        color: #adb5bd;
+        background-color: #f8f9fa;
+        opacity: 1;
+    }
+
+    .section-card {
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+        background: #fff;
+    }
+
+    .section-card .section-title {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.75rem 1rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+    }
+
+    .section-card .section-body {
+        padding: 1.25rem;
+    }
+
+    .worker-summary {
+        background: linear-gradient(135deg, #f8f9fa 0%, #eef2f7 100%);
+        border: 1px solid #dee2e6;
+        border-radius: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <div>
+        <h4 class="mb-1 fw-bold">Edición de trabajador</h4>
+        <p class="text-muted small mb-0">Información bancaria y depósito de CTS</p>
+    </div>
+    <a href="{{ url_for('trabajadores_page') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Volver al listado
+    </a>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div class="alert alert-{{ 'danger' if category == 'error' else category }} alert-dismissible fade show py-2" role="alert">
+                {{ message }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Cerrar"></button>
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<div class="worker-summary p-3 mb-4">
+    <div class="row g-2 small">
+        <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
+        <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.employeecode or '—' }}</strong></div>
+        <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-3">
+        <div class="nav flex-column nav-pills edit-tabs" role="tablist" aria-orientation="vertical">
+            <button class="nav-link disabled" type="button" disabled>Datos Generales</button>
+            <button class="nav-link disabled" type="button" disabled>Datos Laborales</button>
+            <button class="nav-link disabled" type="button" disabled>Pensiones</button>
+            <button class="nav-link active" type="button" aria-selected="true">Información Bancaria y CTS</button>
+        </div>
+    </div>
+
+    <div class="col-lg-9">
+        <form id="frmBancario" method="POST" action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}" novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+
+            <div class="section-card mb-4">
+                <div class="section-title">Cuenta de Haberes</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cboFormaPago" class="form-label small fw-bold text-muted">Forma de pago</label>
+                            <select id="cboFormaPago" name="collectionform" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in formas_pago %}
+                                <option value="{{ opt.id }}" data-text="{{ opt.text }}" {% if empleado.collectionform == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboBancoHaberes" class="form-label small fw-bold text-muted">Banco</label>
+                            <select id="cboBancoHaberes" name="salarybank" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in bancos %}
+                                <option value="{{ opt.id }}" {% if empleado.salarybank == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboTipoCuenta" class="form-label small fw-bold text-muted">Tipo cuenta</label>
+                            <select id="cboTipoCuenta" name="salaryaccounttype" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in tipos_cuenta %}
+                                <option value="{{ opt.id }}" {% if empleado.salaryaccounttype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtNumeroCuenta" class="form-label small fw-bold text-muted">Número cuenta</label>
+                            <input type="text" id="txtNumeroCuenta" name="salaryaccount" class="form-control form-control-sm"
+                                   maxlength="20" value="{{ empleado.salaryaccount or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtCci" class="form-label small fw-bold text-muted">CCI</label>
+                            <input type="text" id="txtCci" name="cci" class="form-control form-control-sm font-monospace"
+                                   maxlength="20" inputmode="numeric" pattern="[0-9]{20}"
+                                   value="{{ empleado.cci or '' }}" autocomplete="off"
+                                   placeholder="20 dígitos (obligatorio si es depósito)">
+                            <div class="invalid-feedback">El CCI debe tener exactamente 20 dígitos numéricos.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card mb-4">
+                <div class="section-title">Depósito de CTS</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="cboBancoCts" class="form-label small fw-bold text-muted">Banco CTS</label>
+                            <select id="cboBancoCts" name="ctsbank" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in bancos %}
+                                <option value="{{ opt.id }}" {% if empleado.ctsbank == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtCuentaCts" class="form-label small fw-bold text-muted">Número cuenta CTS</label>
+                            <input type="text" id="txtCuentaCts" name="ctsaccount" class="form-control form-control-sm"
+                                   maxlength="20" value="{{ empleado.ctsaccount or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cboMonedaCts" class="form-label small fw-bold text-muted">Moneda</label>
+                            <select id="cboMonedaCts" name="ctscurrency" class="form-select form-select-sm">
+                                <option value="LO" {% if (empleado.ctscurrency or 'LO') == 'LO' %}selected{% endif %}>Local (LO)</option>
+                                <option value="EX" {% if empleado.ctscurrency == 'EX' %}selected{% endif %}>Extranjera (EX)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('trabajadores_page') }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const frm = document.getElementById('frmBancario');
+    const cboFormaPago = document.getElementById('cboFormaPago');
+    const cboBancoHaberes = document.getElementById('cboBancoHaberes');
+    const cboTipoCuenta = document.getElementById('cboTipoCuenta');
+    const txtNumeroCuenta = document.getElementById('txtNumeroCuenta');
+    const txtCci = document.getElementById('txtCci');
+    const cboBancoCts = document.getElementById('cboBancoCts');
+    const txtCuentaCts = document.getElementById('txtCuentaCts');
+    const cboMonedaCts = document.getElementById('cboMonedaCts');
+
+    function esDeposito() {
+        const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
+        const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
+        const val = (cboFormaPago.value || '').trim();
+        return text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
+    }
+
+    function toggleCamposHaberes() {
+        const habilitado = !!cboBancoHaberes.value.trim();
+        cboTipoCuenta.disabled = !habilitado;
+        txtNumeroCuenta.disabled = !habilitado;
+        if (!habilitado) {
+            cboTipoCuenta.value = '';
+            txtNumeroCuenta.value = '';
+        }
+    }
+
+    function toggleCamposCts() {
+        const habilitado = !!cboBancoCts.value.trim();
+        txtCuentaCts.disabled = !habilitado;
+        cboMonedaCts.disabled = !habilitado;
+        if (!habilitado) {
+            txtCuentaCts.value = '';
+            cboMonedaCts.value = 'LO';
+        }
+    }
+
+    function validarCci() {
+        const cci = (txtCci.value || '').replace(/\D/g, '');
+        txtCci.value = cci;
+        if (!esDeposito()) {
+            txtCci.classList.remove('is-invalid');
+            return true;
+        }
+        const ok = cci.length === 20;
+        txtCci.classList.toggle('is-invalid', !ok);
+        return ok;
+    }
+
+    cboBancoHaberes.addEventListener('change', toggleCamposHaberes);
+    cboBancoCts.addEventListener('change', toggleCamposCts);
+    cboFormaPago.addEventListener('change', validarCci);
+    txtCci.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 20);
+        validarCci();
+    });
+
+    frm.addEventListener('submit', function (e) {
+        if (!validarCci()) {
+            e.preventDefault();
+            txtCci.focus();
+            return;
+        }
+        if (esDeposito() && !cboBancoHaberes.value.trim()) {
+            e.preventDefault();
+            alert('Seleccione el banco de haberes cuando la forma de pago es depósito.');
+            cboBancoHaberes.focus();
+        }
+    });
+
+    toggleCamposHaberes();
+    toggleCamposCts();
+    validarCci();
+});
+</script>
+{% endblock %}

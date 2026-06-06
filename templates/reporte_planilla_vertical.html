@@ -94,10 +94,7 @@
 
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-layout-text-sidebar-reverse"></i> Planilla vertical (plame)</h5>
-    </div>
-    <div class="card-body">
+    <div class="card-body pt-3">
         <form id="frmPlanillaVertical" class="row g-3">
             <div class="col-md-3">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
@@ -129,9 +126,16 @@
                     <option value="">Todos (por defecto)</option>
                 </select>
             </div>
-            <div class="col-12 d-flex gap-2 border-top pt-3 mt-3">
+            <div class="col-md-3">
+                <label for="cboBancoHaberes" class="form-label small fw-bold text-muted">Banco haberes <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboBancoHaberes" class="form-select form-select-sm" disabled>
+                    <option value="" selected>Todos</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
             </div>
         </form>
     </div>
@@ -145,9 +149,6 @@
                 <thead id="thead-vertical"></thead>
                 <tbody id="tbody-vertical"></tbody>
             </table>
-        </div>
-        <div class="mt-2 text-muted small fw-bold">
-            No. de Registros: <span id="lblRowCount">0</span>
         </div>
     </div>
 </div>
@@ -299,7 +300,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             'Compañía', meta.compania || '',
             'Tipo planilla', meta.tipoPlanilla || '',
             'Proceso', meta.proceso || '',
-            'Periodo', meta.periodo || ''
+            'Periodo', meta.periodo || '',
+            'Banco haberes', meta.bancoHaberes || ''
         ]);
         metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             if (colNumber <= 8) {
@@ -458,12 +460,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         const period = document.getElementById('cboPeriodo').value.trim();
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
+        const salarybank = document.getElementById('cboBancoHaberes').value.trim();
 
         try {
             const res = await fetch('/reporte_planilla_vertical', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payroll_type, process, period, person })
+                body: JSON.stringify({ cia, payroll_type, process, period, person, salarybank })
             });
             const payload = await res.json();
             if (!res.ok) {
@@ -490,7 +493,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     compania: selectedText('cboCompania'),
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
                     proceso: selectedText('cboProceso'),
-                    periodo: selectedText('cboPeriodo')
+                    periodo: selectedText('cboPeriodo'),
+                    bancoHaberes: selectedText('cboBancoHaberes')
                 }
             };
             document.getElementById('btnExportExcel').disabled = false;
@@ -502,7 +506,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    const poblarSelect = async (url, selectElement) => {
+    const poblarSelect = async (url, selectElement, opciones) => {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
         selectElement.innerHTML = '';
         const loading = document.createElement('option');
         loading.value = '';
@@ -512,10 +521,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(url);
             const data = await res.json();
             selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
             (Array.isArray(data) ? data : []).forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = item.id != null ? String(item.id) : '';
@@ -529,6 +545,21 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     };
 
+    async function poblarBancosHaberes(cia) {
+        const cboBanco = document.getElementById('cboBancoHaberes');
+        if (!cboBanco) return;
+        if (!cia) {
+            cboBanco.innerHTML = '<option value="" selected>Todos</option>';
+            cboBanco.disabled = true;
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/bancos?cia=${encodeURIComponent(cia)}`,
+            cboBanco,
+            { incluyeTodos: true, valorTodos: '', textoTodos: 'Todos' }
+        );
+    }
+
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
@@ -540,7 +571,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes });
         etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
     }
 
@@ -550,7 +581,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             const ciaNorm = cboCia.value.trim();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`, cboPlanilla);
             await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(ciaNorm)}`, cboTrabajador);
+            await poblarBancosHaberes(ciaNorm);
             etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+        }
+    } else {
+        const ciaInicial = cboCia.value.trim();
+        if (ciaInicial) {
+            await poblarBancosHaberes(ciaInicial);
         }
     }
 
@@ -577,12 +614,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
             await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
+            await poblarBancosHaberes(cia);
             etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
         } else {
             cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanilla.disabled = true;
             cboTrabajador.innerHTML = '<option value="">Seleccione...</option>';
             cboTrabajador.disabled = true;
+            await poblarBancosHaberes('');
         }
     });
 

@@ -44,6 +44,16 @@
             text-align: center;
         }
 
+        #sidebar .sidebar-header .sidebar-logo {
+            display: block;
+            max-width: 100%;
+            max-height: 72px;
+            width: auto;
+            height: auto;
+            margin: 0 auto;
+            object-fit: contain;
+        }
+
         #sidebar ul.components {
             padding: 20px 0;
         }
@@ -63,6 +73,33 @@
 
         #sidebar ul li a i {
             margin-right: 10px;
+        }
+
+        #sidebar .sidebar-parent-link {
+            display: flex;
+            align-items: center;
+        }
+
+        #sidebar .sidebar-chevron {
+            margin-left: auto;
+            margin-right: 0;
+            font-size: 0.75rem;
+            transition: transform 0.2s;
+        }
+
+        #sidebar .sidebar-parent-link[aria-expanded="true"] .sidebar-chevron {
+            transform: rotate(180deg);
+        }
+
+        #sidebar .sidebar-submenu a {
+            padding: 10px 20px 10px 2.75rem;
+            font-size: 0.9rem;
+        }
+
+        #sidebar .sidebar-menu-parent.active > .sidebar-parent-link,
+        #sidebar .sidebar-submenu li.active > a {
+            color: #fff;
+            background: var(--accent-color);
         }
 
         .sidebar-section-title {
@@ -99,7 +136,7 @@
     <div class="wrapper d-flex">
         <nav id="sidebar" aria-label="Navegación principal">
             <div class="sidebar-header">
-                <h4 class="mb-0">Planillas</h4>
+                <img src="{{ url_for('static', filename='img/LogoHM.png') }}" alt="Logo empresa" class="sidebar-logo">
             </div>
 
             <ul class="list-unstyled components">
@@ -113,9 +150,9 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint == 'mapeo_general' else '' }}">
-                    <a href="#" aria-disabled="true">
-                        <i class="bi bi-diagram-3"></i> Mapeo General
+                <li class="{{ 'active' if request.endpoint in ('trabajadores_page', 'trabajadores_editar') else '' }}">
+                    <a href="{{ url_for('trabajadores_page') }}">
+                        <i class="bi bi-people-fill"></i> Trabajadores
                     </a>
                 </li>
 
@@ -127,6 +164,30 @@
                     <a href="{{ url_for('procesar_planilla_page') }}">
                         <i class="bi bi-gear-wide-connected"></i> Procesar planilla
                     </a>
+                </li>
+
+                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
+                    <a href="#submenuPagoHaberes"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if pago_haberes_active else 'false' }}"
+                       aria-controls="submenuPagoHaberes">
+                        <i class="bi bi-cash-stack"></i> Pago de Haberes
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if pago_haberes_active else '' }}" id="submenuPagoHaberes">
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_telecredito_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_telecredito_page') }}">
+                                <i class="bi bi-bank2"></i> Archivo Telecrédito
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_interbank_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_interbank_page') }}">
+                                <i class="bi bi-bank"></i> Archivo Interbank
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 <li class="py-0">
@@ -154,6 +215,12 @@
                 <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
                     <a href="{{ url_for('reporte_vacaciones_detalle_page') }}">
                         <i class="bi bi-calendar-range"></i> Detalle de vacaciones
+                    </a>
+                </li>
+
+                <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
+                    <a href="{{ url_for('reporte_saldo_vacaciones_page') }}">
+                        <i class="bi bi-calendar-check"></i> Saldo de vacaciones
                     </a>
                 </li>
 

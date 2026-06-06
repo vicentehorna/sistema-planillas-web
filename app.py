@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sys
+import time
 import logging
 import io
 import zipfile
@@ -141,6 +142,186 @@ def _fmt_periodo_yyyy_mm(val):
     if len(s) >= 6:
         return f'{s[:4]}-{s[4:6]}'
     return str(val).strip()
+
+
+def _parse_report_date(fecha_raw):
+    """Parsea fecha del filtro (YYYY-MM-DD o dd/mm/yyyy); hoy si viene vacía o inválida."""
+    s = str(fecha_raw or '').strip()
+    if not s:
+        return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(s[:10], fmt)
+        except ValueError:
+            continue
+    return datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def _anios_saldo_vacaciones(fecha_dt):
+    """Años de las columnas saldo1..saldo5 según lógica del SP (year(@date)+1)."""
+    ref = fecha_dt.year + 1
+    return [ref - 5, ref - 4, ref - 3, ref - 2, ref - 1]
+
+
+def _normalize_cesados_saldo_vacaciones(raw):
+    """Todos=T, Si=Y, No=N (acepta letra directa del SP)."""
+    s = str(raw or 'T').strip().upper()
+    if s in ('Y', 'S', 'SI', 'SÍ'):
+        return 'Y'
+    if s in ('N', 'NO'):
+        return 'N'
+    return 'T'
+
+
+def _normalize_estado_trabajador(raw):
+    """Todos=T, Activo=A, Inactivo=I (por defecto solo activos)."""
+    s = str(raw or 'A').strip().upper()
+    if s in ('T', 'A', 'I'):
+        return s
+    return 'A'
+
+
+def _normalize_cesados_telecredito(raw, default='T'):
+    v = str(raw or default).strip().upper()
+    return v if v in ('T', 'Y', 'N') else default
+
+
+def _telecredito_params_from_json(body):
+    """Parámetros comunes para listado y generación Telecrédito BCP."""
+    body = body or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    currency = str(body.get('currency') or body.get('par_currency') or 'LO').strip().upper()
+    concept = str(body.get('concept') or body.get('par_concept') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('par_period'))
+    processtype = str(body.get('processtype') or body.get('process') or '').strip()
+    paydate = _parse_report_date(body.get('paydate') or body.get('par_paydate'))
+    return {
+        'cia': cia,
+        'currency': currency,
+        'concept': concept,
+        'payrolltype': payrolltype,
+        'period': period,
+        'processtype': processtype,
+        'paydate': paydate,
+    }
+
+
+def _pago_haberes_cargar_personas_temp(cursor, persons, temp_table):
+    """Carga tabla temporal #TelecreditoPersonas o #InterbankPersonas en lotes."""
+    allowed = {'TelecreditoPersonas', 'InterbankPersonas'}
+    if temp_table not in allowed:
+        raise ValueError('Tabla temporal no permitida.')
+    cursor.execute(
+        f"""
+        IF OBJECT_ID('tempdb..#{temp_table}') IS NOT NULL
+            DROP TABLE #{temp_table};
+        CREATE TABLE #{temp_table} (person VARCHAR(30) NOT NULL PRIMARY KEY);
+        """
+    )
+    if not persons:
+        return
+    batch_size = 200
+    for i in range(0, len(persons), batch_size):
+        chunk = [str(p)[:30] for p in persons[i:i + batch_size]]
+        placeholders = ','.join(['(?)'] * len(chunk))
+        cursor.execute(
+            f"INSERT INTO #{temp_table} (person) VALUES {placeholders}",
+            chunk,
+        )
+
+
+def _telecredito_cargar_personas_temp(cursor, persons):
+    _pago_haberes_cargar_personas_temp(cursor, persons, 'TelecreditoPersonas')
+
+
+def _telecredito_persons_from_json(body):
+    raw = body.get('persons') or body.get('trabajadores') or body.get('person') or []
+    if isinstance(raw, str):
+        parts = [p.strip() for p in raw.split(',') if p.strip()]
+    elif isinstance(raw, list):
+        parts = [str(p).strip() for p in raw if str(p).strip()]
+    else:
+        parts = []
+    return parts
+
+
+def _telecredito_validar_params(params):
+    if not params['cia']:
+        return 'Seleccione una compañía.'
+    if not params['payrolltype']:
+        return 'Seleccione tipo de planilla.'
+    if not params['processtype']:
+        return 'Seleccione proceso.'
+    if not params['period']:
+        return 'Seleccione periodo.'
+    if not params['concept']:
+        return 'Indique el concepto de pago.'
+    if params['currency'] not in ('LO', 'EX'):
+        return 'Moneda inválida (use LO o EX).'
+    return None
+
+
+def _telecredito_campos_faltantes(conn, cia, lineas, currency='LO'):
+    """Campos de configuración aún no resueltos o con valor por defecto."""
+    faltantes = []
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                ISNULL(ba.BankAccountNumber, '') AS bankaccountnumber,
+                ISNULL(m.SalaryAccountType, '') AS salaryaccounttype,
+                ISNULL(m.Creditobank, '') AS creditobank,
+                ISNULL(tat.abrev, '') AS accounttypeabrev
+            FROM pr_mapping m
+                LEFT JOIN TE_BankAccount ba
+                    ON ba.Company = m.Company
+                   AND ba.Bank = m.Creditobank
+                   AND ba.accountcurrency = ?
+                LEFT JOIN TE_accounttype tat
+                    ON tat.AccountType = m.SalaryAccountType
+            WHERE m.Company = ?
+            """,
+            (currency, cia),
+        )
+        row = cursor.fetchone()
+        if not row:
+            faltantes.append('pr_mapping: no hay configuración para la compañía.')
+        else:
+            if not str(row[0] or '').strip():
+                faltantes.append(
+                    'Cuenta origen empresa (TE_BankAccount.BankAccountNumber '
+                    'según CreditoBank y moneda).'
+                )
+            if not str(row[1] or '').strip():
+                faltantes.append('Tipo cuenta origen empresa (pr_mapping.SalaryAccountType).')
+            elif not str(row[3] or '').strip():
+                faltantes.append('Abreviatura tipo cuenta origen (TE_accounttype.abrev).')
+            if not str(row[2] or '').strip():
+                faltantes.append('Banco Telecrédito (pr_mapping.Creditobank).')
+    except Exception:
+        faltantes.append(
+            'Configuración TE_BankAccount / pr_mapping (BankAccountNumber, '
+            'SalaryAccountType, Creditobank): verificar nombres de columnas en BD.'
+        )
+
+    if not lineas:
+        faltantes.append('No se generaron líneas de detalle para los trabajadores seleccionados.')
+
+    return faltantes
+
+
+def _telecredito_filename(period):
+    periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
+    stamp = datetime.now().strftime('%Y%m%d%H%M')
+    return f'Telecredito_{periodo}_{stamp}.txt'
+
+
+def _interbank_filename(period):
+    periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
+    stamp = datetime.now().strftime('%Y%m%d%H%M')
+    return f'Interbank_{periodo}_{stamp}.txt'
 
 
 def _report_params_from_json(req):
@@ -565,6 +746,157 @@ def dashboard():
     return render_template('dashboard.html')
 
 
+@app.route('/trabajadores')
+@login_required
+def trabajadores_page():
+    return render_template('trabajadores.html')
+
+
+def _selector_items_from_sp(cursor, sp_sql, params):
+    """Ejecuta un SP selector y devuelve lista {id, text}."""
+    cursor.execute(sp_sql, params)
+    col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+    items = []
+    for row in cursor.fetchall():
+        rd = _row_dict_from_columns(col_names, row)
+        item_id = rd.get('id') if rd.get('id') is not None else rd.get('bank')
+        item_text = rd.get('text') if rd.get('text') is not None else rd.get('name')
+        if item_id is None:
+            continue
+        items.append({'id': str(item_id).strip(), 'text': str(item_text or item_id).strip()})
+    return items
+
+
+def _cargar_selectores_bancario(cursor, cia):
+    bancos = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorbancos_web @cia=?', (cia,))
+    formas_pago = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorformapago_web @cia=?', (cia,))
+    tipos_cuenta = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectortipocuenta_web @cia=?', (cia,))
+    return bancos, formas_pago, tipos_cuenta
+
+
+@app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
+@login_required
+def trabajadores_editar(person_id):
+    """Edición de datos bancarios y CTS del trabajador."""
+    person_id = str(person_id or '').strip()
+    cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
+
+    if not person_id:
+        flash('Trabajador no indicado.', 'warning')
+        return redirect(url_for('trabajadores_page'))
+    if not cia:
+        flash('Indique la compañía (cia) para editar el trabajador.', 'warning')
+        return redirect(url_for('trabajadores_page'))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if request.method == 'POST':
+            collectionform = str(request.form.get('collectionform') or '').strip()
+            cci = re.sub(r'\D', '', str(request.form.get('cci') or ''))[:20]
+
+            forma_es_deposito = (
+                '000000000009' in collectionform
+                or 'DEPOSITO' in collectionform.upper()
+            )
+            if not forma_es_deposito and collectionform:
+                cursor.execute(
+                    "SELECT TOP 1 LTRIM(RTRIM(ISNULL(description, ''))) FROM te_collectionform WHERE collectionform = ? AND company = ?",
+                    (collectionform, cia),
+                )
+                cf_row = cursor.fetchone()
+                if cf_row and 'DEPOSITO' in str(cf_row[0] or '').upper():
+                    forma_es_deposito = True
+
+            if forma_es_deposito and len(cci) != 20:
+                flash('El CCI debe tener 20 dígitos cuando la forma de pago es depósito.', 'danger')
+                bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
+                cursor.execute(
+                    'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
+                    (cia, person_id),
+                )
+                rows = _dicts_first_nonempty_resultset(cursor)
+                empleado = rows[0] if rows else {}
+                empleado['cci'] = cci
+                empleado['collectionform'] = collectionform
+                empleado['salarybank'] = str(request.form.get('salarybank') or '').strip()
+                empleado['salaryaccounttype'] = str(request.form.get('salaryaccounttype') or '').strip()
+                empleado['salaryaccount'] = str(request.form.get('salaryaccount') or '').strip()
+                empleado['ctsbank'] = str(request.form.get('ctsbank') or '').strip()
+                empleado['ctsaccount'] = str(request.form.get('ctsaccount') or '').strip()
+                empleado['ctscurrency'] = str(request.form.get('ctscurrency') or 'LO').strip() or 'LO'
+                return render_template(
+                    'trabajadores_editar.html',
+                    cia=cia,
+                    person_id=person_id,
+                    empleado=empleado,
+                    bancos=bancos,
+                    formas_pago=formas_pago,
+                    tipos_cuenta=tipos_cuenta,
+                )
+
+            cursor.execute(
+                'EXEC sp_pr_actualizar_bancario_trabajador_web '
+                '@cia=?, @person=?, @collectionform=?, @salarybank=?, @salaryaccounttype=?, '
+                '@salaryaccount=?, @cci=?, @ctsbank=?, @ctsaccount=?, @ctscurrency=?, @xlastuser=?',
+                (
+                    cia,
+                    person_id,
+                    str(request.form.get('collectionform') or '').strip(),
+                    str(request.form.get('salarybank') or '').strip(),
+                    str(request.form.get('salaryaccounttype') or '').strip(),
+                    str(request.form.get('salaryaccount') or '').strip(),
+                    cci,
+                    str(request.form.get('ctsbank') or '').strip(),
+                    str(request.form.get('ctsaccount') or '').strip(),
+                    str(request.form.get('ctscurrency') or 'LO').strip() or 'LO',
+                    str(getattr(current_user, 'username', '') or '')[:20],
+                ),
+            )
+            conn.commit()
+            flash('Datos bancarios actualizados correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia))
+
+        cursor.execute(
+            'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
+            (cia, person_id),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        if not rows:
+            flash('No se encontró el trabajador indicado.', 'warning')
+            return redirect(url_for('trabajadores_page'))
+
+        empleado = rows[0]
+        bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
+
+        return render_template(
+            'trabajadores_editar.html',
+            cia=cia,
+            person_id=person_id,
+            empleado=empleado,
+            bancos=bancos,
+            formas_pago=formas_pago,
+            tipos_cuenta=tipos_cuenta,
+        )
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('trabajadores_editar')
+        flash(f'Error al procesar la solicitud: {e}', 'danger')
+        return redirect(url_for('trabajadores_page'))
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/reporte-liquidaciones')
 @login_required
 def reporte_liquidaciones():
@@ -584,6 +916,12 @@ def reporte_vacaciones_detalle_page():
     return render_template('reporte_vacaciones_detalle.html')
 
 
+@app.route('/reporte-saldo-vacaciones')
+@login_required
+def reporte_saldo_vacaciones_page():
+    return render_template('reporte_saldo_vacaciones.html')
+
+
 @app.route('/reporte-descansos-medicos-detalle')
 @login_required
 def reporte_descansos_medicos_detalle_page():
@@ -594,6 +932,366 @@ def reporte_descansos_medicos_detalle_page():
 @login_required
 def procesar_planilla_page():
     return render_template('procesar_planilla.html')
+
+
+@app.route('/pago-haberes/telecredito')
+@login_required
+def pago_haberes_telecredito_page():
+    return render_template('pago_haberes_telecredito.html')
+
+
+@app.route('/api/pago-haberes/telecredito/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_telecredito_listado():
+    """sp_pr_listatelecredito_web: trabajadores con abono Telecrédito para el periodo/concepto."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    log_sp = (
+        '[telecredito listado] EXEC sp_pr_listatelecredito_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@cesados={cesados!r}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listatelecredito_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], cesados,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        filas_pantalla = []
+        filas_detalle = []
+        for r in rows:
+            person = str(r.get('person') or '').strip()
+            dni = str(r.get('dni') or '').strip()
+            nombre = str(r.get('nombre') or '').strip()
+            tipodoc = str(r.get('tipodoc') or '').strip()
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            filas_pantalla.append([dni, tipodoc, nombre])
+            filas_detalle.append({
+                "person": person,
+                "dni": dni,
+                "tipodoc": tipodoc,
+                "nombre": nombre,
+                "importe": importe_num,
+            })
+        log_result = f'[telecredito listado] registros devueltos={len(filas_detalle)}'
+        logging.info(log_result)
+        print(log_result, flush=True)
+        return jsonify({
+            "headers": ['DNI', 'Tipo doc.', 'Nombre'],
+            "data": filas_pantalla,
+            "rows": filas_detalle,
+            "meta": {
+                "total": len(filas_detalle),
+                "paydate": p['paydate'].strftime('%d/%m/%Y'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_telecredito_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/telecredito/generar-txt', methods=['POST'])
+@login_required
+def api_pago_haberes_telecredito_generar_txt():
+    """sp_pr_generar_telecredito_web → archivo TXT Telecrédito BCP."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    log_sp = (
+        '[telecredito generar] EXEC sp_pr_generar_telecredito_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'trabajadores_seleccionados={len(persons)}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    t0 = time.perf_counter()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        t_conn = time.perf_counter()
+        _telecredito_cargar_personas_temp(cursor, persons)
+        t_temp = time.perf_counter()
+        cursor.execute(
+            "EXEC sp_pr_generar_telecredito_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'],
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        t_sp = time.perf_counter()
+        lineas = []
+        for r in rows:
+            txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+            if txt:
+                lineas.append(txt)
+
+        detalle_count = max(len(lineas) - 1, 0)
+        t_done = time.perf_counter()
+        log_result = (
+            f'[telecredito generar] seleccionados={len(persons)} '
+            f'detalle_txt={detalle_count} '
+            f'ms_conexion={int((t_conn - t0) * 1000)} '
+            f'ms_temp={int((t_temp - t_conn) * 1000)} '
+            f'ms_sp={int((t_sp - t_temp) * 1000)} '
+            f'ms_total={int((t_done - t0) * 1000)}'
+        )
+        logging.info(log_result)
+        print(log_result, flush=True)
+
+        if len(lineas) < 2:
+            campos = _telecredito_campos_faltantes(
+                conn, p['cia'], lineas[1:] if len(lineas) > 1 else [], p['currency']
+            )
+            return jsonify({
+                "error": (
+                    f"No se pudo generar el archivo (sin líneas de detalle). "
+                    f"Seleccionados: {len(persons)}."
+                ),
+                "campos_faltantes": campos,
+            }), 400
+
+        contenido = '\r\n'.join(lineas) + '\r\n'
+        filename = _telecredito_filename(p['period'])
+
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_telecredito_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/interbank/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_interbank_listado():
+    """sp_pr_listainterbank_web: trabajadores con abono Interbank para el periodo/concepto."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    log_sp = (
+        '[interbank listado] EXEC sp_pr_listainterbank_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@cesados={cesados!r}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listainterbank_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], cesados,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        filas_pantalla = []
+        filas_detalle = []
+        for r in rows:
+            person = str(r.get('person') or '').strip()
+            dni = str(r.get('dni') or '').strip()
+            nombre = str(r.get('nombre') or '').strip()
+            tipodoc = str(r.get('tipodoc') or '').strip()
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            filas_pantalla.append([dni, tipodoc, nombre])
+            filas_detalle.append({
+                "person": person,
+                "dni": dni,
+                "tipodoc": tipodoc,
+                "nombre": nombre,
+                "importe": importe_num,
+            })
+        log_result = f'[interbank listado] registros devueltos={len(filas_detalle)}'
+        logging.info(log_result)
+        print(log_result, flush=True)
+        return jsonify({
+            "headers": ['DNI', 'Tipo doc.', 'Nombre'],
+            "data": filas_pantalla,
+            "rows": filas_detalle,
+            "meta": {
+                "total": len(filas_detalle),
+                "paydate": p['paydate'].strftime('%d/%m/%Y'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_interbank_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/interbank/generar-txt', methods=['POST'])
+@login_required
+def api_pago_haberes_interbank_generar_txt():
+    """sp_pr_generar_interbank_web → archivo TXT Interbank."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    log_sp = (
+        '[interbank generar] EXEC sp_pr_generar_interbank_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'trabajadores_seleccionados={len(persons)}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    t0 = time.perf_counter()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        t_conn = time.perf_counter()
+        _pago_haberes_cargar_personas_temp(cursor, persons, 'InterbankPersonas')
+        t_temp = time.perf_counter()
+        cursor.execute(
+            "EXEC sp_pr_generar_interbank_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'],
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        t_sp = time.perf_counter()
+        lineas = []
+        for r in rows:
+            txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+            if txt:
+                lineas.append(txt)
+
+        detalle_count = max(len(lineas) - 1, 0)
+        t_done = time.perf_counter()
+        log_result = (
+            f'[interbank generar] seleccionados={len(persons)} '
+            f'detalle_txt={detalle_count} '
+            f'ms_conexion={int((t_conn - t0) * 1000)} '
+            f'ms_temp={int((t_temp - t_conn) * 1000)} '
+            f'ms_sp={int((t_sp - t_temp) * 1000)} '
+            f'ms_total={int((t_done - t0) * 1000)}'
+        )
+        logging.info(log_result)
+        print(log_result, flush=True)
+
+        if len(lineas) < 2:
+            return jsonify({
+                "error": (
+                    f"No se pudo generar el archivo (sin líneas de detalle). "
+                    f"Seleccionados: {len(persons)}."
+                ),
+            }), 400
+
+        contenido = '\r\n'.join(lineas) + '\r\n'
+        filename = _interbank_filename(p['period'])
+
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_interbank_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/pago-haberes/interbank')
+@login_required
+def pago_haberes_interbank_page():
+    return render_template('pago_haberes_interbank.html')
+
+
+@app.route('/pago-haberes/bbva')
+@login_required
+def pago_haberes_bbva_page():
+    return render_template('pago_haberes_bbva.html')
 
 
 @app.route('/generar_boletas')
@@ -924,6 +1622,72 @@ def api_companias():
                 pass
 
 
+@app.route('/api/selectores/bancos')
+@login_required
+def api_bancos():
+    """sp_pr_selectorbancos_web @cia → bank, name."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorbancos_web @cia=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({
+                "id": rd.get("bank"),
+                "text": rd.get("name"),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_bancos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/conceptos')
+@login_required
+def api_conceptos():
+    """sp_pr_selectorconceptos_web @cia → concept, description."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorconceptos_web @cia=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({
+                "id": rd.get("concept"),
+                "text": rd.get("description"),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_conceptos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/planillas')
 @login_required
 def api_planillas():
@@ -1077,6 +1841,70 @@ def api_unidades():
     except Exception:
         logging.exception("api_unidades")
         return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/trabajadores/listado', methods=['POST'])
+@login_required
+def api_trabajadores_listado():
+    """sp_pr_listatrabajadores_web @cia, @payrolltype, @person, @docnro, @estado, @salarybank, @cesados."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    person = str(body.get('person') or '0').strip() or '0'
+    docnro = str(body.get('docnro') or body.get('dni') or '').strip()
+    estado = _normalize_estado_trabajador(body.get('estado'))
+    salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    headers_es = [
+        'Tipo planilla',
+        'Código',
+        'Nombre',
+        'Estado',
+        'Tipo documento',
+        'Nro. documento',
+        'F. ingreso',
+        'F. cese',
+        'Cargo',
+        'Acciones',
+    ]
+    keys_datos = [
+        'tipoplanilla', 'codigo', 'nombre', 'estado', 'tipodocumento', 'numerodocumento',
+        'fechaingreso', 'fechacese', 'cargo',
+    ]
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listatrabajadores_web "
+            "@cia=?, @payrolltype=?, @person=?, @docnro=?, @estado=?, @salarybank=?, @cesados=?",
+            (cia, payrolltype, person, docnro, estado, salarybank, cesados),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        rows_meta = []
+        for r in rows:
+            fila = [_jsonable_value(r.get(key)) for key in keys_datos]
+            fila.append('')
+            resultado.append(fila)
+            rows_meta.append({
+                'person': str(r.get('person') or '').strip(),
+                'codigo': str(r.get('codigo') or '').strip(),
+            })
+        return jsonify({"headers": headers_es, "data": resultado, "rows": rows_meta})
+    except Exception as e:
+        logging.exception("api_trabajadores_listado")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn:
             try:
@@ -1315,7 +2143,7 @@ def reporte_resumen_total_post():
 @login_required
 def reporte_planilla_vertical_post():
     """
-    sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person.
+    sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank.
     Cabeceras dinámicas desde xx_plamevertical2 + PR_Concept; datos desde xx_reporteplanilla.
     """
     body = request.get_json(silent=True) or {}
@@ -1324,6 +2152,7 @@ def reporte_planilla_vertical_post():
     process = (body.get('process') or '').strip()
     period = _normalize_pr_period(body.get('period'))
     person = (body.get('person') or '0').strip() or '0'
+    salarybank = str(body.get('salarybank') if body.get('salarybank') is not None else body.get('salary_bank') or '').strip()
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -1368,8 +2197,8 @@ def reporte_planilla_vertical_post():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_reporteplamevertical_web @cia=?, @payrolltype=?, @process=?, @period=?, @person=?",
-            (cia, payroll_type, process, period, person),
+            "EXEC sp_pr_reporteplamevertical_web @cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?",
+            (cia, payroll_type, process, period, person, salarybank),
         )
         _drain_all_cursor_resultsets(cursor)
 
@@ -1551,6 +2380,90 @@ def reporte_vacaciones_detalle_post():
         return jsonify({"headers": headers_es, "data": resultado})
     except Exception as e:
         logging.exception("reporte_vacaciones_detalle_post")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/reporte_saldo_vacaciones', methods=['POST'])
+@login_required
+def reporte_saldo_vacaciones_post():
+    """sp_pr_saldovacaciones_web @company, @payrolltype, @date, @person, @cesados."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    person = str(body.get('person') or '0').strip() or '0'
+    fecha_dt = _parse_report_date(body.get('fecha') or body.get('date'))
+    cesados = _normalize_cesados_saldo_vacaciones(body.get('cesados'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payroll_type:
+        return jsonify({"error": "Debe indicar tipo de planilla."}), 400
+
+    anios = _anios_saldo_vacaciones(fecha_dt)
+    headers_es = [
+        'Tipo planilla',
+        'Código',
+        'Nombre',
+        'Unidad',
+        'F. ingreso',
+        'F. cese',
+        f'Saldo {anios[0]}',
+        f'Saldo {anios[1]}',
+        f'Saldo {anios[2]}',
+        f'Saldo {anios[3]}',
+        f'Saldo {anios[4]}',
+        'Faltas',
+        'Licencias',
+        'Descansos',
+    ]
+    keys_datos = [
+        'tipoplanillas', 'person', 'name', 'description', 'entrydate', 'ceasedate',
+        'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
+        'faltas', 'licencias', 'descansos',
+    ]
+    keys_numericos = {
+        'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
+        'faltas', 'licencias', 'descansos',
+    }
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_saldovacaciones_web @company=?, @payrolltype=?, @date=?, @person=?, @cesados=?",
+            (cia, payroll_type, fecha_dt, person, cesados),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            fila = []
+            for key in keys_datos:
+                val = r.get(key)
+                if key in keys_numericos and val is not None:
+                    try:
+                        fila.append(float(val))
+                    except Exception:
+                        fila.append(_jsonable_value(val))
+                else:
+                    fila.append(_jsonable_value(val))
+            resultado.append(fila)
+        return jsonify({
+            "headers": headers_es,
+            "data": resultado,
+            "meta": {
+                "fecha": fecha_dt.strftime('%d/%m/%Y'),
+                "anios": anios,
+            },
+        })
+    except Exception as e:
+        logging.exception("reporte_saldo_vacaciones_post")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

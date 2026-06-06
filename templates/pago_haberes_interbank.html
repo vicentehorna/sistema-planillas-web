@@ -1,0 +1,532 @@
+{% extends "layout.html" %}
+
+{% block title %}Archivo Interbank{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-interbank {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-interbank th,
+    .table-interbank td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-interbank thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-interbank .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+        vertical-align: middle;
+    }
+
+    .table-interbank .col-tipodoc {
+        width: 2.25rem;
+        max-width: 2.25rem;
+        text-align: center;
+        padding-left: 0.2rem;
+        padding-right: 0.2rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmInterbank" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboMoneda" class="form-label small fw-bold text-muted">Moneda</label>
+                <select id="cboMoneda" class="form-select form-select-sm" required>
+                    <option value="LO" selected>Soles (LO)</option>
+                    <option value="EX">Dólares (EX)</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboConcepto" class="form-label small fw-bold text-muted">Concepto</label>
+                <select id="cboConcepto" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtFechaPago" class="form-label small fw-bold text-muted">Fecha de pago</label>
+                <input type="date" id="txtFechaPago" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
+                    <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCountIbk">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosIbk">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoInterbank">
+    <div class="card-body pt-3">
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-interbank align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="checkAllIbk" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th>DNI</th>
+                        <th class="col-tipodoc">Tipo</th>
+                        <th>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-interbank"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_LISTADO = {{ url_for('api_pago_haberes_interbank_listado') | tojson }};
+    const URL_GENERAR_TXT = {{ url_for('api_pago_haberes_interbank_generar_txt') | tojson }};
+    let lastRowsInterbank = [];
+
+    function hoyIsoLocal() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function limpiarValorComboSiObsoleto(select) {
+        if (!select) return;
+        const v = String(select.value || '').trim();
+        if (!v) return;
+        const ok = Array.from(select.options).some((o) => String(o.value) === v);
+        if (!ok) select.value = '';
+    }
+
+    function obtenerSeleccionadosInterbank() {
+        const mapa = new Map(
+            (lastRowsInterbank || []).map((r) => [String(r.person || '').trim(), r])
+        );
+        const seleccionados = [];
+        document.querySelectorAll('.check-interbank:checked').forEach((cb) => {
+            const person = String(cb.value || '').trim();
+            const row = mapa.get(person);
+            if (row) seleccionados.push(row);
+        });
+        return seleccionados;
+    }
+
+    function actualizarContadoresInterbank() {
+        const total = document.querySelectorAll('.check-interbank').length;
+        const sel = document.querySelectorAll('.check-interbank:checked').length;
+        document.getElementById('lblRowCountIbk').textContent = String(total);
+        document.getElementById('lblSeleccionadosIbk').textContent = String(sel);
+        document.getElementById('btnGenerarTxt').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAllIbk() {
+        const all = document.querySelectorAll('.check-interbank');
+        const chk = document.getElementById('checkAllIbk');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let marcados = 0;
+        all.forEach((x) => { if (x.checked) marcados++; });
+        chk.checked = marcados === all.length;
+        chk.indeterminate = marcados > 0 && marcados < all.length;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-interbank');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+
+        filas.forEach((row) => {
+            const tr = document.createElement('tr');
+            const person = String(row.person || '').trim();
+            const dni = String(row.dni || '').trim();
+            const tipodoc = String(row.tipodoc || '').trim();
+            const nombre = String(row.nombre || '').trim();
+
+            const tdChk = document.createElement('td');
+            tdChk.className = 'text-center';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'check-interbank form-check-input';
+            cb.value = person;
+            cb.checked = true;
+            tdChk.appendChild(cb);
+
+            const tdDni = document.createElement('td');
+            tdDni.textContent = dni;
+
+            const tdTipoDoc = document.createElement('td');
+            tdTipoDoc.className = 'col-tipodoc';
+            tdTipoDoc.textContent = tipodoc;
+
+            const tdNombre = document.createElement('td');
+            tdNombre.textContent = nombre;
+
+            tr.appendChild(tdChk);
+            tr.appendChild(tdDni);
+            tr.appendChild(tdTipoDoc);
+            tr.appendChild(tdNombre);
+            tbody.appendChild(tr);
+        });
+
+        sincronizarCheckAllIbk();
+        actualizarContadoresInterbank();
+    }
+
+    async function ejecutarListado() {
+        lastRowsInterbank = [];
+        document.getElementById('tbody-interbank').innerHTML = '';
+        document.getElementById('checkAllIbk').checked = false;
+        document.getElementById('checkAllIbk').indeterminate = false;
+        document.getElementById('lblRowCountIbk').textContent = '0';
+        document.getElementById('lblSeleccionadosIbk').textContent = '0';
+        document.getElementById('btnGenerarTxt').disabled = true;
+
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        const processtype = document.getElementById('cboProceso').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim();
+        const currency = document.getElementById('cboMoneda').value.trim();
+        const concept = document.getElementById('cboConcepto').value.trim();
+        const paydate = document.getElementById('txtFechaPago').value.trim();
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+
+        if (!cia || !payrolltype || !processtype || !period || !concept) {
+            alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados
+                })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoInterbank').classList.add('d-none');
+                document.getElementById('lblRowCountIbk').textContent = '0';
+                document.getElementById('lblSeleccionadosIbk').textContent = '0';
+                alert(payload.error || 'Error al listar trabajadores.');
+                return;
+            }
+            if (!Array.isArray(payload.headers) || !Array.isArray(payload.data)) {
+                alert('Respuesta inválida del servidor.');
+                return;
+            }
+            lastRowsInterbank = Array.isArray(payload.rows) ? payload.rows : [];
+            document.getElementById('cardResultadoInterbank').classList.remove('d-none');
+            renderizarTabla(lastRowsInterbank);
+        } catch (e) {
+            console.error(e);
+            document.getElementById('cardResultadoInterbank').classList.add('d-none');
+            document.getElementById('lblRowCountIbk').textContent = '0';
+            document.getElementById('lblSeleccionadosIbk').textContent = '0';
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    const poblarSelect = async (url, selectElement) => {
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = 'Seleccione...';
+            selectElement.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    };
+
+    const DEFAULT_CIA = 'BGT';
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const txtFechaPago = document.getElementById('txtFechaPago');
+
+    if (!txtFechaPago.value) {
+        txtFechaPago.value = hoyIsoLocal();
+    }
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    limpiarValorComboSiObsoleto(cboCia);
+
+    if (!String(cboCia.value || '').trim()) {
+        if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+            const ciaNorm = cboCia.value.trim();
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`, cboPlanilla);
+            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(ciaNorm)}`, document.getElementById('cboConcepto'));
+        }
+    } else {
+        const ciaInicial = cboCia.value.trim();
+        if (ciaInicial) {
+            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(ciaInicial)}`, document.getElementById('cboConcepto'));
+        }
+    }
+
+    document.getElementById('cboCompania').addEventListener('change', async function () {
+        const cia = this.value;
+        const cboPlanillaEl = document.getElementById('cboTipoPlanilla');
+        const cboProcesoEl = document.getElementById('cboProceso');
+        const cboPeriodoEl = document.getElementById('cboPeriodo');
+        const cboConceptoEl = document.getElementById('cboConcepto');
+
+        cboProcesoEl.innerHTML = '<option value="">Seleccione...</option>';
+        cboProcesoEl.disabled = true;
+        cboPeriodoEl.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodoEl.disabled = true;
+        cboConceptoEl.innerHTML = '<option value="">Seleccione...</option>';
+        cboConceptoEl.disabled = true;
+
+        if (cia) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanillaEl);
+            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConceptoEl);
+        } else {
+            cboPlanillaEl.innerHTML = '<option value="">Seleccione...</option>';
+            cboPlanillaEl.disabled = true;
+        }
+    });
+
+    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
+        const cia = document.getElementById('cboCompania').value;
+        const payroll = this.value;
+        const cboProcesoEl = document.getElementById('cboProceso');
+        const cboPeriodoEl = document.getElementById('cboPeriodo');
+
+        cboPeriodoEl.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodoEl.disabled = true;
+
+        if (cia && payroll) {
+            await poblarSelect(
+                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                cboProcesoEl
+            );
+        } else {
+            cboProcesoEl.innerHTML = '<option value="">Seleccione...</option>';
+            cboProcesoEl.disabled = true;
+        }
+    });
+
+    document.getElementById('cboProceso').addEventListener('change', async function () {
+        const cia = document.getElementById('cboCompania').value;
+        const payroll = document.getElementById('cboTipoPlanilla').value;
+        const proceso = this.value;
+        const cboPeriodoEl = document.getElementById('cboPeriodo');
+
+        if (cia && payroll && proceso) {
+            await poblarSelect(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
+                cboPeriodoEl
+            );
+        } else {
+            cboPeriodoEl.innerHTML = '<option value="">Seleccione...</option>';
+            cboPeriodoEl.disabled = true;
+        }
+    });
+
+    document.getElementById('checkAllIbk').addEventListener('change', function () {
+        document.querySelectorAll('.check-interbank').forEach((cb) => {
+            cb.checked = this.checked;
+        });
+        sincronizarCheckAllIbk();
+        actualizarContadoresInterbank();
+    });
+
+    document.getElementById('tbody-interbank').addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('check-interbank')) {
+            sincronizarCheckAllIbk();
+            actualizarContadoresInterbank();
+        }
+    });
+
+    function nombreArchivoDesdeContentDisposition(header) {
+        if (!header) return null;
+        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(header);
+        const raw = (m && (m[1] || m[2])) || '';
+        try {
+            return decodeURIComponent(raw.trim());
+        } catch (e) {
+            return raw.trim();
+        }
+    }
+
+    async function generarTxtInterbank() {
+        const seleccionados = obtenerSeleccionadosInterbank();
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        const processtype = document.getElementById('cboProceso').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim();
+        const currency = document.getElementById('cboMoneda').value.trim();
+        const concept = document.getElementById('cboConcepto').value.trim();
+        const paydate = document.getElementById('txtFechaPago').value.trim();
+
+        if (!cia || !payrolltype || !processtype || !period || !concept) {
+            alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
+            return;
+        }
+
+        const btn = document.getElementById('btnGenerarTxt');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_GENERAR_TXT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia, payrolltype, processtype, period, currency, concept, paydate,
+                    persons: seleccionados.map((r) => r.person)
+                })
+            });
+
+            if (!res.ok) {
+                let msg = 'Error al generar el archivo TXT.';
+                try {
+                    const payload = await res.json();
+                    msg = payload.error || msg;
+                    if (payload.campos_faltantes && payload.campos_faltantes.length) {
+                        msg += '\n\nCampos pendientes:\n- ' + payload.campos_faltantes.join('\n- ');
+                    }
+                } catch (e) {
+                    /* respuesta no JSON */
+                }
+                alert(msg);
+                return;
+            }
+
+            const blob = await res.blob();
+            const filename = nombreArchivoDesdeContentDisposition(res.headers.get('Content-Disposition'))
+                || 'Interbank_periodo.txt';
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            actualizarContadoresInterbank();
+        }
+    }
+
+    document.getElementById('btnGenerarTxt').addEventListener('click', generarTxtInterbank);
+
+    document.getElementById('frmInterbank').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarListado();
+    });
+});
+</script>
+{% endblock %}

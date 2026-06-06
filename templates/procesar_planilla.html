@@ -306,6 +306,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const opt = document.createElement('option');
                 opt.value = item.id != null ? String(item.id) : '';
                 opt.textContent = item.text != null ? String(item.text) : '';
+                opt.dataset.procedureName = item.procedurename != null ? String(item.procedurename).trim() : '';
                 cboProc.appendChild(opt);
             });
         } catch (e) {
@@ -481,6 +482,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         const period = document.getElementById('hidPeriodoCalculo').value.trim();
         if (!cia || !payroll_type || !processtype || !period) {
             alert('Complete compañía, tipo de planilla, proceso y periodo antes de calcular.');
+            return;
+        }
+
+        const optProceso = cboProc.options[cboProc.selectedIndex];
+        const procedureName = optProceso
+            ? String(optProceso.dataset.procedureName || '').trim()
+            : '';
+        if (!procedureName) {
+            const descProceso = optProceso
+                ? String(optProceso.textContent || '').trim()
+                : processtype;
+            alert(
+                `El proceso "${descProceso}" no tiene un procedimiento de cálculo configurado (ProcedureName).`
+            );
             return;
         }
 

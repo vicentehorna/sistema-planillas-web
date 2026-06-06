@@ -15,6 +15,7 @@
     const STORAGE_KEY_INTERBANK = 'filtros_pago_haberes_interbank';
     const STORAGE_KEY_CONTINENTAL = 'filtros_pago_haberes_continental';
     const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
+    const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -529,8 +530,9 @@
     /**
      * @param {string} storageKey
      * @param {boolean} incluyeTodosBancos
+     * @param {boolean} incluyeBancoHaberes
      */
-    function crearPersistenciaPagoHaberes(storageKey, incluyeTodosBancos) {
+    function crearPersistenciaPagoHaberes(storageKey, incluyeTodosBancos, incluyeBancoHaberes) {
         function guardar() {
             try {
                 const estado = {
@@ -544,6 +546,9 @@
                     cesados: val('cboCesados') || 'T',
                     timestamp: Date.now()
                 };
+                if (incluyeBancoHaberes) {
+                    estado.salarybank = val('cboBancoHaberes') || '0';
+                }
                 if (incluyeTodosBancos) {
                     const chk = document.getElementById('chkTodosBancos');
                     estado.todos_bancos = !!(chk && chk.checked);
@@ -569,7 +574,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect } = opts;
+            const { poblarSelect, poblarBancosHaberes } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -587,6 +592,19 @@
             const cia = String(filtros.cia).trim();
             if (!optionExists(cboCia, cia)) return false;
             cboCia.value = cia;
+
+            if (incluyeBancoHaberes && typeof poblarBancosHaberes === 'function') {
+                await poblarBancosHaberes(cia);
+                const cboBanco = document.getElementById('cboBancoHaberes');
+                if (cboBanco) {
+                    const salarybank = filtros.salarybank != null ? String(filtros.salarybank).trim() : '0';
+                    if (optionExists(cboBanco, salarybank)) {
+                        cboBanco.value = salarybank;
+                    } else if (optionExists(cboBanco, '0')) {
+                        cboBanco.value = '0';
+                    }
+                }
+            }
 
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
             await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto);
@@ -664,6 +682,10 @@
             if (incluyeTodosBancos) {
                 const chkTodosBancos = document.getElementById('chkTodosBancos');
                 if (chkTodosBancos) chkTodosBancos.addEventListener('change', guardar);
+            }
+            if (incluyeBancoHaberes) {
+                const cboBanco = document.getElementById('cboBancoHaberes');
+                if (cboBanco) cboBanco.addEventListener('change', guardar);
             }
         }
 
@@ -822,6 +844,7 @@
         STORAGE_KEY_INTERBANK,
         STORAGE_KEY_CONTINENTAL,
         STORAGE_KEY_BANBIF,
+        STORAGE_KEY_LISTADO_PAGOS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         resumenTotal: function () {
@@ -859,6 +882,9 @@
         },
         banbif: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_BANBIF, true);
+        },
+        listadoPagos: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_LISTADO_PAGOS, false, true);
         }
     };
 })(typeof window !== 'undefined' ? window : this);

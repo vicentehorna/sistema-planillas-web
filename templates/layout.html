@@ -234,6 +234,12 @@
                     </a>
                 </li>
 
+                <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
+                    <a href="{{ url_for('reporte_listado_pagos_page') }}">
+                        <i class="bi bi-cash-stack"></i> Listado de pagos
+                    </a>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Documentos</p>
                 </li>

@@ -148,7 +148,7 @@ class User(UserMixin):
                 u.UserID,
                 p.Name,
                 p.email,
-                'Autónomo'
+                p.Name
             FROM SY_User u
             INNER JOIN SY_Person p ON p.UserID = u.UserID 
             INNER JOIN PR_Employee E on (p.Person = e.Person and e.Status = 'N')
@@ -196,7 +196,7 @@ class User(UserMixin):
                 u.UserID,
                 p.Name,
                 p.email,
-                'Autónomo'
+                p.Name
             FROM SY_User u
             INNER JOIN SY_Person p ON p.UserID = u.UserID 
             INNER JOIN PR_Employee E on (p.Person = e.Person and e.Status = 'N')

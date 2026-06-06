@@ -947,6 +947,12 @@ def reporte_descansos_medicos_detalle_page():
     return render_template('reporte_descansos_medicos_detalle.html')
 
 
+@app.route('/reporte-listado-pagos')
+@login_required
+def reporte_listado_pagos_page():
+    return render_template('reporte_listado_pagos.html')
+
+
 @app.route('/procesar_planilla')
 @login_required
 def procesar_planilla_page():
@@ -2848,6 +2854,62 @@ def reporte_saldo_vacaciones_post():
                 pass
 
 
+@app.route('/api/reportes/listado-pagos', methods=['POST'])
+@login_required
+def api_reporte_listado_pagos():
+    """sp_pr_reportelistadopagos_web: listado de pagos por trabajador (filtros Telecrédito sin fecha de pago)."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reportelistadopagos_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @cesados=?, @salarybank=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], cesados, salarybank,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            resultado.append({
+                "employeecode": _jsonable_value(r.get('employeecode')),
+                "nombre": _jsonable_value(r.get('nombre')),
+                "banco": _jsonable_value(r.get('banco')),
+                "obra": _jsonable_value(r.get('obra')),
+                "costcenter": _jsonable_value(r.get('costcenter')),
+                "cuenta": _jsonable_value(r.get('cuenta')),
+                "moneda": _jsonable_value(r.get('moneda')),
+                "importe": importe_num,
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_reporte_listado_pagos")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/reporte_descansos_medicos_detalle', methods=['POST'])
 @login_required
 def reporte_descansos_medicos_detalle_post():
@@ -2940,10 +3002,29 @@ def api_procesar_planilla_procesos():
             (cia, payrolltype),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
+        proc_names = {}
+        try:
+            cursor.execute(
+                """
+                SELECT ProcessType, ProcedureName
+                FROM PR_ProcessType
+                WHERE Company = ?
+                """,
+                (cia,),
+            )
+            for pr in _dicts_first_nonempty_resultset(cursor):
+                pt = str(pr.get('ProcessType') or pr.get('processtype') or '').strip()
+                pn = str(pr.get('ProcedureName') or pr.get('procedurename') or '').strip()
+                if pt:
+                    proc_names[pt] = pn
+        except Exception:
+            logging.debug('ProcedureName no disponible en PR_ProcessType', exc_info=True)
+
         data = [
             {
                 "id": str(r.get("processtype") or "").strip(),
                 "text": str(r.get("description") or "").strip(),
+                "procedurename": proc_names.get(str(r.get("processtype") or "").strip(), ''),
             }
             for r in rows
             if str(r.get("processtype") or "").strip()
@@ -3094,7 +3175,7 @@ def ejecutar_calculo_planilla():
         _set_cursor_timeout(cursor)
         cursor.execute(
             """
-            SELECT ProcedureName
+            SELECT ProcedureName, Description
             FROM PR_ProcessType
             WHERE ProcessType = ? AND Company = ?
             """,
@@ -3102,16 +3183,24 @@ def ejecutar_calculo_planilla():
         )
         row = cursor.fetchone()
         proc_raw = None
+        proceso_desc = processtype
         if row:
             proc_raw = getattr(row, 'ProcedureName', None)
+            desc_raw = getattr(row, 'Description', None)
             if proc_raw is None and len(row) > 0:
                 proc_raw = row[0]
+            if desc_raw is None and len(row) > 1:
+                desc_raw = row[1]
+            if desc_raw is not None and str(desc_raw).strip():
+                proceso_desc = str(desc_raw).strip()
         sp_name = _sanitize_dynamic_procedure_name(proc_raw)
         if not sp_name:
             return jsonify(
                 {
-                    'error': 'No se encontró un procedimiento configurado para este proceso '
-                    'o el nombre del procedimiento no es válido.'
+                    'error': (
+                        f'El proceso "{proceso_desc}" no tiene un procedimiento de cálculo '
+                        f'configurado (ProcedureName).'
+                    )
                 }
             ), 400
 
@@ -3238,7 +3327,7 @@ def ejecutar_calculo_streaming():
             _set_cursor_timeout(cursor)
             cursor.execute(
                 """
-                SELECT ProcedureName
+                SELECT ProcedureName, Description
                 FROM PR_ProcessType
                 WHERE ProcessType = ? AND Company = ?
                 """,
@@ -3246,18 +3335,26 @@ def ejecutar_calculo_streaming():
             )
             row = cursor.fetchone()
             proc_raw = None
+            proceso_desc = processtype
             if row:
                 proc_raw = getattr(row, 'ProcedureName', None)
+                desc_raw = getattr(row, 'Description', None)
                 if proc_raw is None and len(row) > 0:
                     proc_raw = row[0]
+                if desc_raw is None and len(row) > 1:
+                    desc_raw = row[1]
+                if desc_raw is not None and str(desc_raw).strip():
+                    proceso_desc = str(desc_raw).strip()
             sp_name = _sanitize_dynamic_procedure_name(proc_raw)
             if not sp_name:
                 yield (
                     'data: '
                     + json.dumps(
                         {
-                            'error': 'No se encontró un procedimiento configurado para este proceso '
-                            'o el nombre del procedimiento no es válido.'
+                            'error': (
+                                f'El proceso "{proceso_desc}" no tiene un procedimiento de cálculo '
+                                f'configurado (ProcedureName).'
+                            )
                         }
                     )
                     + '\n\n'

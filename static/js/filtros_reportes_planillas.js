@@ -11,6 +11,10 @@
     const STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE = 'filtros_descansos_medicos_detalle';
     const STORAGE_KEY_PROCESAR_PLANILLA = 'filtros_procesar_planilla';
     const STORAGE_KEY_TRABAJADORES = 'filtros_trabajadores';
+    const STORAGE_KEY_TELECREDITO = 'filtros_pago_haberes_telecredito';
+    const STORAGE_KEY_INTERBANK = 'filtros_pago_haberes_interbank';
+    const STORAGE_KEY_CONTINENTAL = 'filtros_pago_haberes_continental';
+    const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -522,6 +526,156 @@
         };
     }
 
+    /**
+     * @param {string} storageKey
+     * @param {boolean} incluyeTodosBancos
+     */
+    function crearPersistenciaPagoHaberes(storageKey, incluyeTodosBancos) {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    proceso: val('cboProceso'),
+                    periodo: val('cboPeriodo'),
+                    currency: val('cboMoneda') || 'LO',
+                    concept: val('cboConcepto'),
+                    paydate: val('txtFechaPago'),
+                    cesados: val('cboCesados') || 'T',
+                    timestamp: Date.now()
+                };
+                if (incluyeTodosBancos) {
+                    const chk = document.getElementById('chkTodosBancos');
+                    estado.todos_bancos = !!(chk && chk.checked);
+                }
+                localStorage.setItem(storageKey, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros pago haberes: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const cboConcepto = document.getElementById('cboConcepto');
+            const cboMoneda = document.getElementById('cboMoneda');
+            const txtFechaPago = document.getElementById('txtFechaPago');
+            const cboCesados = document.getElementById('cboCesados');
+            const chkTodosBancos = incluyeTodosBancos ? document.getElementById('chkTodosBancos') : null;
+            if (!cboCia || !cboPt || !cboProc || !cboPer || !cboConcepto) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            const concept = filtros.concept != null ? String(filtros.concept).trim() : '';
+            if (concept && optionExists(cboConcepto, concept)) {
+                cboConcepto.value = concept;
+            }
+
+            await poblarSelect(
+                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                cboProc
+            );
+
+            const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '';
+            if (!proceso || !optionExists(cboProc, proceso)) {
+                guardar();
+                return true;
+            }
+            cboProc.value = proceso;
+
+            await poblarSelect(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
+                cboPer
+            );
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (cboMoneda) {
+                const currency = filtros.currency != null ? String(filtros.currency).trim().toUpperCase() : 'LO';
+                if (optionExists(cboMoneda, currency)) {
+                    cboMoneda.value = currency;
+                }
+            }
+
+            if (txtFechaPago && filtros.paydate) {
+                txtFechaPago.value = String(filtros.paydate);
+            }
+
+            if (cboCesados) {
+                const cesados = filtros.cesados != null ? String(filtros.cesados).trim().toUpperCase() : 'T';
+                if (['T', 'Y', 'N'].includes(cesados) && optionExists(cboCesados, cesados)) {
+                    cboCesados.value = cesados;
+                }
+            }
+
+            if (chkTodosBancos) {
+                chkTodosBancos.checked = !!filtros.todos_bancos;
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            [
+                'cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo',
+                'cboMoneda', 'cboConcepto', 'cboCesados'
+            ].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txtFechaPago = document.getElementById('txtFechaPago');
+            if (txtFechaPago) txtFechaPago.addEventListener('change', guardar);
+            if (incluyeTodosBancos) {
+                const chkTodosBancos = document.getElementById('chkTodosBancos');
+                if (chkTodosBancos) chkTodosBancos.addEventListener('change', guardar);
+            }
+        }
+
+        return {
+            STORAGE_KEY: storageKey,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaTrabajadores() {
         function guardar() {
             try {
@@ -530,6 +684,7 @@
                     payroll: val('cboTipoPlanilla') || '0',
                     person: val('cboTrabajador') || '0',
                     docnro: val('txtDni'),
+                    nombre: val('txtNombre'),
                     estadoFiltro: val('cboEstado') || 'A',
                     cesados: val('cboCesados') || 'T',
                     salarybank: val('cboBancoHaberes') || '0',
@@ -629,6 +784,11 @@
                 }
             }
 
+            const txtNombre = document.getElementById('txtNombre');
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+
             guardar();
             return true;
         }
@@ -658,6 +818,10 @@
         STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE,
         STORAGE_KEY_PROCESAR_PLANILLA,
         STORAGE_KEY_TRABAJADORES,
+        STORAGE_KEY_TELECREDITO,
+        STORAGE_KEY_INTERBANK,
+        STORAGE_KEY_CONTINENTAL,
+        STORAGE_KEY_BANBIF,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         resumenTotal: function () {
@@ -683,6 +847,18 @@
         },
         trabajadores: function () {
             return crearPersistenciaTrabajadores();
+        },
+        telecredito: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_TELECREDITO, false);
+        },
+        interbank: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_INTERBANK, false);
+        },
+        continental: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_CONTINENTAL, false);
+        },
+        banbif: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_BANBIF, true);
         }
     };
 })(typeof window !== 'undefined' ? window : this);

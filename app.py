@@ -186,6 +186,13 @@ def _normalize_cesados_telecredito(raw, default='T'):
     return v if v in ('T', 'Y', 'N') else default
 
 
+def _normalize_todos_bancos_banbif(raw, default='N'):
+    v = str(raw or default).strip().upper()
+    if v in ('Y', 'S', '1', 'TRUE', 'ON'):
+        return 'Y'
+    return 'N'
+
+
 def _telecredito_params_from_json(body):
     """Parámetros comunes para listado y generación Telecrédito BCP."""
     body = body or {}
@@ -209,7 +216,7 @@ def _telecredito_params_from_json(body):
 
 def _pago_haberes_cargar_personas_temp(cursor, persons, temp_table):
     """Carga tabla temporal #TelecreditoPersonas o #InterbankPersonas en lotes."""
-    allowed = {'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas'}
+    allowed = {'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas', 'BanbifPersonas'}
     if temp_table not in allowed:
         raise ValueError('Tabla temporal no permitida.')
     cursor.execute(
@@ -328,6 +335,12 @@ def _continental_filename(period):
     periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
     stamp = datetime.now().strftime('%Y%m%d%H%M')
     return f'Continental_{periodo}_{stamp}.txt'
+
+
+def _banbif_filename(period):
+    periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
+    stamp = datetime.now().strftime('%Y%m%d%H%M')
+    return f'Banbif_{periodo}_{stamp}.txt'
 
 
 def _report_params_from_json(req):
@@ -1300,6 +1313,12 @@ def pago_haberes_bbva_page():
     return render_template('pago_haberes_bbva.html')
 
 
+@app.route('/pago-haberes/banbif')
+@login_required
+def pago_haberes_banbif_page():
+    return render_template('pago_haberes_banbif.html')
+
+
 @app.route('/api/pago-haberes/continental/listado', methods=['POST'])
 @login_required
 def api_pago_haberes_continental_listado():
@@ -1458,6 +1477,188 @@ def api_pago_haberes_continental_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_pago_haberes_continental_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/banbif/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_banbif_listado():
+    """sp_pr_listabanbif_web: trabajadores con abono BANBIF."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
+    log_sp = (
+        '[banbif listado] EXEC sp_pr_listabanbif_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@cesados={cesados!r} @todos_bancos={todos_bancos!r}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listabanbif_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?, @todos_bancos=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], cesados, todos_bancos,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        filas_detalle = []
+        for r in rows:
+            person = str(r.get('person') or '').strip()
+            dni = str(r.get('dni') or '').strip()
+            nombre = str(r.get('nombre') or '').strip()
+            tipodoc = str(r.get('tipodoc') or '').strip()
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            filas_detalle.append({
+                "person": person,
+                "dni": dni,
+                "tipodoc": tipodoc,
+                "nombre": nombre,
+                "banco": str(r.get('banco') or '').strip(),
+                "importe": importe_num,
+            })
+        log_result = f'[banbif listado] registros devueltos={len(filas_detalle)} todos_bancos={todos_bancos}'
+        logging.info(log_result)
+        print(log_result, flush=True)
+        headers = ['DNI', 'Tipo doc.', 'Nombre']
+        if todos_bancos == 'Y':
+            headers.append('Banco')
+        headers.append('Importe')
+        data_rows = []
+        for r in filas_detalle:
+            fila = [r['dni'], r['tipodoc'], r['nombre']]
+            if todos_bancos == 'Y':
+                fila.append(r['banco'])
+            fila.append(r['importe'])
+            data_rows.append(fila)
+        return jsonify({
+            "headers": headers,
+            "data": data_rows,
+            "rows": filas_detalle,
+            "meta": {
+                "total": len(filas_detalle),
+                "paydate": p['paydate'].strftime('%d/%m/%Y'),
+                "todos_bancos": todos_bancos == 'Y',
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_banbif_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/banbif/generar-txt', methods=['POST'])
+@login_required
+def api_pago_haberes_banbif_generar_txt():
+    """sp_pr_generar_banbif_web → archivo TXT BANBIF."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
+    log_sp = (
+        '[banbif generar] EXEC sp_pr_generar_banbif_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@todos_bancos={todos_bancos!r} trabajadores_seleccionados={len(persons)}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    t0 = time.perf_counter()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        t_conn = time.perf_counter()
+        _pago_haberes_cargar_personas_temp(cursor, persons, 'BanbifPersonas')
+        t_temp = time.perf_counter()
+        cursor.execute(
+            "EXEC sp_pr_generar_banbif_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @todos_bancos=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], todos_bancos,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        t_sp = time.perf_counter()
+        lineas = []
+        for r in rows:
+            txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+            if txt:
+                lineas.append(txt)
+
+        t_done = time.perf_counter()
+        log_result = (
+            f'[banbif generar] seleccionados={len(persons)} todos_bancos={todos_bancos} '
+            f'detalle_txt={len(lineas)} '
+            f'ms_conexion={int((t_conn - t0) * 1000)} '
+            f'ms_temp={int((t_temp - t_conn) * 1000)} '
+            f'ms_sp={int((t_sp - t_temp) * 1000)} '
+            f'ms_total={int((t_done - t0) * 1000)}'
+        )
+        logging.info(log_result)
+        print(log_result, flush=True)
+
+        if not lineas:
+            return jsonify({
+                "error": (
+                    f"No se pudo generar el archivo (sin líneas de detalle). "
+                    f"Seleccionados: {len(persons)}."
+                ),
+            }), 400
+
+        contenido = '\r\n'.join(lineas) + '\r\n'
+        filename = _banbif_filename(p['period'])
+
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_banbif_generar_txt")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -2025,12 +2226,13 @@ def api_unidades():
 @app.route('/api/trabajadores/listado', methods=['POST'])
 @login_required
 def api_trabajadores_listado():
-    """sp_pr_listatrabajadores_web @cia, @payrolltype, @person, @docnro, @estado, @salarybank, @cesados."""
+    """sp_pr_listatrabajadores_web @cia, @payrolltype, @person, @docnro, @nombre, @estado, @salarybank, @cesados."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
     person = str(body.get('person') or '0').strip() or '0'
     docnro = str(body.get('docnro') or body.get('dni') or '').strip()
+    nombre = str(body.get('nombre') or body.get('name') or '').strip()
     estado = _normalize_estado_trabajador(body.get('estado'))
     salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
@@ -2060,8 +2262,8 @@ def api_trabajadores_listado():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_listatrabajadores_web "
-            "@cia=?, @payrolltype=?, @person=?, @docnro=?, @estado=?, @salarybank=?, @cesados=?",
-            (cia, payrolltype, person, docnro, estado, salarybank, cesados),
+            "@cia=?, @payrolltype=?, @person=?, @docnro=?, @nombre=?, @estado=?, @salarybank=?, @cesados=?",
+            (cia, payrolltype, person, docnro, nombre, estado, salarybank, cesados),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []

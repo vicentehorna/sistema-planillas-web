@@ -1,7 +1,7 @@
 /*
     Listado de trabajadores para el módulo web de Planillas.
-    Filtros: compañía (obligatorio), tipo planilla, trabajador (person), DNI, estado,
-    banco haberes y cesados.
+    Filtros: compañía (obligatorio), tipo planilla, trabajador (person), DNI, nombre,
+    estado, banco haberes y cesados.
     Parámetros opcionales con valor '0' o vacío = sin filtro (excepto estado: A = Activos por defecto).
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
 */
@@ -10,6 +10,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatrabajadores_web]
     @payrolltype  VARCHAR(20),
     @person       VARCHAR(20),
     @docnro       VARCHAR(20),
+    @nombre       VARCHAR(100),
     @estado       VARCHAR(1),
     @salarybank   VARCHAR(20),
     @cesados      CHAR(1)
@@ -20,6 +21,8 @@ BEGIN
     IF RTRIM(ISNULL(@payrolltype, '')) = '' SET @payrolltype = '0';
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
     IF @docnro IS NULL SET @docnro = '';
+    IF @nombre IS NULL SET @nombre = '';
+    SET @nombre = LTRIM(RTRIM(@nombre));
     IF RTRIM(ISNULL(@estado, '')) = '' SET @estado = 'A';
     IF RTRIM(ISNULL(@salarybank, '')) = '' SET @salarybank = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
@@ -68,6 +71,15 @@ BEGIN
       AND (@payrolltype = '0' OR PR_EMPLOYEE.PAYROLLTYPE = @payrolltype)
       AND (@person = '0' OR PR_EMPLOYEE.PERSON = @person)
       AND (@docnro = '' OR SY_PERSON_A.DOCUMENTNUMBER LIKE '%' + @docnro + '%')
+      AND (
+            @nombre = ''
+         OR LTRIM(RTRIM(
+                ISNULL(SY_PERSON_A.LASTNAME1, '') + ' ' +
+                ISNULL(SY_PERSON_A.LASTNAME2, '') + ' ' +
+                ISNULL(SY_PERSON_A.NAME1, '') + ' ' +
+                ISNULL(SY_PERSON_A.NAME2, '')
+            )) LIKE '%' + @nombre + '%'
+      )
       AND (@salarybank = '0' OR PR_EMPLOYEE.SalaryBank = @salarybank)
       AND (
             @cesados = 'T'

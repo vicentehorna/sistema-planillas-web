@@ -140,12 +140,6 @@
             </div>
 
             <ul class="list-unstyled components">
-                <li class="{{ 'active' if request.endpoint == 'dashboard' else '' }}">
-                    <a href="{{ url_for('dashboard') }}">
-                        <i class="bi bi-speedometer2"></i> Dashboard
-                    </a>
-                </li>
-
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
@@ -166,7 +160,7 @@
                     </a>
                 </li>
 
-                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page') %}
+                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"
                        class="sidebar-parent-link"
@@ -190,6 +184,11 @@
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_bbva_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_bbva_page') }}">
                                 <i class="bi bi-bank"></i> Archivo Continental
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_banbif_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_banbif_page') }}">
+                                <i class="bi bi-bank"></i> Archivo BANBIF
                             </a>
                         </li>
                     </ul>

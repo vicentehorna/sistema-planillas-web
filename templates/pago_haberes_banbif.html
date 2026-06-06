@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Archivo Telecrédito{% endblock %}
+{% block title %}Archivo BANBIF{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -10,19 +10,19 @@
         border: 1px solid #dee2e6;
     }
 
-    .table-telecredito {
+    .table-banbif {
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
     }
 
-    .table-telecredito th,
-    .table-telecredito td {
+    .table-banbif th,
+    .table-banbif td {
         padding: 0.25rem 0.5rem;
         vertical-align: middle;
     }
 
-    .table-telecredito thead th {
+    .table-banbif thead th {
         position: sticky;
         top: 0;
         background-color: #f8f9fa;
@@ -30,14 +30,14 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
-    .table-telecredito .form-check-input {
+    .table-banbif .form-check-input {
         width: 0.85rem;
         height: 0.85rem;
         margin: 0;
         vertical-align: middle;
     }
 
-    .table-telecredito .col-tipodoc {
+    .table-banbif .col-tipodoc {
         width: 2.25rem;
         max-width: 2.25rem;
         text-align: center;
@@ -45,7 +45,12 @@
         padding-right: 0.2rem;
     }
 
-    .table-telecredito .col-importe {
+    .table-banbif .col-banco {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
+    .table-banbif .col-importe {
         min-width: 5.5rem;
         text-align: right;
     }
@@ -55,7 +60,7 @@
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
-        <form id="frmTelecredito" class="row g-3">
+        <form id="frmBanbif" class="row g-3">
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
@@ -105,37 +110,35 @@
                     <option value="N">No</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3 d-flex align-items-end pb-1">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkTodosBancos">
+                    <label class="form-check-label small fw-bold text-muted" for="chkTodosBancos">
+                        Todos los Bancos
+                    </label>
+                </div>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
-                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnListarBanbif"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
                     <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
-                    No. de Registros: <span id="lblRowCountTele">0</span>
-                    · Seleccionados: <span id="lblSeleccionadosTele">0</span>
-                    · Importes totales: <span id="lblImporteTotalTele">0.00</span>
+                    No. de Registros: <span id="lblRowCountBan">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosBan">0</span>
+                    · Importes totales: <span id="lblImporteTotalBan">0.00</span>
                 </span>
             </div>
         </form>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 d-none" id="cardResultadoTelecredito">
+<div class="card shadow-sm border-0 d-none" id="cardResultadoBanbif">
     <div class="card-body pt-3">
         <div class="table-scroll-container">
-            <table class="table table-bordered table-sm table-hover table-telecredito align-middle">
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 2.5rem;">
-                            <input type="checkbox" id="checkAllTele" class="form-check-input" title="Marcar / desmarcar todos">
-                        </th>
-                        <th>DNI</th>
-                        <th class="col-tipodoc">Tipo</th>
-                        <th>Nombre</th>
-                        <th class="col-importe">Importe</th>
-                    </tr>
-                </thead>
-                <tbody id="tbody-telecredito"></tbody>
+            <table class="table table-bordered table-sm table-hover table-banbif align-middle">
+                <thead id="thead-banbif"></thead>
+                <tbody id="tbody-banbif"></tbody>
             </table>
         </div>
     </div>
@@ -146,13 +149,13 @@
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.telecredito
-        ? window.FiltrosPlanillasReportes.telecredito()
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.banbif
+        ? window.FiltrosPlanillasReportes.banbif()
         : null;
 
-    const URL_LISTADO = {{ url_for('api_pago_haberes_telecredito_listado') | tojson }};
-    const URL_GENERAR_TXT = {{ url_for('api_pago_haberes_telecredito_generar_txt') | tojson }};
-    let lastRowsTelecredito = [];
+    const URL_LISTADO = {{ url_for('api_pago_haberes_banbif_listado') | tojson }};
+    const URL_GENERAR_TXT = {{ url_for('api_pago_haberes_banbif_generar_txt') | tojson }};
+    let lastRowsBanbif = [];
 
     function hoyIsoLocal() {
         const d = new Date();
@@ -193,12 +196,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!ok) select.value = '';
     }
 
-    function obtenerSeleccionadosTelecredito() {
+    function obtenerSeleccionadosBanbif() {
         const mapa = new Map(
-            (lastRowsTelecredito || []).map((r) => [String(r.person || '').trim(), r])
+            (lastRowsBanbif || []).map((r) => [String(r.person || '').trim(), r])
         );
         const seleccionados = [];
-        document.querySelectorAll('.check-telecredito:checked').forEach((cb) => {
+        document.querySelectorAll('.check-banbif:checked').forEach((cb) => {
             const person = String(cb.value || '').trim();
             const row = mapa.get(person);
             if (row) seleccionados.push(row);
@@ -212,24 +215,24 @@ document.addEventListener('DOMContentLoaded', async function () {
         return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function actualizarContadoresTelecredito() {
-        const total = document.querySelectorAll('.check-telecredito').length;
-        const seleccionados = obtenerSeleccionadosTelecredito();
+    function actualizarContadoresBanbif() {
+        const total = document.querySelectorAll('.check-banbif').length;
+        const seleccionados = obtenerSeleccionadosBanbif();
         const sel = seleccionados.length;
         const importeTotal = seleccionados.reduce((suma, row) => {
             const n = Number(row.importe);
             return suma + (Number.isFinite(n) ? n : 0);
         }, 0);
 
-        document.getElementById('lblRowCountTele').textContent = String(total);
-        document.getElementById('lblSeleccionadosTele').textContent = String(sel);
-        document.getElementById('lblImporteTotalTele').textContent = formatearImporte(importeTotal);
+        document.getElementById('lblRowCountBan').textContent = String(total);
+        document.getElementById('lblSeleccionadosBan').textContent = String(sel);
+        document.getElementById('lblImporteTotalBan').textContent = formatearImporte(importeTotal);
         document.getElementById('btnGenerarTxt').disabled = sel === 0;
     }
 
-    function sincronizarCheckAllTele() {
-        const all = document.querySelectorAll('.check-telecredito');
-        const chk = document.getElementById('checkAllTele');
+    function sincronizarCheckAllBan() {
+        const all = document.querySelectorAll('.check-banbif');
+        const chk = document.getElementById('checkAllBan');
         if (!chk) return;
         if (!all.length) {
             chk.checked = false;
@@ -242,8 +245,58 @@ document.addEventListener('DOMContentLoaded', async function () {
         chk.indeterminate = marcados > 0 && marcados < all.length;
     }
 
-    function renderizarTabla(rows) {
-        const tbody = document.getElementById('tbody-telecredito');
+    function renderizarEncabezadoTabla(mostrarBanco) {
+        const thead = document.getElementById('thead-banbif');
+        if (!thead) return;
+
+        const tr = document.createElement('tr');
+
+        const thChk = document.createElement('th');
+        thChk.className = 'text-center';
+        thChk.style.width = '2.5rem';
+        const chkAll = document.createElement('input');
+        chkAll.type = 'checkbox';
+        chkAll.id = 'checkAllBan';
+        chkAll.className = 'form-check-input';
+        chkAll.title = 'Marcar / desmarcar todos';
+        thChk.appendChild(chkAll);
+        tr.appendChild(thChk);
+
+        ['DNI', 'Tipo', 'Nombre'].forEach((texto, idx) => {
+            const th = document.createElement('th');
+            th.textContent = texto;
+            if (idx === 1) th.className = 'col-tipodoc';
+            tr.appendChild(th);
+        });
+
+        if (mostrarBanco) {
+            const thBanco = document.createElement('th');
+            thBanco.textContent = 'Banco';
+            thBanco.className = 'col-banco';
+            tr.appendChild(thBanco);
+        }
+
+        const thImporte = document.createElement('th');
+        thImporte.textContent = 'Importe';
+        thImporte.className = 'col-importe';
+        tr.appendChild(thImporte);
+
+        thead.innerHTML = '';
+        thead.appendChild(tr);
+
+        chkAll.addEventListener('change', function () {
+            document.querySelectorAll('.check-banbif').forEach((cb) => {
+                cb.checked = this.checked;
+            });
+            sincronizarCheckAllBan();
+            actualizarContadoresBanbif();
+        });
+    }
+
+    function renderizarTabla(rows, mostrarBanco) {
+        renderizarEncabezadoTabla(!!mostrarBanco);
+
+        const tbody = document.getElementById('tbody-banbif');
         tbody.innerHTML = '';
         const filas = Array.isArray(rows) ? rows : [];
 
@@ -253,13 +306,14 @@ document.addEventListener('DOMContentLoaded', async function () {
             const dni = String(row.dni || '').trim();
             const tipodoc = String(row.tipodoc || '').trim();
             const nombre = String(row.nombre || '').trim();
+            const banco = String(row.banco || '').trim();
             const importe = row.importe;
 
             const tdChk = document.createElement('td');
             tdChk.className = 'text-center';
             const cb = document.createElement('input');
             cb.type = 'checkbox';
-            cb.className = 'check-telecredito form-check-input';
+            cb.className = 'check-banbif form-check-input';
             cb.value = person;
             cb.checked = true;
             tdChk.appendChild(cb);
@@ -274,30 +328,43 @@ document.addEventListener('DOMContentLoaded', async function () {
             const tdNombre = document.createElement('td');
             tdNombre.textContent = nombre;
 
-            const tdImporte = document.createElement('td');
-            tdImporte.className = 'col-importe';
-            tdImporte.textContent = formatearImporte(importe);
-
             tr.appendChild(tdChk);
             tr.appendChild(tdDni);
             tr.appendChild(tdTipoDoc);
             tr.appendChild(tdNombre);
+
+            if (mostrarBanco) {
+                const tdBanco = document.createElement('td');
+                tdBanco.className = 'col-banco';
+                tdBanco.textContent = banco;
+                tr.appendChild(tdBanco);
+            }
+
+            const tdImporte = document.createElement('td');
+            tdImporte.className = 'col-importe';
+            tdImporte.textContent = formatearImporte(importe);
             tr.appendChild(tdImporte);
+
             tbody.appendChild(tr);
         });
 
-        sincronizarCheckAllTele();
-        actualizarContadoresTelecredito();
+        sincronizarCheckAllBan();
+        actualizarContadoresBanbif();
     }
 
     async function ejecutarListado() {
-        lastRowsTelecredito = [];
-        document.getElementById('tbody-telecredito').innerHTML = '';
-        document.getElementById('checkAllTele').checked = false;
-        document.getElementById('checkAllTele').indeterminate = false;
-        document.getElementById('lblRowCountTele').textContent = '0';
-        document.getElementById('lblSeleccionadosTele').textContent = '0';
-        document.getElementById('lblImporteTotalTele').textContent = '0.00';
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        lastRowsBanbif = [];
+        document.getElementById('tbody-banbif').innerHTML = '';
+        const chkAllInicio = document.getElementById('checkAllBan');
+        if (chkAllInicio) {
+            chkAllInicio.checked = false;
+            chkAllInicio.indeterminate = false;
+        }
+        document.getElementById('lblRowCountBan').textContent = '0';
+        document.getElementById('lblSeleccionadosBan').textContent = '0';
+        document.getElementById('lblImporteTotalBan').textContent = '0.00';
         document.getElementById('btnGenerarTxt').disabled = true;
 
         const cia = document.getElementById('cboCompania').value.trim();
@@ -308,6 +375,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const todosBancos = document.getElementById('chkTodosBancos').checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -319,15 +387,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados
+                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
+                    todos_bancos: todosBancos
                 })
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {
-                document.getElementById('cardResultadoTelecredito').classList.add('d-none');
-                document.getElementById('lblRowCountTele').textContent = '0';
-                document.getElementById('lblSeleccionadosTele').textContent = '0';
-                document.getElementById('lblImporteTotalTele').textContent = '0.00';
+                document.getElementById('cardResultadoBanbif').classList.add('d-none');
+                document.getElementById('lblRowCountBan').textContent = '0';
+                document.getElementById('lblSeleccionadosBan').textContent = '0';
+                document.getElementById('lblImporteTotalBan').textContent = '0.00';
                 alert(payload.error || 'Error al listar trabajadores.');
                 return;
             }
@@ -335,18 +404,24 @@ document.addEventListener('DOMContentLoaded', async function () {
                 alert('Respuesta inválida del servidor.');
                 return;
             }
-            lastRowsTelecredito = Array.isArray(payload.rows) ? payload.rows : [];
-            document.getElementById('cardResultadoTelecredito').classList.remove('d-none');
-            renderizarTabla(lastRowsTelecredito);
+            lastRowsBanbif = Array.isArray(payload.rows) ? payload.rows : [];
+            document.getElementById('cardResultadoBanbif').classList.remove('d-none');
+            const mostrarBanco = !!(payload.meta && payload.meta.todos_bancos);
+            renderizarTabla(lastRowsBanbif, mostrarBanco);
         } catch (e) {
             console.error(e);
-            document.getElementById('cardResultadoTelecredito').classList.add('d-none');
-            document.getElementById('lblRowCountTele').textContent = '0';
-            document.getElementById('lblSeleccionadosTele').textContent = '0';
-            document.getElementById('lblImporteTotalTele').textContent = '0.00';
+            document.getElementById('cardResultadoBanbif').classList.add('d-none');
+            document.getElementById('lblRowCountBan').textContent = '0';
+            document.getElementById('lblSeleccionadosBan').textContent = '0';
+            document.getElementById('lblImporteTotalBan').textContent = '0.00';
             alert('Error de red o del servidor.');
         }
     }
+
+    document.getElementById('frmBanbif').addEventListener('submit', function (e) {
+        e.preventDefault();
+    });
+    document.getElementById('btnListarBanbif').addEventListener('click', ejecutarListado);
 
     const poblarSelect = async (url, selectElement) => {
         selectElement.innerHTML = '';
@@ -485,18 +560,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    document.getElementById('checkAllTele').addEventListener('change', function () {
-        document.querySelectorAll('.check-telecredito').forEach((cb) => {
-            cb.checked = this.checked;
-        });
-        sincronizarCheckAllTele();
-        actualizarContadoresTelecredito();
-    });
-
-    document.getElementById('tbody-telecredito').addEventListener('change', function (e) {
-        if (e.target && e.target.classList && e.target.classList.contains('check-telecredito')) {
-            sincronizarCheckAllTele();
-            actualizarContadoresTelecredito();
+    document.getElementById('tbody-banbif').addEventListener('change', function (e) {
+        if (e.target && e.target.classList && e.target.classList.contains('check-banbif')) {
+            sincronizarCheckAllBan();
+            actualizarContadoresBanbif();
         }
     });
 
@@ -511,8 +578,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function generarTxtTelecredito() {
-        const seleccionados = obtenerSeleccionadosTelecredito();
+    async function generarTxtBanbif() {
+        const seleccionados = obtenerSeleccionadosBanbif();
         if (!seleccionados.length) {
             alert('Seleccione al menos un trabajador.');
             return;
@@ -525,6 +592,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const currency = document.getElementById('cboMoneda').value.trim();
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
+        const todosBancos = document.getElementById('chkTodosBancos').checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -539,6 +607,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate,
+                    todos_bancos: todosBancos,
                     persons: seleccionados.map((r) => r.person)
                 })
             });
@@ -560,7 +629,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             const blob = await res.blob();
             const filename = nombreArchivoDesdeContentDisposition(res.headers.get('Content-Disposition'))
-                || 'Telecredito_periodo.txt';
+                || 'Banbif_periodo.txt';
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -573,16 +642,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(e);
             alert('Error de red o del servidor.');
         } finally {
-            actualizarContadoresTelecredito();
+            actualizarContadoresBanbif();
         }
     }
 
-    document.getElementById('btnGenerarTxt').addEventListener('click', generarTxtTelecredito);
-
-    document.getElementById('frmTelecredito').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        await ejecutarListado();
-    });
+    document.getElementById('btnGenerarTxt').addEventListener('click', generarTxtBanbif);
 });
 </script>
 {% endblock %}

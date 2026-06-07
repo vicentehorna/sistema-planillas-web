@@ -131,10 +131,14 @@
                 </select>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
-                <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre</label>
-                <input type="text" id="txtNombre" class="form-control form-control-sm" placeholder="Buscar por nombre" maxlength="100" autocomplete="off">
+                <label for="cboTipoConcepto" class="form-label small fw-bold text-muted">Tipo concepto</label>
+                <select id="cboTipoConcepto" class="form-select form-select-sm">
+                    <option value="0" selected>Todos</option>
+                    <option value="P">Permanente</option>
+                    <option value="T">Temporal</option>
+                </select>
             </div>
-            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
                     <option value="T" selected>Todos</option>
@@ -142,7 +146,19 @@
                     <option value="N">No</option>
                 </select>
             </div>
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0" selected>Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-8 col-lg-6">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Empleado <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos (por defecto)</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelAsigConceptos" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
                 <button type="button" class="btn btn-nueva-asignacion btn-sm px-3" id="btnNuevaAsignacion" disabled>
@@ -222,11 +238,11 @@
                             <label class="form-label small fw-bold text-muted d-block">Tipo</label>
                             <div class="d-flex gap-3 pt-1">
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalPermanente" value="P" checked>
+                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalPermanente" value="P">
                                     <label class="form-check-label small" for="radModalPermanente">Permanente</label>
                                 </div>
                                 <div class="form-check">
-                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalTemporal" value="T">
+                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalTemporal" value="T" checked>
                                     <label class="form-check-label small" for="radModalTemporal">Temporal</label>
                                 </div>
                             </div>
@@ -353,7 +369,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('frmModalAsignacion').reset();
         document.getElementById('hdModalModo').value = 'I';
         document.getElementById('hdModalCostCenter').value = '';
-        document.getElementById('radModalPermanente').checked = true;
+        document.getElementById('radModalPermanente').checked = false;
+        document.getElementById('radModalTemporal').checked = true;
         document.getElementById('chkModalAplicaFormula').checked = false;
         document.getElementById('cboModalMoneda').value = 'LO';
         actualizarEstadoPeriodoFinModal();
@@ -376,6 +393,27 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla');
 
         await poblarCombosModal(cia, payrolltype);
+
+        const periodoFiltro = document.getElementById('cboPeriodo').value.trim();
+        if (periodoFiltro && periodoFiltro !== '0') {
+            const cboInicio = document.getElementById('cboModalPeriodoInicio');
+            const cboFin = document.getElementById('cboModalPeriodoFin');
+            if (optionExists(cboInicio, periodoFiltro)) {
+                cboInicio.value = periodoFiltro;
+            }
+            if (optionExists(cboFin, periodoFiltro)) {
+                cboFin.value = periodoFiltro;
+            }
+        }
+
+        const personFiltro = document.getElementById('cboTrabajador').value.trim();
+        if (personFiltro && personFiltro !== '0') {
+            const cboEmp = document.getElementById('cboModalEmpleado');
+            if (optionExists(cboEmp, personFiltro)) {
+                cboEmp.value = personFiltro;
+            }
+        }
+
         modalAsignacion.show();
     }
 
@@ -606,6 +644,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         return 'Todos';
     }
 
+    function etiquetaTipoConcepto(valor) {
+        const v = String(valor || '0').trim().toUpperCase();
+        if (v === 'P') return 'Permanente';
+        if (v === 'T') return 'Temporal';
+        return 'Todos';
+    }
+
     function etiquetaFrecuencia(valor) {
         const v = String(valor || '').trim().toUpperCase();
         if (v === 'P') return 'Permanente';
@@ -637,12 +682,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         const filas = Array.isArray(rows) ? rows : [];
         const excelRows = [];
         let item = 0;
-        let valorTotal = 0;
 
         filas.forEach((row) => {
             const valorNum = Number(row.conceptvalue);
             const valor = Number.isFinite(valorNum) ? valorNum : 0;
-            valorTotal += valor;
             item += 1;
             excelRows.push({
                 tipo: 'detalle',
@@ -652,73 +695,56 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
         });
 
-        if (filas.length) {
-            excelRows.push({
-                tipo: 'total',
-                values: ['', '', 'Total', '', '', valorTotal, '', '', '', '', '', '']
-            });
-        }
-
-        return { excelRows, valorTotal, count: filas.length };
+        return { excelRows, count: filas.length };
     }
 
     function renderizarTabla(rows) {
         const tbody = document.getElementById('tbody-asignacion-conceptos');
         tbody.innerHTML = '';
-        const { excelRows, valorTotal, count } = construirDatosListado(rows);
+        const { excelRows, count } = construirDatosListado(rows);
 
         excelRows.forEach((entry) => {
             const tr = document.createElement('tr');
-            if (entry.tipo === 'detalle') {
-                const row = entry.row;
-                tr.innerHTML = `
-                    <td class="col-item">${entry.item}</td>
-                    <td>${escapeHtml(row.employeecode || row.person)}</td>
-                    <td>${escapeHtml(row.nombre)}</td>
-                    <td>${escapeHtml(row.conceptname || row.concept)}</td>
-                    <td>${escapeHtml(etiquetaFrecuencia(row.flagfrecuencytype))}</td>
-                    <td class="col-valor">${formatearImporte(entry.valor)}</td>
-                    <td>${escapeHtml(etiquetaMoneda(row.conceptcurrency))}</td>
-                    <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodstart))}</td>
-                    <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodend))}</td>
-                    <td>${escapeHtml(row.costcentercode || row.costcenter)}</td>
-                    <td>${escapeHtml(row.tareo)}</td>
-                    <td>${escapeHtml(etiquetaAplica(row.flagapplyformula))}</td>
-                    <td class="col-acciones">
-                        <button type="button" class="btn btn-link btn-sm p-0 btn-editar-asig me-1" title="Editar">
-                            <i class="bi bi-pencil-fill text-success"></i>
-                        </button>
-                        <button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-asig" title="Eliminar">
-                            <i class="bi bi-trash-fill text-danger"></i>
-                        </button>
-                    </td>
-                `;
-                const btnEdit = tr.querySelector('.btn-editar-asig');
-                if (btnEdit) {
-                    btnEdit.addEventListener('click', function () {
-                        abrirModalEditar(row);
-                    });
-                }
-                const btnDel = tr.querySelector('.btn-eliminar-asig');
-                if (btnDel) {
-                    btnDel.addEventListener('click', function () {
-                        eliminarAsignacion(row);
-                    });
-                }
-            } else if (entry.tipo === 'total') {
-                tr.className = 'total-reporte';
-                tr.innerHTML = `
-                    <td></td>
-                    <td colspan="4" class="text-end">${escapeHtml(entry.values[2])}</td>
-                    <td class="col-valor">${formatearImporte(entry.values[IDX_VALOR])}</td>
-                    <td colspan="7"></td>
-                `;
+            const row = entry.row;
+            tr.innerHTML = `
+                <td class="col-item">${entry.item}</td>
+                <td>${escapeHtml(row.employeecode || row.person)}</td>
+                <td>${escapeHtml(row.nombre)}</td>
+                <td>${escapeHtml(row.conceptname || row.concept)}</td>
+                <td>${escapeHtml(etiquetaFrecuencia(row.flagfrecuencytype))}</td>
+                <td class="col-valor">${formatearImporte(entry.valor)}</td>
+                <td>${escapeHtml(etiquetaMoneda(row.conceptcurrency))}</td>
+                <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodstart))}</td>
+                <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodend))}</td>
+                <td>${escapeHtml(row.costcentercode || row.costcenter)}</td>
+                <td>${escapeHtml(row.tareo)}</td>
+                <td>${escapeHtml(etiquetaAplica(row.flagapplyformula))}</td>
+                <td class="col-acciones">
+                    <button type="button" class="btn btn-link btn-sm p-0 btn-editar-asig me-1" title="Editar">
+                        <i class="bi bi-pencil-fill text-success"></i>
+                    </button>
+                    <button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-asig" title="Eliminar">
+                        <i class="bi bi-trash-fill text-danger"></i>
+                    </button>
+                </td>
+            `;
+            const btnEdit = tr.querySelector('.btn-editar-asig');
+            if (btnEdit) {
+                btnEdit.addEventListener('click', function () {
+                    abrirModalEditar(row);
+                });
+            }
+            const btnDel = tr.querySelector('.btn-eliminar-asig');
+            if (btnDel) {
+                btnDel.addEventListener('click', function () {
+                    eliminarAsignacion(row);
+                });
             }
             tbody.appendChild(tr);
         });
 
         document.getElementById('lblRowCountAsigConceptos').textContent = String(count);
-        return { excelRows, valorTotal, count };
+        return { excelRows, count };
     }
 
     function filasParaExcel(excelRows) {
@@ -785,13 +811,28 @@ document.addEventListener('DOMContentLoaded', async function () {
             'Tipo planilla', meta.tipoPlanilla || '',
             'Periodo', meta.periodo || '',
             'Concepto', meta.concepto || '',
-            'Nombre', meta.nombre || '',
+            'Empleado', meta.empleado || '',
             'Cesados', meta.cesados || ''
         ]);
         metaRow1.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             if (colNumber <= 12) {
                 cell.fill = fill(F.meta);
                 cell.font = { bold: colNumber % 2 === 1 };
+                cell.alignment = alignCenter;
+            }
+            cell.border = allBorders;
+        });
+        rowIdx++;
+
+        const metaRow2 = ws.addRow([
+            'Tipo concepto', meta.tipoConcepto || '',
+            'Unidad', meta.unidad || '',
+            '', '', '', '', '', '', ''
+        ]);
+        metaRow2.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (colNumber <= 4) {
+                cell.fill = fill(F.meta);
+                cell.font = { bold: colNumber === 1 };
                 cell.alignment = alignCenter;
             }
             cell.border = allBorders;
@@ -945,8 +986,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
         const period = document.getElementById('cboPeriodo').value.trim() || '0';
         const concept = document.getElementById('cboConcepto').value.trim() || '0';
-        const nombre = document.getElementById('txtNombre').value.trim();
+        let person = document.getElementById('cboTrabajador').value.trim();
+        if (!person) person = '0';
+        const replicationunit = document.getElementById('cboUnidad').value.trim() || '0';
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const frecuencytype = document.getElementById('cboTipoConcepto').value.trim() || '0';
 
         if (!cia || !payrolltype) {
             alert('Complete compañía y tipo planilla.');
@@ -959,7 +1003,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_LISTADO, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payrolltype, period, concept, nombre, cesados })
+                body: JSON.stringify({ cia, payrolltype, period, concept, person, replicationunit, cesados, frecuencytype })
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {
@@ -970,9 +1014,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             const rows = Array.isArray(payload.rows) ? payload.rows : [];
             if (!rows.length) {
-                document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
+                renderizarTabla([]);
+                document.getElementById('cardResultadoAsigConceptos').classList.remove('d-none');
                 document.getElementById('btnExportExcelAsigConceptos').disabled = true;
-                alert('No se encontraron registros para los filtros seleccionados.');
+                consultaEjecutada = true;
                 return;
             }
             const built = renderizarTabla(rows);
@@ -985,8 +1030,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
                     periodo: period === '0' ? 'Todos' : selectedText('cboPeriodo'),
                     concepto: concept === '0' ? 'Todos' : selectedText('cboConcepto'),
-                    nombre: nombre || '—',
-                    cesados: etiquetaCesados(cesados)
+                    empleado: person === '0' ? 'Todos' : selectedText('cboTrabajador'),
+                    unidad: replicationunit === '0' ? 'Todos' : selectedText('cboUnidad'),
+                    cesados: etiquetaCesados(cesados),
+                    tipoConcepto: etiquetaTipoConcepto(frecuencytype)
                 }
             };
             document.getElementById('cardResultadoAsigConceptos').classList.remove('d-none');
@@ -1004,10 +1051,22 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const cboConcepto = document.getElementById('cboConcepto');
-    const txtNombre = document.getElementById('txtNombre');
+    const cboUnidad = document.getElementById('cboUnidad');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+
+    function etiquetaTrabajadorTodosPorDefecto(selectElement) {
+        if (!selectElement || !selectElement.options.length) return;
+        const o = selectElement.options[0];
+        if (o && o.value === '') o.textContent = 'Todos (por defecto)';
+    }
 
     modalAsignacion = new bootstrap.Modal(document.getElementById('modalAsignacionConcepto'));
 
+    await poblarSelect('/api/selectores/unidades', cboUnidad, {
+        incluyeTodos: true,
+        valorTodos: '0',
+        textoTodos: 'Todos'
+    });
     await poblarSelect('/api/selectores/companias', cboCia);
     actualizarBtnNuevaAsignacion();
 
@@ -1021,7 +1080,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             await filtrosPersist.aplicarRestauracionCascada({
                 poblarSelect,
                 poblarPeriodosAsignacion,
-                poblarConceptos
+                poblarConceptos,
+                etiquetaTrabajadorTodosPorDefecto
             });
             limpiarValorComboSiObsoleto(cboPlanilla);
             limpiarValorComboSiObsoleto(cboPeriodo);
@@ -1030,15 +1090,23 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (cesados && optionExists(document.getElementById('cboCesados'), cesados)) {
                 document.getElementById('cboCesados').value = cesados;
             }
-            if (ciaGuardada.nombre) txtNombre.value = ciaGuardada.nombre;
+            const tipoConcepto = ciaGuardada.tipoConcepto != null ? String(ciaGuardada.tipoConcepto).trim() : '0';
+            if (optionExists(document.getElementById('cboTipoConcepto'), tipoConcepto)) {
+                document.getElementById('cboTipoConcepto').value = tipoConcepto;
+            }
+            const personGuardado = ciaGuardada.person != null ? String(ciaGuardada.person).trim() : '';
+            if (personGuardado && personGuardado !== '0' && optionExists(cboTrabajador, personGuardado)) {
+                cboTrabajador.value = personGuardado;
+            }
+            const unidadGuardada = ciaGuardada.unidad != null ? String(ciaGuardada.unidad).trim() : '0';
+            if (optionExists(cboUnidad, unidadGuardada)) {
+                cboUnidad.value = unidadGuardada;
+            }
         }
     }
 
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();
-        txtNombre.addEventListener('input', function () {
-            filtrosPersist.guardar();
-        });
     }
 
     if (filtrosPersist && ciaGuardada) {
@@ -1057,10 +1125,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         cboPeriodo.disabled = true;
         cboConcepto.innerHTML = '<option value="">Seleccione...</option>';
         cboConcepto.disabled = true;
+        cboTrabajador.innerHTML = '<option value="">Todos (por defecto)</option>';
+        cboTrabajador.disabled = true;
 
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
             await poblarConceptos(cia, cboConcepto);
+            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
+            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+            cboTrabajador.disabled = false;
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';

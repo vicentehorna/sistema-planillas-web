@@ -15,6 +15,7 @@
     <style>
         :root {
             --sidebar-width: 260px;
+            --sidebar-collapsed-width: 72px;
             --sidebar-bg: #2c3e50;
             --primary-color: #2c3e50;
             --accent-color: #3498db;
@@ -34,14 +35,51 @@
             top: 0;
             background-color: var(--primary-color);
             color: white;
-            transition: all 0.3s;
+            transition: width 0.3s ease;
             z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
         }
 
         #sidebar .sidebar-header {
-            padding: 20px;
+            padding: 20px 44px 20px 20px;
             background: rgba(0,0,0,0.1);
             text-align: center;
+            position: relative;
+            flex-shrink: 0;
+        }
+
+        #sidebar .sidebar-collapse-btn {
+            position: absolute;
+            top: 14px;
+            right: 10px;
+            width: 28px;
+            height: 28px;
+            padding: 0;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            border-radius: 4px;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.9);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background 0.2s, border-color 0.2s;
+        }
+
+        #sidebar .sidebar-collapse-btn:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.55);
+        }
+
+        #sidebar .sidebar-collapse-btn i {
+            font-size: 0.85rem;
+            transition: transform 0.3s ease;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-collapse-btn i {
+            transform: rotate(180deg);
         }
 
         #sidebar .sidebar-header .sidebar-logo {
@@ -56,14 +94,24 @@
 
         #sidebar ul.components {
             padding: 20px 0;
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
         }
 
         #sidebar ul li a {
             padding: 12px 20px;
-            display: block;
+            display: flex;
+            align-items: center;
             color: rgba(255,255,255,0.7);
             text-decoration: none;
             transition: 0.3s;
+            white-space: nowrap;
+        }
+
+        #sidebar ul li a .sidebar-link-text {
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
         #sidebar ul li a:hover, #sidebar ul li.active > a {
@@ -72,6 +120,96 @@
         }
 
         #sidebar ul li a i {
+            margin-right: 10px;
+            flex-shrink: 0;
+            width: 1.25rem;
+            text-align: center;
+        }
+
+        body.sidebar-collapsed #sidebar {
+            width: var(--sidebar-collapsed-width);
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-header {
+            padding: 14px 8px;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-logo {
+            max-height: 40px;
+            max-width: 52px;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-collapse-btn {
+            top: 14px;
+            right: 10px;
+            bottom: auto;
+            transform: none;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-section-title,
+        body.sidebar-collapsed #sidebar .sidebar-link-text,
+        body.sidebar-collapsed #sidebar .sidebar-chevron {
+            opacity: 0;
+            width: 0;
+            overflow: hidden;
+            margin: 0;
+            padding: 0;
+            display: inline-block;
+        }
+
+        body.sidebar-collapsed #sidebar ul li a {
+            justify-content: center;
+            padding: 12px 8px;
+        }
+
+        body.sidebar-collapsed #sidebar ul li a i {
+            margin-right: 0;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-submenu a {
+            padding: 10px 16px;
+            justify-content: flex-start;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent {
+            position: relative;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent > .sidebar-submenu {
+            display: none !important;
+            position: absolute;
+            left: calc(var(--sidebar-collapsed-width) - 4px);
+            top: 0;
+            min-width: 230px;
+            margin: 0;
+            padding: 6px 0;
+            background-color: #243442;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 0 6px 6px 0;
+            box-shadow: 4px 4px 14px rgba(0, 0, 0, 0.25);
+            z-index: 1100;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent:hover > .sidebar-submenu,
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent:focus-within > .sidebar-submenu {
+            display: block !important;
+            height: auto !important;
+            visibility: visible;
+        }
+
+        body.sidebar-collapsed #sidebar li:has(> .sidebar-section-title) {
+            display: none;
+        }
+
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent:hover > .sidebar-submenu .sidebar-link-text,
+        body.sidebar-collapsed #sidebar .sidebar-menu-parent:focus-within > .sidebar-submenu .sidebar-link-text {
+            opacity: 1;
+            width: auto;
+            display: inline;
+        }
+
+        body.sidebar-collapsed #sidebar hr {
+            margin-left: 10px;
             margin-right: 10px;
         }
 
@@ -113,8 +251,13 @@
         #content {
             width: calc(100% - var(--sidebar-width));
             margin-left: var(--sidebar-width);
-            transition: all 0.3s;
+            transition: margin-left 0.3s ease, width 0.3s ease;
             min-height: 100vh;
+        }
+
+        body.sidebar-collapsed #content {
+            width: calc(100% - var(--sidebar-collapsed-width));
+            margin-left: var(--sidebar-collapsed-width);
         }
 
         .navbar {
@@ -124,9 +267,21 @@
         }
 
         @media (max-width: 768px) {
-            #sidebar { margin-left: calc(-1 * var(--sidebar-width)); }
+            body.sidebar-collapsed #sidebar {
+                width: var(--sidebar-width);
+            }
+            body.sidebar-collapsed #content {
+                width: 100%;
+                margin-left: 0;
+            }
+            #sidebar .sidebar-collapse-btn { display: none; }
+            #sidebar { margin-left: calc(-1 * var(--sidebar-width)); width: var(--sidebar-width) !important; }
             #sidebar.active { margin-left: 0; }
             #content { width: 100%; margin-left: 0; }
+        }
+
+        @media (min-width: 769px) {
+            #sidebar { margin-left: 0 !important; }
         }
     </style>
     {% block extra_css %}{% endblock %}
@@ -137,6 +292,9 @@
         <nav id="sidebar" aria-label="Navegación principal">
             <div class="sidebar-header">
                 <img src="{{ url_for('static', filename='img/LogoHM.png') }}" alt="Logo empresa" class="sidebar-logo">
+                <button type="button" class="sidebar-collapse-btn d-none d-md-inline-flex" id="sidebarCollapseBtn" aria-label="Contraer menú" aria-expanded="true">
+                    <i class="bi bi-chevron-left" aria-hidden="true"></i>
+                </button>
             </div>
 
             <ul class="list-unstyled components">
@@ -145,8 +303,8 @@
                 </li>
 
                 <li class="{{ 'active' if request.endpoint in ('trabajadores_page', 'trabajadores_editar') else '' }}">
-                    <a href="{{ url_for('trabajadores_page') }}">
-                        <i class="bi bi-people-fill"></i> Trabajadores
+                    <a href="{{ url_for('trabajadores_page') }}" title="Trabajadores">
+                        <i class="bi bi-people-fill"></i><span class="sidebar-link-text">Trabajadores</span>
                     </a>
                 </li>
 
@@ -155,14 +313,14 @@
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
-                    <a href="{{ url_for('procesar_planilla_page') }}">
-                        <i class="bi bi-gear-wide-connected"></i> Procesar planilla
+                    <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar planilla">
+                        <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar planilla</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'asignacion_conceptos_page' else '' }}">
-                    <a href="{{ url_for('asignacion_conceptos_page') }}">
-                        <i class="bi bi-tags"></i> Asignación de Conceptos
+                    <a href="{{ url_for('asignacion_conceptos_page') }}" title="Asignación de Conceptos">
+                        <i class="bi bi-tags"></i><span class="sidebar-link-text">Asignación de Conceptos</span>
                     </a>
                 </li>
 
@@ -172,29 +330,30 @@
                        class="sidebar-parent-link"
                        data-bs-toggle="collapse"
                        aria-expanded="{{ 'true' if pago_haberes_active else 'false' }}"
-                       aria-controls="submenuPagoHaberes">
-                        <i class="bi bi-cash-stack"></i> Pago de Haberes
+                       aria-controls="submenuPagoHaberes"
+                       title="Pago de Haberes">
+                        <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Pago de Haberes</span>
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if pago_haberes_active else '' }}" id="submenuPagoHaberes">
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_telecredito_page' else '' }}">
-                            <a href="{{ url_for('pago_haberes_telecredito_page') }}">
-                                <i class="bi bi-bank2"></i> Archivo Telecrédito
+                            <a href="{{ url_for('pago_haberes_telecredito_page') }}" title="Archivo Telecrédito">
+                                <i class="bi bi-bank2"></i><span class="sidebar-link-text">Archivo Telecrédito</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_interbank_page' else '' }}">
-                            <a href="{{ url_for('pago_haberes_interbank_page') }}">
-                                <i class="bi bi-bank"></i> Archivo Interbank
+                            <a href="{{ url_for('pago_haberes_interbank_page') }}" title="Archivo Interbank">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Interbank</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_bbva_page' else '' }}">
-                            <a href="{{ url_for('pago_haberes_bbva_page') }}">
-                                <i class="bi bi-bank"></i> Archivo Continental
+                            <a href="{{ url_for('pago_haberes_bbva_page') }}" title="Archivo Continental">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Continental</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_banbif_page' else '' }}">
-                            <a href="{{ url_for('pago_haberes_banbif_page') }}">
-                                <i class="bi bi-bank"></i> Archivo BANBIF
+                            <a href="{{ url_for('pago_haberes_banbif_page') }}" title="Archivo BANBIF">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo BANBIF</span>
                             </a>
                         </li>
                     </ul>
@@ -205,44 +364,44 @@
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
-                    <a href="{{ url_for('reporte_liquidaciones') }}">
-                        <i class="bi bi-calculator"></i> Promedio Liquidaciones
+                    <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio Liquidaciones">
+                        <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio Liquidaciones</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_resumen_total' else '' }}">
-                    <a href="{{ url_for('reporte_resumen_total') }}">
-                        <i class="bi bi-table"></i> Resumen planilla total
+                    <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen planilla total">
+                        <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen planilla total</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
-                    <a href="{{ url_for('reporte_planilla_vertical_page') }}">
-                        <i class="bi bi-layout-text-sidebar-reverse"></i> Planilla vertical
+                    <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla vertical">
+                        <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla vertical</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
-                    <a href="{{ url_for('reporte_vacaciones_detalle_page') }}">
-                        <i class="bi bi-calendar-range"></i> Detalle de vacaciones
+                    <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de vacaciones">
+                        <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de vacaciones</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
-                    <a href="{{ url_for('reporte_saldo_vacaciones_page') }}">
-                        <i class="bi bi-calendar-check"></i> Saldo de vacaciones
+                    <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de vacaciones">
+                        <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de vacaciones</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_descansos_medicos_detalle_page' else '' }}">
-                    <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}">
-                        <i class="bi bi-heart-pulse"></i> Detalle de descansos médicos
+                    <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de descansos médicos">
+                        <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de descansos médicos</span>
                     </a>
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
-                    <a href="{{ url_for('reporte_listado_pagos_page') }}">
-                        <i class="bi bi-cash-stack"></i> Listado de pagos
+                    <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de pagos">
+                        <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de pagos</span>
                     </a>
                 </li>
 
@@ -251,16 +410,16 @@
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'generar_boletas_page' else '' }}">
-                    <a href="{{ url_for('generar_boletas_page') }}">
-                        <i class="bi bi-file-earmark-pdf"></i> Generar boletas
+                    <a href="{{ url_for('generar_boletas_page') }}" title="Generar boletas">
+                        <i class="bi bi-file-earmark-pdf"></i><span class="sidebar-link-text">Generar boletas</span>
                     </a>
                 </li>
 
                 <hr class="mx-3 opacity-25 mt-4">
 
                 <li>
-                    <a href="{{ url_for('logout') }}">
-                        <i class="bi bi-box-arrow-right"></i> Cerrar Sesión
+                    <a href="{{ url_for('logout') }}" title="Cerrar Sesión">
+                        <i class="bi bi-box-arrow-right"></i><span class="sidebar-link-text">Cerrar Sesión</span>
                     </a>
                 </li>
             </ul>
@@ -301,11 +460,66 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         (function () {
-            var btn = document.getElementById('sidebarToggle');
+            var STORAGE_KEY = 'planillas-sidebar-collapsed';
             var sidebar = document.getElementById('sidebar');
-            if (btn && sidebar) {
-                btn.addEventListener('click', function () {
+            var btnMobile = document.getElementById('sidebarToggle');
+            var btnCollapse = document.getElementById('sidebarCollapseBtn');
+
+            function isSidebarCollapsed() {
+                return document.body.classList.contains('sidebar-collapsed');
+            }
+
+            function setSidebarCollapsed(collapsed) {
+                document.body.classList.toggle('sidebar-collapsed', collapsed);
+                if (btnCollapse) {
+                    btnCollapse.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+                    btnCollapse.setAttribute('aria-label', collapsed ? 'Expandir menú' : 'Contraer menú');
+                }
+                if (sidebar) {
+                    sidebar.querySelectorAll('.sidebar-parent-link').forEach(function (link) {
+                        if (collapsed) {
+                            link.removeAttribute('data-bs-toggle');
+                        } else {
+                            link.setAttribute('data-bs-toggle', 'collapse');
+                        }
+                    });
+                }
+                try {
+                    localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0');
+                } catch (e) {}
+            }
+
+            if (btnCollapse) {
+                btnCollapse.addEventListener('click', function () {
+                    setSidebarCollapsed(!isSidebarCollapsed());
+                });
+            }
+
+            if (btnMobile && sidebar) {
+                btnMobile.addEventListener('click', function () {
                     sidebar.classList.toggle('active');
+                });
+            }
+
+            try {
+                var saved = localStorage.getItem(STORAGE_KEY);
+                if (saved === '1' && window.innerWidth >= 769) {
+                    setSidebarCollapsed(true);
+                }
+            } catch (e) {}
+
+            if (sidebar) {
+                sidebar.querySelectorAll('.sidebar-parent-link').forEach(function (link) {
+                    link.addEventListener('click', function (e) {
+                        if (isSidebarCollapsed()) e.preventDefault();
+                    });
+                });
+                sidebar.querySelectorAll('a[href]').forEach(function (link) {
+                    var href = link.getAttribute('href') || '';
+                    if (href.indexOf('#') === 0) return;
+                    link.addEventListener('click', function () {
+                        if (window.innerWidth <= 768) sidebar.classList.remove('active');
+                    });
                 });
             }
         })();

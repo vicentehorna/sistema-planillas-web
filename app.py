@@ -163,6 +163,22 @@ def _normalize_conceptcurrency_asig(raw):
     return 'EX' if v == 'EX' else 'LO'
 
 
+def _normalize_tipo_concepto_asig(raw):
+    """Filtro listado: 0 = todos, P = permanente, T = temporal."""
+    v = str(raw or '0').strip().upper()
+    if v == 'P':
+        return 'P'
+    if v == 'T':
+        return 'T'
+    return '0'
+
+
+def _normalize_replicationunit_asig(raw):
+    """Filtro listado: 0 = todas las unidades (SY_Person.ReplicationUnit)."""
+    v = str(raw or '0').strip()
+    return '0' if v in ('', '0') else v
+
+
 def _asignacion_concepto_detalle_dict(r):
     conceptvalue = r.get('conceptvalue')
     try:
@@ -2095,6 +2111,36 @@ def api_bancos():
                 pass
 
 
+@app.route('/api/selectores/unidades')
+@login_required
+def api_unidades():
+    """sp_pr_selectorunidades_web → replicationunit, description."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorunidades_web")
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({
+                "id": rd.get("replicationunit") or rd.get("ReplicationUnit"),
+                "text": rd.get("description") or rd.get("Description"),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_unidades")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/conceptos')
 @login_required
 def api_conceptos():
@@ -2248,38 +2294,6 @@ def api_periodos_asig():
         return jsonify(data)
     except Exception:
         logging.exception("api_periodos_asig")
-        return jsonify([])
-    finally:
-        if conn:
-            try:
-                conn.close()
-            except Exception:
-                pass
-
-
-@app.route('/api/selectores/unidades')
-@login_required
-def api_unidades():
-    """sp_pr_selectorunidades_web → ReplicationUnit, Description (status = 'A')."""
-    conn = None
-    try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorunidades_web")
-        rows = cursor.fetchall()
-        data = []
-        for r in rows:
-            try:
-                rid = str(r.ReplicationUnit).strip()
-                txt = str(r.Description).strip()
-            except Exception:
-                rid = str(r[0]).strip() if len(r) > 0 else ''
-                txt = str(r[1]).strip() if len(r) > 1 else rid
-            if rid:
-                data.append({"id": rid, "text": txt})
-        return jsonify(data)
-    except Exception:
-        logging.exception("api_unidades")
         return jsonify([])
     finally:
         if conn:
@@ -2927,8 +2941,17 @@ def api_asignacion_conceptos_listado():
     concept_raw = body.get('concept')
     cs = str(concept_raw).strip() if concept_raw is not None else ''
     concept = '0' if cs in ('', '0') else cs
+    person_raw = body.get('person') or body.get('trabajador') or body.get('empleado') or ''
+    ps_person = str(person_raw).strip() if person_raw is not None else ''
+    person = '0' if ps_person in ('', '0') else ps_person
     nombre = str(body.get('nombre') or body.get('name') or '').strip()
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    frecuencytype = _normalize_tipo_concepto_asig(
+        body.get('frecuencytype') or body.get('tipo_concepto') or body.get('tipoconcepto')
+    )
+    replicationunit = _normalize_replicationunit_asig(
+        body.get('replicationunit') or body.get('unidad') or body.get('repunit')
+    )
 
     if not cia:
         return jsonify({"error": "Seleccione compañía."}), 400
@@ -2941,8 +2964,9 @@ def api_asignacion_conceptos_listado():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_listaasignacionconceptos_web "
-            "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, @nombre=?, @cesados=?",
-            (cia, payrolltype, period, concept, nombre, cesados),
+            "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, "
+            "@par_person=?, @nombre=?, @cesados=?, @par_frecuencytype=?, @par_replicationunit=?",
+            (cia, payrolltype, period, concept, person, nombre, cesados, frecuencytype, replicationunit),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []

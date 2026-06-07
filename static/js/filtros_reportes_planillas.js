@@ -536,8 +536,10 @@
                     payroll: val('cboTipoPlanilla'),
                     periodo: val('cboPeriodo') || '0',
                     concept: val('cboConcepto') || '0',
-                    nombre: val('txtNombre'),
+                    person: val('cboTrabajador') || '0',
+                    unidad: val('cboUnidad') || '0',
                     cesados: val('cboCesados') || 'T',
+                    tipoConcepto: val('cboTipoConcepto') || '0',
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY_ASIGNACION_CONCEPTOS, JSON.stringify(estado));
@@ -570,6 +572,9 @@
             const cboPer = document.getElementById('cboPeriodo');
             const cboConcepto = document.getElementById('cboConcepto');
             const cboCesados = document.getElementById('cboCesados');
+            const cboTipoConcepto = document.getElementById('cboTipoConcepto');
+            const cboUnidad = document.getElementById('cboUnidad');
+            const cboTrabajador = document.getElementById('cboTrabajador');
             if (!cboCia || !cboPt || !cboPer || !cboConcepto) return false;
 
             const cia = String(filtros.cia).trim();
@@ -624,9 +629,41 @@
                 }
             }
 
-            const txtNombre = document.getElementById('txtNombre');
-            if (txtNombre && filtros.nombre != null) {
-                txtNombre.value = String(filtros.nombre);
+            if (cboTipoConcepto) {
+                const tipoConcepto = filtros.tipoConcepto != null ? String(filtros.tipoConcepto).trim().toUpperCase() : '0';
+                if (['0', 'P', 'T'].includes(tipoConcepto) && optionExists(cboTipoConcepto, tipoConcepto)) {
+                    cboTipoConcepto.value = tipoConcepto;
+                } else if (optionExists(cboTipoConcepto, '0')) {
+                    cboTipoConcepto.value = '0';
+                }
+            }
+
+            if (cboUnidad) {
+                const unidad = filtros.unidad != null ? String(filtros.unidad).trim() : '0';
+                if (unidad && optionExists(cboUnidad, unidad)) {
+                    cboUnidad.value = unidad;
+                } else if (optionExists(cboUnidad, '0')) {
+                    cboUnidad.value = '0';
+                }
+            }
+
+            if (cboTrabajador && cia) {
+                await poblarSelect(
+                    `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                    cboTrabajador
+                );
+                if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {
+                    opts.etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+                } else if (cboTrabajador.options.length && cboTrabajador.options[0].value === '') {
+                    cboTrabajador.options[0].textContent = 'Todos (por defecto)';
+                }
+                cboTrabajador.disabled = false;
+                const person = filtros.person != null ? String(filtros.person).trim() : '';
+                if (person && person !== '0' && optionExists(cboTrabajador, person)) {
+                    cboTrabajador.value = person;
+                } else if (optionExists(cboTrabajador, '')) {
+                    cboTrabajador.value = '';
+                }
             }
 
             guardar();
@@ -634,7 +671,7 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo', 'cboConcepto', 'cboCesados'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo', 'cboConcepto', 'cboUnidad', 'cboTrabajador', 'cboCesados', 'cboTipoConcepto'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

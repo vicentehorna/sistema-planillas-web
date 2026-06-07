@@ -6,19 +6,24 @@
 
     Filtros iniciales:
       @par_company, @par_payrolltype, @par_period ('0' = todos los periodos),
-      @par_concept ('0' = todos los conceptos), @nombre (búsqueda parcial), @cesados (T/Y/N).
+      @par_concept ('0' = todos los conceptos), @par_person ('0' = todos los empleados),
+      @nombre (búsqueda parcial, opcional), @cesados (T/Y/N),
+      @par_frecuencytype ('0' = todos, P = permanente, T = temporal),
+      @par_replicationunit ('0' = todas las unidades, SY_Person.ReplicationUnit).
 
     Filtros legacy no expuestos aún (valores por defecto):
-      empleado = todos, centro de costo = todos, frecuencia = todos,
-      unidad replicación = todos, viewliq = T, tareo = N, validar = T.
+      centro de costo = todos, viewliq = T, tareo = N, validar = T.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listaasignacionconceptos_web]
     @par_company     VARCHAR(10),
     @par_payrolltype VARCHAR(20),
     @par_period      VARCHAR(10),
     @par_concept     VARCHAR(20),
+    @par_person      VARCHAR(20) = '0',
     @nombre          VARCHAR(100),
-    @cesados         CHAR(1)
+    @cesados         CHAR(1),
+    @par_frecuencytype CHAR(1) = '0',
+    @par_replicationunit VARCHAR(4) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -26,10 +31,10 @@ BEGIN
     DECLARE @par_period_all  CHAR(1) = 'N';
     DECLARE @par_allconcept  CHAR(1) = 'N';
     DECLARE @par_employee_all CHAR(1) = 'Y';
-    DECLARE @par_person      VARCHAR(20) = '';
+    DECLARE @person_filter   VARCHAR(20) = '';
     DECLARE @par_cc_all      CHAR(1) = 'Y';
     DECLARE @par_cc          VARCHAR(20) = '';
-    DECLARE @par_frecuency_all CHAR(1) = 'Y';
+    DECLARE @par_frecuency_all CHAR(1) = 'N';
     DECLARE @par_frecuency   CHAR(1) = '';
     DECLARE @par_repunit_all CHAR(1) = 'Y';
     DECLARE @par_repunit     VARCHAR(4) = '';
@@ -42,6 +47,24 @@ BEGIN
     IF RTRIM(ISNULL(@par_concept, '')) IN ('', '0') SET @par_allconcept = 'Y';
     IF @nombre IS NULL SET @nombre = '';
     SET @nombre = LTRIM(RTRIM(@nombre));
+    SET @person_filter = LTRIM(RTRIM(ISNULL(@par_person, '')));
+    IF @person_filter IN ('', '0')
+        SET @par_employee_all = 'Y';
+    ELSE
+        SET @par_employee_all = 'N';
+    SET @par_frecuencytype = UPPER(LTRIM(RTRIM(ISNULL(@par_frecuencytype, '0'))));
+    IF @par_frecuencytype IN ('', '0')
+        SET @par_frecuency_all = 'Y';
+    ELSE IF @par_frecuencytype IN ('P', 'T')
+        SET @par_frecuency = @par_frecuencytype;
+    ELSE
+        SET @par_frecuency_all = 'Y';
+
+    SET @par_repunit = LTRIM(RTRIM(ISNULL(@par_replicationunit, '')));
+    IF @par_repunit IN ('', '0')
+        SET @par_repunit_all = 'Y';
+    ELSE
+        SET @par_repunit_all = 'N';
 
     SELECT
         ec.Person AS person,
@@ -92,7 +115,7 @@ BEGIN
       AND ec.PayRollType = @par_payrolltype
       AND (
             @par_employee_all = 'Y'
-         OR ec.Person = @par_person
+         OR ec.Person = @person_filter
       )
       AND (
             @par_period_all = 'Y'

@@ -134,6 +134,60 @@ def _normalize_pr_period(period_raw):
     return str(period_raw or '').strip()
 
 
+def _asignacion_concepto_pk_from_json(body):
+    """Clave PR_EmployeeConcept desde JSON del cliente."""
+    body = body or {}
+    return {
+        'company': str(body.get('company') or body.get('cia') or '').strip(),
+        'person': str(body.get('person') or '').strip(),
+        'concept': str(body.get('concept') or '').strip(),
+        'payrolltype': str(body.get('payrolltype') or body.get('payroll_type') or '').strip(),
+        'prperiodstart': _normalize_pr_period(body.get('prperiodstart') or body.get('period_start')),
+        'costcenter': str(body.get('costcenter') if body.get('costcenter') is not None else '').strip(),
+    }
+
+
+def _normalize_flagapplyformula_asig(raw):
+    if raw is True or str(raw).strip().upper() in ('Y', '1', 'TRUE', 'SI', 'SÍ'):
+        return 'Y'
+    return 'N'
+
+
+def _normalize_flagfrecuencytype_asig(raw):
+    v = str(raw or 'P').strip().upper()
+    return 'T' if v == 'T' else 'P'
+
+
+def _normalize_conceptcurrency_asig(raw):
+    v = str(raw or 'LO').strip().upper()
+    return 'EX' if v == 'EX' else 'LO'
+
+
+def _asignacion_concepto_detalle_dict(r):
+    conceptvalue = r.get('conceptvalue')
+    try:
+        conceptvalue_num = float(conceptvalue) if conceptvalue is not None else 0.0
+    except Exception:
+        conceptvalue_num = 0.0
+    return {
+        "person": _jsonable_value(r.get('person')),
+        "nombre": _jsonable_value(r.get('nombre')),
+        "employeecode": _jsonable_value(r.get('employeecode')),
+        "company": _jsonable_value(r.get('company')),
+        "concept": _jsonable_value(r.get('concept')),
+        "conceptname": _jsonable_value(r.get('conceptname')),
+        "payrolltype": _jsonable_value(r.get('payrolltype')),
+        "prperiodstart": _jsonable_value(r.get('prperiodstart')),
+        "prperiodend": _jsonable_value(r.get('prperiodend')),
+        "conceptvalue": conceptvalue_num,
+        "conceptcurrency": _jsonable_value(r.get('conceptcurrency')),
+        "flagapplyformula": _jsonable_value(r.get('flagapplyformula')),
+        "flagfrecuencytype": _jsonable_value(r.get('flagfrecuencytype')),
+        "costcenter": _jsonable_value(r.get('costcenter')),
+        "costcentercode": _jsonable_value(r.get('costcentercode')),
+    }
+
+
 def _fmt_periodo_yyyy_mm(val):
     """Periodo para columnas de reporte: YYYY-MM (p. ej. 20250301 → 2025-03)."""
     if val is None:
@@ -957,6 +1011,12 @@ def reporte_listado_pagos_page():
 @login_required
 def procesar_planilla_page():
     return render_template('procesar_planilla.html')
+
+
+@app.route('/asignacion-conceptos')
+@login_required
+def asignacion_conceptos_page():
+    return render_template('asignacion_conceptos.html')
 
 
 @app.route('/pago-haberes/telecredito')
@@ -2846,6 +2906,224 @@ def reporte_saldo_vacaciones_post():
     except Exception as e:
         logging.exception("reporte_saldo_vacaciones_post")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asignacion-conceptos/listado', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_listado():
+    """sp_pr_listaasignacionconceptos_web: listado de conceptos asignados a trabajadores."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    period_raw = body.get('period')
+    ps = str(period_raw).strip() if period_raw is not None else ''
+    period = '0' if ps in ('', '0') else ps
+    concept_raw = body.get('concept')
+    cs = str(concept_raw).strip() if concept_raw is not None else ''
+    concept = '0' if cs in ('', '0') else cs
+    nombre = str(body.get('nombre') or body.get('name') or '').strip()
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listaasignacionconceptos_web "
+            "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, @nombre=?, @cesados=?",
+            (cia, payrolltype, period, concept, nombre, cesados),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        total_valor = 0.0
+        for r in rows:
+            conceptvalue = r.get('conceptvalue')
+            try:
+                conceptvalue_num = float(conceptvalue) if conceptvalue is not None else 0.0
+            except Exception:
+                conceptvalue_num = 0.0
+            total_valor += conceptvalue_num
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "nombre": _jsonable_value(r.get('nombre')),
+                "employeecode": _jsonable_value(r.get('employeecode')),
+                "company": _jsonable_value(r.get('company')),
+                "concept": _jsonable_value(r.get('concept')),
+                "conceptname": _jsonable_value(r.get('conceptname')),
+                "payrolltype": _jsonable_value(r.get('payrolltype')),
+                "prperiodstart": _jsonable_value(r.get('prperiodstart')),
+                "prperiodend": _jsonable_value(r.get('prperiodend')),
+                "conceptvalue": conceptvalue_num,
+                "conceptcurrency": _jsonable_value(r.get('conceptcurrency')),
+                "flagapplyformula": _jsonable_value(r.get('flagapplyformula')),
+                "flagfrecuencytype": _jsonable_value(r.get('flagfrecuencytype')),
+                "costcenter": _jsonable_value(r.get('costcenter')),
+                "costcentercode": _jsonable_value(r.get('costcentercode')),
+                "project": _jsonable_value(r.get('project')),
+                "comments": _jsonable_value(r.get('comments')),
+                "tareo": _jsonable_value(r.get('tareo')),
+                "xlastuser": _jsonable_value(r.get('xlastuser')),
+                "xlastdate": _jsonable_value(r.get('xlastdate')),
+            })
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "total_valor": total_valor,
+        })
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asignacion-conceptos/detalle', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_detalle():
+    """sp_pr_obtenerasignacionconcepto_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    pk = _asignacion_concepto_pk_from_json(body)
+    if not pk['company'] or not pk['person'] or not pk['concept'] or not pk['payrolltype'] or not pk['prperiodstart']:
+        return jsonify({"error": "Faltan datos de la asignación."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerasignacionconcepto_web "
+            "@par_company=?, @par_person=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_prperiodstart=?, @par_costcenter=?",
+            (
+                pk['company'], pk['person'], pk['concept'],
+                pk['payrolltype'], pk['prperiodstart'], pk['costcenter'],
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        if not rows:
+            return jsonify({"error": "No se encontró la asignación."}), 404
+        return jsonify({"row": _asignacion_concepto_detalle_dict(rows[0])})
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_detalle")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asignacion-conceptos/guardar', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_guardar():
+    """sp_pr_guardarasignacionconcepto_web: alta o actualización."""
+    body = request.get_json(silent=True) or {}
+    modo_raw = str(body.get('modo') or 'I').strip().upper()
+    modo = 'U' if modo_raw == 'U' else 'I'
+    pk = _asignacion_concepto_pk_from_json(body)
+
+    if not pk['company'] or not pk['person'] or not pk['concept'] or not pk['payrolltype'] or not pk['prperiodstart']:
+        return jsonify({"error": "Complete compañía, empleado, concepto, tipo planilla y periodo inicio."}), 400
+
+    prperiodend_raw = body.get('prperiodend') or body.get('period_end')
+    prperiodend = _normalize_pr_period(prperiodend_raw) if prperiodend_raw not in (None, '') else ''
+    flagfrecuencytype = _normalize_flagfrecuencytype_asig(body.get('flagfrecuencytype'))
+    if flagfrecuencytype == 'P':
+        prperiodend = ''
+
+    conceptvalue_raw = body.get('conceptvalue')
+    if conceptvalue_raw is None or str(conceptvalue_raw).strip() == '':
+        return jsonify({"error": "Indique el valor del concepto."}), 400
+    try:
+        conceptvalue = float(conceptvalue_raw)
+    except Exception:
+        return jsonify({"error": "Valor del concepto inválido."}), 400
+
+    conceptcurrency = _normalize_conceptcurrency_asig(body.get('conceptcurrency'))
+    flagapplyformula = _normalize_flagapplyformula_asig(body.get('flagapplyformula'))
+    xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarasignacionconcepto_web "
+            "@modo=?, @par_company=?, @par_person=?, @par_concept=?, @par_payrolltype=?, "
+            "@par_prperiodstart=?, @par_costcenter=?, @par_prperiodend=?, @par_conceptvalue=?, "
+            "@par_conceptcurrency=?, @par_flagapplyformula=?, @par_flagfrecuencytype=?, @xlastuser=?",
+            (
+                modo, pk['company'], pk['person'], pk['concept'], pk['payrolltype'],
+                pk['prperiodstart'], pk['costcenter'], prperiodend or None, conceptvalue,
+                conceptcurrency, flagapplyformula, flagfrecuencytype, xlastuser,
+            ),
+        )
+        _drain_pyodbc_cursor(cursor)
+        return jsonify({"ok": True, "modo": modo})
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asignacion-conceptos/eliminar', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_eliminar():
+    """sp_pr_eliminarasignacionconcepto_web: elimina asignación por clave."""
+    body = request.get_json(silent=True) or {}
+    pk = _asignacion_concepto_pk_from_json(body)
+    if not pk['company'] or not pk['person'] or not pk['concept'] or not pk['payrolltype'] or not pk['prperiodstart']:
+        return jsonify({"error": "Faltan datos de la asignación."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarasignacionconcepto_web "
+            "@par_company=?, @par_person=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_prperiodstart=?, @par_costcenter=?",
+            (
+                pk['company'], pk['person'], pk['concept'],
+                pk['payrolltype'], pk['prperiodstart'], pk['costcenter'],
+            ),
+        )
+        _drain_pyodbc_cursor(cursor)
+        return jsonify({"ok": True})
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
     finally:
         if conn:
             try:

@@ -1,0 +1,1112 @@
+{% extends "layout.html" %}
+
+{% block title %}Asignación de Conceptos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-asignacion-conceptos {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-asignacion-conceptos th,
+    .table-asignacion-conceptos td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-asignacion-conceptos thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-asignacion-conceptos .col-item {
+        width: 2.5rem;
+        text-align: center;
+    }
+
+    .table-asignacion-conceptos .col-valor {
+        min-width: 6rem;
+        text-align: right;
+    }
+
+    .table-asignacion-conceptos tr.total-reporte td {
+        background-color: #e9ecef;
+        font-weight: 700;
+        border-top: 2px solid #adb5bd;
+    }
+
+    .table-asignacion-conceptos .col-acciones {
+        width: 4.5rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .table-asignacion-conceptos .col-acciones .btn-link {
+        line-height: 1;
+    }
+
+    .btn-nueva-asignacion {
+        background-color: #17a2b8;
+        border-color: #17a2b8;
+        color: #fff;
+    }
+
+    .btn-nueva-asignacion:hover:not(:disabled),
+    .btn-nueva-asignacion:focus:not(:disabled) {
+        background-color: #138496;
+        border-color: #117a8b;
+        color: #fff;
+    }
+
+    .btn-nueva-asignacion:disabled {
+        background-color: #17a2b8;
+        border-color: #17a2b8;
+        color: #fff;
+        opacity: 0.55;
+    }
+
+    .modal-campo-bloqueado {
+        background-color: #e9ecef !important;
+        color: #495057;
+        cursor: not-allowed;
+        border-color: #ced4da;
+    }
+
+    .modal-campo-obligatorio {
+        background-color: #faf8f3 !important;
+        border-color: #e8e2d6;
+    }
+
+    .modal-campo-obligatorio:focus {
+        background-color: #fcfbfa !important;
+        border-color: #d9d0c3;
+        box-shadow: 0 0 0 0.2rem rgba(180, 170, 150, 0.15);
+    }
+
+    .modal-campo-obligatorio:disabled {
+        background-color: #f3f1ed !important;
+        color: #495057;
+        opacity: 1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmAsignacionConceptos" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboConcepto" class="form-label small fw-bold text-muted">Concepto</label>
+                <select id="cboConcepto" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre</label>
+                <input type="text" id="txtNombre" class="form-control form-control-sm" placeholder="Buscar por nombre" maxlength="100" autocomplete="off">
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelAsigConceptos" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <button type="button" class="btn btn-nueva-asignacion btn-sm px-3" id="btnNuevaAsignacion" disabled>
+                    <i class="bi bi-plus-lg"></i> Nueva asignación
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCountAsigConceptos">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoAsigConceptos">
+    <div class="card-body pt-3">
+        <h4 class="text-center fw-bold mb-3">Asignación de Conceptos</h4>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-asignacion-conceptos align-middle">
+                <thead>
+                    <tr>
+                        <th class="col-item">Item</th>
+                        <th>Código</th>
+                        <th>Empleado</th>
+                        <th>Concepto</th>
+                        <th>Tipo</th>
+                        <th class="col-valor">Valor</th>
+                        <th>Moneda</th>
+                        <th>Vigente Desde</th>
+                        <th>Hasta</th>
+                        <th>C.Costo</th>
+                        <th>Tareo</th>
+                        <th>Aplica</th>
+                        <th class="col-acciones">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-asignacion-conceptos"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalAsignacionConcepto" tabindex="-1" aria-labelledby="modalAsignacionConceptoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fw-bold" id="modalAsignacionConceptoLabel">Nueva asignación de concepto</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <form id="frmModalAsignacion" novalidate>
+                <div class="modal-body">
+                    <input type="hidden" id="hdModalModo" value="I">
+                    <input type="hidden" id="hdModalCostCenter" value="">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="txtModalCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                            <input type="text" id="txtModalCompania" class="form-control form-control-sm modal-campo-bloqueado" readonly>
+                            <input type="hidden" id="hdModalCompania">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtModalPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                            <input type="text" id="txtModalPlanilla" class="form-control form-control-sm modal-campo-bloqueado" readonly>
+                            <input type="hidden" id="hdModalPlanilla">
+                        </div>
+                        <div class="col-12">
+                            <label for="cboModalEmpleado" class="form-label small fw-bold text-muted">Empleado</label>
+                            <select id="cboModalEmpleado" class="form-select form-select-sm modal-campo-obligatorio" required>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="cboModalConcepto" class="form-label small fw-bold text-muted">Concepto</label>
+                            <select id="cboModalConcepto" class="form-select form-select-sm modal-campo-obligatorio" required>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-bold text-muted d-block">Tipo</label>
+                            <div class="d-flex gap-3 pt-1">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalPermanente" value="P" checked>
+                                    <label class="form-check-label small" for="radModalPermanente">Permanente</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="radio" name="radModalTipo" id="radModalTemporal" value="T">
+                                    <label class="form-check-label small" for="radModalTemporal">Temporal</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check mt-4 pt-1">
+                                <input class="form-check-input" type="checkbox" id="chkModalAplicaFormula">
+                                <label class="form-check-label small" for="chkModalAplicaFormula">Aplicar sobre fórmula</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboModalPeriodoInicio" class="form-label small fw-bold text-muted">Vigente desde</label>
+                            <select id="cboModalPeriodoInicio" class="form-select form-select-sm" required>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboModalPeriodoFin" class="form-label small fw-bold text-muted">Hasta</label>
+                            <select id="cboModalPeriodoFin" class="form-select form-select-sm" disabled>
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtModalValor" class="form-label small fw-bold text-muted">Valor</label>
+                            <input type="number" id="txtModalValor" class="form-control form-control-sm text-end modal-campo-obligatorio" step="0.0001" min="0" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboModalMoneda" class="form-label small fw-bold text-muted">Moneda</label>
+                            <select id="cboModalMoneda" class="form-select form-select-sm" required>
+                                <option value="LO" selected>Local (LO)</option>
+                                <option value="EX">Extranjera (EX)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4" id="btnGuardarAsignacion">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.asignacionConceptos
+        ? window.FiltrosPlanillasReportes.asignacionConceptos()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_asignacion_conceptos_listado') | tojson }};
+    const URL_DETALLE = {{ url_for('api_asignacion_conceptos_detalle') | tojson }};
+    const URL_GUARDAR = {{ url_for('api_asignacion_conceptos_guardar') | tojson }};
+    const URL_ELIMINAR = {{ url_for('api_asignacion_conceptos_eliminar') | tojson }};
+    const HEADERS = [
+        'Item', 'Código', 'Empleado', 'Concepto', 'Tipo', 'Valor', 'Moneda',
+        'Vigente Desde', 'Hasta', 'C.Costo', 'Tareo', 'Aplica'
+    ];
+    const IDX_VALOR = 5;
+    let lastExportAsigConceptos = null;
+    let modalAsignacion = null;
+    let consultaEjecutada = false;
+
+    function actualizarBtnNuevaAsignacion() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        document.getElementById('btnNuevaAsignacion').disabled = !(cia && payrolltype);
+    }
+
+    function tipoAsignacionSeleccionado() {
+        const rad = document.querySelector('input[name="radModalTipo"]:checked');
+        return rad ? String(rad.value).trim().toUpperCase() : 'P';
+    }
+
+    function actualizarEstadoPeriodoFinModal() {
+        const esTemporal = tipoAsignacionSeleccionado() === 'T';
+        const cboFin = document.getElementById('cboModalPeriodoFin');
+        cboFin.disabled = !esTemporal;
+        cboFin.required = esTemporal;
+        if (!esTemporal) {
+            cboFin.value = '';
+        }
+    }
+
+    function setModalCamposClaveDisabled(esEdicion) {
+        const bloqueados = ['cboModalEmpleado', 'cboModalConcepto', 'cboModalPeriodoInicio'];
+        bloqueados.forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = esEdicion;
+        });
+    }
+
+    async function poblarSelectModal(url, selectElement) {
+        await poblarSelect(url, selectElement, { incluyeTodos: false });
+    }
+
+    async function poblarPeriodosModal(cia, payrolltype) {
+        const cboInicio = document.getElementById('cboModalPeriodoInicio');
+        const cboFin = document.getElementById('cboModalPeriodoFin');
+        await poblarSelectModal(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            cboInicio
+        );
+        await poblarSelectModal(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            cboFin
+        );
+        actualizarEstadoPeriodoFinModal();
+    }
+
+    async function poblarCombosModal(cia, payrolltype) {
+        await poblarSelectModal(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, document.getElementById('cboModalEmpleado'));
+        await poblarSelectModal(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, document.getElementById('cboModalConcepto'));
+        await poblarPeriodosModal(cia, payrolltype);
+    }
+
+    function limpiarFormularioModal() {
+        document.getElementById('frmModalAsignacion').reset();
+        document.getElementById('hdModalModo').value = 'I';
+        document.getElementById('hdModalCostCenter').value = '';
+        document.getElementById('radModalPermanente').checked = true;
+        document.getElementById('chkModalAplicaFormula').checked = false;
+        document.getElementById('cboModalMoneda').value = 'LO';
+        actualizarEstadoPeriodoFinModal();
+        setModalCamposClaveDisabled(false);
+    }
+
+    async function abrirModalNuevo() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        if (!cia || !payrolltype) {
+            alert('Seleccione compañía y tipo planilla antes de agregar.');
+            return;
+        }
+
+        limpiarFormularioModal();
+        document.getElementById('modalAsignacionConceptoLabel').textContent = 'Nueva asignación de concepto';
+        document.getElementById('hdModalCompania').value = cia;
+        document.getElementById('txtModalCompania').value = selectedText('cboCompania');
+        document.getElementById('hdModalPlanilla').value = payrolltype;
+        document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla');
+
+        await poblarCombosModal(cia, payrolltype);
+        modalAsignacion.show();
+    }
+
+    function keysAsignacionDesdeFila(row) {
+        return {
+            company: row.company || document.getElementById('cboCompania').value.trim(),
+            person: row.person,
+            concept: row.concept,
+            payrolltype: row.payrolltype,
+            prperiodstart: row.prperiodstart,
+            costcenter: row.costcenter != null ? String(row.costcenter) : ''
+        };
+    }
+
+    async function eliminarAsignacion(row) {
+        const keys = keysAsignacionDesdeFila(row);
+        if (!keys.person || !keys.concept || !keys.payrolltype || !keys.prperiodstart) {
+            alert('No se pudo identificar el registro a eliminar.');
+            return;
+        }
+
+        const etiqueta = [
+            row.nombre || keys.person,
+            row.conceptname || row.concept,
+            fmtPeriodoDisplay(row.prperiodstart)
+        ].filter(Boolean).join(' · ');
+
+        const msg = etiqueta
+            ? `¿Eliminar la asignación?\n\n${etiqueta}\n\nEsta acción no se puede deshacer.`
+            : '¿Eliminar la asignación seleccionada? Esta acción no se puede deshacer.';
+        if (!window.confirm(msg)) {
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_ELIMINAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(keys)
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                alert(payload.error || 'No se pudo eliminar la asignación.');
+                return;
+            }
+            if (consultaEjecutada) {
+                await ejecutarConsulta();
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error de red o del servidor al eliminar.');
+        }
+    }
+
+    async function abrirModalEditar(row) {
+        const keys = keysAsignacionDesdeFila(row);
+
+        if (!keys.person || !keys.concept || !keys.payrolltype || !keys.prperiodstart) {
+            alert('No se pudo identificar el registro a editar.');
+            return;
+        }
+
+        limpiarFormularioModal();
+        document.getElementById('modalAsignacionConceptoLabel').textContent = 'Editar asignación de concepto';
+        document.getElementById('hdModalModo').value = 'U';
+
+        try {
+            const res = await fetch(URL_DETALLE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(keys)
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                alert(payload.error || 'No se pudo cargar la asignación.');
+                return;
+            }
+            const det = payload.row || {};
+            const cia = String(det.company || keys.company).trim();
+            const payrolltype = String(det.payrolltype || keys.payrolltype).trim();
+
+            document.getElementById('hdModalCompania').value = cia;
+            document.getElementById('txtModalCompania').value = selectedText('cboCompania') || cia;
+            document.getElementById('hdModalPlanilla').value = payrolltype;
+            document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla') || payrolltype;
+            document.getElementById('hdModalCostCenter').value = det.costcenter != null ? String(det.costcenter) : keys.costcenter;
+
+            await poblarCombosModal(cia, payrolltype);
+
+            if (optionExists(document.getElementById('cboModalEmpleado'), det.person)) {
+                document.getElementById('cboModalEmpleado').value = det.person;
+            }
+            if (optionExists(document.getElementById('cboModalConcepto'), det.concept)) {
+                document.getElementById('cboModalConcepto').value = det.concept;
+            }
+            if (optionExists(document.getElementById('cboModalPeriodoInicio'), det.prperiodstart)) {
+                document.getElementById('cboModalPeriodoInicio').value = det.prperiodstart;
+            }
+
+            const tipo = String(det.flagfrecuencytype || 'P').trim().toUpperCase();
+            document.getElementById('radModalPermanente').checked = tipo !== 'T';
+            document.getElementById('radModalTemporal').checked = tipo === 'T';
+            actualizarEstadoPeriodoFinModal();
+
+            if (tipo === 'T' && det.prperiodend && optionExists(document.getElementById('cboModalPeriodoFin'), det.prperiodend)) {
+                document.getElementById('cboModalPeriodoFin').value = det.prperiodend;
+            }
+
+            document.getElementById('txtModalValor').value = det.conceptvalue != null ? String(det.conceptvalue) : '';
+            document.getElementById('cboModalMoneda').value = String(det.conceptcurrency || 'LO').trim().toUpperCase() === 'EX' ? 'EX' : 'LO';
+            document.getElementById('chkModalAplicaFormula').checked = String(det.flagapplyformula || '').trim().toUpperCase() === 'Y';
+
+            setModalCamposClaveDisabled(true);
+            modalAsignacion.show();
+        } catch (err) {
+            console.error(err);
+            alert('Error al cargar la asignación.');
+        }
+    }
+
+    async function guardarAsignacionModal(e) {
+        e.preventDefault();
+
+        const modo = document.getElementById('hdModalModo').value.trim().toUpperCase() === 'U' ? 'U' : 'I';
+        const company = document.getElementById('hdModalCompania').value.trim();
+        const payrolltype = document.getElementById('hdModalPlanilla').value.trim();
+        const person = document.getElementById('cboModalEmpleado').value.trim();
+        const concept = document.getElementById('cboModalConcepto').value.trim();
+        const prperiodstart = document.getElementById('cboModalPeriodoInicio').value.trim();
+        const costcenter = document.getElementById('hdModalCostCenter').value.trim();
+        const flagfrecuencytype = tipoAsignacionSeleccionado();
+        let prperiodend = document.getElementById('cboModalPeriodoFin').value.trim();
+        const conceptvalue = document.getElementById('txtModalValor').value.trim();
+        const conceptcurrency = document.getElementById('cboModalMoneda').value.trim();
+        const flagapplyformula = document.getElementById('chkModalAplicaFormula').checked ? 'Y' : 'N';
+
+        if (!company || !payrolltype || !person || !concept || !prperiodstart || conceptvalue === '') {
+            alert('Complete los campos obligatorios.');
+            return;
+        }
+        if (flagfrecuencytype === 'T' && !prperiodend) {
+            alert('Para asignación temporal indique el periodo fin.');
+            return;
+        }
+        if (flagfrecuencytype === 'P') {
+            prperiodend = '';
+        }
+
+        const btn = document.getElementById('btnGuardarAsignacion');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_GUARDAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    modo, company, payrolltype, person, concept, prperiodstart, costcenter,
+                    prperiodend, conceptvalue, conceptcurrency, flagapplyformula, flagfrecuencytype
+                })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                alert(payload.error || 'No se pudo guardar la asignación.');
+                return;
+            }
+            modalAsignacion.hide();
+            if (consultaEjecutada) {
+                await ejecutarConsulta();
+            } else {
+                alert('Asignación guardada correctamente.');
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error de red o del servidor al guardar.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function limpiarValorComboSiObsoleto(select) {
+        if (!select) return;
+        const v = String(select.value || '').trim();
+        if (!v) return;
+        const ok = Array.from(select.options).some((o) => String(o.value) === v);
+        if (!ok) select.value = '';
+    }
+
+    function formatearImporte(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    }
+
+    function fmtPeriodoDisplay(period) {
+        const p = String(period || '').trim();
+        if (p.length === 8 && /^\d{8}$/.test(p)) {
+            return `${p.slice(0, 4)}-${p.slice(4, 6)}-${p.slice(6, 8)}`;
+        }
+        return p;
+    }
+
+    function etiquetaCesados(valor) {
+        const v = String(valor || 'T').trim().toUpperCase();
+        if (v === 'Y') return 'Sí';
+        if (v === 'N') return 'No';
+        return 'Todos';
+    }
+
+    function etiquetaFrecuencia(valor) {
+        const v = String(valor || '').trim().toUpperCase();
+        if (v === 'P') return 'Permanente';
+        if (v === 'T') return 'Temporal';
+        return v;
+    }
+
+    function etiquetaMoneda(valor) {
+        const v = String(valor || '').trim().toUpperCase();
+        if (v === 'LO') return 'Local';
+        if (v === 'EX') return 'Extranjera';
+        return v;
+    }
+
+    function etiquetaAplica(valor) {
+        const v = String(valor || '').trim().toUpperCase();
+        if (v === 'Y') return 'Sí';
+        if (v === 'N') return 'No';
+        return v;
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function construirDatosListado(rows) {
+        const filas = Array.isArray(rows) ? rows : [];
+        const excelRows = [];
+        let item = 0;
+        let valorTotal = 0;
+
+        filas.forEach((row) => {
+            const valorNum = Number(row.conceptvalue);
+            const valor = Number.isFinite(valorNum) ? valorNum : 0;
+            valorTotal += valor;
+            item += 1;
+            excelRows.push({
+                tipo: 'detalle',
+                row,
+                item,
+                valor
+            });
+        });
+
+        if (filas.length) {
+            excelRows.push({
+                tipo: 'total',
+                values: ['', '', 'Total', '', '', valorTotal, '', '', '', '', '', '']
+            });
+        }
+
+        return { excelRows, valorTotal, count: filas.length };
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-asignacion-conceptos');
+        tbody.innerHTML = '';
+        const { excelRows, valorTotal, count } = construirDatosListado(rows);
+
+        excelRows.forEach((entry) => {
+            const tr = document.createElement('tr');
+            if (entry.tipo === 'detalle') {
+                const row = entry.row;
+                tr.innerHTML = `
+                    <td class="col-item">${entry.item}</td>
+                    <td>${escapeHtml(row.employeecode || row.person)}</td>
+                    <td>${escapeHtml(row.nombre)}</td>
+                    <td>${escapeHtml(row.conceptname || row.concept)}</td>
+                    <td>${escapeHtml(etiquetaFrecuencia(row.flagfrecuencytype))}</td>
+                    <td class="col-valor">${formatearImporte(entry.valor)}</td>
+                    <td>${escapeHtml(etiquetaMoneda(row.conceptcurrency))}</td>
+                    <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodstart))}</td>
+                    <td>${escapeHtml(fmtPeriodoDisplay(row.prperiodend))}</td>
+                    <td>${escapeHtml(row.costcentercode || row.costcenter)}</td>
+                    <td>${escapeHtml(row.tareo)}</td>
+                    <td>${escapeHtml(etiquetaAplica(row.flagapplyformula))}</td>
+                    <td class="col-acciones">
+                        <button type="button" class="btn btn-link btn-sm p-0 btn-editar-asig me-1" title="Editar">
+                            <i class="bi bi-pencil-fill text-success"></i>
+                        </button>
+                        <button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-asig" title="Eliminar">
+                            <i class="bi bi-trash-fill text-danger"></i>
+                        </button>
+                    </td>
+                `;
+                const btnEdit = tr.querySelector('.btn-editar-asig');
+                if (btnEdit) {
+                    btnEdit.addEventListener('click', function () {
+                        abrirModalEditar(row);
+                    });
+                }
+                const btnDel = tr.querySelector('.btn-eliminar-asig');
+                if (btnDel) {
+                    btnDel.addEventListener('click', function () {
+                        eliminarAsignacion(row);
+                    });
+                }
+            } else if (entry.tipo === 'total') {
+                tr.className = 'total-reporte';
+                tr.innerHTML = `
+                    <td></td>
+                    <td colspan="4" class="text-end">${escapeHtml(entry.values[2])}</td>
+                    <td class="col-valor">${formatearImporte(entry.values[IDX_VALOR])}</td>
+                    <td colspan="7"></td>
+                `;
+            }
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById('lblRowCountAsigConceptos').textContent = String(count);
+        return { excelRows, valorTotal, count };
+    }
+
+    function filasParaExcel(excelRows) {
+        return excelRows.map((entry) => {
+            if (entry.tipo === 'detalle') {
+                const row = entry.row;
+                return [
+                    entry.item,
+                    row.employeecode || row.person || '',
+                    row.nombre || '',
+                    row.conceptname || row.concept || '',
+                    etiquetaFrecuencia(row.flagfrecuencytype),
+                    entry.valor,
+                    etiquetaMoneda(row.conceptcurrency),
+                    fmtPeriodoDisplay(row.prperiodstart),
+                    fmtPeriodoDisplay(row.prperiodend),
+                    row.costcentercode || row.costcenter || '',
+                    row.tareo || '',
+                    etiquetaAplica(row.flagapplyformula)
+                ];
+            }
+            return entry.values.slice();
+        });
+    }
+
+    async function exportAsigConceptosExcel(payload, meta) {
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+        const headers = payload.headers || [];
+        const filas = payload.data || [];
+        const ncols = headers.length;
+        if (!ncols) return;
+
+        const F = {
+            title: 'FFE9ECEF',
+            meta: 'FFF8F9FA',
+            header: 'FFF8F9FA',
+            data: 'FFFFFFFF',
+            total: 'FFE9ECEF'
+        };
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+        const alignCenter = { horizontal: 'center', vertical: 'middle' };
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Asignación Conceptos', { views: [{ showGridLines: true }] });
+
+        let rowIdx = 1;
+        ws.mergeCells(rowIdx, 1, rowIdx, ncols);
+        const titleCell = ws.getCell(rowIdx, 1);
+        titleCell.value = 'Asignación de Conceptos';
+        titleCell.font = { bold: true, size: 14 };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        titleCell.fill = fill(F.title);
+        titleCell.border = allBorders;
+        ws.getRow(rowIdx).height = 26;
+        rowIdx++;
+
+        const metaRow1 = ws.addRow([
+            'Compañía', meta.compania || '',
+            'Tipo planilla', meta.tipoPlanilla || '',
+            'Periodo', meta.periodo || '',
+            'Concepto', meta.concepto || '',
+            'Nombre', meta.nombre || '',
+            'Cesados', meta.cesados || ''
+        ]);
+        metaRow1.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (colNumber <= 12) {
+                cell.fill = fill(F.meta);
+                cell.font = { bold: colNumber % 2 === 1 };
+                cell.alignment = alignCenter;
+            }
+            cell.border = allBorders;
+        });
+        rowIdx++;
+
+        ws.addRow([]);
+        rowIdx++;
+
+        const hRow = ws.addRow(headers);
+        hRow.font = { bold: true };
+        hRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.fill = fill(F.header);
+            cell.border = allBorders;
+            if (colNumber - 1 === IDX_VALOR) {
+                cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (colNumber === 1) {
+                cell.alignment = alignCenter;
+            } else if (colNumber === 3) {
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            } else {
+                cell.alignment = alignCenter;
+            }
+        });
+        rowIdx++;
+
+        filas.forEach((rowVals, index) => {
+            const excelEntry = payload.excelRows && payload.excelRows[index];
+            const tipo = excelEntry ? excelEntry.tipo : 'detalle';
+            const r = ws.addRow(rowVals || []);
+            const rowFill = tipo === 'total' ? F.total : F.data;
+            r.font = tipo === 'total' ? { bold: true } : undefined;
+            r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                const idx = colNumber - 1;
+                const v = rowVals && rowVals[idx];
+                cell.fill = fill(rowFill);
+                cell.border = allBorders;
+                if (typeof v === 'number' && Number.isFinite(v)) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                } else if (idx === IDX_VALOR) {
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                } else if (colNumber === 1) {
+                    cell.alignment = alignCenter;
+                } else if (colNumber === 3) {
+                    cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                } else {
+                    cell.alignment = alignCenter;
+                }
+            });
+            rowIdx++;
+        });
+
+        ws.getColumn(1).width = 8;
+        ws.getColumn(2).width = 12;
+        ws.getColumn(3).width = 34;
+        ws.getColumn(4).width = 28;
+        ws.getColumn(5).width = 12;
+        ws.getColumn(6).width = 14;
+        ws.getColumn(7).width = 12;
+        ws.getColumn(8).width = 14;
+        ws.getColumn(9).width = 14;
+        ws.getColumn(10).width = 14;
+        ws.getColumn(11).width = 8;
+        ws.getColumn(12).width = 10;
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
+        const stamp = new Date().toISOString().slice(0, 10);
+        a.download = `asignacion_conceptos_${safe(meta.compania)}_${stamp}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    async function poblarSelect(url, selectElement, opciones) {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
+        if (!selectElement) return;
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            if (incluyeTodos) {
+                selectElement.value = valorTodos;
+            }
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = incluyeTodos
+                ? `<option value="${valorTodos}">${textoTodos}</option>`
+                : '<option value="">Error</option>';
+            if (incluyeTodos) selectElement.value = valorTodos;
+            selectElement.disabled = false;
+        }
+    }
+
+    async function poblarPeriodosAsignacion(cia, payrolltype, selectElement) {
+        await poblarSelect(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            selectElement,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    async function poblarConceptos(cia, selectElement) {
+        await poblarSelect(
+            `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
+            selectElement,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    async function ejecutarConsulta() {
+        lastExportAsigConceptos = null;
+        document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim() || '0';
+        const concept = document.getElementById('cboConcepto').value.trim() || '0';
+        const nombre = document.getElementById('txtNombre').value.trim();
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+
+        if (!cia || !payrolltype) {
+            alert('Complete compañía y tipo planilla.');
+            return;
+        }
+
+        document.getElementById('lblRowCountAsigConceptos').textContent = '0';
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, period, concept, nombre, cesados })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
+                document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+                alert(payload.error || 'Error al consultar el listado.');
+                return;
+            }
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            if (!rows.length) {
+                document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
+                document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+                alert('No se encontraron registros para los filtros seleccionados.');
+                return;
+            }
+            const built = renderizarTabla(rows);
+            lastExportAsigConceptos = {
+                headers: HEADERS.slice(),
+                data: filasParaExcel(built.excelRows),
+                excelRows: built.excelRows,
+                meta: {
+                    compania: selectedText('cboCompania'),
+                    tipoPlanilla: selectedText('cboTipoPlanilla'),
+                    periodo: period === '0' ? 'Todos' : selectedText('cboPeriodo'),
+                    concepto: concept === '0' ? 'Todos' : selectedText('cboConcepto'),
+                    nombre: nombre || '—',
+                    cesados: etiquetaCesados(cesados)
+                }
+            };
+            document.getElementById('cardResultadoAsigConceptos').classList.remove('d-none');
+            document.getElementById('btnExportExcelAsigConceptos').disabled = false;
+            consultaEjecutada = true;
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
+            document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboConcepto = document.getElementById('cboConcepto');
+    const txtNombre = document.getElementById('txtNombre');
+
+    modalAsignacion = new bootstrap.Modal(document.getElementById('modalAsignacionConcepto'));
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    actualizarBtnNuevaAsignacion();
+
+    let ciaGuardada = null;
+    if (filtrosPersist) {
+        ciaGuardada = filtrosPersist.leer();
+        if (ciaGuardada && ciaGuardada.cia) {
+            if (!seleccionarCompaniaInsensitive(cboCia, ciaGuardada.cia)) {
+                if (optionExists(cboCia, ciaGuardada.cia)) cboCia.value = ciaGuardada.cia;
+            }
+            await filtrosPersist.aplicarRestauracionCascada({
+                poblarSelect,
+                poblarPeriodosAsignacion,
+                poblarConceptos
+            });
+            limpiarValorComboSiObsoleto(cboPlanilla);
+            limpiarValorComboSiObsoleto(cboPeriodo);
+            limpiarValorComboSiObsoleto(cboConcepto);
+            const cesados = ciaGuardada.cesados;
+            if (cesados && optionExists(document.getElementById('cboCesados'), cesados)) {
+                document.getElementById('cboCesados').value = cesados;
+            }
+            if (ciaGuardada.nombre) txtNombre.value = ciaGuardada.nombre;
+        }
+    }
+
+    if (filtrosPersist) {
+        filtrosPersist.registrarGuardadoEnCambio();
+        txtNombre.addEventListener('input', function () {
+            filtrosPersist.guardar();
+        });
+    }
+
+    if (filtrosPersist && ciaGuardada) {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        if (cia && payrolltype) {
+            await ejecutarConsulta();
+        }
+    }
+
+    actualizarBtnNuevaAsignacion();
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        cboConcepto.innerHTML = '<option value="">Seleccione...</option>';
+        cboConcepto.disabled = true;
+
+        if (cia) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+            await poblarConceptos(cia, cboConcepto);
+            if (filtrosPersist) filtrosPersist.guardar();
+        } else {
+            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            cboPlanilla.disabled = true;
+        }
+        actualizarBtnNuevaAsignacion();
+    });
+
+    cboPlanilla.addEventListener('change', async function () {
+        const cia = cboCia.value;
+        const payroll = this.value;
+
+        if (cia && payroll) {
+            await poblarPeriodosAsignacion(cia, payroll, cboPeriodo);
+            if (filtrosPersist) filtrosPersist.guardar();
+        } else {
+            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            cboPeriodo.disabled = true;
+        }
+        actualizarBtnNuevaAsignacion();
+    });
+
+    document.querySelectorAll('input[name="radModalTipo"]').forEach((el) => {
+        el.addEventListener('change', actualizarEstadoPeriodoFinModal);
+    });
+
+    document.getElementById('btnNuevaAsignacion').addEventListener('click', abrirModalNuevo);
+    document.getElementById('frmModalAsignacion').addEventListener('submit', guardarAsignacionModal);
+
+    document.getElementById('frmAsignacionConceptos').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarConsulta();
+    });
+
+    document.getElementById('btnExportExcelAsigConceptos').addEventListener('click', async function () {
+        if (!lastExportAsigConceptos || !lastExportAsigConceptos.headers || !lastExportAsigConceptos.headers.length) {
+            alert('Ejecute primero una consulta con resultados.');
+            return;
+        }
+        try {
+            await exportAsigConceptosExcel(lastExportAsigConceptos, lastExportAsigConceptos.meta);
+        } catch (err) {
+            console.error(err);
+            alert('No se pudo generar el archivo Excel.');
+        }
+    });
+});
+</script>
+{% endblock %}

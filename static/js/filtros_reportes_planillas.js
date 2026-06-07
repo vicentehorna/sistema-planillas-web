@@ -16,6 +16,7 @@
     const STORAGE_KEY_CONTINENTAL = 'filtros_pago_haberes_continental';
     const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
     const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
+    const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -527,6 +528,127 @@
         };
     }
 
+    function crearPersistenciaAsignacionConceptos() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    periodo: val('cboPeriodo') || '0',
+                    concept: val('cboConcepto') || '0',
+                    nombre: val('txtNombre'),
+                    cesados: val('cboCesados') || 'T',
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_ASIGNACION_CONCEPTOS, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros asignacion conceptos: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_ASIGNACION_CONCEPTOS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, poblarPeriodosAsignacion, poblarConceptos } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboPer = document.getElementById('cboPeriodo');
+            const cboConcepto = document.getElementById('cboConcepto');
+            const cboCesados = document.getElementById('cboCesados');
+            if (!cboCia || !cboPt || !cboPer || !cboConcepto) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            if (typeof poblarConceptos === 'function') {
+                await poblarConceptos(cia, cboConcepto);
+            } else {
+                await poblarSelect(
+                    `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
+                    cboConcepto
+                );
+            }
+
+            const concept = filtros.concept != null ? String(filtros.concept).trim() : '0';
+            if (concept && optionExists(cboConcepto, concept)) {
+                cboConcepto.value = concept;
+            } else if (optionExists(cboConcepto, '0')) {
+                cboConcepto.value = '0';
+            }
+
+            if (typeof poblarPeriodosAsignacion === 'function') {
+                await poblarPeriodosAsignacion(cia, payroll, cboPer);
+            } else {
+                await poblarSelect(
+                    `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                    cboPer
+                );
+            }
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '0';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            } else if (optionExists(cboPer, '0')) {
+                cboPer.value = '0';
+            }
+
+            if (cboCesados) {
+                const cesados = filtros.cesados != null ? String(filtros.cesados).trim().toUpperCase() : 'T';
+                if (['T', 'Y', 'N'].includes(cesados) && optionExists(cboCesados, cesados)) {
+                    cboCesados.value = cesados;
+                }
+            }
+
+            const txtNombre = document.getElementById('txtNombre');
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo', 'cboConcepto', 'cboCesados'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_ASIGNACION_CONCEPTOS,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     /**
      * @param {string} storageKey
      * @param {boolean} incluyeTodosBancos
@@ -885,6 +1007,9 @@
         },
         listadoPagos: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_LISTADO_PAGOS, false, true);
+        },
+        asignacionConceptos: function () {
+            return crearPersistenciaAsignacionConceptos();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

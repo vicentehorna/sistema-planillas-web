@@ -179,6 +179,275 @@ def _normalize_replicationunit_asig(raw):
     return '0' if v in ('', '0') else v
 
 
+PLAME_ARCHIVO_EXTENSION = {
+    '14': 'jor',
+    '15': 'snl',
+    '18': 'rem',
+    '26': 'est',
+}
+
+
+def _plame_period_yyyymm(period_raw):
+    """Periodo tributario PLAME: YYYYMM (6 dígitos)."""
+    s = str(period_raw or '').strip().replace('-', '').replace('/', '')
+    if len(s) >= 6 and s[:6].isdigit():
+        return s[:6]
+    return ''
+
+
+def _plame_params_from_json(body):
+    body = body or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = _plame_period_yyyymm(body.get('period') or body.get('periodo'))
+    return {'cia': cia, 'period': period}
+
+
+def _plame_validar_params(p):
+    if not p.get('cia'):
+        return 'Seleccione compañía.'
+    if not p.get('period') or len(p['period']) != 6:
+        return 'Indique un periodo tributario válido (YYYYMM).'
+    return None
+
+
+def _plame_split_horas_minutos(valor):
+    try:
+        v = float(valor or 0)
+    except (TypeError, ValueError):
+        v = 0.0
+    if v < 0:
+        v = 0.0
+    horas = int(v)
+    minutos = int(round((v - horas) * 60))
+    if minutos >= 60:
+        horas += minutos // 60
+        minutos = minutos % 60
+    return horas, minutos
+
+
+def _plame_linea_archivo14(row):
+    """Genera línea PLAME Archivo 14: TT|DOC|H|m|H|m|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    wh, wm = _plame_split_horas_minutos(row.get('workinghours'))
+    eh, em = _plame_split_horas_minutos(row.get('extrahours'))
+    wmi = row.get('workingminutes')
+    emi = row.get('extraminutes')
+    if wmi is not None and str(wmi).strip() not in ('', '0'):
+        try:
+            wm = max(0, int(float(wmi)))
+        except (TypeError, ValueError):
+            pass
+    if emi is not None and str(emi).strip() not in ('', '0'):
+        try:
+            em = max(0, int(float(emi)))
+        except (TypeError, ValueError):
+            pass
+    return '|'.join([
+        doc_type,
+        doc_num,
+        str(wh).zfill(3),
+        str(wm).zfill(2),
+        str(eh).zfill(3),
+        str(em).zfill(2),
+    ]) + '|'
+
+
+def _plame_linea_archivo15(row):
+    """Genera línea PLAME Archivo 15 (.snl): TT|DOC|MOTIVO|DIAS|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    susp = str(row.get('suspensiontype') or row.get('pdt') or '').strip()
+    if susp.isdigit():
+        susp = susp.zfill(2)
+    try:
+        days = int(float(row.get('days') or 0))
+    except (TypeError, ValueError):
+        days = 0
+    if days < 0:
+        days = 0
+    return '|'.join([
+        doc_type,
+        doc_num,
+        susp,
+        str(days).zfill(2),
+    ]) + '|'
+
+
+def _plame_params_archivo18_from_json(body):
+    base = _plame_params_from_json(body)
+    body = body or {}
+    payroll = str(body.get('payroll') or body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    payroll_all = str(body.get('payroll_all') or '').strip().upper()
+    if payroll_all not in ('Y', 'N'):
+        payroll_all = 'Y' if not payroll or payroll in ('0', 'T', 'TODOS', 'TODAS') else 'N'
+    if payroll_all == 'Y':
+        payroll = ''
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    base['payroll_all'] = payroll_all
+    base['payroll'] = payroll
+    base['cesados'] = cesados
+    return base
+
+
+def _plame_format_monto_rem(valor):
+    """Monto PLAME .rem: entero sin decimales o hasta 2 decimales con punto."""
+    if valor is None or valor == '':
+        return ''
+    try:
+        v = float(valor)
+    except (TypeError, ValueError):
+        return ''
+    if abs(v) < 0.00005:
+        return ''
+    redondeado = round(v, 2)
+    if abs(redondeado - round(redondeado)) < 0.00005:
+        return str(int(round(redondeado)))
+    return f'{redondeado:.2f}'
+
+
+def _plame_es_descuento_tabla22(pdt):
+    """Códigos 07xx (descuentos): solo monto pagado/descontado en el .rem."""
+    s = str(pdt or '').strip()
+    if s.isdigit():
+        s = s.zfill(4)
+    return len(s) >= 2 and s[:2] == '07' and s != '0700'
+
+
+def _plame_linea_archivo18(row):
+    """Genera línea PLAME Archivo 18 (.rem): TT|DOC|PDT|DEV|PAG|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    pdt = str(row.get('pdt') or '').strip()
+    if pdt.isdigit():
+        pdt = pdt.zfill(4)
+    devengado_val = row.get('conceptvalue', row.get('devengado'))
+    pagado_val = row.get('conceptvaluelo', row.get('pagado'))
+    if _plame_es_descuento_tabla22(pdt):
+        devengado = ''
+        pagado = _plame_format_monto_rem(pagado_val)
+    else:
+        devengado = _plame_format_monto_rem(devengado_val)
+        pagado = _plame_format_monto_rem(pagado_val)
+        if devengado and not pagado:
+            pagado = devengado
+        elif pagado and not devengado:
+            devengado = pagado
+    return '|'.join([doc_type, doc_num, pdt, devengado, pagado]) + '|'
+
+
+def _plame_rows_archivo18_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        pdt = str(r.get('pdt') or '').strip()
+        if not doc_num or not pdt:
+            continue
+        try:
+            cv = float(r.get('conceptvalue') or r.get('devengado') or 0)
+            cl = float(r.get('conceptvaluelo') or r.get('pagado') or 0)
+        except (TypeError, ValueError):
+            cv, cl = 0.0, 0.0
+        if abs(cv) < 0.00005 and abs(cl) < 0.00005:
+            continue
+        resultado.append({
+            'documenttype': str(r.get('documenttype') or '').strip(),
+            'documentnumber': doc_num,
+            'pdt': pdt,
+            'conceptvalue': cv,
+            'conceptvaluelo': cl,
+        })
+    return resultado
+
+
+def _plame_rows_archivo15_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        susp = str(r.get('suspensiontype') or r.get('pdt') or '').strip()
+        if not doc_num or not susp:
+            continue
+        try:
+            days = int(float(r.get('days') or 0))
+        except (TypeError, ValueError):
+            days = 0
+        if days <= 0:
+            continue
+        resultado.append({
+            'documenttype': str(r.get('documenttype') or '').strip(),
+            'documentnumber': doc_num,
+            'suspensiontype': susp,
+            'days': days,
+        })
+    return resultado
+
+
+def _plame_filename(ruc, yyyymm, codigo_archivo):
+    digits = ''.join(ch for ch in str(ruc or '') if ch.isdigit())
+    ruc11 = digits.zfill(11)[-11:] if digits else '00000000000'
+    yyyy = yyyymm[:4]
+    mm = yyyymm[4:6]
+    ext = PLAME_ARCHIVO_EXTENSION.get(str(codigo_archivo), 'txt')
+    if str(codigo_archivo) in ('14', '15', '18'):
+        return f'0601{yyyy}{mm}{ruc11}.{ext}'
+    return f'RP_{ruc11}_{yyyy}_{mm}_{codigo_archivo}.{ext}'
+
+
+def _obtener_ruc_compania(cursor, cia):
+    """Obtiene RUC de SY_Company para nomenclatura de archivos PLAME."""
+    queries = (
+        "SELECT TOP 1 LTRIM(RTRIM(ISNULL(RUC, ''))) FROM SY_Company WHERE Company = ?",
+        "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Ruc, ''))) FROM SY_Company WHERE Company = ?",
+    )
+    for sql in queries:
+        try:
+            cursor.execute(sql, (cia,))
+            row = cursor.fetchone()
+            if row and row[0]:
+                return str(row[0]).strip()
+        except Exception:
+            continue
+    return ''
+
+
+def _plame_rows_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        if not doc_num:
+            continue
+        resultado.append({
+            'documenttype': str(r.get('documenttype') or '').strip(),
+            'documentnumber': doc_num,
+            'workinghours': r.get('workinghours'),
+            'workingminutes': r.get('workingminutes'),
+            'extrahours': r.get('extrahours'),
+            'extraminutes': r.get('extraminutes'),
+        })
+    return resultado
+
+
 def _asignacion_concepto_detalle_dict(r):
     conceptvalue = r.get('conceptvalue')
     try:
@@ -1033,6 +1302,319 @@ def procesar_planilla_page():
 @login_required
 def asignacion_conceptos_page():
     return render_template('asignacion_conceptos.html')
+
+
+@app.route('/plame/archivo-14')
+@login_required
+def plame_archivo14_page():
+    return render_template('plame_archivo14.html')
+
+
+@app.route('/plame/archivo-15')
+@login_required
+def plame_archivo15_page():
+    return render_template('plame_archivo15.html')
+
+
+@app.route('/plame/archivo-18')
+@login_required
+def plame_archivo18_page():
+    return render_template('plame_archivo18.html')
+
+
+@app.route('/plame/archivo-26')
+@login_required
+def plame_archivo26_page():
+    return render_template(
+        'plame_pendiente.html',
+        codigo='26',
+        titulo='Establecimientos (.est)',
+    )
+
+
+@app.route('/api/plame/archivo-14/listado', methods=['POST'])
+@login_required
+def api_plame_archivo14_listado():
+    """sp_pr_listado_plame14_web: preview jornada laboral / sobretiempo PLAME."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_plame14_web @cia=?, @period=?",
+            (p['cia'], p['period']),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            wh = r.get('workinghours')
+            eh = r.get('extrahours')
+            try:
+                wh_num = float(wh) if wh is not None else 0.0
+            except Exception:
+                wh_num = 0.0
+            try:
+                eh_num = float(eh) if eh is not None else 0.0
+            except Exception:
+                eh_num = 0.0
+            resultado.append({
+                "documenttype": _jsonable_value(r.get('documenttype')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "workinghours": wh_num,
+                "workingminutes": _jsonable_value(r.get('workingminutes')),
+                "extrahours": eh_num,
+                "extraminutes": _jsonable_value(r.get('extraminutes')),
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_plame_archivo14_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-14/generar-txt', methods=['POST'])
+@login_required
+def api_plame_archivo14_generar_txt():
+    """Genera TXT PLAME Archivo 14 (encoding latin-1)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _plame_rows_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        lineas = [_plame_linea_archivo14(row) for row in filas]
+        contenido = '\r\n'.join(lineas)
+        if lineas:
+            contenido += '\r\n'
+
+        filename = _plame_filename(ruc, p['period'], '14')
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_archivo14_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-15/listado', methods=['POST'])
+@login_required
+def api_plame_archivo15_listado():
+    """sp_pr_listado_plame15_web: días subsidiados y no laborados (.snl)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_plame15_web @cia=?, @period=?",
+            (p['cia'], p['period']),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            try:
+                days_num = int(float(r.get('days') or 0))
+            except (TypeError, ValueError):
+                days_num = 0
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "documenttype": _jsonable_value(r.get('documenttype')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "suspensiontype": _jsonable_value(r.get('suspensiontype')),
+                "days": days_num,
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_plame_archivo15_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-15/generar-txt', methods=['POST'])
+@login_required
+def api_plame_archivo15_generar_txt():
+    """Genera TXT PLAME Archivo 15 (.snl, encoding latin-1)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _plame_rows_archivo15_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        lineas = [_plame_linea_archivo15(row) for row in filas]
+        contenido = '\r\n'.join(lineas)
+        if lineas:
+            contenido += '\r\n'
+
+        filename = _plame_filename(ruc, p['period'], '15')
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_archivo15_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-18/listado', methods=['POST'])
+@login_required
+def api_plame_archivo18_listado():
+    """sp_pr_listado_plame18_web: ingresos, tributos y descuentos (.rem)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_archivo18_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_plame18_web @cia=?, @period=?, @payroll_all=?, @payroll=?, @cesados=?",
+            (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None, p['cesados']),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            try:
+                cv = float(r.get('conceptvalue') or 0)
+            except (TypeError, ValueError):
+                cv = 0.0
+            try:
+                cl = float(r.get('conceptvaluelo') or 0)
+            except (TypeError, ValueError):
+                cl = 0.0
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "documenttype": _jsonable_value(r.get('documenttype')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "pdt": _jsonable_value(r.get('pdt')),
+                "conceptvalue": cv,
+                "conceptvaluelo": cl,
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_plame_archivo18_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-18/generar-txt', methods=['POST'])
+@login_required
+def api_plame_archivo18_generar_txt():
+    """Genera TXT PLAME Archivo 18 (.rem, encoding latin-1)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_archivo18_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _plame_rows_archivo18_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        lineas = [_plame_linea_archivo18(row) for row in filas]
+        contenido = '\r\n'.join(lineas)
+        if lineas:
+            contenido += '\r\n'
+
+        filename = _plame_filename(ruc, p['period'], '18')
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_archivo18_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/pago-haberes/telecredito')
@@ -2252,6 +2834,47 @@ def api_periodos():
         return jsonify(data)
     except Exception:
         logging.exception("api_periodos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/periodos-plame')
+@login_required
+def api_periodos_plame():
+    """sp_pr_selectorperiodos_plame_web @cia → prperiod (YYYYMM), description (YYYY-MM)."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodos_plame_web @cia=?",
+            (cia,),
+        )
+        desc = cursor.description
+        rows = cursor.fetchall()
+        if not rows or not desc:
+            return jsonify([])
+        cols = [str(c[0] or '').strip().lower() for c in desc]
+        data = []
+        for row in rows:
+            rd = {cols[i]: row[i] for i in range(len(cols))}
+            pid = rd.get('prperiod')
+            txt = rd.get('description')
+            pid_s = str(pid).strip() if pid is not None else ''
+            txt_s = str(txt).strip() if txt is not None else pid_s
+            if pid_s:
+                data.append({"id": pid_s, "text": txt_s})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_periodos_plame")
         return jsonify([])
     finally:
         if conn:

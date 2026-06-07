@@ -1,0 +1,461 @@
+{% extends "layout.html" %}
+
+{% block title %}PLAME Archivo 14{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-plame14 {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-plame14 th,
+    .table-plame14 td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-plame14 thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-plame14 .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+
+    .table-plame14 .col-horas {
+        min-width: 5rem;
+        text-align: right;
+    }
+
+    .plame-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .plame-info code {
+        font-size: 0.78rem;
+    }
+
+    /* col-lg-3 = 25%; +20% ≈ 30% para ver el nombre completo de la compañía */
+    .plame-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-compania {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .plame-filtro-compania {
+            flex: 0 0 40%;
+            max-width: 40%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .plame-filtro-compania {
+            flex: 0 0 30%;
+            max-width: 30%;
+        }
+    }
+
+    .plame-filtro-periodo {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-periodo {
+            flex: 0 0 10rem;
+            max-width: 10rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border plame-info mb-3" role="note">
+    <strong>Archivo 14 — Jornada laboral y sobretiempo (SUNAT).</strong>
+    Formato de línea: <code>TT|NNNNNNNNNNNNNNN|HHH|MM|HHH|MM|</code>
+    (Tipo doc Tabla 3, N° documento, horas/min ordinarias, horas/min de sobretiempo).
+    Nombre del archivo: <code>0601AAAAmmRRRRRRRRRRR.jor</code>
+    (<code>0601</code> = formulario PLAME, <code>AAAA</code> = año, <code>mm</code> = mes, RUC de 11 dígitos).
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmPlame14" class="row g-3">
+            <div class="col-12 col-sm-6 plame-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-auto plame-filtro-periodo">
+                <label for="cboPeriodoTributario" class="form-label small fw-bold text-muted">Periodo tributario</label>
+                <select id="cboPeriodoTributario" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarPlame14" disabled>
+                    <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountPlame14">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosPlame14">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoPlame14">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">PLAME — Archivo 14 (.jor)</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-plame14 align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="checkAllPlame14" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th style="width: 2.5rem;">Tipo</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th class="col-horas">H. Trabajadas</th>
+                        <th class="col-horas">H. Extras</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-plame14"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameArchivo14
+        ? window.FiltrosPlanillasReportes.plameArchivo14()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_plame_archivo14_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_plame_archivo14_generar_txt') | tojson }};
+    let lastRowsPlame14 = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function periodoTributarioYyyymm() {
+        return document.getElementById('cboPeriodoTributario').value.trim();
+    }
+
+    function periodoTributarioEsValido() {
+        const v = periodoTributarioYyyymm();
+        return /^\d{6}$/.test(v);
+    }
+
+    function rowKey(row) {
+        return [
+            String(row.documenttype || '').trim(),
+            String(row.documentnumber || '').trim()
+        ].join('|');
+    }
+
+    function formatearHoras(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function obtenerSeleccionados() {
+        const mapa = new Map((lastRowsPlame14 || []).map((r) => [rowKey(r), r]));
+        const seleccionados = [];
+        document.querySelectorAll('.check-plame14:checked').forEach((cb) => {
+            const row = mapa.get(String(cb.value || '').trim());
+            if (row) seleccionados.push(row);
+        });
+        return seleccionados;
+    }
+
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-plame14').length;
+        const sel = obtenerSeleccionados().length;
+        document.getElementById('lblRowCountPlame14').textContent = String(total);
+        document.getElementById('lblSeleccionadosPlame14').textContent = String(sel);
+        document.getElementById('btnGenerarPlame14').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAll() {
+        const all = document.querySelectorAll('.check-plame14');
+        const chk = document.getElementById('checkAllPlame14');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let marcados = 0;
+        all.forEach((x) => { if (x.checked) marcados++; });
+        chk.checked = marcados === all.length;
+        chk.indeterminate = marcados > 0 && marcados < all.length;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-plame14');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+
+        filas.forEach((row) => {
+            const tr = document.createElement('tr');
+            const key = rowKey(row);
+            tr.innerHTML = `
+                <td class="text-center">
+                    <input type="checkbox" class="check-plame14 form-check-input" value="${escapeHtml(key)}" checked>
+                </td>
+                <td class="text-center">${escapeHtml(row.documenttype)}</td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td class="col-horas">${escapeHtml(formatearHoras(row.workinghours))}</td>
+                <td class="col-horas">${escapeHtml(formatearHoras(row.extrahours))}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.check-plame14').forEach((cb) => {
+            cb.addEventListener('change', function () {
+                sincronizarCheckAll();
+                actualizarContadores();
+            });
+        });
+
+        sincronizarCheckAll();
+        actualizarContadores();
+    }
+
+    async function poblarPeriodosPlame(cia, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = true;
+        }
+    }
+
+    async function poblarSelect(url, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    async function ejecutarConsulta() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        document.getElementById('lblRowCountPlame14').textContent = '0';
+        document.getElementById('lblSeleccionadosPlame14').textContent = '0';
+        document.getElementById('btnGenerarPlame14').disabled = true;
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, period })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoPlame14').classList.add('d-none');
+                alert(payload.error || 'Error al consultar el listado.');
+                return;
+            }
+            lastRowsPlame14 = Array.isArray(payload.rows) ? payload.rows : [];
+            renderizarTabla(lastRowsPlame14);
+            document.getElementById('cardResultadoPlame14').classList.remove('d-none');
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoPlame14').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function generarTxt() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        const seleccionados = obtenerSeleccionados();
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un registro.');
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, period, rows: seleccionados })
+            });
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                } catch (e) {}
+                alert(msg);
+                return;
+            }
+
+            const blob = await res.blob();
+            let filename = '06010000000000000000000.jor';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el archivo TXT.');
+        }
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodo = document.getElementById('cboPeriodoTributario');
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    async function onCompaniaChange(cia, periodoRestaurar) {
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (cia) {
+            await poblarPeriodosPlame(cia, cboPeriodo);
+            if (periodoRestaurar && optionExists(cboPeriodo, periodoRestaurar)) {
+                cboPeriodo.value = periodoRestaurar;
+            }
+            if (filtrosPersist) filtrosPersist.guardar();
+        }
+    }
+
+    if (filtrosPersist) {
+        const guardado = filtrosPersist.leer();
+        if (guardado && guardado.cia) {
+            if (!seleccionarCompaniaInsensitive(cboCia, guardado.cia)) {
+                if (optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+            }
+            const periodoGuardado = guardado.period != null ? String(guardado.period).trim() : '';
+            await onCompaniaChange(cboCia.value.trim(), periodoGuardado);
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+        cboPeriodo.addEventListener('change', () => filtrosPersist.guardar());
+    } else {
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+    }
+
+    document.getElementById('frmPlame14').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+
+    document.getElementById('checkAllPlame14').addEventListener('change', function () {
+        const marcar = this.checked;
+        document.querySelectorAll('.check-plame14').forEach((cb) => { cb.checked = marcar; });
+        this.indeterminate = false;
+        actualizarContadores();
+    });
+
+    document.getElementById('btnGenerarPlame14').addEventListener('click', generarTxt);
+});
+</script>
+{% endblock %}

@@ -686,6 +686,137 @@
         };
     }
 
+    function crearPersistenciaPlameArchivo14() {
+        const STORAGE_KEY = 'filtros_plame_archivo14';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    period: val('cboPeriodoTributario'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame archivo14: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoTributario'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    function crearPersistenciaPlameArchivo18() {
+        const STORAGE_KEY = 'filtros_plame_archivo18';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    period: val('cboPeriodoTributario'),
+                    payroll: val('cboTipoPlanilla'),
+                    cesados: val('cboCesados') || 'T',
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame archivo18: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoTributario', 'cboTipoPlanilla', 'cboCesados'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    function crearPersistenciaPlameArchivo15() {
+        const STORAGE_KEY = 'filtros_plame_archivo15';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    period: val('cboPeriodoTributario'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame archivo15: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoTributario'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     /**
      * @param {string} storageKey
      * @param {boolean} incluyeTodosBancos
@@ -1047,6 +1178,15 @@
         },
         asignacionConceptos: function () {
             return crearPersistenciaAsignacionConceptos();
+        },
+        plameArchivo14: function () {
+            return crearPersistenciaPlameArchivo14();
+        },
+        plameArchivo15: function () {
+            return crearPersistenciaPlameArchivo15();
+        },
+        plameArchivo18: function () {
+            return crearPersistenciaPlameArchivo18();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

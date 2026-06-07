@@ -324,6 +324,41 @@
                     </a>
                 </li>
 
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
+                    <a href="#submenuPlame"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if plame_active else 'false' }}"
+                       aria-controls="submenuPlame"
+                       title="PLAME">
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">PLAME</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if plame_active else '' }}" id="submenuPlame">
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivo14_page' else '' }}">
+                            <a href="{{ url_for('plame_archivo14_page') }}" title="Archivo 14 (.jor)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 14 (.jor)</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivo15_page' else '' }}">
+                            <a href="{{ url_for('plame_archivo15_page') }}" title="Archivo 15 (.snl)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 15 (.snl)</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivo18_page' else '' }}">
+                            <a href="{{ url_for('plame_archivo18_page') }}" title="Archivo 18 (.rem)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 18 (.rem)</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivo26_page' else '' }}">
+                            <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.est)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.est)</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"

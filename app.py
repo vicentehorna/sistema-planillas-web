@@ -825,12 +825,30 @@ def _sql_call_timeout_seconds():
     return max(10, min(n, 180))
 
 
+def _sql_call_timeout_payroll_seconds():
+    """Timeout por trabajador en cálculo de planilla (SP puede ser más lento)."""
+    raw = str(os.getenv("SQL_CALL_TIMEOUT_PAYROLL_SEC", "120")).strip()
+    try:
+        n = int(raw)
+    except Exception:
+        n = 120
+    return max(30, min(n, 600))
+
+
 def _set_cursor_timeout(cursor):
     """Timeout por ejecución de SP (segundos) para evitar cuelgues largos."""
     try:
         cursor.timeout = _sql_call_timeout_seconds()
     except Exception:
         logging.debug("No se pudo fijar timeout en cursor", exc_info=True)
+
+
+def _set_cursor_timeout_payroll(cursor):
+    """Timeout ampliado para procesar planilla trabajador por trabajador."""
+    try:
+        cursor.timeout = _sql_call_timeout_payroll_seconds()
+    except Exception:
+        logging.debug("No se pudo fijar timeout payroll en cursor", exc_info=True)
 
 
 def _rows_to_dual_dicts(columns, rows):
@@ -4292,7 +4310,7 @@ def ejecutar_calculo_planilla():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        _set_cursor_timeout(cursor)
+        _set_cursor_timeout_payroll(cursor)
         cursor.execute(
             """
             SELECT ProcedureName, Description
@@ -4355,7 +4373,7 @@ def ejecutar_calculo_planilla():
                             pass
                         conn = get_db_connection()
                         cursor = conn.cursor()
-                        _set_cursor_timeout(cursor)
+                        _set_cursor_timeout_payroll(cursor)
                         cursor.execute(
                             call_sql,
                             (cia, payroll_type, processtype, period, pid, user_id, tc),
@@ -4444,7 +4462,7 @@ def ejecutar_calculo_streaming():
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            _set_cursor_timeout(cursor)
+            _set_cursor_timeout_payroll(cursor)
             cursor.execute(
                 """
                 SELECT ProcedureName, Description
@@ -4488,20 +4506,6 @@ def ejecutar_calculo_streaming():
             call_sql = f'{{CALL {sp_name} (?, ?, ?, ?, ?, ?, ?)}}'
 
             for index, pid in enumerate(lista):
-                # Heartbeat previo para mantener vivo el stream detrás de proxies.
-                yield (
-                    "data: "
-                    + json.dumps(
-                        {
-                            "actual": index + 1,
-                            "total": total,
-                            "progreso": int((index / total) * 100),
-                            "person": pid,
-                            "stage": "start",
-                        }
-                    )
-                    + "\n\n"
-                )
                 try:
                     cursor.execute(
                         call_sql,
@@ -4514,6 +4518,7 @@ def ejecutar_calculo_streaming():
                         'progreso': int(((index + 1) / total) * 100),
                         'actual': index + 1,
                         'total': total,
+                        'person': pid,
                     }
                 except Exception as e_individual:
                     if _is_transient_sql_error(e_individual):
@@ -4528,7 +4533,7 @@ def ejecutar_calculo_streaming():
                                 pass
                             conn = get_db_connection()
                             cursor = conn.cursor()
-                            _set_cursor_timeout(cursor)
+                            _set_cursor_timeout_payroll(cursor)
                             cursor.execute(
                                 call_sql,
                                 (cia, payroll_type, processtype, period, pid, user_id, tc),

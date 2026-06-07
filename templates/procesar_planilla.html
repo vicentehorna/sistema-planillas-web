@@ -180,7 +180,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_UNIDADES = {{ url_for('api_unidades') | tojson }};
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_trabajadores') | tojson }};
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
-    const URL_EJECUTAR_CALCULO = {{ url_for('ejecutar_calculo_planilla') | tojson }};
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
@@ -487,6 +486,71 @@ document.addEventListener('DOMContentLoaded', async function () {
         return new Promise((resolve) => setTimeout(resolve, ms));
     }
 
+    function actualizarBarraProgreso(barra, porcentajeTxt, label, actual, total, detalleErr, detalle) {
+        const p = Math.min(100, Math.max(0, Math.round((actual / total) * 100)));
+        const ps = p + '%';
+        barra.style.width = ps;
+        barra.setAttribute('aria-valuenow', String(p));
+        porcentajeTxt.textContent = ps;
+        label.textContent = `Procesando: ${actual} de ${total}`;
+        if (detalleErr && detalle) {
+            detalleErr.textContent = String(detalle);
+            detalleErr.classList.remove('d-none');
+        }
+    }
+
+    async function consumirEventosCalculoStreaming(response, ui) {
+        if (!response.body || typeof response.body.getReader !== 'function') {
+            throw new Error('El navegador no soporta progreso en streaming.');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let resultadoFinal = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+
+            let sep = buffer.indexOf('\n\n');
+            while (sep !== -1) {
+                const bloque = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const linea = bloque.split('\n').find((l) => l.startsWith('data: '));
+                if (linea) {
+                    let data = null;
+                    try {
+                        data = JSON.parse(linea.slice(6));
+                    } catch (parseErr) {
+                        console.warn('Evento SSE inválido', parseErr);
+                    }
+                    if (data) {
+                        if (data.error) {
+                            throw new Error(data.error);
+                        }
+                        if (data.done) {
+                            resultadoFinal = data;
+                        } else if (typeof data.actual === 'number' && typeof data.total === 'number' && data.total > 0) {
+                            actualizarBarraProgreso(
+                                ui.barra,
+                                ui.porcentajeTxt,
+                                ui.label,
+                                data.actual,
+                                data.total,
+                                ui.detalleErr,
+                                data.detalle
+                            );
+                            await esperarRepintadoUI();
+                        }
+                    }
+                }
+                sep = buffer.indexOf('\n\n');
+            }
+        }
+        return resultadoFinal;
+    }
+
     async function iniciarCalculo() {
         const checks = document.querySelectorAll('.check-trabajador:checked');
         const listaPerson = Array.from(checks)
@@ -531,91 +595,62 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.disabled = true;
         setUiCalculoEnCurso(true);
 
-        // Render corta requests largas; para "Marcar todos" procesamos por lotes.
-        const BATCH_SIZE = 20;
-        const batches = [];
-        for (let i = 0; i < listaPerson.length; i += BATCH_SIZE) {
-            batches.push(listaPerson.slice(i, i + BATCH_SIZE));
-        }
-
-        let huboErrorFatal = false;
-        let totalExitos = 0;
-        let totalErrores = 0;
-        const detallesTotales = [];
-        let procesados = 0;
-
         try {
-            for (let i = 0; i < batches.length; i++) {
-                const lote = batches[i];
-                const ini = i * BATCH_SIZE + 1;
-                const fin = Math.min((i + 1) * BATCH_SIZE, listaPerson.length);
-                label.textContent = `Procesando lote ${i + 1}/${batches.length} (${ini}-${fin})`;
+            const response = await fetch(URL_EJECUTAR_STREAMING, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cia,
+                    processtype: processtype,
+                    payroll_type: payroll_type,
+                    period: period,
+                    trabajadores: listaPerson
+                })
+            });
 
-                const response = await fetch(URL_EJECUTAR_CALCULO, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        cia: cia,
-                        processtype: processtype,
-                        payroll_type: payroll_type,
-                        period: period,
-                        trabajadores: lote
-                    })
-                });
-
-                let result = {};
+            if (!response.ok) {
+                let errMsg = 'No se pudo iniciar el cálculo de planilla.';
                 try {
-                    result = await response.json();
-                } catch (ignore) {
-                    result = {};
-                }
-
-                if (!response.ok) {
-                    alert(result.error || `No se pudo procesar el lote ${i + 1}.`);
-                    huboErrorFatal = true;
-                    break;
-                }
-
-                const batchExitos = Number(result.exitos || 0);
-                const batchErrores = Number(result.errores || 0);
-                totalExitos += batchExitos;
-                totalErrores += batchErrores;
-                if (Array.isArray(result.detalles) && result.detalles.length) {
-                    detallesTotales.push(...result.detalles);
-                    detalleErr.textContent = String(result.detalles[result.detalles.length - 1] || '');
-                    detalleErr.classList.remove('d-none');
-                }
-
-                procesados += lote.length;
-                const p = Math.min(100, Math.round((procesados / listaPerson.length) * 100));
-                const ps = p + '%';
-                barra.style.width = ps;
-                barra.setAttribute('aria-valuenow', String(p));
-                porcentajeTxt.textContent = ps;
-                label.textContent = `Procesando: ${procesados} de ${listaPerson.length}`;
+                    const errJson = await response.json();
+                    if (errJson && errJson.error) errMsg = errJson.error;
+                } catch (ignore) {}
+                alert(errMsg);
+                return;
             }
 
-            if (!huboErrorFatal) {
-                // Forzar estado final visible antes del alert.
-                barra.style.width = '100%';
-                barra.setAttribute('aria-valuenow', '100');
-                porcentajeTxt.textContent = '100%';
-                label.textContent = `Procesando: ${listaPerson.length} de ${listaPerson.length}`;
-                // Doble frame + micro pausa: evita que alert bloquee el último repintado en algunos navegadores/proxies.
-                await esperarRepintadoUI();
-                await esperarRepintadoUI();
-                await esperar(120);
+            const resultado = await consumirEventosCalculoStreaming(response, {
+                barra,
+                label,
+                porcentajeTxt,
+                detalleErr
+            });
 
-                let msg = `Cálculo finalizado. Éxitos: ${totalExitos}, errores: ${totalErrores}.`;
-                if (detallesTotales.length) {
-                    msg += '\n\n' + detallesTotales.slice(0, 10).join('\n');
-                    if (detallesTotales.length > 10) msg += '\n…';
-                }
-                alert(msg);
+            actualizarBarraProgreso(
+                barra,
+                porcentajeTxt,
+                label,
+                listaPerson.length,
+                listaPerson.length,
+                detalleErr,
+                null
+            );
+            await esperarRepintadoUI();
+            await esperarRepintadoUI();
+            await esperar(120);
+
+            const totalExitos = Number(resultado && resultado.exitos != null ? resultado.exitos : 0);
+            const totalErrores = Number(resultado && resultado.errores != null ? resultado.errores : 0);
+            const detallesTotales = resultado && Array.isArray(resultado.detalles) ? resultado.detalles : [];
+
+            let msg = `Cálculo finalizado. Éxitos: ${totalExitos}, errores: ${totalErrores}.`;
+            if (detallesTotales.length) {
+                msg += '\n\n' + detallesTotales.slice(0, 10).join('\n');
+                if (detallesTotales.length > 10) msg += '\n…';
             }
+            alert(msg);
         } catch (error) {
             console.error(error);
-            alert('Ocurrió un error en la comunicación con el servidor.');
+            alert(error && error.message ? error.message : 'Ocurrió un error en la comunicación con el servidor.');
         } finally {
             container.classList.add('d-none');
             resetBarraProgreso();

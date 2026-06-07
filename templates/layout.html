@@ -26,6 +26,13 @@
             background-color: #f8f9fa;
         }
 
+        .navbar-db-hint {
+            font-size: 0.65rem;
+            line-height: 1.15;
+            color: #6c757d;
+            opacity: 0.9;
+        }
+
         /* Sidebar Styling */
         #sidebar {
             width: var(--sidebar-width);
@@ -352,8 +359,8 @@
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo26_page' else '' }}">
-                            <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.est)">
-                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.est)</span>
+                            <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.toc)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.toc)</span>
                             </a>
                         </li>
                     </ul>
@@ -469,8 +476,11 @@
                     <span class="navbar-text fw-bold">
                         Bienvenido, {% if current_user.is_authenticated %}{{ current_user.nombre or current_user.username }}{% else %}Usuario{% endif %}
                     </span>
-                    <div class="ms-auto">
+                    <div class="ms-auto text-end">
                         <small class="text-muted">{{ now.strftime('%d/%m/%Y') if now else '' }}</small>
+                        {% if sql_database %}
+                        <div class="navbar-db-hint">{{ sql_database }}</div>
+                        {% endif %}
                     </div>
                 </div>
             </nav>

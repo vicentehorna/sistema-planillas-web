@@ -29,6 +29,68 @@
         return Array.prototype.some.call(select.options, (o) => String(o.value).trim() === v);
     }
 
+    async function obtenerPeriodoActivo(cia, payrolltype, processtype) {
+        try {
+            const url = `/api/selectores/periodo-activo?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}&processtype=${encodeURIComponent(processtype)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return data && data.prperiod != null ? String(data.prperiod).trim() : '';
+        } catch (e) {
+            console.error(e);
+            return '';
+        }
+    }
+
+    /**
+     * Carga periodos del proceso y selecciona el preferido o, si no hay, el activo (PR_ProcessControl).
+     * @param {string} periodoPreferido — valor guardado en filtros; vacío usa periodo activo.
+     */
+    async function poblarPeriodosConActivo(cia, payrolltype, processtype, selectElement, poblarSelect, periodoPreferido) {
+        if (!selectElement || typeof poblarSelect !== 'function') return;
+        await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}&processtype=${encodeURIComponent(processtype)}`,
+            selectElement
+        );
+        let periodo = periodoPreferido != null ? String(periodoPreferido).trim() : '';
+        if (!periodo) {
+            periodo = await obtenerPeriodoActivo(cia, payrolltype, processtype);
+        }
+        if (periodo && optionExists(selectElement, periodo)) {
+            selectElement.value = periodo;
+        }
+    }
+
+    async function obtenerConceptoNeto(cia) {
+        try {
+            const url = `/api/selectores/concepto-neto?cia=${encodeURIComponent(cia)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return data && data.concept != null ? String(data.concept).trim() : '';
+        } catch (e) {
+            console.error(e);
+            return '';
+        }
+    }
+
+    /**
+     * Carga conceptos de la compañía y selecciona el preferido o, si no hay, Neto a recibir (FormulaCode NETO).
+     * @param {string} conceptoPreferido — valor guardado en filtros; vacío usa concepto NETO.
+     */
+    async function poblarConceptosConNeto(cia, selectElement, poblarSelect, conceptoPreferido) {
+        if (!selectElement || typeof poblarSelect !== 'function') return;
+        await poblarSelect(
+            `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
+            selectElement
+        );
+        let concepto = conceptoPreferido != null ? String(conceptoPreferido).trim() : '';
+        if (!concepto) {
+            concepto = await obtenerConceptoNeto(cia);
+        }
+        if (concepto && optionExists(selectElement, concepto)) {
+            selectElement.value = concepto;
+        }
+    }
+
     /**
      * @param {string} storageKey
      * @param {boolean} incluyeEmpleado
@@ -737,7 +799,6 @@
                 const estado = {
                     cia: val('cboCompania'),
                     period: val('cboPeriodoTributario'),
-                    payroll: val('cboTipoPlanilla'),
                     cesados: val('cboCesados') || 'T',
                     timestamp: Date.now()
                 };
@@ -760,7 +821,50 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboPeriodoTributario', 'cboTipoPlanilla', 'cboCesados'].forEach((id) => {
+            ['cboCompania', 'cboPeriodoTributario', 'cboCesados'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    function crearPersistenciaPlameArchivo26() {
+        const STORAGE_KEY = 'filtros_plame_archivo26';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    period: val('cboPeriodoTributario'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame archivo26: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoTributario'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });
@@ -897,7 +1001,8 @@
             }
 
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto);
+            const concept = filtros.concept != null ? String(filtros.concept).trim() : '';
+            await poblarConceptosConNeto(cia, cboConcepto, poblarSelect, concept);
 
             const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
             if (!payroll || !optionExists(cboPt, payroll)) {
@@ -905,11 +1010,6 @@
                 return true;
             }
             cboPt.value = payroll;
-
-            const concept = filtros.concept != null ? String(filtros.concept).trim() : '';
-            if (concept && optionExists(cboConcepto, concept)) {
-                cboConcepto.value = concept;
-            }
 
             await poblarSelect(
                 `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
@@ -923,15 +1023,8 @@
             }
             cboProc.value = proceso;
 
-            await poblarSelect(
-                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
-                cboPer
-            );
-
             const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
-            if (periodo && optionExists(cboPer, periodo)) {
-                cboPer.value = periodo;
-            }
+            await poblarPeriodosConActivo(cia, payroll, proceso, cboPer, poblarSelect, periodo);
 
             if (cboMoneda) {
                 const currency = filtros.currency != null ? String(filtros.currency).trim().toUpperCase() : 'LO';
@@ -1137,6 +1230,10 @@
         STORAGE_KEY_LISTADO_PAGOS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
+        obtenerPeriodoActivo,
+        poblarPeriodosConActivo,
+        obtenerConceptoNeto,
+        poblarConceptosConNeto,
         resumenTotal: function () {
             return crearPersistenciaReporte(STORAGE_KEY_RESUMEN_TOTAL, false);
         },
@@ -1187,6 +1284,9 @@
         },
         plameArchivo18: function () {
             return crearPersistenciaPlameArchivo18();
+        },
+        plameArchivo26: function () {
+            return crearPersistenciaPlameArchivo26();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

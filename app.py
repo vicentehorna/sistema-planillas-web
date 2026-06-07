@@ -99,7 +99,10 @@ def fecha_filter(value):
 
 @app.context_processor
 def inject_now():
-    return {'now': datetime.now()}
+    return {
+        'now': datetime.now(),
+        'sql_database': (os.getenv('SQL_DATABASE') or '').strip(),
+    }
 
 
 def _jsonable_value(value):
@@ -183,7 +186,7 @@ PLAME_ARCHIVO_EXTENSION = {
     '14': 'jor',
     '15': 'snl',
     '18': 'rem',
-    '26': 'est',
+    '26': 'toc',
 }
 
 
@@ -253,6 +256,46 @@ def _plame_linea_archivo14(row):
         str(eh).zfill(3),
         str(em).zfill(2),
     ]) + '|'
+
+
+def _plame_linea_archivo26(row):
+    """Genera línea PLAME Archivo 26 (.toc): TT|DOC|INDICADOR|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    indicator = str(row.get('pensionmembership') or '0').strip()
+    if indicator not in ('0', '1'):
+        indicator = '0'
+    return '|'.join([doc_type, doc_num, indicator]) + '|'
+
+
+def _plame_rows_archivo26_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    allowed_docs = {'01', '04', '07', '09'}
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        if not doc_num:
+            continue
+        doc_type = str(r.get('documenttype') or '').strip()
+        if doc_type.isdigit():
+            doc_type = doc_type.zfill(2)
+        if doc_type not in allowed_docs:
+            continue
+        indicator = str(r.get('pensionmembership') or '0').strip()
+        if indicator not in ('0', '1'):
+            indicator = '0'
+        resultado.append({
+            'documenttype': doc_type,
+            'documentnumber': doc_num,
+            'pensionmembership': indicator,
+        })
+    return resultado
 
 
 def _plame_linea_archivo15(row):
@@ -404,7 +447,7 @@ def _plame_filename(ruc, yyyymm, codigo_archivo):
     yyyy = yyyymm[:4]
     mm = yyyymm[4:6]
     ext = PLAME_ARCHIVO_EXTENSION.get(str(codigo_archivo), 'txt')
-    if str(codigo_archivo) in ('14', '15', '18'):
+    if str(codigo_archivo) in ('14', '15', '18', '26'):
         return f'0601{yyyy}{mm}{ruc11}.{ext}'
     return f'RP_{ruc11}_{yyyy}_{mm}_{codigo_archivo}.{ext}'
 
@@ -1325,11 +1368,7 @@ def plame_archivo18_page():
 @app.route('/plame/archivo-26')
 @login_required
 def plame_archivo26_page():
-    return render_template(
-        'plame_pendiente.html',
-        codigo='26',
-        titulo='Establecimientos (.est)',
-    )
+    return render_template('plame_archivo26.html')
 
 
 @app.route('/api/plame/archivo-14/listado', methods=['POST'])
@@ -1461,6 +1500,7 @@ def api_plame_archivo15_listado():
                 "documentnumber": _jsonable_value(r.get('documentnumber')),
                 "name": _jsonable_value(r.get('name')),
                 "suspensiontype": _jsonable_value(r.get('suspensiontype')),
+                "suspensionname": _jsonable_value(r.get('suspensionname')),
                 "days": days_num,
                 "selection": _jsonable_value(r.get('selection')),
             })
@@ -1608,6 +1648,95 @@ def api_plame_archivo18_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_plame_archivo18_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-26/listado', methods=['POST'])
+@login_required
+def api_plame_archivo26_listado():
+    """sp_pr_listado_plame26_web: indicador aporte Asegura tu pensión (.toc)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_plame26_web @cia=?, @period=?",
+            (p['cia'], p['period']),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "documenttype": _jsonable_value(r.get('documenttype')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "pensionmembership": _jsonable_value(r.get('pensionmembership')),
+                "accidentinsurance": _jsonable_value(r.get('accidentinsurance')),
+                "typeaporte": _jsonable_value(r.get('typeaporte')),
+                "isdomiciled": _jsonable_value(r.get('isdomiciled')),
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_plame_archivo26_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-26/generar-txt', methods=['POST'])
+@login_required
+def api_plame_archivo26_generar_txt():
+    """Genera TXT PLAME Archivo 26 (.toc, encoding latin-1)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _plame_rows_archivo26_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        lineas = [_plame_linea_archivo26(row) for row in filas]
+        contenido = '\r\n'.join(lineas)
+        if lineas:
+            contenido += '\r\n'
+
+        filename = _plame_filename(ruc, p['period'], '26')
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_archivo26_generar_txt")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -2843,6 +2972,70 @@ def api_periodos():
                 pass
 
 
+@app.route('/api/selectores/concepto-neto')
+@login_required
+def api_concepto_neto():
+    """sp_pr_selectorconceptoneto_web: concepto Neto a recibir (FormulaCode = NETO)."""
+    cia = request.args.get('cia', '').strip()
+    if not cia:
+        return jsonify({"concept": "", "description": ""})
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorconceptoneto_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        concept = ''
+        description = ''
+        if rows:
+            concept = str(rows[0].get('concept') or '').strip()
+            description = str(rows[0].get('description') or '').strip()
+        return jsonify({"concept": concept, "description": description})
+    except Exception:
+        logging.exception("api_concepto_neto")
+        return jsonify({"concept": "", "description": ""})
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/periodo-activo')
+@login_required
+def api_periodo_activo():
+    """sp_pr_selectorperiodoactivo_web: periodo activo en PR_ProcessControl (Status = A)."""
+    cia = request.args.get('cia', '').strip()
+    payrolltype = request.args.get('payrolltype', '').strip()
+    processtype = request.args.get('processtype', '').strip()
+    if not all([cia, payrolltype, processtype]):
+        return jsonify({"prperiod": ""})
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodoactivo_web @cia=?, @payrolltype=?, @processtype=?",
+            (cia, payrolltype, processtype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        prperiod = ''
+        if rows:
+            raw = rows[0].get('prperiod')
+            prperiod = _normalize_pr_period(raw) or str(raw or '').strip()
+        return jsonify({"prperiod": prperiod})
+    except Exception:
+        logging.exception("api_periodo_activo")
+        return jsonify({"prperiod": ""})
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/periodos-plame')
 @login_required
 def api_periodos_plame():
@@ -3722,6 +3915,7 @@ def api_asignacion_conceptos_guardar():
             ),
         )
         _drain_pyodbc_cursor(cursor)
+        conn.commit()
         return jsonify({"ok": True, "modo": modo})
     except Exception as e:
         logging.exception("api_asignacion_conceptos_guardar")
@@ -3762,6 +3956,7 @@ def api_asignacion_conceptos_eliminar():
             ),
         )
         _drain_pyodbc_cursor(cursor)
+        conn.commit()
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception("api_asignacion_conceptos_eliminar")

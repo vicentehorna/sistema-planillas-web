@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}PLAME Archivo 15{% endblock %}
+{% block title %}PLAME Archivo 26{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -10,19 +10,19 @@
         border: 1px solid #dee2e6;
     }
 
-    .table-plame15 {
+    .table-plame26 {
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
     }
 
-    .table-plame15 th,
-    .table-plame15 td {
+    .table-plame26 th,
+    .table-plame26 td {
         padding: 0.25rem 0.5rem;
         vertical-align: middle;
     }
 
-    .table-plame15 thead th {
+    .table-plame26 thead th {
         position: sticky;
         top: 0;
         background-color: #f8f9fa;
@@ -30,14 +30,14 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
-    .table-plame15 .form-check-input {
+    .table-plame26 .form-check-input {
         width: 0.85rem;
         height: 0.85rem;
         margin: 0;
     }
 
-    .table-plame15 .col-dias {
-        min-width: 3.5rem;
+    .table-plame26 .col-indicador {
+        min-width: 3rem;
         text-align: center;
     }
 
@@ -95,17 +95,18 @@
 
 {% block content %}
 <div class="alert alert-light border plame-info mb-3" role="note">
-    <strong>Archivo 15 — Días subsidiados y no laborados (SUNAT).</strong>
-    Formato de línea: <code>TT|NNNNNNNNNNNNNNN|SS|DD|</code>
-    (Tipo doc Tabla 3, N° documento, tipo suspensión Tabla 21, días subsidiados/no laborados).
-    Nombre del archivo: <code>0601AAAAmmRRRRRRRRRRR.snl</code>
+    <strong>Archivo 26 — Indicador de aporte a «Asegura tu pensión» (SUNAT).</strong>
+    Formato de línea: <code>TT|NNNNNNNNNNNNNNN|I|</code>
+    (Tipo doc Tabla 3, N° documento, indicador de aporte).
+    Solo aplica a tipos de documento 01, 04, 07 y 09.
+    Nombre del archivo: <code>0601AAAAmmRRRRRRRRRRR.toc</code>
     (<code>0601</code> = formulario PLAME, <code>AAAA</code> = año, <code>mm</code> = mes, RUC de 11 dígitos).
-    Ejemplo de línea: <code>01|46741460|01|07|</code>
+    Ejemplo de línea: <code>01|46741460|0|</code>
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
-        <form id="frmPlame15" class="row g-3">
+        <form id="frmPlame26" class="row g-3">
             <div class="col-12 col-sm-6 plame-filtro-compania">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
@@ -120,36 +121,38 @@
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
-                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarPlame15" disabled>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarPlame26" disabled>
                     <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
-                    Registros: <span id="lblRowCountPlame15">0</span>
-                    · Seleccionados: <span id="lblSeleccionadosPlame15">0</span>
+                    Registros: <span id="lblRowCountPlame26">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosPlame26">0</span>
                 </span>
             </div>
         </form>
     </div>
 </div>
 
-<div class="card shadow-sm border-0 d-none" id="cardResultadoPlame15">
+<div class="card shadow-sm border-0 d-none" id="cardResultadoPlame26">
     <div class="card-body pt-3">
-        <h5 class="fw-bold mb-3 text-center">PLAME — Archivo 15 (.snl)</h5>
+        <h5 class="fw-bold mb-3 text-center">PLAME — Archivo 26 (.toc)</h5>
         <div class="table-scroll-container">
-            <table class="table table-bordered table-sm table-hover table-plame15 align-middle">
+            <table class="table table-bordered table-sm table-hover table-plame26 align-middle">
                 <thead>
                     <tr>
                         <th class="text-center" style="width: 2.5rem;">
-                            <input type="checkbox" id="checkAllPlame15" class="form-check-input" title="Marcar / desmarcar todos">
+                            <input type="checkbox" id="checkAllPlame26" class="form-check-input" title="Marcar / desmarcar todos">
                         </th>
                         <th style="width: 2.5rem;">Tipo</th>
                         <th>Código</th>
                         <th>Nombre</th>
-                        <th>Motivo</th>
-                        <th class="col-dias">Días</th>
+                        <th class="col-indicador">Asegura pensión</th>
+                        <th class="col-indicador">Seg. vida</th>
+                        <th class="col-indicador">Tipo aporte</th>
+                        <th class="col-indicador">Domiciliado</th>
                     </tr>
                 </thead>
-                <tbody id="tbody-plame15"></tbody>
+                <tbody id="tbody-plame26"></tbody>
             </table>
         </div>
     </div>
@@ -160,13 +163,13 @@
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameArchivo15
-        ? window.FiltrosPlanillasReportes.plameArchivo15()
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameArchivo26
+        ? window.FiltrosPlanillasReportes.plameArchivo26()
         : null;
 
-    const URL_LISTADO = {{ url_for('api_plame_archivo15_listado') | tojson }};
-    const URL_GENERAR = {{ url_for('api_plame_archivo15_generar_txt') | tojson }};
-    let lastRowsPlame15 = [];
+    const URL_LISTADO = {{ url_for('api_plame_archivo26_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_plame_archivo26_generar_txt') | tojson }};
+    let lastRowsPlame26 = [];
 
     function escapeHtml(s) {
         return String(s || '')
@@ -200,16 +203,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function rowKey(row) {
-        return [
-            String(row.documentnumber || '').trim(),
-            String(row.suspensiontype || '').trim()
-        ].join('|');
+        return String(row.documentnumber || '').trim();
     }
 
     function obtenerSeleccionados() {
-        const mapa = new Map((lastRowsPlame15 || []).map((r) => [rowKey(r), r]));
+        const mapa = new Map((lastRowsPlame26 || []).map((r) => [rowKey(r), r]));
         const seleccionados = [];
-        document.querySelectorAll('.check-plame15:checked').forEach((cb) => {
+        document.querySelectorAll('.check-plame26:checked').forEach((cb) => {
             const row = mapa.get(String(cb.value || '').trim());
             if (row) seleccionados.push(row);
         });
@@ -217,16 +217,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function actualizarContadores() {
-        const total = document.querySelectorAll('.check-plame15').length;
+        const total = document.querySelectorAll('.check-plame26').length;
         const sel = obtenerSeleccionados().length;
-        document.getElementById('lblRowCountPlame15').textContent = String(total);
-        document.getElementById('lblSeleccionadosPlame15').textContent = String(sel);
-        document.getElementById('btnGenerarPlame15').disabled = sel === 0;
+        document.getElementById('lblRowCountPlame26').textContent = String(total);
+        document.getElementById('lblSeleccionadosPlame26').textContent = String(sel);
+        document.getElementById('btnGenerarPlame26').disabled = sel === 0;
     }
 
     function sincronizarCheckAll() {
-        const all = document.querySelectorAll('.check-plame15');
-        const chk = document.getElementById('checkAllPlame15');
+        const all = document.querySelectorAll('.check-plame26');
+        const chk = document.getElementById('checkAllPlame26');
         if (!chk) return;
         if (!all.length) {
             chk.checked = false;
@@ -240,7 +240,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function renderizarTabla(rows) {
-        const tbody = document.getElementById('tbody-plame15');
+        const tbody = document.getElementById('tbody-plame26');
         tbody.innerHTML = '';
         const filas = Array.isArray(rows) ? rows : [];
 
@@ -249,18 +249,20 @@ document.addEventListener('DOMContentLoaded', async function () {
             const key = rowKey(row);
             tr.innerHTML = `
                 <td class="text-center">
-                    <input type="checkbox" class="check-plame15 form-check-input" value="${escapeHtml(key)}" checked>
+                    <input type="checkbox" class="check-plame26 form-check-input" value="${escapeHtml(key)}" checked>
                 </td>
                 <td class="text-center">${escapeHtml(row.documenttype)}</td>
                 <td>${escapeHtml(row.documentnumber)}</td>
                 <td>${escapeHtml(row.name)}</td>
-                <td>${escapeHtml(row.suspensionname || row.suspensiontype)}</td>
-                <td class="col-dias">${escapeHtml(row.days)}</td>
+                <td class="col-indicador">${escapeHtml(row.pensionmembership)}</td>
+                <td class="col-indicador">${escapeHtml(row.accidentinsurance)}</td>
+                <td class="col-indicador">${escapeHtml(row.typeaporte)}</td>
+                <td class="col-indicador">${escapeHtml(row.isdomiciled)}</td>
             `;
             tbody.appendChild(tr);
         });
 
-        tbody.querySelectorAll('.check-plame15').forEach((cb) => {
+        tbody.querySelectorAll('.check-plame26').forEach((cb) => {
             cb.addEventListener('change', function () {
                 sincronizarCheckAll();
                 actualizarContadores();
@@ -324,9 +326,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (filtrosPersist) filtrosPersist.guardar();
 
-        document.getElementById('lblRowCountPlame15').textContent = '0';
-        document.getElementById('lblSeleccionadosPlame15').textContent = '0';
-        document.getElementById('btnGenerarPlame15').disabled = true;
+        document.getElementById('lblRowCountPlame26').textContent = '0';
+        document.getElementById('lblSeleccionadosPlame26').textContent = '0';
+        document.getElementById('btnGenerarPlame26').disabled = true;
 
         try {
             const res = await fetch(URL_LISTADO, {
@@ -336,16 +338,16 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {
-                document.getElementById('cardResultadoPlame15').classList.add('d-none');
+                document.getElementById('cardResultadoPlame26').classList.add('d-none');
                 alert(payload.error || 'Error al consultar el listado.');
                 return;
             }
-            lastRowsPlame15 = Array.isArray(payload.rows) ? payload.rows : [];
-            renderizarTabla(lastRowsPlame15);
-            document.getElementById('cardResultadoPlame15').classList.remove('d-none');
+            lastRowsPlame26 = Array.isArray(payload.rows) ? payload.rows : [];
+            renderizarTabla(lastRowsPlame26);
+            document.getElementById('cardResultadoPlame26').classList.remove('d-none');
         } catch (err) {
             console.error(err);
-            document.getElementById('cardResultadoPlame15').classList.add('d-none');
+            document.getElementById('cardResultadoPlame26').classList.add('d-none');
             alert('Error de red o del servidor.');
         }
     }
@@ -380,7 +382,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
 
             const blob = await res.blob();
-            let filename = '06010000000000000000000.snl';
+            let filename = '06010000000000000000000.toc';
             const cd = res.headers.get('Content-Disposition') || '';
             const m = cd.match(/filename="([^"]+)"/i);
             if (m) filename = m[1];
@@ -436,19 +438,19 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    document.getElementById('frmPlame15').addEventListener('submit', function (e) {
+    document.getElementById('frmPlame26').addEventListener('submit', function (e) {
         e.preventDefault();
         ejecutarConsulta();
     });
 
-    document.getElementById('checkAllPlame15').addEventListener('change', function () {
+    document.getElementById('checkAllPlame26').addEventListener('change', function () {
         const marcar = this.checked;
-        document.querySelectorAll('.check-plame15').forEach((cb) => { cb.checked = marcar; });
+        document.querySelectorAll('.check-plame26').forEach((cb) => { cb.checked = marcar; });
         this.indeterminate = false;
         actualizarContadores();
     });
 
-    document.getElementById('btnGenerarPlame15').addEventListener('click', generarTxt);
+    document.getElementById('btnGenerarPlame26').addEventListener('click', generarTxt);
 });
 </script>
 {% endblock %}

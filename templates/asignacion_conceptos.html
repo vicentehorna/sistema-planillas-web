@@ -209,8 +209,11 @@
             </div>
             <form id="frmModalAsignacion" novalidate>
                 <div class="modal-body">
-                    <input type="hidden" id="hdModalModo" value="I">
-                    <input type="hidden" id="hdModalCostCenter" value="">
+                <input type="hidden" id="hdModalModo" value="I">
+                <input type="hidden" id="hdModalCostCenter" value="">
+                <input type="hidden" id="hdModalPerson" value="">
+                <input type="hidden" id="hdModalConcept" value="">
+                <input type="hidden" id="hdModalPeriodoInicio" value="">
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="txtModalCompania" class="form-label small fw-bold text-muted">Compañía</label>
@@ -369,6 +372,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('frmModalAsignacion').reset();
         document.getElementById('hdModalModo').value = 'I';
         document.getElementById('hdModalCostCenter').value = '';
+        document.getElementById('hdModalPerson').value = '';
+        document.getElementById('hdModalConcept').value = '';
+        document.getElementById('hdModalPeriodoInicio').value = '';
         document.getElementById('radModalPermanente').checked = false;
         document.getElementById('radModalTemporal').checked = true;
         document.getElementById('chkModalAplicaFormula').checked = false;
@@ -503,23 +509,36 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             await poblarCombosModal(cia, payrolltype);
 
-            if (optionExists(document.getElementById('cboModalEmpleado'), det.person)) {
-                document.getElementById('cboModalEmpleado').value = det.person;
-            }
-            if (optionExists(document.getElementById('cboModalConcepto'), det.concept)) {
-                document.getElementById('cboModalConcepto').value = det.concept;
-            }
-            if (optionExists(document.getElementById('cboModalPeriodoInicio'), det.prperiodstart)) {
-                document.getElementById('cboModalPeriodoInicio').value = det.prperiodstart;
-            }
+            const personId = String(det.person || keys.person || row.person || '').trim();
+            const etiquetaEmpleado = String(det.nombre || row.nombre || det.employeecode || row.employeecode || personId).trim();
+            asegurarOpcionSelect(document.getElementById('cboModalEmpleado'), personId, etiquetaEmpleado);
+
+            const conceptId = String(det.concept || keys.concept || row.concept || '').trim();
+            const etiquetaConcepto = String(det.conceptname || row.conceptname || conceptId).trim();
+            asegurarOpcionSelect(document.getElementById('cboModalConcepto'), conceptId, etiquetaConcepto);
+
+            const periodoInicio = String(det.prperiodstart || keys.prperiodstart || row.prperiodstart || '').trim();
+            document.getElementById('hdModalPerson').value = personId;
+            document.getElementById('hdModalConcept').value = conceptId;
+            document.getElementById('hdModalPeriodoInicio').value = periodoInicio;
+            asegurarOpcionSelect(
+                document.getElementById('cboModalPeriodoInicio'),
+                periodoInicio,
+                fmtPeriodoDisplay(periodoInicio)
+            );
 
             const tipo = String(det.flagfrecuencytype || 'P').trim().toUpperCase();
             document.getElementById('radModalPermanente').checked = tipo !== 'T';
             document.getElementById('radModalTemporal').checked = tipo === 'T';
             actualizarEstadoPeriodoFinModal();
 
-            if (tipo === 'T' && det.prperiodend && optionExists(document.getElementById('cboModalPeriodoFin'), det.prperiodend)) {
-                document.getElementById('cboModalPeriodoFin').value = det.prperiodend;
+            if (tipo === 'T' && det.prperiodend) {
+                const periodoFin = String(det.prperiodend || row.prperiodend || '').trim();
+                asegurarOpcionSelect(
+                    document.getElementById('cboModalPeriodoFin'),
+                    periodoFin,
+                    fmtPeriodoDisplay(periodoFin)
+                );
             }
 
             document.getElementById('txtModalValor').value = det.conceptvalue != null ? String(det.conceptvalue) : '';
@@ -540,9 +559,18 @@ document.addEventListener('DOMContentLoaded', async function () {
         const modo = document.getElementById('hdModalModo').value.trim().toUpperCase() === 'U' ? 'U' : 'I';
         const company = document.getElementById('hdModalCompania').value.trim();
         const payrolltype = document.getElementById('hdModalPlanilla').value.trim();
-        const person = document.getElementById('cboModalEmpleado').value.trim();
-        const concept = document.getElementById('cboModalConcepto').value.trim();
-        const prperiodstart = document.getElementById('cboModalPeriodoInicio').value.trim();
+        const person = (modo === 'U'
+            ? document.getElementById('hdModalPerson').value.trim()
+            : document.getElementById('cboModalEmpleado').value.trim())
+            || document.getElementById('cboModalEmpleado').value.trim();
+        const concept = (modo === 'U'
+            ? document.getElementById('hdModalConcept').value.trim()
+            : document.getElementById('cboModalConcepto').value.trim())
+            || document.getElementById('cboModalConcepto').value.trim();
+        const prperiodstart = (modo === 'U'
+            ? document.getElementById('hdModalPeriodoInicio').value.trim()
+            : document.getElementById('cboModalPeriodoInicio').value.trim())
+            || document.getElementById('cboModalPeriodoInicio').value.trim();
         const costcenter = document.getElementById('hdModalCostCenter').value.trim();
         const flagfrecuencytype = tipoAsignacionSeleccionado();
         let prperiodend = document.getElementById('cboModalPeriodoFin').value.trim();
@@ -603,6 +631,23 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!select || value === '' || value == null) return false;
         const v = String(value).trim();
         return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function asegurarOpcionSelect(select, value, text) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        if (!v) return false;
+        let opt = Array.from(select.options).find((o) => String(o.value).trim() === v);
+        if (!opt) {
+            opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = String(text || v).trim() || v;
+            select.appendChild(opt);
+        } else if (text && String(text).trim()) {
+            opt.textContent = String(text).trim();
+        }
+        select.value = opt.value;
+        return true;
     }
 
     function seleccionarCompaniaInsensitive(select, codigoDeseado) {

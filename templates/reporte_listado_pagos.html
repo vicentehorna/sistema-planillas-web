@@ -632,7 +632,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     } else {
         const ciaInicial = cboCia.value.trim();
         if (ciaInicial) {
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(ciaInicial)}`, document.getElementById('cboConcepto'));
+            await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
+                ciaInicial, document.getElementById('cboConcepto'), poblarSelect
+            );
             await poblarBancosHaberes(ciaInicial);
         }
     }
@@ -667,7 +669,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConceptoEl);
+            await window.FiltrosPlanillasReportes.poblarConceptosConNeto(cia, cboConceptoEl, poblarSelect);
             await poblarBancosHaberes(cia);
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
@@ -705,9 +707,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cboPeriodoEl = document.getElementById('cboPeriodo');
 
         if (cia && payroll && proceso) {
-            await poblarSelect(
-                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
-                cboPeriodoEl
+            await window.FiltrosPlanillasReportes.poblarPeriodosConActivo(
+                cia, payroll, proceso, cboPeriodoEl, poblarSelect
             );
             if (filtrosPersist) filtrosPersist.guardar();
         } else {

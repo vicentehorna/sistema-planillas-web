@@ -473,12 +473,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(ciaNorm)}`, document.getElementById('cboConcepto'));
+            await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
+                ciaNorm, document.getElementById('cboConcepto'), poblarSelect
+            );
         }
     } else {
         const ciaInicial = cboCia.value.trim();
         if (ciaInicial) {
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(ciaInicial)}`, document.getElementById('cboConcepto'));
+            await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
+                ciaInicial, document.getElementById('cboConcepto'), poblarSelect
+            );
         }
     }
 
@@ -513,7 +517,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanillaEl);
-            await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConceptoEl);
+            await window.FiltrosPlanillasReportes.poblarConceptosConNeto(cia, cboConceptoEl, poblarSelect);
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPlanillaEl.innerHTML = '<option value="">Seleccione...</option>';
@@ -549,9 +553,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cboPeriodoEl = document.getElementById('cboPeriodo');
 
         if (cia && payroll && proceso) {
-            await poblarSelect(
-                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
-                cboPeriodoEl
+            await window.FiltrosPlanillasReportes.poblarPeriodosConActivo(
+                cia, payroll, proceso, cboPeriodoEl, poblarSelect
             );
             if (filtrosPersist) filtrosPersist.guardar();
         } else {

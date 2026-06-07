@@ -1,22 +1,50 @@
 {% extends "layout.html" %}
 
-{% block title %}Resumen planilla total{% endblock %}
+{% block title %}Resumen de planilla{% endblock %}
 
 {% block extra_css %}
 <style>
-    #tbody-resumen-total tr.reporte-fila-totales td {
-        background-color: #d9edf7;
-        font-weight: 700;
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-resumen-total {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-resumen-total th,
+    .table-resumen-total td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-resumen-total thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-resumen-total .col-importe {
+        min-width: 6rem;
+        text-align: right;
+    }
+
+    .table-resumen-total tr.reporte-fila-totales td {
+        background-color: #f1f3f5;
+        font-weight: 600;
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-table"></i> Reporte resumen total (plame)</h5>
-    </div>
-    <div class="card-body">
+    <div class="card-body pt-3">
         <form id="frmResumenTotal" class="row g-3">
             <div class="col-md-3">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
@@ -51,22 +79,22 @@
 </div>
 
 <div class="card shadow-sm border-0 d-none" id="cardResultado">
-    <div class="card-body">
-        <h4 class="text-center fw-bold mb-4">RESUMEN PLANILLA TOTAL</h4>
-        <div class="table-responsive">
-            <table class="table table-sm table-hover table-bordered border text-center align-middle" style="font-size: 0.85rem;">
-                <thead class="table-light">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center" id="tituloResumenTotal">Resumen de Planilla</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-resumen-total align-middle">
+                <thead>
                     <tr>
-                        <th>TIPO</th>
+                        <th>Tipo</th>
                         <th>PDT</th>
-                        <th>CONCEPTO</th>
-                        <th class="text-end">MENSUAL</th>
-                        <th class="text-end">SEMANAL</th>
-                        <th class="text-end">LIQUIDACIONES</th>
-                        <th class="text-end">VACACIONES</th>
-                        <th class="text-end">CTS</th>
-                        <th class="text-end">GRATI</th>
-                        <th class="text-end">TOTAL</th>
+                        <th>Concepto</th>
+                        <th class="col-importe">Mensual</th>
+                        <th class="col-importe">Semanal</th>
+                        <th class="col-importe">Liquidaciones</th>
+                        <th class="col-importe">Vacaciones</th>
+                        <th class="col-importe">CTS</th>
+                        <th class="col-importe">Grati</th>
+                        <th class="col-importe">Total</th>
                     </tr>
                 </thead>
                 <tbody id="tbody-resumen-total">
@@ -103,18 +131,32 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/"/g, '&quot;');
     }
 
+    function formatTituloResumenPeriodo(periodRaw) {
+        const s = String(periodRaw || '').trim().replace(/[-/]/g, '');
+        if (s.length >= 6 && /^\d{6,}/.test(s)) {
+            const year = s.slice(0, 4);
+            const month = s.slice(4, 6);
+            return `Resumen de Planilla ${year} - ${month}`;
+        }
+        return 'Resumen de Planilla';
+    }
+
+    function actualizarTituloResumen(period) {
+        document.getElementById('tituloResumenTotal').textContent = formatTituloResumenPeriodo(period);
+    }
+
     function renderFilaSubtotal(tipo, montos) {
         const t = escapeHtml(tipo);
         return `
             <tr class="reporte-fila-totales">
                 <td colspan="3" class="text-end">TOTAL ${t}</td>
-                <td class="text-end">${formatNumber(montos.mensual)}</td>
-                <td class="text-end">${formatNumber(montos.semanal)}</td>
-                <td class="text-end">${formatNumber(montos.liquida)}</td>
-                <td class="text-end">${formatNumber(montos.vacaciones)}</td>
-                <td class="text-end">${formatNumber(montos.cts)}</td>
-                <td class="text-end">${formatNumber(montos.grati)}</td>
-                <td class="text-end text-dark">${formatNumber(montos.total)}</td>
+                <td class="col-importe">${formatNumber(montos.mensual)}</td>
+                <td class="col-importe">${formatNumber(montos.semanal)}</td>
+                <td class="col-importe">${formatNumber(montos.liquida)}</td>
+                <td class="col-importe">${formatNumber(montos.vacaciones)}</td>
+                <td class="col-importe">${formatNumber(montos.cts)}</td>
+                <td class="col-importe">${formatNumber(montos.grati)}</td>
+                <td class="col-importe">${formatNumber(montos.total)}</td>
             </tr>
         `;
     }
@@ -135,16 +177,16 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             const tr = document.createElement('tr');
             tr.innerHTML = `
-                <td class="small fw-bold text-muted">${escapeHtml(item.tipo)}</td>
+                <td>${escapeHtml(item.tipo)}</td>
                 <td class="font-monospace">${escapeHtml(item.pdt)}</td>
-                <td class="text-start">${escapeHtml(item.concepto)}</td>
-                <td class="text-end">${formatNumber(item.mensual)}</td>
-                <td class="text-end">${formatNumber(item.semanal)}</td>
-                <td class="text-end">${formatNumber(item.liquida)}</td>
-                <td class="text-end">${formatNumber(item.vacaciones)}</td>
-                <td class="text-end">${formatNumber(item.cts)}</td>
-                <td class="text-end">${formatNumber(item.grati)}</td>
-                <td class="text-end fw-bold text-primary">${formatNumber(item.total)}</td>
+                <td>${escapeHtml(item.concepto)}</td>
+                <td class="col-importe">${formatNumber(item.mensual)}</td>
+                <td class="col-importe">${formatNumber(item.semanal)}</td>
+                <td class="col-importe">${formatNumber(item.liquida)}</td>
+                <td class="col-importe">${formatNumber(item.vacaciones)}</td>
+                <td class="col-importe">${formatNumber(item.cts)}</td>
+                <td class="col-importe">${formatNumber(item.grati)}</td>
+                <td class="col-importe">${formatNumber(item.total)}</td>
             `;
             tbody.appendChild(tr);
 
@@ -334,6 +376,40 @@ document.addEventListener('DOMContentLoaded', async function () {
         return opt ? opt.textContent.trim() : '';
     }
 
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    async function obtenerPeriodoActivo(cia, payrolltype, processtype) {
+        try {
+            const url = `/api/selectores/periodo-activo?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}&processtype=${encodeURIComponent(processtype)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return data && data.prperiod != null ? String(data.prperiod).trim() : '';
+        } catch (e) {
+            console.error(e);
+            return '';
+        }
+    }
+
+    async function poblarPeriodosResumen(cia, payrolltype, processtype, periodoPreferido) {
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}&processtype=${encodeURIComponent(processtype)}`,
+            cboPeriodo
+        );
+        let periodo = periodoPreferido != null ? String(periodoPreferido).trim() : '';
+        if (!periodo) {
+            periodo = await obtenerPeriodoActivo(cia, payrolltype, processtype);
+        }
+        if (periodo && optionExists(cboPeriodo, periodo)) {
+            cboPeriodo.value = periodo;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+    }
+
     async function ejecutarConsultaResumen() {
         if (filtrosPersist) filtrosPersist.guardar();
         const cia = document.getElementById('cboCompania').value.trim();
@@ -366,6 +442,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 alert('No se encontraron registros para los filtros seleccionados.');
                 return;
             }
+            actualizarTituloResumen(period);
             renderizarResumenTotal(data);
             document.getElementById('cardResultado').classList.remove('d-none');
             lastResumenExport = {
@@ -431,17 +508,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    document.getElementById('cboProceso').addEventListener('change', function () {
-        const cia = document.getElementById('cboCompania').value;
-        const pt = document.getElementById('cboTipoPlanilla').value;
-        const proc = this.value;
+    document.getElementById('cboProceso').addEventListener('change', async function () {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const pt = document.getElementById('cboTipoPlanilla').value.trim();
+        const proc = this.value.trim();
         const cboPeriodo = document.getElementById('cboPeriodo');
 
-        if (proc) {
-            poblarSelect(
-                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
-                cboPeriodo
-            );
+        if (proc && cia && pt) {
+            await poblarPeriodosResumen(cia, pt, proc, '');
         } else {
             cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
             cboPeriodo.disabled = true;

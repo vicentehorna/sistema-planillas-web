@@ -123,12 +123,6 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
-                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
-                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
-                    <option value="">Todas</option>
-                </select>
-            </div>
             <div class="col-6 col-sm-4 col-md-3 col-lg-2">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
@@ -217,11 +211,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function periodoTributarioEsValido() {
         return /^\d{6}$/.test(periodoTributarioYyyymm());
-    }
-
-    function payrollAllFlag() {
-        const pt = document.getElementById('cboTipoPlanilla').value.trim();
-        return pt ? 'N' : 'Y';
     }
 
     function formatearMonto(valor) {
@@ -350,7 +339,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function ejecutarConsulta() {
         const cia = document.getElementById('cboCompania').value.trim();
         const period = periodoTributarioYyyymm();
-        const payroll = document.getElementById('cboTipoPlanilla').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
         if (!cia || !periodoTributarioEsValido()) {
             alert('Seleccione compañía y periodo tributario.');
@@ -369,8 +357,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     cia,
                     period,
-                    payroll,
-                    payroll_all: payrollAllFlag(),
+                    payroll_all: 'Y',
                     cesados
                 })
             });
@@ -393,7 +380,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function generarTxt() {
         const cia = document.getElementById('cboCompania').value.trim();
         const period = periodoTributarioYyyymm();
-        const payroll = document.getElementById('cboTipoPlanilla').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
         const seleccionados = obtenerSeleccionados();
         if (!cia || !periodoTributarioEsValido()) {
@@ -412,8 +398,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     cia,
                     period,
-                    payroll,
-                    payroll_all: payrollAllFlag(),
+                    payroll_all: 'Y',
                     cesados,
                     rows: seleccionados
                 })
@@ -450,27 +435,16 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodo = document.getElementById('cboPeriodoTributario');
-    const cboPlanilla = document.getElementById('cboTipoPlanilla');
 
     await poblarSelect('/api/selectores/companias', cboCia);
 
-    async function onCompaniaChange(cia, periodoRestaurar, planillaRestaurar) {
+    async function onCompaniaChange(cia, periodoRestaurar) {
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.disabled = true;
-        cboPlanilla.innerHTML = '<option value="">Todas</option>';
-        cboPlanilla.disabled = true;
         if (cia) {
             await poblarPeriodosPlame(cia, cboPeriodo);
-            await poblarSelect(
-                `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
-                cboPlanilla,
-                '<option value="">Todas</option>'
-            );
             if (periodoRestaurar && optionExists(cboPeriodo, periodoRestaurar)) {
                 cboPeriodo.value = periodoRestaurar;
-            }
-            if (planillaRestaurar && optionExists(cboPlanilla, planillaRestaurar)) {
-                cboPlanilla.value = planillaRestaurar;
             }
             if (filtrosPersist) filtrosPersist.guardar();
         }
@@ -483,8 +457,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
             }
             const periodoGuardado = guardado.period != null ? String(guardado.period).trim() : '';
-            const planillaGuardada = guardado.payroll != null ? String(guardado.payroll).trim() : '';
-            await onCompaniaChange(cboCia.value.trim(), periodoGuardado, planillaGuardada);
+            await onCompaniaChange(cboCia.value.trim(), periodoGuardado);
             const cesados = guardado.cesados != null ? String(guardado.cesados).trim().toUpperCase() : 'T';
             if (['T', 'Y', 'N'].includes(cesados)) {
                 document.getElementById('cboCesados').value = cesados;
@@ -492,14 +465,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         filtrosPersist.registrarGuardadoEnCambio();
         cboCia.addEventListener('change', function () {
-            onCompaniaChange(this.value.trim(), '', '');
+            onCompaniaChange(this.value.trim(), '');
         });
         cboPeriodo.addEventListener('change', () => filtrosPersist.guardar());
-        cboPlanilla.addEventListener('change', () => filtrosPersist.guardar());
         document.getElementById('cboCesados').addEventListener('change', () => filtrosPersist.guardar());
     } else {
         cboCia.addEventListener('change', function () {
-            onCompaniaChange(this.value.trim(), '', '');
+            onCompaniaChange(this.value.trim(), '');
         });
     }
 

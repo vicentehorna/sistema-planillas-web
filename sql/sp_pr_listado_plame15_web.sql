@@ -30,6 +30,7 @@ BEGIN
             ISNULL(sy_person.name2, '')
         )) AS name,
         LTRIM(RTRIM(D.pdt)) AS suspensiontype,
+        LTRIM(RTRIM(ISNULL(T21.description, D.pdt))) AS suspensionname,
         CAST(D.days AS INT) AS days,
         'N' AS selection
     FROM (
@@ -95,6 +96,15 @@ BEGIN
             ON sy_person.person = pr_employee.person
         LEFT JOIN sy_persondocumenttype (NOLOCK)
             ON sy_person.employeedocumenttype = sy_persondocumenttype.persondocumenttype
+        LEFT JOIN (
+            SELECT
+                LTRIM(RTRIM(pdt)) AS pdt,
+                MIN(LTRIM(RTRIM(Description))) AS description
+            FROM pr_medicalresttype (NOLOCK)
+            WHERE company = @cia
+            GROUP BY LTRIM(RTRIM(pdt))
+        ) T21
+            ON T21.pdt = LTRIM(RTRIM(D.pdt))
     WHERE ISNULL(D.days, 0) <> 0
       AND LTRIM(RTRIM(ISNULL(sy_person.documentnumber, ''))) <> ''
     ORDER BY name, suspensiontype;

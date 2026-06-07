@@ -47,40 +47,56 @@
     #cboCesados {
         max-width: 100%;
     }
+
+    .procesar-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 768px) {
+        .procesar-filtro-compania {
+            flex: 0 0 28%;
+            max-width: 28%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .procesar-filtro-compania {
+            flex: 0 0 22%;
+            max-width: 22%;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-gear-wide-connected"></i> Procesar planilla</h5>
-    </div>
-    <div class="card-body">
-        <div class="row g-3 align-items-end mb-2">
-            <div class="col-md-2">
+    <div class="card-body pt-3">
+        <form id="frmProcesarPlanilla" class="row g-3">
+            <div class="col-12 col-md-6 col-lg-4 procesar-filtro-compania">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboProcesoCalculo" class="form-label small fw-bold text-muted">Proceso</label>
                 <select id="cboProcesoCalculo" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="txtPeriodoDesc" class="form-label small fw-bold text-muted">Periodo</label>
                 <input type="text" id="txtPeriodoDesc" class="form-control form-control-sm text-truncate" readonly autocomplete="off" placeholder="—" title="">
                 <input type="hidden" id="hidPeriodoCalculo" value="">
             </div>
-            <div class="col-md-1">
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
                     <option value="T" selected>Todos</option>
@@ -88,19 +104,30 @@
                     <option value="N">No</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
                 <select id="cboUnidad" class="form-select form-select-sm">
                     <option value="0">Todas</option>
                 </select>
             </div>
-            <div class="col-md-1 d-grid">
-                <button type="button" class="btn btn-primary btn-sm" id="btnListarTrabajadores" title="Listar trabajadores">
-                    <i class="bi bi-search"></i>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarPlanilla">
+                    <i class="bi bi-search"></i> Consultar
                 </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnCalcular" disabled>
+                    <i class="bi bi-calculator"></i> Calcular planilla
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountPlanilla">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosPlanilla">0</span>
+                </span>
             </div>
-        </div>
+        </form>
+    </div>
+</div>
 
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
         <div id="container-progreso" class="mb-3 d-none" aria-live="polite">
             <div class="d-flex justify-content-between mb-1">
                 <span id="progreso-label" class="small fw-bold text-muted">Procesando trabajadores…</span>
@@ -135,13 +162,6 @@
                 </thead>
                 <tbody id="tbodyTrabajadores"></tbody>
             </table>
-        </div>
-
-        <div class="mt-3 d-flex justify-content-between align-items-center">
-            <span class="text-muted small" id="lblTrabajadoresCount">0 trabajadores</span>
-            <button type="button" id="btnCalcular" class="btn btn-success btn-sm px-3" disabled>
-                <i class="bi bi-calculator"></i> Calcular planilla
-            </button>
         </div>
     </div>
 </div>
@@ -192,13 +212,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         const chk = document.getElementById('checkAll');
         chk.checked = false;
         chk.indeterminate = false;
-        document.getElementById('lblTrabajadoresCount').textContent = '0 trabajadores';
-        validarBotonCalcular();
+        actualizarContadores();
     }
 
-    function validarBotonCalcular() {
-        const n = document.querySelectorAll('.check-trabajador:checked').length;
-        document.getElementById('btnCalcular').disabled = n === 0;
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-trabajador').length;
+        const sel = document.querySelectorAll('.check-trabajador:checked').length;
+        document.getElementById('lblRowCountPlanilla').textContent = String(total);
+        document.getElementById('lblSeleccionadosPlanilla').textContent = String(sel);
+        document.getElementById('btnCalcular').disabled = sel === 0;
     }
 
     function sincronizarCheckAll() {
@@ -218,7 +240,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function toggleAll(source) {
         document.querySelectorAll('.check-trabajador').forEach((x) => { x.checked = source.checked; });
-        validarBotonCalcular();
+        actualizarContadores();
         if (filtrosPersist) filtrosPersist.guardar();
     }
 
@@ -405,10 +427,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 tr.appendChild(td4);
                 tbody.appendChild(tr);
             });
-            document.getElementById('lblTrabajadoresCount').textContent =
-                data.length === 1 ? '1 trabajador' : `${data.length} trabajadores`;
             sincronizarCheckAll();
-            validarBotonCalcular();
+            actualizarContadores();
             if (filtrosPersist) filtrosPersist.guardar();
         } catch (e) {
             console.error(e);
@@ -424,7 +444,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             'cboCesados',
             'cboUnidad',
             'txtPeriodoDesc',
-            'btnListarTrabajadores',
+            'btnConsultarPlanilla',
             'checkAll'
         ];
         ids.forEach((id) => {
@@ -600,11 +620,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             container.classList.add('d-none');
             resetBarraProgreso();
             setUiCalculoEnCurso(false);
-            validarBotonCalcular();
+            actualizarContadores();
         }
     }
 
-    document.getElementById('btnListarTrabajadores').addEventListener('click', function () {
+    document.getElementById('frmProcesarPlanilla').addEventListener('submit', function (e) {
+        e.preventDefault();
         listarTrabajadores();
     });
     document.getElementById('btnCalcular').addEventListener('click', function () {
@@ -615,7 +636,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const t = e.target;
         if (t && t.classList && t.classList.contains('check-trabajador')) {
             sincronizarCheckAll();
-            validarBotonCalcular();
+            actualizarContadores();
+            if (filtrosPersist) filtrosPersist.guardar();
         }
     });
 

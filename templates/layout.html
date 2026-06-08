@@ -254,6 +254,12 @@
             font-size: 0.7rem;
         }
 
+        #sidebar ul li a.sidebar-link-disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
         /* Content Area */
         #content {
             width: calc(100% - var(--sidebar-width));
@@ -309,19 +315,19 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint in ('trabajadores_page', 'trabajadores_editar') else '' }}">
-                    <a href="{{ url_for('trabajadores_page') }}" title="Trabajadores">
-                        <i class="bi bi-people-fill"></i><span class="sidebar-link-text">Trabajadores</span>
+                <li>
+                    <a href="#" class="sidebar-link-disabled" title="Conceptos (próximamente)" aria-disabled="true" tabindex="-1">
+                        <i class="bi bi-box-seam"></i><span class="sidebar-link-text">Conceptos</span>
                     </a>
                 </li>
 
                 <li class="py-0">
-                    <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
+                    <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Administración</p>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
-                    <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar planilla">
-                        <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar planilla</span>
+                <li class="{{ 'active' if request.endpoint in ('trabajadores_page', 'trabajadores_editar') else '' }}">
+                    <a href="{{ url_for('trabajadores_page') }}" title="Trabajadores">
+                        <i class="bi bi-people-fill"></i><span class="sidebar-link-text">Trabajadores</span>
                     </a>
                 </li>
 
@@ -329,6 +335,35 @@
                     <a href="{{ url_for('asignacion_conceptos_page') }}" title="Asignación de Conceptos">
                         <i class="bi bi-tags"></i><span class="sidebar-link-text">Asignación de Conceptos</span>
                     </a>
+                </li>
+
+                <li class="py-0">
+                    <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
+                </li>
+
+                {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'procesar_planilla_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if calculos_active else '' }}">
+                    <a href="#submenuCalculos"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if calculos_active else 'false' }}"
+                       aria-controls="submenuCalculos"
+                       title="Cálculos">
+                        <i class="bi bi-calculator"></i><span class="sidebar-link-text">Cálculos</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if calculos_active else '' }}" id="submenuCalculos">
+                        <li class="{{ 'active' if request.endpoint == 'aperturar_periodos_page' else '' }}">
+                            <a href="{{ url_for('aperturar_periodos_page') }}" title="Aperturar periodos">
+                                <i class="bi bi-calendar2-check"></i><span class="sidebar-link-text">Aperturar periodos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
+                            <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar planilla">
+                                <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar planilla</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page') %}

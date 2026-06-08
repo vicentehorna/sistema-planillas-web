@@ -1359,6 +1359,12 @@ def procesar_planilla_page():
     return render_template('procesar_planilla.html')
 
 
+@app.route('/aperturar-periodos')
+@login_required
+def aperturar_periodos_page():
+    return render_template('aperturar_periodos.html')
+
+
 @app.route('/asignacion-conceptos')
 @login_required
 def asignacion_conceptos_page():
@@ -4109,6 +4115,267 @@ def reporte_descansos_medicos_detalle_post():
     except Exception as e:
         logging.exception("reporte_descansos_medicos_detalle_post")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# ==========================================
+# API Aperturar periodos — control de procesos
+# ==========================================
+
+
+def _format_prperiod_display(period_raw):
+    """Formatea PRPeriod yyyymmdd como yyyy-mm-dd para la UI."""
+    s = _normalize_pr_period(period_raw)
+    if len(s) >= 8 and s[:8].isdigit():
+        return f'{s[0:4]}-{s[4:6]}-{s[6:8]}'
+    return str(period_raw or '').strip()
+
+
+def _fecha_hora_tabla_json(val):
+    if val is None:
+        return ''
+    if isinstance(val, datetime):
+        return val.strftime('%d/%m/%Y %H:%M')
+    if isinstance(val, date):
+        return val.strftime('%d/%m/%Y')
+    return str(val).strip()
+
+
+@app.route('/api/aperturar-periodos/listado', methods=['POST'])
+@login_required
+def api_aperturar_periodos_listado():
+    """sp_pr_listaprocesscontrol_apertura_web: procesos activos y pendientes de control."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listaprocesscontrol_apertura_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            prperiod_raw = r.get('prperiod')
+            prperiod = _normalize_pr_period(prperiod_raw) if prperiod_raw not in (None, '') else ''
+            resultado.append({
+                "processtype": _jsonable_value(r.get('processtype')),
+                "description": _jsonable_value(r.get('description')),
+                "company": _jsonable_value(r.get('company')),
+                "payrolltype": _jsonable_value(r.get('payrolltype')),
+                "prperiod": prperiod,
+                "prperiod_display": _format_prperiod_display(prperiod) if prperiod else '',
+                "processdate": _fecha_hora_tabla_json(r.get('processdate')),
+                "status": _jsonable_value(r.get('status')),
+                "statusdesc": _jsonable_value(r.get('statusdesc')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_aperturar_periodos_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/aperturar-periodos/periodos')
+@login_required
+def api_aperturar_periodos_periodos():
+    """sp_pr_selectorperiodos_apertura_web: periodos configurados en PR_Period."""
+    cia = request.args.get('cia', '').strip()
+    payrolltype = request.args.get('payrolltype', '').strip()
+    if not cia or not payrolltype:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodos_apertura_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        data = []
+        for r in rows:
+            pid = _normalize_pr_period(r.get('prperiod'))
+            if not pid:
+                continue
+            txt = str(r.get('description') or '').strip() or _format_prperiod_display(pid)
+            data.append({"id": pid, "text": txt})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_aperturar_periodos_periodos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/aperturar-periodos/periodo-sugerido')
+@login_required
+def api_aperturar_periodos_periodo_sugerido():
+    """sp_pr_selectorperiodoactivo_planilla_web: MAX periodo con status A/G."""
+    cia = request.args.get('cia', '').strip()
+    payrolltype = request.args.get('payrolltype', '').strip()
+    if not cia or not payrolltype:
+        return jsonify({"prperiod": ""})
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodoactivo_planilla_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        prperiod = ''
+        if rows:
+            prperiod = _normalize_pr_period(rows[0].get('prperiod'))
+        return jsonify({"prperiod": prperiod})
+    except Exception:
+        logging.exception("api_aperturar_periodos_periodo_sugerido")
+        return jsonify({"prperiod": ""})
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _aperturar_periodos_procesos_from_body(body):
+    raw = body.get('processtypes') or body.get('procesos') or body.get('process_types') or []
+    if isinstance(raw, str):
+        raw = [p.strip() for p in raw.split(',') if p.strip()]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    seen = set()
+    out = []
+    for item in raw:
+        s = str(item or '').strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+@app.route('/api/aperturar-periodos/aperturar', methods=['POST'])
+@login_required
+def api_aperturar_periodos_aperturar():
+    """Apertura masiva de periodo por tipo de proceso seleccionado."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
+    processtypes = _aperturar_periodos_procesos_from_body(body)
+    xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+    if not cia:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+    if not period:
+        return jsonify({"error": "Seleccione el periodo a aperturar."}), 400
+    if not processtypes:
+        return jsonify({"error": "Seleccione al menos un tipo de proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for pt in processtypes:
+            cursor.execute(
+                "EXEC sp_pr_aperturarperiodo_proceso_web "
+                "@cia=?, @payrolltype=?, @processtype=?, @period=?, @xlastuser=?",
+                (cia, payrolltype, pt, period, xlastuser),
+            )
+            _drain_all_cursor_resultsets(cursor)
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "message": f"Periodo { _format_prperiod_display(period) } aperturado en {len(processtypes)} proceso(s).",
+            "procesados": len(processtypes),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_aperturar_periodos_aperturar")
+        msg = str(e)
+        if '50001' in msg or 'RAISERROR' in msg.upper():
+            msg = msg.split(']')[-1].strip() if ']' in msg else msg
+        return jsonify({"error": msg or "No se pudo aperturar el periodo."}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/aperturar-periodos/cerrar', methods=['POST'])
+@login_required
+def api_aperturar_periodos_cerrar():
+    """Cierra periodo activo (A/G → C) en los procesos seleccionados."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    processtypes = _aperturar_periodos_procesos_from_body(body)
+    xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+    if not cia:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+    if not processtypes:
+        return jsonify({"error": "Seleccione al menos un tipo de proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for pt in processtypes:
+            cursor.execute(
+                "EXEC sp_pr_cerrarperiodo_proceso_web "
+                "@cia=?, @payrolltype=?, @processtype=?, @xlastuser=?",
+                (cia, payrolltype, pt, xlastuser),
+            )
+            _drain_all_cursor_resultsets(cursor)
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "message": f"Periodo cerrado en {len(processtypes)} proceso(s).",
+            "procesados": len(processtypes),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_aperturar_periodos_cerrar")
+        return jsonify({"error": str(e) or "No se pudo cerrar el periodo."}), 500
     finally:
         if conn:
             try:

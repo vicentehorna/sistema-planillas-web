@@ -17,6 +17,7 @@
     const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
     const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
     const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
+    const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -1081,6 +1082,48 @@
         };
     }
 
+    function crearPersistenciaAperturarPeriodos() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    periodo: val('cboPeriodoApertura'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_APERTURAR_PERIODOS, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros aperturar periodos: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_APERTURAR_PERIODOS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodoApertura'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_APERTURAR_PERIODOS,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaTrabajadores() {
         function guardar() {
             try {
@@ -1228,6 +1271,7 @@
         STORAGE_KEY_CONTINENTAL,
         STORAGE_KEY_BANBIF,
         STORAGE_KEY_LISTADO_PAGOS,
+        STORAGE_KEY_APERTURAR_PERIODOS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         obtenerPeriodoActivo,
@@ -1275,6 +1319,9 @@
         },
         asignacionConceptos: function () {
             return crearPersistenciaAsignacionConceptos();
+        },
+        aperturarPeriodos: function () {
+            return crearPersistenciaAperturarPeriodos();
         },
         plameArchivo14: function () {
             return crearPersistenciaPlameArchivo14();

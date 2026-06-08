@@ -440,46 +440,69 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
-                    <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio Liquidaciones">
-                        <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio Liquidaciones</span>
+                {% set vacaciones_descansos_active = request.endpoint in ('reporte_vacaciones_detalle_page', 'reporte_saldo_vacaciones_page', 'reporte_descansos_medicos_detalle_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if vacaciones_descansos_active else '' }}">
+                    <a href="#submenuVacacionesDescansos"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if vacaciones_descansos_active else 'false' }}"
+                       aria-controls="submenuVacacionesDescansos"
+                       title="Vacaciones / Descansos">
+                        <i class="bi bi-calendar-heart"></i><span class="sidebar-link-text">Vacaciones / Descansos</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if vacaciones_descansos_active else '' }}" id="submenuVacacionesDescansos">
+                        <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
+                            <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de vacaciones">
+                                <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de vacaciones</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
+                            <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de vacaciones">
+                                <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de vacaciones</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_descansos_medicos_detalle_page' else '' }}">
+                            <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de descansos">
+                                <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de descansos</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint == 'reporte_resumen_total' else '' }}">
-                    <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen planilla total">
-                        <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen planilla total</span>
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones') %}
+                <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
+                    <a href="#submenuPlanillasReportes"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if planillas_reportes_active else 'false' }}"
+                       aria-controls="submenuPlanillasReportes"
+                       title="Planillas">
+                        <i class="bi bi-table"></i><span class="sidebar-link-text">Planillas</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
-                </li>
-
-                <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
-                    <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla vertical">
-                        <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla vertical</span>
-                    </a>
-                </li>
-
-                <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
-                    <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de vacaciones">
-                        <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de vacaciones</span>
-                    </a>
-                </li>
-
-                <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
-                    <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de vacaciones">
-                        <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de vacaciones</span>
-                    </a>
-                </li>
-
-                <li class="{{ 'active' if request.endpoint == 'reporte_descansos_medicos_detalle_page' else '' }}">
-                    <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de descansos médicos">
-                        <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de descansos médicos</span>
-                    </a>
-                </li>
-
-                <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
-                    <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de pagos">
-                        <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de pagos</span>
-                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if planillas_reportes_active else '' }}" id="submenuPlanillasReportes">
+                        <li class="{{ 'active' if request.endpoint == 'reporte_resumen_total' else '' }}">
+                            <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen de planilla total">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen de planilla total</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
+                            <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla vertical">
+                                <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla vertical</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
+                            <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de pagos">
+                                <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de pagos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
+                            <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio de liquidaciones">
+                                <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio de liquidaciones</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 <li class="py-0">

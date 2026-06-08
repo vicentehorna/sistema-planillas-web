@@ -158,6 +158,7 @@
                         <th>Nombre del trabajador</th>
                         <th style="width: 7rem;">F. ingreso</th>
                         <th style="width: 7rem;">F. cese</th>
+                        <th style="width: 8.5rem;">Fecha cálculo</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyTrabajadores"></tbody>
@@ -372,10 +373,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const restoreIds = opciones.seleccionPersonas;
         const cia = cboCia.value.trim();
         const payrolltype = cboPt.value.trim();
+        const processtype = cboProc.value.trim();
         const period = document.getElementById('hidPeriodoCalculo').value.trim();
         const cesados = String(cboCesados.value || 'T').trim().toUpperCase();
         const repunit = String(cboUnidad.value || '0').trim() || '0';
-        if (!cia || !payrolltype || !period) {
+        if (!cia || !payrolltype || !processtype || !period) {
             alert('Seleccione compañía, tipo de planilla, proceso y periodo (válido) antes de listar.');
             return;
         }
@@ -387,7 +389,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_TRABAJADORES, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payrolltype, period, cesados, repunit })
+                body: JSON.stringify({ cia, payrolltype, processtype, period, cesados, repunit })
             });
             const data = await res.json();
             if (!res.ok) {
@@ -419,11 +421,14 @@ document.addEventListener('DOMContentLoaded', async function () {
                 td3.textContent = String(t.entrydate || '').trim();
                 const td4 = document.createElement('td');
                 td4.textContent = String(t.ceasedate || '').trim();
+                const td5 = document.createElement('td');
+                td5.textContent = String(t.calculationdate || '').trim();
                 tr.appendChild(td0);
                 tr.appendChild(td1);
                 tr.appendChild(td2);
                 tr.appendChild(td3);
                 tr.appendChild(td4);
+                tr.appendChild(td5);
                 tbody.appendChild(tr);
             });
             sincronizarCheckAll();
@@ -648,6 +653,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (detallesTotales.length > 10) msg += '\n…';
             }
             alert(msg);
+            await listarTrabajadores({ seleccionPersonas: listaPerson });
         } catch (error) {
             console.error(error);
             alert(error && error.message ? error.message : 'Ocurrió un error en la comunicación con el servidor.');

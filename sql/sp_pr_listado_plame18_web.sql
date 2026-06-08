@@ -217,6 +217,17 @@ BEGIN
     GROUP BY A.person, A.pdt
     HAVING SUM(A.conceptvaluelo) <> 0 OR SUM(A.conceptvalue) <> 0;
 
+    /* 0605 — quinta categoría: valor 0 si el trabajador no tiene retención en el periodo */
+    INSERT INTO #Conceptos (person, pdt, conceptvalue, conceptvaluelo)
+    SELECT E.person, '0605', 0, 0
+    FROM #Empleados E
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM #Conceptos C
+        WHERE C.person = E.person
+          AND C.pdt = '0605'
+    );
+
     SELECT
         C.person,
         CASE WHEN S.pdt = '03' THEN '04' ELSE S.pdt END AS documenttype,

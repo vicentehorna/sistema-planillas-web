@@ -337,15 +337,22 @@ def _plame_params_archivo18_from_json(body):
     return base
 
 
-def _plame_format_monto_rem(valor):
+def _plame_format_monto_rem(valor, pdt=None):
     """Monto PLAME .rem: entero sin decimales o hasta 2 decimales con punto."""
+    pdt_norm = str(pdt or '').strip()
+    if pdt_norm.isdigit():
+        pdt_norm = pdt_norm.zfill(4)
     if valor is None or valor == '':
+        if pdt_norm == '0605':
+            return '0'
         return ''
     try:
         v = float(valor)
     except (TypeError, ValueError):
         return ''
     if abs(v) < 0.00005:
+        if pdt_norm == '0605':
+            return '0'
         return ''
     redondeado = round(v, 2)
     if abs(redondeado - round(redondeado)) < 0.00005:
@@ -374,10 +381,10 @@ def _plame_linea_archivo18(row):
     pagado_val = row.get('conceptvaluelo', row.get('pagado'))
     if _plame_es_descuento_tabla22(pdt):
         devengado = ''
-        pagado = _plame_format_monto_rem(pagado_val)
+        pagado = _plame_format_monto_rem(pagado_val, pdt)
     else:
-        devengado = _plame_format_monto_rem(devengado_val)
-        pagado = _plame_format_monto_rem(pagado_val)
+        devengado = _plame_format_monto_rem(devengado_val, pdt)
+        pagado = _plame_format_monto_rem(pagado_val, pdt)
         if devengado and not pagado:
             pagado = devengado
         elif pagado and not devengado:
@@ -4501,10 +4508,11 @@ def _fecha_tabla_json(val):
 @app.route('/api/procesar-planilla/trabajadores-calculo', methods=['POST'])
 @login_required
 def api_procesar_planilla_trabajadores():
-    """sp_pr_calcularplanillas_web @cia, @payrolltype, @period, @cesados, @repunit → name, person, entrydate, ceasedate…"""
+    """sp_pr_calcularplanillas_web @cia, @payrolltype, @processtype, @period, @cesados, @repunit."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or '').strip()
     payrolltype = str(body.get('payrolltype') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
     period = _normalize_pr_period(body.get('period'))
     cesados = str(body.get('cesados') or 'T').strip().upper()
     if cesados not in ('T', 'Y', 'N'):
@@ -4514,15 +4522,16 @@ def api_procesar_planilla_trabajadores():
         repunit = '0'
     if len(repunit) > 20:
         repunit = repunit[:20]
-    if not cia or not payrolltype or not period:
-        return jsonify({"error": "Faltan compañía, tipo de planilla o periodo."}), 400
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Faltan compañía, tipo de planilla, proceso o periodo."}), 400
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_calcularplanillas_web @cia=?, @payrolltype=?, @period=?, @cesados=?, @repunit=?",
-            (cia, payrolltype, period, cesados, repunit),
+            "EXEC sp_pr_calcularplanillas_web "
+            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @cesados=?, @repunit=?",
+            (cia, payrolltype, processtype, period, cesados, repunit),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = [
@@ -4531,6 +4540,7 @@ def api_procesar_planilla_trabajadores():
                 "name": str(r.get("name") or "").strip(),
                 "entrydate": _fecha_tabla_json(r.get("entrydate")),
                 "ceasedate": _fecha_tabla_json(r.get("ceasedate")),
+                "calculationdate": _fecha_hora_tabla_json(r.get("calculationdate")),
             }
             for r in rows
             if str(r.get("person") or "").strip()

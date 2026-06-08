@@ -354,13 +354,13 @@
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if calculos_active else '' }}" id="submenuCalculos">
                         <li class="{{ 'active' if request.endpoint == 'aperturar_periodos_page' else '' }}">
-                            <a href="{{ url_for('aperturar_periodos_page') }}" title="Aperturar periodos">
-                                <i class="bi bi-calendar2-check"></i><span class="sidebar-link-text">Aperturar periodos</span>
+                            <a href="{{ url_for('aperturar_periodos_page') }}" title="Aperturar Periodos">
+                                <i class="bi bi-calendar2-check"></i><span class="sidebar-link-text">Aperturar Periodos</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
-                            <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar planilla">
-                                <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar planilla</span>
+                            <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar Planilla">
+                                <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar Planilla</span>
                             </a>
                         </li>
                     </ul>
@@ -453,18 +453,18 @@
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if vacaciones_descansos_active else '' }}" id="submenuVacacionesDescansos">
                         <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
-                            <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de vacaciones">
-                                <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de vacaciones</span>
+                            <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de Vacaciones">
+                                <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de Vacaciones</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
-                            <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de vacaciones">
-                                <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de vacaciones</span>
+                            <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de Vacaciones">
+                                <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de Vacaciones</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_descansos_medicos_detalle_page' else '' }}">
-                            <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de descansos">
-                                <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de descansos</span>
+                            <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de Descansos">
+                                <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de Descansos</span>
                             </a>
                         </li>
                     </ul>
@@ -483,23 +483,23 @@
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if planillas_reportes_active else '' }}" id="submenuPlanillasReportes">
                         <li class="{{ 'active' if request.endpoint == 'reporte_resumen_total' else '' }}">
-                            <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen de planilla total">
-                                <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen de planilla total</span>
+                            <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen de Planilla Total">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen de Planilla Total</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
-                            <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla vertical">
-                                <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla vertical</span>
+                            <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla Vertical">
+                                <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla Vertical</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
-                            <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de pagos">
-                                <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de pagos</span>
+                            <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de Pagos">
+                                <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de Pagos</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
-                            <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio de liquidaciones">
-                                <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio de liquidaciones</span>
+                            <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio de Liquidaciones">
+                                <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio de Liquidaciones</span>
                             </a>
                         </li>
                     </ul>
@@ -510,8 +510,8 @@
                 </li>
 
                 <li class="{{ 'active' if request.endpoint == 'generar_boletas_page' else '' }}">
-                    <a href="{{ url_for('generar_boletas_page') }}" title="Generar boletas">
-                        <i class="bi bi-file-earmark-pdf"></i><span class="sidebar-link-text">Generar boletas</span>
+                    <a href="{{ url_for('generar_boletas_page') }}" title="Generar Boletas">
+                        <i class="bi bi-file-earmark-pdf"></i><span class="sidebar-link-text">Generar Boletas</span>
                     </a>
                 </li>
 

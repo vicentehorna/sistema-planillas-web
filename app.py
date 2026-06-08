@@ -409,7 +409,8 @@ def _plame_rows_archivo18_from_json(body):
             cl = float(r.get('conceptvaluelo') or r.get('pagado') or 0)
         except (TypeError, ValueError):
             cv, cl = 0.0, 0.0
-        if abs(cv) < 0.00005 and abs(cl) < 0.00005:
+        pdt_norm = pdt.zfill(4) if pdt.isdigit() else pdt
+        if abs(cv) < 0.00005 and abs(cl) < 0.00005 and pdt_norm != '0605':
             continue
         resultado.append({
             'documenttype': str(r.get('documenttype') or '').strip(),

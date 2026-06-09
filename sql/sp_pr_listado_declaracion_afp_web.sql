@@ -282,7 +282,7 @@ BEGIN
             ) THEN 'L'
             ELSE 'J'
         END AS excepcion_aportar,
-        'N' AS relacion_laboral,
+        'S' AS relacion_laboral,
         'N' AS tipo_trabajo,
         CAST(0 AS DECIMAL(19, 2)) AS remuneracion,
         CAST(0 AS DECIMAL(19, 2)) AS topafp,

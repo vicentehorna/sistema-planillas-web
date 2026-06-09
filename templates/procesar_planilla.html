@@ -66,6 +66,12 @@
             max-width: 22%;
         }
     }
+
+    #cardValidacionesCalculo ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
 </style>
 {% endblock %}
 
@@ -126,6 +132,16 @@
     </div>
 </div>
 
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesCalculo">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Validaciones del cálculo</strong>
+            <span class="d-block small mt-1">Revise las observaciones detectadas tras procesar la planilla.</span>
+            <ul id="listaValidacionesCalculo"></ul>
+        </div>
+    </div>
+</div>
+
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
         <div id="container-progreso" class="mb-3 d-none" aria-live="polite">
@@ -181,6 +197,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_UNIDADES = {{ url_for('api_unidades') | tojson }};
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_trabajadores') | tojson }};
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
+    const URL_VALIDAR_CALCULO = {{ url_for('api_procesar_planilla_validar_calculo') | tojson }};
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
@@ -371,6 +388,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function listarTrabajadores(opciones) {
         opciones = opciones || {};
         const restoreIds = opciones.seleccionPersonas;
+        if (!restoreIds) {
+            ocultarValidacionesCalculo();
+        }
         const cia = cboCia.value.trim();
         const payrolltype = cboPt.value.trim();
         const processtype = cboProc.value.trim();
@@ -458,6 +478,61 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.querySelectorAll('.check-trabajador').forEach((cb) => {
             cb.disabled = enCurso;
         });
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderizarValidacionesCalculo(validaciones) {
+        const card = document.getElementById('cardValidacionesCalculo');
+        const lista = document.getElementById('listaValidacionesCalculo');
+        const items = Array.isArray(validaciones) ? validaciones : [];
+        if (!items.length) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+        lista.innerHTML = items.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
+    function ocultarValidacionesCalculo() {
+        document.getElementById('cardValidacionesCalculo').classList.add('d-none');
+        document.getElementById('listaValidacionesCalculo').innerHTML = '';
+    }
+
+    async function consultarValidacionesCalculo() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPt.value.trim();
+        const processtype = cboProc.value.trim();
+        const period = document.getElementById('hidPeriodoCalculo').value.trim();
+        if (!cia || !payrolltype || !processtype || !period) {
+            ocultarValidacionesCalculo();
+            return [];
+        }
+        try {
+            const res = await fetch(URL_VALIDAR_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, processtype, period })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                ocultarValidacionesCalculo();
+                return [];
+            }
+            const items = Array.isArray(data.validaciones) ? data.validaciones : [];
+            renderizarValidacionesCalculo(items);
+            return items;
+        } catch (e) {
+            console.error(e);
+            ocultarValidacionesCalculo();
+            return [];
+        }
     }
 
     function resetBarraProgreso() {
@@ -596,6 +671,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const btn = document.getElementById('btnCalcular');
 
         resetBarraProgreso();
+        ocultarValidacionesCalculo();
         container.classList.remove('d-none');
         btn.disabled = true;
         setUiCalculoEnCurso(true);
@@ -643,16 +719,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             await esperarRepintadoUI();
             await esperar(120);
 
-            const totalExitos = Number(resultado && resultado.exitos != null ? resultado.exitos : 0);
-            const totalErrores = Number(resultado && resultado.errores != null ? resultado.errores : 0);
-            const detallesTotales = resultado && Array.isArray(resultado.detalles) ? resultado.detalles : [];
+            const validaciones = resultado && Array.isArray(resultado.validaciones)
+                ? resultado.validaciones
+                : [];
 
-            let msg = `Cálculo finalizado. Éxitos: ${totalExitos}, errores: ${totalErrores}.`;
-            if (detallesTotales.length) {
-                msg += '\n\n' + detallesTotales.slice(0, 10).join('\n');
-                if (detallesTotales.length > 10) msg += '\n…';
-            }
-            alert(msg);
+            renderizarValidacionesCalculo(validaciones);
             await listarTrabajadores({ seleccionPersonas: listaPerson });
         } catch (error) {
             console.error(error);

@@ -53,6 +53,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 |---------|---------------|
 | `sp_pr_listatrabajadores_web.sql` | Búsqueda trabajadores |
 | `sp_pr_calcularplanillas_web.sql` | Cálculo planillas |
+| `sp_pr_validar_calculo_web.sql` | Validaciones post-cálculo → POST `/api/procesar-planilla/validar-calculo` |
 | `sp_pr_selectorbancos_web.sql` | Bancos |
 | `sp_pr_selectorconceptos_web.sql` | Conceptos |
 | `sp_pr_selectorformapago_web.sql` | Forma de pago |

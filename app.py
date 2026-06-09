@@ -4919,6 +4919,29 @@ def _fecha_tabla_json(val):
     return str(val).strip()
 
 
+def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, period):
+    """sp_pr_validar_calculo_web → lista de mensajes para el panel de validaciones."""
+    cursor.execute(
+        "EXEC sp_pr_validar_calculo_web "
+        "@cia=?, @payrolltype=?, @processtype=?, @period=?",
+        (cia, payrolltype, processtype, period),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    mensajes = []
+    for r in rows:
+        person = str(r.get('person') or '').strip()
+        name = str(r.get('name') or '').strip()
+        obs = str(r.get('observacion') or '').strip()
+        if not obs:
+            continue
+        if person or name:
+            etiqueta = ' — '.join([p for p in [person, name] if p])
+            mensajes.append(f'{etiqueta}: {obs}')
+        else:
+            mensajes.append(obs)
+    return mensajes
+
+
 @app.route('/api/procesar-planilla/trabajadores-calculo', methods=['POST'])
 @login_required
 def api_procesar_planilla_trabajadores():
@@ -4962,6 +4985,39 @@ def api_procesar_planilla_trabajadores():
         return jsonify(trabajadores)
     except Exception as e:
         logging.exception("api_procesar_planilla_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/procesar-planilla/validar-calculo', methods=['POST'])
+@login_required
+def api_procesar_planilla_validar_calculo():
+    """sp_pr_validar_calculo_web: validaciones post-cálculo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Faltan compañía, tipo de planilla, proceso o periodo."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        validaciones = _validar_calculo_planilla_mensajes(
+            cursor, cia, payrolltype, processtype, period
+        )
+        return jsonify({
+            "validaciones": validaciones,
+            "total": len(validaciones),
+        })
+    except Exception as e:
+        logging.exception("api_procesar_planilla_validar_calculo")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -5092,6 +5148,15 @@ def ejecutar_calculo_planilla():
                     errores.append(f'Error en {pid}: {e_individual}')
                     logging.warning('ejecutar_calculo_planilla persona %s: %s', pid, e_individual)
 
+        validaciones = []
+        if exitos > 0:
+            try:
+                validaciones = _validar_calculo_planilla_mensajes(
+                    cursor, cia, payroll_type, processtype, period
+                )
+            except Exception:
+                logging.exception('validar_calculo_planilla tras ejecutar_calculo_planilla')
+
         status = 'success' if not errores else 'partial'
         n_errores = len(errores)
         message = f'Proceso terminado. Éxitos: {exitos}, Errores: {n_errores}.'
@@ -5103,6 +5168,7 @@ def ejecutar_calculo_planilla():
                 'errores': n_errores,
                 'procesados': exitos + n_errores,
                 'detalles': errores,
+                'validaciones': validaciones,
             }
         )
     except Exception as e:
@@ -5274,6 +5340,15 @@ def ejecutar_calculo_streaming():
 
                 yield f'data: {json.dumps(evento)}\n\n'
 
+            validaciones = []
+            if exitos > 0:
+                try:
+                    validaciones = _validar_calculo_planilla_mensajes(
+                        cursor, cia, payroll_type, processtype, period
+                    )
+                except Exception:
+                    logging.exception('validar_calculo_planilla tras ejecutar_calculo_streaming')
+
             yield (
                 'data: '
                 + json.dumps(
@@ -5282,6 +5357,7 @@ def ejecutar_calculo_streaming():
                         'exitos': exitos,
                         'errores': len(errores),
                         'detalles': errores,
+                        'validaciones': validaciones,
                     }
                 )
                 + '\n\n'

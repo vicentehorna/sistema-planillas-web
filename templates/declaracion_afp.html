@@ -1,0 +1,588 @@
+{% extends "layout.html" %}
+
+{% block title %}Declaración AFP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-declaracion-afp {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-declaracion-afp th,
+    .table-declaracion-afp td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-declaracion-afp thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-declaracion-afp .col-monto {
+        min-width: 5.5rem;
+        text-align: right;
+    }
+
+    .table-declaracion-afp .col-cuspp {
+        min-width: 7rem;
+    }
+
+    .table-declaracion-afp .col-nro {
+        width: 2.5rem;
+        text-align: center;
+    }
+
+    .table-declaracion-afp tfoot td {
+        font-weight: 700;
+        background-color: #f8f9fa;
+    }
+
+    .table-declaracion-afp tr.fila-invalida td {
+        background-color: #fff3cd;
+    }
+
+    #cardValidacionesAfp ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmDeclaracionAfp" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboPlanilla" class="form-label small fw-bold text-muted">Planilla</label>
+                <select id="cboPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboAfp" class="form-label small fw-bold text-muted">AFP</label>
+                <select id="cboAfp" class="form-select form-select-sm" disabled>
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarAfpnet" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Generar Archivo AFPnet
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountAfp">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesAfp">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Validaciones AFPnet (advertencias)</strong>
+            <span class="d-block small mt-1">Puede generar el archivo Excel aunque existan advertencias.</span>
+            <ul id="listaValidacionesAfp"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoAfp">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">Planilla de AFPnet</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-declaracion-afp align-middle">
+                <thead>
+                    <tr>
+                        <th class="col-nro">N°</th>
+                        <th>AFP</th>
+                        <th>Código</th>
+                        <th class="col-cuspp">CUSSP</th>
+                        <th>DNI</th>
+                        <th>Apellido Paterno</th>
+                        <th>Apellido Materno</th>
+                        <th>Nombres</th>
+                        <th>Mov. de Personal</th>
+                        <th class="col-monto">Remuneración Asegurable</th>
+                        <th class="col-monto">Aporte Obligatorio</th>
+                        <th class="col-monto">Aporte Empleador</th>
+                        <th class="col-monto">Total Fondo de Pensiones</th>
+                        <th class="col-monto">Seguros</th>
+                        <th class="col-monto">Comisión % sobre RA</th>
+                        <th class="col-monto">Total Ret.</th>
+                        <th class="col-monto">Ap. Riesgo Trab</th>
+                        <th class="col-monto">Ap. Riesgo Emp</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-declaracion-afp"></tbody>
+                <tfoot id="tfoot-declaracion-afp"></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.declaracionAfp
+        ? window.FiltrosPlanillasReportes.declaracionAfp()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_declaracion_afp_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_declaracion_afp_generar_xlsx') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+    let lastRowsAfp = [];
+    let lastValidacionesAfp = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatearMonto(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function sumCampo(rows, campo) {
+        return (Array.isArray(rows) ? rows : []).reduce((acc, row) => {
+            const n = Number(row[campo]);
+            return acc + (Number.isFinite(n) ? n : 0);
+        }, 0);
+    }
+
+    function payrollAllFromCombo() {
+        const v = String(document.getElementById('cboPlanilla').value || '').trim();
+        return v ? 'N' : 'Y';
+    }
+
+    function afpAllFromCombo() {
+        const v = String(document.getElementById('cboAfp').value || '').trim();
+        return v ? 'N' : 'Y';
+    }
+
+    function payloadFiltros() {
+        return {
+            cia: document.getElementById('cboCompania').value.trim(),
+            period: document.getElementById('cboPeriodo').value.trim(),
+            payroll_all: payrollAllFromCombo(),
+            payroll: document.getElementById('cboPlanilla').value.trim(),
+            afp_all: afpAllFromCombo(),
+            afp: document.getElementById('cboAfp').value.trim()
+        };
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function periodoYyyymm(prperiod) {
+        const s = String(prperiod || '').replace(/\D/g, '');
+        return s.length >= 6 ? s.slice(0, 6) : s;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    async function cargarPeriodos(cia, payrolltype, periodoPreferido) {
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        cboPeriodo.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+
+        if (!cia) return;
+
+        if (!payrolltype) {
+            await poblarSelect(
+                `/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`,
+                cboPeriodo,
+                '<option value="">Seleccione...</option>'
+            );
+            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+            if (!preferido || !optionExists(cboPeriodo, preferido)) {
+                try {
+                    const cboPlanilla = document.getElementById('cboPlanilla');
+                    const primeraPlanilla = Array.from(cboPlanilla.options).find((o) => String(o.value || '').trim());
+                    if (primeraPlanilla && primeraPlanilla.value) {
+                        const resApertura = await fetch(
+                            `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(primeraPlanilla.value)}`
+                        );
+                        const dataApertura = await resApertura.json();
+                        if (Array.isArray(dataApertura) && dataApertura.length) {
+                            preferido = periodoYyyymm(dataApertura[0].id);
+                        }
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }
+            if (!preferido || !optionExists(cboPeriodo, preferido)) {
+                const primeraOpcion = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
+                preferido = primeraOpcion ? String(primeraOpcion.value).trim() : '';
+            }
+            if (preferido && optionExists(cboPeriodo, preferido)) {
+                cboPeriodo.value = preferido;
+            }
+            return;
+        }
+
+        try {
+            const res = await fetch(
+                `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json();
+            const vistos = new Set();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const yyyymm = periodoYyyymm(item.id);
+                if (!/^\d{6}$/.test(yyyymm) || vistos.has(yyyymm)) return;
+                vistos.add(yyyymm);
+                const opt = document.createElement('option');
+                opt.value = yyyymm;
+                opt.textContent = item.text != null ? String(item.text) : yyyymm;
+                cboPeriodo.appendChild(opt);
+            });
+            cboPeriodo.disabled = false;
+
+            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+            if (!preferido || !optionExists(cboPeriodo, preferido)) {
+                const primeraOpcion = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
+                preferido = primeraOpcion ? String(primeraOpcion.value).trim() : '';
+            }
+            if (preferido && optionExists(cboPeriodo, preferido)) {
+                cboPeriodo.value = preferido;
+            }
+        } catch (e) {
+            console.error(e);
+            cboPeriodo.innerHTML = '<option value="">Error</option>';
+            cboPeriodo.disabled = true;
+        }
+    }
+
+    function actualizarContadores() {
+        const total = Array.isArray(lastRowsAfp) ? lastRowsAfp.length : 0;
+        document.getElementById('lblRowCountAfp').textContent = String(total);
+        document.getElementById('btnGenerarAfpnet').disabled = total <= 0;
+    }
+
+    function renderizarValidaciones(validaciones) {
+        const card = document.getElementById('cardValidacionesAfp');
+        const lista = document.getElementById('listaValidacionesAfp');
+        const items = Array.isArray(validaciones) ? validaciones : [];
+        if (!items.length) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+        lista.innerHTML = items.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
+    function mostrarErroresValidacion(mensaje, validaciones) {
+        const items = Array.isArray(validaciones) ? validaciones : [];
+        if (items.length) {
+            renderizarValidaciones(items);
+            alert(`${mensaje}\n\n${items.slice(0, 8).join('\n')}${items.length > 8 ? `\n... y ${items.length - 8} más.` : ''}`);
+            return;
+        }
+        alert(mensaje);
+    }
+
+    function renderizarTotales(rows) {
+        const tfoot = document.getElementById('tfoot-declaracion-afp');
+        const filas = Array.isArray(rows) ? rows : [];
+        if (!filas.length) {
+            tfoot.innerHTML = '';
+            return;
+        }
+        tfoot.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-end">Totales</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'remuneracion')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_obligatorio')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_empleador')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'total_fondo_pensiones')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'seguro')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'comision')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'total_retenciones')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_riesgo_trab')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_riesgo_emp')))}</td>
+            </tr>
+        `;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-declaracion-afp');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+
+        filas.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            if (row.validacion_ok === false) {
+                tr.classList.add('fila-invalida');
+                tr.title = Array.isArray(row.validacion_errores) ? row.validacion_errores.join(' | ') : '';
+            }
+            tr.innerHTML = `
+                <td class="col-nro">${index + 1}</td>
+                <td>${escapeHtml(row.afp_description)}</td>
+                <td>${escapeHtml(row.person)}</td>
+                <td class="col-cuspp">${escapeHtml(row.cuspp)}</td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.lastname1)}</td>
+                <td>${escapeHtml(row.lastname2)}</td>
+                <td>${escapeHtml(row.names)}</td>
+                <td>${escapeHtml(row.fecha_cese)}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.remuneracion))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_obligatorio))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_empleador))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.total_fondo_pensiones))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.seguro))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.comision))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.total_retenciones))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_riesgo_trab))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_riesgo_emp))}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        renderizarTotales(filas);
+        actualizarContadores();
+    }
+
+    async function poblarSelect(url, selectElement, primeraOpcion) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = primeraOpcion || '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = primeraOpcion || '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    async function onCompaniaChange(cia, periodoGuardado, planillaGuardada, afpGuardada) {
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        const cboPlanilla = document.getElementById('cboPlanilla');
+        const cboAfp = document.getElementById('cboAfp');
+
+        if (!cia) {
+            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            cboPeriodo.disabled = true;
+            cboPlanilla.innerHTML = '<option value="">Todas</option>';
+            cboPlanilla.disabled = true;
+            cboAfp.innerHTML = '<option value="">Todas</option>';
+            cboAfp.disabled = true;
+            return;
+        }
+
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+
+        await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla, '<option value="">Todas</option>'),
+            poblarSelect(`/api/selectores/afp?cia=${encodeURIComponent(cia)}`, cboAfp, '<option value="">Todas</option>')
+        ]);
+
+        if (planillaGuardada) {
+            const opt = Array.from(cboPlanilla.options).find((o) => String(o.value).trim() === String(planillaGuardada).trim());
+            if (opt) cboPlanilla.value = opt.value;
+        }
+        if (afpGuardada) {
+            const opt = Array.from(cboAfp.options).find((o) => String(o.value).trim() === String(afpGuardada).trim());
+            if (opt) cboAfp.value = opt.value;
+        }
+
+        await cargarPeriodos(cia, cboPlanilla.value.trim(), periodoGuardado || '');
+    }
+
+    async function ejecutarConsulta() {
+        const payload = payloadFiltros();
+        if (!payload.cia || !/^\d{6}$/.test(payload.period)) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        document.getElementById('lblRowCountAfp').textContent = '0';
+        document.getElementById('btnGenerarAfpnet').disabled = true;
+        document.getElementById('tfoot-declaracion-afp').innerHTML = '';
+        document.getElementById('cardValidacionesAfp').classList.add('d-none');
+        lastValidacionesAfp = [];
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                document.getElementById('cardResultadoAfp').classList.add('d-none');
+                alert(data.error || 'Error al consultar el listado.');
+                return;
+            }
+            lastRowsAfp = Array.isArray(data.rows) ? data.rows : [];
+            lastValidacionesAfp = Array.isArray(data.validaciones) ? data.validaciones : [];
+            renderizarValidaciones(lastValidacionesAfp);
+            renderizarTabla(lastRowsAfp);
+            document.getElementById('cardResultadoAfp').classList.remove('d-none');
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoAfp').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function generarArchivoAfpnet() {
+        const payload = payloadFiltros();
+        if (!payload.cia || !/^\d{6}$/.test(payload.period)) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        if (!lastRowsAfp.length) {
+            alert('Consulte el listado antes de generar el archivo.');
+            return;
+        }
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, rows: lastRowsAfp })
+            });
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                let validaciones = [];
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                    if (err && Array.isArray(err.validaciones)) validaciones = err.validaciones;
+                } catch (e) {}
+                mostrarErroresValidacion(msg, validaciones);
+                return;
+            }
+
+            const blob = await res.blob();
+            let filename = 'AFPNET.xlsx';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="?([^"]+)"?/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el archivo Excel.');
+        }
+    }
+
+    document.getElementById('frmDeclaracionAfp').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+
+    document.getElementById('btnGenerarAfpnet').addEventListener('click', generarArchivoAfpnet);
+
+    document.getElementById('cboCompania').addEventListener('change', async function () {
+        await onCompaniaChange(this.value.trim());
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    document.getElementById('cboPlanilla').addEventListener('change', async function () {
+        const cia = document.getElementById('cboCompania').value.trim();
+        await cargarPeriodos(cia, this.value.trim());
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    ['cboPeriodo', 'cboPlanilla', 'cboAfp'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', function () {
+            if (filtrosPersist) filtrosPersist.guardar();
+        });
+    });
+
+    const cboCompania = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboPlanilla');
+
+    await poblarSelect('/api/selectores/companias', cboCompania, '<option value="">Seleccione...</option>');
+
+    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
+    if (guardado && guardado.cia) {
+        seleccionarCompaniaInsensitive(cboCompania, guardado.cia);
+        await onCompaniaChange(
+            guardado.cia,
+            guardado.period || '',
+            guardado.payroll || '',
+            guardado.afp || ''
+        );
+        if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
+        if (guardado.cia && guardado.period && /^\d{6}$/.test(String(guardado.period))) {
+            ejecutarConsulta();
+        }
+    } else {
+        if (seleccionarCompaniaInsensitive(cboCompania, DEFAULT_CIA)) {
+            await onCompaniaChange(DEFAULT_CIA);
+            const periodo = document.getElementById('cboPeriodo').value.trim();
+            if (filtrosPersist) filtrosPersist.guardar();
+            if (/^\d{6}$/.test(periodo)) {
+                ejecutarConsulta();
+            }
+        }
+        if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
+    }
+});
+</script>
+{% endblock %}

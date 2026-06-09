@@ -401,6 +401,26 @@
                     </ul>
                 </li>
 
+                {% set afp_active = request.endpoint in ('declaracion_afp_page',) %}
+                <li class="sidebar-menu-parent {{ 'active' if afp_active else '' }}">
+                    <a href="#submenuAfp"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if afp_active else 'false' }}"
+                       aria-controls="submenuAfp"
+                       title="AFP">
+                        <i class="bi bi-piggy-bank"></i><span class="sidebar-link-text">AFP</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if afp_active else '' }}" id="submenuAfp">
+                        <li class="{{ 'active' if request.endpoint == 'declaracion_afp_page' else '' }}">
+                            <a href="{{ url_for('declaracion_afp_page') }}" title="AFPnet">
+                                <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">AFPnet</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"

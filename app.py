@@ -422,6 +422,286 @@ def _plame_rows_archivo18_from_json(body):
     return resultado
 
 
+def _declaracion_afp_params_from_json(body):
+    body = body or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or '').strip()
+    if len(period) >= 6:
+        period = period[:6]
+
+    payroll = str(body.get('payroll') or body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    payroll_all = str(body.get('payroll_all') or '').strip().upper()
+    if payroll_all not in ('Y', 'N'):
+        payroll_all = 'Y' if not payroll or payroll in ('0', 'T', 'TODOS', 'TODAS') else 'N'
+    if payroll_all == 'Y':
+        payroll = ''
+
+    afp = str(body.get('afp') or '').strip()
+    afp_all = str(body.get('afp_all') or '').strip().upper()
+    if afp_all not in ('Y', 'N'):
+        afp_all = 'Y' if not afp or afp in ('0', 'T', 'TODOS', 'TODAS') else 'N'
+    if afp_all == 'Y':
+        afp = ''
+
+    return {
+        'cia': cia,
+        'period': period,
+        'payroll_all': payroll_all,
+        'payroll': payroll,
+        'afp_all': afp_all,
+        'afp': afp,
+    }
+
+
+def _declaracion_afp_validar_params(p):
+    if not p.get('cia'):
+        return 'Seleccione la compañía.'
+    period = str(p.get('period') or '').strip()
+    if not re.fullmatch(r'\d{6}', period):
+        return 'Seleccione un periodo válido (YYYYMM).'
+    return None
+
+
+def _declaracion_afp_row_dict(r):
+    aporte_riesgo = _jsonable_value(r.get('aporte_riesgo_trab'))
+    return {
+        'person': _jsonable_value(r.get('person')),
+        'afp_description': _jsonable_value(r.get('afp_description')),
+        'cuspp': _jsonable_value(r.get('cuspp')),
+        'documentnumber': _jsonable_value(r.get('documentnumber')),
+        'lastname1': _jsonable_value(r.get('lastname1')),
+        'lastname2': _jsonable_value(r.get('lastname2')),
+        'names': _jsonable_value(r.get('names')),
+        'fecha_cese': _jsonable_value(r.get('fecha_cese')),
+        'entrydate': _jsonable_value(r.get('entrydate')),
+        'ceasedate': _jsonable_value(r.get('ceasedate')),
+        'inicio_relacion': _jsonable_value(r.get('inicio_relacion')),
+        'cese_relacion': _jsonable_value(r.get('cese_relacion')),
+        'remuneracion': _jsonable_value(r.get('remuneracion')),
+        'topafp': _jsonable_value(r.get('topafp')),
+        'insuredpercentage': _jsonable_value(r.get('insuredpercentage')),
+        'aporte_obligatorio': _jsonable_value(r.get('aporte_obligatorio')),
+        'aporte_empleador': _jsonable_value(r.get('aporte_empleador')),
+        'total_fondo_pensiones': _jsonable_value(r.get('total_fondo_pensiones')),
+        'seguro': _jsonable_value(r.get('seguro')),
+        'seguro_esperado': _jsonable_value(r.get('seguro_esperado')),
+        'comision': _jsonable_value(r.get('comision')),
+        'total_retenciones': _jsonable_value(r.get('total_retenciones')),
+        'aporte_riesgo_trab': aporte_riesgo,
+        'aporte_riesgo_emp': aporte_riesgo,
+        'tipodoc': _jsonable_value(r.get('tipodoc')),
+    }
+
+
+def _declaracion_afp_rows_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def _afpnet_limpia_texto(valor):
+    return str(valor or '').strip()
+
+
+def _cuspp_afpnet_es_valido(cuspp):
+    return bool(re.fullmatch(r'[A-Za-z0-9]{12}', str(cuspp or '').strip()))
+
+
+def _fecha_ddmmyyyy_en_periodo(fecha_txt, period_yyyymm):
+    """True si la fecha dd/mm/yyyy cae en el periodo YYYYMM."""
+    period = str(period_yyyymm or '').strip()[:6]
+    if not re.fullmatch(r'\d{6}', period):
+        return False
+    s = str(fecha_txt or '').strip()
+    m = re.fullmatch(r'(\d{2})/(\d{2})/(\d{4})', s)
+    if not m:
+        return False
+    _d, mes, anio = m.group(1), m.group(2), m.group(3)
+    return f'{anio}{mes}' == period
+
+
+def _declaracion_afp_etiqueta_fila(row, fila=None):
+    partes = [
+        str(row.get('documentnumber') or '').strip(),
+        str(row.get('names') or '').strip(),
+        str(row.get('person') or '').strip(),
+    ]
+    etiqueta = ' — '.join([p for p in partes if p]) or 'Registro'
+    if fila is not None:
+        return f'Fila {fila} ({etiqueta})'
+    return etiqueta
+
+
+def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
+    """Validaciones críticas AFPnet antes de generar el XLS."""
+    errores = []
+    etiqueta = _declaracion_afp_etiqueta_fila(row, fila)
+    period = str(period or '').strip()[:6]
+
+    cuspp = str(row.get('cuspp') or '').strip()
+    if not _cuspp_afpnet_es_valido(cuspp):
+        errores.append(
+            f'{etiqueta}: CUSPP inválido o vacío («{cuspp or "vacío"}»). '
+            'Debe tener exactamente 12 caracteres alfanuméricos.'
+        )
+
+    inicio = str(row.get('inicio_relacion') or '').strip().upper()
+    entrydate = str(row.get('entrydate') or '').strip()
+    if inicio == 'S':
+        if not entrydate:
+            errores.append(
+                f'{etiqueta}: Inicio de relación laboral marcado «S» sin fecha de ingreso.'
+            )
+        elif not _fecha_ddmmyyyy_en_periodo(entrydate, period):
+            errores.append(
+                f'{etiqueta}: Inicio de relación laboral «S» solo aplica si el ingreso '
+                f'({entrydate}) cae en el periodo {period[:4]}-{period[4:6]}.'
+            )
+
+    cese = str(row.get('cese_relacion') or '').strip().upper()
+    ceasedate = str(row.get('ceasedate') or '').strip()
+    if cese == 'S':
+        if not ceasedate:
+            errores.append(
+                f'{etiqueta}: Cese de relación laboral marcado «S» sin fecha de cese.'
+            )
+        elif not _fecha_ddmmyyyy_en_periodo(ceasedate, period):
+            errores.append(
+                f'{etiqueta}: Cese de relación laboral «S» solo aplica si el cese '
+                f'({ceasedate}) cae en el periodo {period[:4]}-{period[4:6]}.'
+            )
+
+    try:
+        seguro = round(float(row.get('seguro') or 0), 2)
+        seguro_esperado = round(float(row.get('seguro_esperado') or 0), 2)
+    except (TypeError, ValueError):
+        seguro, seguro_esperado = 0.0, 0.0
+    if abs(seguro - seguro_esperado) > 0.01:
+        try:
+            topafp = float(row.get('topafp') or 0)
+            pct = float(row.get('insuredpercentage') or 0)
+        except (TypeError, ValueError):
+            topafp, pct = 0.0, 0.0
+        errores.append(
+            f'{etiqueta}: Seguro registrado ({seguro:.2f}) no coincide con el cálculo '
+            f'topado ({seguro_esperado:.2f}). Tope AFP: {topafp:.2f}, tasa seguro: {pct:.4f}%.'
+        )
+
+    return errores
+
+
+def _declaracion_afp_validar_afpnet(filas, period):
+    mensajes = []
+    for idx, row in enumerate(filas or [], start=1):
+        mensajes.extend(_declaracion_afp_validar_fila_afpnet(row, period, fila=idx))
+    return mensajes
+
+
+def _declaracion_afp_aplicar_validaciones_filas(filas, period):
+    resultado = []
+    todas = []
+    for idx, row in enumerate(filas or [], start=1):
+        errores = _declaracion_afp_validar_fila_afpnet(row, period, fila=idx)
+        item = dict(row)
+        item['validacion_ok'] = len(errores) == 0
+        item['validacion_errores'] = errores
+        resultado.append(item)
+        todas.extend(errores)
+    return resultado, todas
+
+
+def _afpnet_relacion_laboral(row):
+    return 'S'
+
+
+def _afpnet_inicio_relacion(row):
+    return 'S' if str(row.get('inicio_relacion') or '').strip().upper() == 'S' else ''
+
+
+def _afpnet_cese_relacion(row):
+    return 'S' if str(row.get('cese_relacion') or '').strip().upper() == 'S' else ''
+
+
+def _afpnet_remuneracion(row):
+    try:
+        return round(float(row.get('remuneracion') or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _afpnet_tipo_trabajo(row):
+    return ''
+
+
+def _afpnet_fila_excel(secuencia, row):
+    try:
+        aporte_empleador = round(float(row.get('aporte_empleador') or 0), 2)
+    except (TypeError, ValueError):
+        aporte_empleador = 0.0
+    return [
+        secuencia,
+        _afpnet_limpia_texto(row.get('cuspp')),
+        _afpnet_limpia_texto(row.get('tipodoc')),
+        _afpnet_limpia_texto(row.get('documentnumber')),
+        _afpnet_limpia_texto(row.get('lastname1')),
+        _afpnet_limpia_texto(row.get('lastname2')),
+        _afpnet_limpia_texto(row.get('names')),
+        _afpnet_relacion_laboral(row),
+        _afpnet_inicio_relacion(row),
+        _afpnet_cese_relacion(row),
+        '',
+        _afpnet_remuneracion(row),
+        0.0,
+        0.0,
+        aporte_empleador,
+        _afpnet_tipo_trabajo(row),
+    ]
+
+
+def _declaracion_afp_actualizar_datos(cursor, conn, p, xlastuser='WEB'):
+    """sp_pr_actualizar_datos_afp_web: control de datos AFP antes del Excel AFPnet."""
+    cursor.execute(
+        "EXEC sp_pr_actualizar_datos_afp_web "
+        "@cia=?, @period=?, @payroll_all=?, @payroll=?, @xlastuser=?",
+        (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None, xlastuser),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    conn.commit()
+    if rows:
+        return rows[0]
+    return {'actualizado': 0, 'mensaje': 'Sin respuesta del control de datos AFP.'}
+
+
+def _declaracion_afp_ejecutar_listado(cursor, p):
+    cursor.execute(
+        "EXEC sp_pr_listado_declaracion_afp_web "
+        "@cia=?, @period=?, @payroll_all=?, @payroll=?, "
+        "@afp_all=?, @afp=?, @repunit_all=?, @repunit=?, "
+        "@flagcostcenter=?, @costcenter=?, @employee_all=?, @employee=?",
+        (
+            p['cia'], p['period'], p['payroll_all'], p['payroll'] or None,
+            p['afp_all'], p['afp'] or None, 'Y', None, 'Y', None, 'Y', None,
+        ),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    return [_declaracion_afp_row_dict(r) for r in rows]
+
+
+def _declaracion_afp_generar_xlsx_bytes(filas):
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'AFPnet'
+    for idx, row in enumerate(filas, start=1):
+        ws.append(_afpnet_fila_excel(idx, row))
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
 def _plame_rows_archivo15_from_json(body):
     rows = body.get('rows')
     if not isinstance(rows, list):
@@ -1397,6 +1677,12 @@ def plame_archivo18_page():
     return render_template('plame_archivo18.html')
 
 
+@app.route('/afp/declaracion')
+@login_required
+def declaracion_afp_page():
+    return render_template('declaracion_afp.html')
+
+
 @app.route('/plame/archivo-26')
 @login_required
 def plame_archivo26_page():
@@ -1769,6 +2055,80 @@ def api_plame_archivo26_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_plame_archivo26_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/declaracion-afp/listado', methods=['POST'])
+@login_required
+def api_declaracion_afp_listado():
+    """sp_pr_listado_declaracion_afp_web: reporte analítico Declaración AFP."""
+    body = request.get_json(silent=True) or {}
+    p = _declaracion_afp_params_from_json(body)
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        resultado = _declaracion_afp_ejecutar_listado(cursor, p)
+        filas, validaciones = _declaracion_afp_aplicar_validaciones_filas(resultado, p['period'])
+        return jsonify({
+            "rows": filas,
+            "total": len(filas),
+            "validaciones": validaciones,
+            "puede_generar_xlsx": len(filas) > 0,
+        })
+    except Exception as e:
+        logging.exception("api_declaracion_afp_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/declaracion-afp/generar-xlsx', methods=['POST'])
+@login_required
+def api_declaracion_afp_generar_xlsx():
+    """Genera archivo Excel AFPnet (16 columnas, sin cabeceras)."""
+    body = request.get_json(silent=True) or {}
+    p = _declaracion_afp_params_from_json(body)
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        xlastuser = str(session.get('person') or 'WEB').strip() or 'WEB'
+        _declaracion_afp_actualizar_datos(cursor, conn, p, xlastuser)
+        filas = _declaracion_afp_ejecutar_listado(cursor, p)
+        if not filas:
+            return jsonify({"error": "No hay registros para generar el archivo AFPnet."}), 400
+
+        ruc = _obtener_ruc_compania(cursor, p['cia']) or '00000000000'
+
+        buf = _declaracion_afp_generar_xlsx_bytes(filas)
+        filename = f'AFPNET_{p["period"]}_{ruc}.xlsx'
+        return send_file(
+            buf,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logging.exception("api_declaracion_afp_generar_xlsx")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -3060,6 +3420,29 @@ def api_periodo_activo():
     except Exception:
         logging.exception("api_periodo_activo")
         return jsonify({"prperiod": ""})
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/afp')
+@login_required
+def api_selectores_afp():
+    """sp_pr_selectorafp_web @cia → afp, description."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        return jsonify(_selector_items_from_sp(cursor, 'EXEC sp_pr_selectorafp_web @cia=?', (cia,)))
+    except Exception:
+        logging.exception("api_selectores_afp")
+        return jsonify([])
     finally:
         if conn:
             try:

@@ -226,9 +226,9 @@ BEGIN
             S.costcenter,
             S.costcentername,
             S.payrolltype,
-            S.ceasedate,
+            EM.ceasedate,
             S.afpcard,
-            S.entrydate
+            ISNULL(EM.reentrydate, EM.entrydate) AS entrydate
         FROM (
             SELECT
                 C.person,
@@ -259,9 +259,7 @@ BEGIN
                 MAX(C.costcenter) AS costcenter,
                 MAX(C.costcentername) AS costcentername,
                 MAX(C.payrolltype) AS payrolltype,
-                MAX(C.ceasedate) AS ceasedate,
                 MAX(C.afpcard) AS afpcard,
-                MAX(C.entrydate) AS entrydate,
                 SUM(CASE
                     WHEN C.concept IN (
                         @AFPFixedAmountConcept, @AFPVariableAmountConcept,
@@ -271,6 +269,9 @@ BEGIN
             FROM #ConceptosAfp C
             GROUP BY C.person, C.company, C.payrolltype, LEFT(C.prperiod, 6) + SUBSTRING(C.prperiod, 5, 2)
         ) S
+            INNER JOIN pr_employee EM (NOLOCK)
+                ON EM.person = S.person
+               AND EM.company = S.company
         WHERE S.tiene_aportes > 0;
 
         INSERT INTO PR_EmployeeAFPHeader (

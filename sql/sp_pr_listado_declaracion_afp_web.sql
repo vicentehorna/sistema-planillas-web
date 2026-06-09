@@ -64,22 +64,38 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
         CASE
-            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(A.ceasedate, A.entrydate)))
-                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(A.ceasedate, A.entrydate))), 2) <> LEFT(A.prperiod, 6)
+            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate))))
+                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate)))), 2) <> LEFT(A.prperiod, 6)
             THEN ''
             ELSE CASE
-                WHEN ISNULL(A.ceasedate, '') = '' THEN '01 ' + CONVERT(CHAR(10), A.entrydate, 103)
-                ELSE '02 ' + CONVERT(CHAR(10), A.ceasedate, 103)
+                WHEN ISNULL(E.ceasedate, '') = '' THEN '01 ' + CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+                ELSE '02 ' + CONVERT(CHAR(10), E.ceasedate, 103)
             END
         END AS fecha_cese,
-        CASE WHEN A.entrydate IS NULL THEN '' ELSE CONVERT(CHAR(10), A.entrydate, 103) END AS entrydate,
-        CASE WHEN ISNULL(A.ceasedate, '') = '' THEN '' ELSE CONVERT(CHAR(10), A.ceasedate, 103) END AS ceasedate,
         CASE
-            WHEN A.entrydate IS NOT NULL AND LEFT(CONVERT(VARCHAR(8), A.entrydate, 112), 6) = @period THEN 'S'
+            WHEN ISNULL(E.reentrydate, E.entrydate) IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+        END AS entrydate,
+        CASE
+            WHEN ISNULL(E.ceasedate, '') = '' THEN ''
+            ELSE CONVERT(CHAR(10), E.ceasedate, 103)
+        END AS ceasedate,
+        CASE
+            WHEN E.reentrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'S'
+            WHEN E.reentrydate IS NULL
+             AND E.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS inicio_relacion,
         CASE
-            WHEN ISNULL(A.ceasedate, '') <> '' AND LEFT(CONVERT(VARCHAR(8), A.ceasedate, 112), 6) = @period THEN 'S'
+            WHEN E.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period
+             AND (
+                    E.reentrydate IS NULL
+                    OR LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) <> @period
+                    OR E.reentrydate > E.ceasedate
+                 ) THEN 'S'
             ELSE 'N'
         END AS cese_relacion,
         CASE
@@ -129,8 +145,18 @@ BEGIN
                   AND X.Company = @cia
                   AND LEFT(X.PRPeriod, 6) = @period
             ) THEN 'S'
-            WHEN A.entrydate IS NOT NULL AND LEFT(CONVERT(VARCHAR(8), A.entrydate, 112), 6) = @period THEN 'S'
-            WHEN ISNULL(A.ceasedate, '') <> '' AND LEFT(CONVERT(VARCHAR(8), A.ceasedate, 112), 6) = @period THEN 'S'
+            WHEN E.reentrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'S'
+            WHEN E.reentrydate IS NULL
+             AND E.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
+            WHEN E.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period
+             AND (
+                    E.reentrydate IS NULL
+                    OR LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) <> @period
+                    OR E.reentrydate > E.ceasedate
+                 ) THEN 'S'
             ELSE 'N'
         END AS relacion_laboral,
         CASE

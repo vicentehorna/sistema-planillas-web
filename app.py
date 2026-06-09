@@ -477,6 +477,9 @@ def _declaracion_afp_row_dict(r):
         'ceasedate': _jsonable_value(r.get('ceasedate')),
         'inicio_relacion': _jsonable_value(r.get('inicio_relacion')),
         'cese_relacion': _jsonable_value(r.get('cese_relacion')),
+        'relacion_laboral': _jsonable_value(r.get('relacion_laboral')),
+        'excepcion_aportar': _jsonable_value(r.get('excepcion_aportar')),
+        'tipo_trabajo': _jsonable_value(r.get('tipo_trabajo')),
         'remuneracion': _jsonable_value(r.get('remuneracion')),
         'topafp': _jsonable_value(r.get('topafp')),
         'insuredpercentage': _jsonable_value(r.get('insuredpercentage')),
@@ -539,10 +542,16 @@ def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
     etiqueta = _declaracion_afp_etiqueta_fila(row, fila)
     period = str(period or '').strip()[:6]
 
+    excepcion = str(row.get('excepcion_aportar') or '').strip().upper()
     cuspp = str(row.get('cuspp') or '').strip()
-    if not _cuspp_afpnet_es_valido(cuspp):
+    if excepcion not in ('J', 'I', 'O', 'L', 'U', 'P') and not _cuspp_afpnet_es_valido(cuspp):
         errores.append(
             f'{etiqueta}: CUSPP inválido o vacío («{cuspp or "vacío"}»). '
+            'Debe tener exactamente 12 caracteres alfanuméricos.'
+        )
+    elif cuspp and not _cuspp_afpnet_es_valido(cuspp):
+        errores.append(
+            f'{etiqueta}: CUSPP inválido («{cuspp}»). '
             'Debe tener exactamente 12 caracteres alfanuméricos.'
         )
 
@@ -573,11 +582,12 @@ def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
             )
 
     try:
+        remuneracion = round(float(row.get('remuneracion') or 0), 2)
         seguro = round(float(row.get('seguro') or 0), 2)
         seguro_esperado = round(float(row.get('seguro_esperado') or 0), 2)
     except (TypeError, ValueError):
-        seguro, seguro_esperado = 0.0, 0.0
-    if abs(seguro - seguro_esperado) > 0.01:
+        remuneracion, seguro, seguro_esperado = 0.0, 0.0, 0.0
+    if remuneracion > 0 and abs(seguro - seguro_esperado) > 0.01:
         try:
             topafp = float(row.get('topafp') or 0)
             pct = float(row.get('insuredpercentage') or 0)
@@ -611,16 +621,28 @@ def _declaracion_afp_aplicar_validaciones_filas(filas, period):
     return resultado, todas
 
 
+def _afpnet_sn(valor, default='N'):
+    """AFPnet col. H/I/J: solo S o N."""
+    v = str(valor or '').strip().upper()
+    return 'S' if v == 'S' else default
+
+
 def _afpnet_relacion_laboral(row):
-    return 'S'
+    return _afpnet_sn(row.get('relacion_laboral'))
 
 
 def _afpnet_inicio_relacion(row):
-    return 'S' if str(row.get('inicio_relacion') or '').strip().upper() == 'S' else ''
+    return _afpnet_sn(row.get('inicio_relacion'))
 
 
 def _afpnet_cese_relacion(row):
-    return 'S' if str(row.get('cese_relacion') or '').strip().upper() == 'S' else ''
+    return _afpnet_sn(row.get('cese_relacion'))
+
+
+def _afpnet_excepcion_aportar(row):
+    """AFPnet col. K: vacío o L/U/J/I/P/O."""
+    v = str(row.get('excepcion_aportar') or '').strip().upper()
+    return v if v in ('L', 'U', 'J', 'I', 'P', 'O') else ''
 
 
 def _afpnet_remuneracion(row):
@@ -631,30 +653,32 @@ def _afpnet_remuneracion(row):
 
 
 def _afpnet_tipo_trabajo(row):
-    return ''
+    v = str(row.get('tipo_trabajo') or '').strip().upper()
+    return v if v in ('N', 'C', 'M', 'P') else 'N'
+
+
+def _afpnet_documento(valor):
+    """Col. D: texto para conservar ceros a la izquierda."""
+    return _afpnet_limpia_texto(valor)
 
 
 def _afpnet_fila_excel(secuencia, row):
-    try:
-        aporte_empleador = round(float(row.get('aporte_empleador') or 0), 2)
-    except (TypeError, ValueError):
-        aporte_empleador = 0.0
     return [
         secuencia,
         _afpnet_limpia_texto(row.get('cuspp')),
         _afpnet_limpia_texto(row.get('tipodoc')),
-        _afpnet_limpia_texto(row.get('documentnumber')),
+        _afpnet_documento(row.get('documentnumber')),
         _afpnet_limpia_texto(row.get('lastname1')),
         _afpnet_limpia_texto(row.get('lastname2')),
         _afpnet_limpia_texto(row.get('names')),
         _afpnet_relacion_laboral(row),
         _afpnet_inicio_relacion(row),
         _afpnet_cese_relacion(row),
-        '',
+        _afpnet_excepcion_aportar(row),
         _afpnet_remuneracion(row),
         0.0,
         0.0,
-        aporte_empleador,
+        0.0,
         _afpnet_tipo_trabajo(row),
     ]
 
@@ -695,7 +719,13 @@ def _declaracion_afp_generar_xlsx_bytes(filas):
     ws = wb.active
     ws.title = 'AFPnet'
     for idx, row in enumerate(filas, start=1):
-        ws.append(_afpnet_fila_excel(idx, row))
+        valores = _afpnet_fila_excel(idx, row)
+        ws.append(valores)
+        fila_excel = ws.max_row
+        for col in (3, 4):
+            celda = ws.cell(row=fila_excel, column=col)
+            celda.number_format = '@'
+            celda.value = str(valores[col - 1])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

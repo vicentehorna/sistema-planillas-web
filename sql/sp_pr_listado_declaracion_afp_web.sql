@@ -76,13 +76,101 @@ BEGIN
         CASE WHEN ISNULL(A.ceasedate, '') = '' THEN '' ELSE CONVERT(CHAR(10), A.ceasedate, 103) END AS ceasedate,
         CASE
             WHEN A.entrydate IS NOT NULL AND LEFT(CONVERT(VARCHAR(8), A.entrydate, 112), 6) = @period THEN 'S'
-            ELSE ''
+            ELSE 'N'
         END AS inicio_relacion,
         CASE
             WHEN ISNULL(A.ceasedate, '') <> '' AND LEFT(CONVERT(VARCHAR(8), A.ceasedate, 112), 6) = @period THEN 'S'
-            ELSE ''
+            ELSE 'N'
         END AS cese_relacion,
-        CAST(ISNULL(A.assureableremamountlo, 0) AS DECIMAL(19, 2)) AS remuneracion,
+        CASE
+            WHEN ISNULL((
+                SELECT SUM(MR.Days)
+                FROM PR_EmployeeMedicalRest MR (NOLOCK)
+                    INNER JOIN PR_MedicalRestType MT (NOLOCK)
+                        ON MR.MedicalRestType = MT.MedicalRestType
+                       AND MT.pdt = '05'
+                WHERE MR.person = E.person
+                  AND MR.Company = @cia
+                  AND LEFT(MR.PRPeriod, 6) = @period
+            ), 0) >= 30
+            AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRollConcept X (NOLOCK)
+                    INNER JOIN PR_Concept Y (NOLOCK)
+                        ON X.Concept = Y.Concept
+                       AND Y.Company = @cia
+                WHERE Y.FormulaCode = 'TOTAL_REM_AFP'
+                  AND X.Person = E.person
+                  AND X.Company = @cia
+                  AND LEFT(X.PRPeriod, 6) = @period
+            ) THEN 'L'
+            ELSE ''
+        END AS excepcion_aportar,
+        CASE
+            WHEN CAST(ISNULL(A.assureableremamountlo, 0) AS DECIMAL(19, 2)) > 0 THEN 'S'
+            WHEN ISNULL((
+                SELECT SUM(MR.Days)
+                FROM PR_EmployeeMedicalRest MR (NOLOCK)
+                    INNER JOIN PR_MedicalRestType MT (NOLOCK)
+                        ON MR.MedicalRestType = MT.MedicalRestType
+                       AND MT.pdt = '05'
+                WHERE MR.person = E.person
+                  AND MR.Company = @cia
+                  AND LEFT(MR.PRPeriod, 6) = @period
+            ), 0) >= 30
+            AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRollConcept X (NOLOCK)
+                    INNER JOIN PR_Concept Y (NOLOCK)
+                        ON X.Concept = Y.Concept
+                       AND Y.Company = @cia
+                WHERE Y.FormulaCode = 'TOTAL_REM_AFP'
+                  AND X.Person = E.person
+                  AND X.Company = @cia
+                  AND LEFT(X.PRPeriod, 6) = @period
+            ) THEN 'S'
+            WHEN A.entrydate IS NOT NULL AND LEFT(CONVERT(VARCHAR(8), A.entrydate, 112), 6) = @period THEN 'S'
+            WHEN ISNULL(A.ceasedate, '') <> '' AND LEFT(CONVERT(VARCHAR(8), A.ceasedate, 112), 6) = @period THEN 'S'
+            ELSE 'N'
+        END AS relacion_laboral,
+        CASE
+            WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeConcept EC (NOLOCK)
+                    INNER JOIN PR_Concept C2 (NOLOCK)
+                        ON EC.Concept = C2.Concept
+                       AND C2.Company = @cia
+                WHERE EC.Person = E.person
+                  AND EC.PayRollType = E.payrolltype
+                  AND EC.Company = @cia
+                  AND C2.FormulaCode = 'FLAG_MINERO'
+            ) THEN 'M'
+            ELSE 'N'
+        END AS tipo_trabajo,
+        CASE
+            WHEN ISNULL((
+                SELECT SUM(MR.Days)
+                FROM PR_EmployeeMedicalRest MR (NOLOCK)
+                    INNER JOIN PR_MedicalRestType MT (NOLOCK)
+                        ON MR.MedicalRestType = MT.MedicalRestType
+                       AND MT.pdt = '05'
+                WHERE MR.person = E.person
+                  AND MR.Company = @cia
+                  AND LEFT(MR.PRPeriod, 6) = @period
+            ), 0) >= 30
+            AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRollConcept X (NOLOCK)
+                    INNER JOIN PR_Concept Y (NOLOCK)
+                        ON X.Concept = Y.Concept
+                       AND Y.Company = @cia
+                WHERE Y.FormulaCode = 'TOTAL_REM_AFP'
+                  AND X.Person = E.person
+                  AND X.Company = @cia
+                  AND LEFT(X.PRPeriod, 6) = @period
+            ) THEN CAST(0 AS DECIMAL(19, 2))
+            ELSE CAST(ISNULL(A.assureableremamountlo, 0) AS DECIMAL(19, 2))
+        END AS remuneracion,
         CAST(ISNULL(F.TopAFP, 0) AS DECIMAL(19, 2)) AS topafp,
         CAST(ISNULL(F.InsuredPercentage, 0) AS DECIMAL(19, 4)) AS insuredpercentage,
         CAST(ISNULL(A.fixedamountlo, 0) AS DECIMAL(19, 2)) AS aporte_obligatorio,
@@ -153,6 +241,100 @@ BEGIN
       AND (@repunit_all = 'Y' OR H.replicationunit = @repunit)
       AND (@flagcostcenter = 'Y' OR H.costcenter = @costcenter)
       AND (@employee_all = 'Y' OR A.person = @employee)
-    ORDER BY F.description, P.lastname1;
+
+    UNION ALL
+
+    /* Jubilados: PR_EmployeeConcept con FLAG_JUBILADO (legacy UNION ALL AFPnet). */
+    SELECT
+        E.person,
+        '(Jubilado)' AS afp_description,
+        LTRIM(RTRIM(ISNULL(E.AFPCard, ''))) AS cuspp,
+        LTRIM(RTRIM(ISNULL(P.documentnumber, ''))) AS documentnumber,
+        LTRIM(RTRIM(ISNULL(P.lastname1, ''))) AS lastname1,
+        LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
+        LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
+        '' AS fecha_cese,
+        CASE WHEN E.entrydate IS NULL THEN '' ELSE CONVERT(CHAR(10), E.entrydate, 103) END AS entrydate,
+        CASE WHEN ISNULL(E.ceasedate, '') = '' THEN '' ELSE CONVERT(CHAR(10), E.ceasedate, 103) END AS ceasedate,
+        'N' AS inicio_relacion,
+        'N' AS cese_relacion,
+        CASE
+            WHEN ISNULL((
+                SELECT SUM(MR.Days)
+                FROM PR_EmployeeMedicalRest MR (NOLOCK)
+                    INNER JOIN PR_MedicalRestType MT (NOLOCK)
+                        ON MR.MedicalRestType = MT.MedicalRestType
+                       AND MT.pdt = '05'
+                WHERE MR.person = E.person
+                  AND MR.Company = @cia
+                  AND LEFT(MR.PRPeriod, 6) = @period
+            ), 0) >= 30
+            AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRollConcept X (NOLOCK)
+                    INNER JOIN PR_Concept Y (NOLOCK)
+                        ON X.Concept = Y.Concept
+                       AND Y.Company = @cia
+                WHERE Y.FormulaCode = 'TOTAL_REM_AFP'
+                  AND X.Person = E.person
+                  AND X.Company = @cia
+                  AND LEFT(X.PRPeriod, 6) = @period
+            ) THEN 'L'
+            ELSE 'J'
+        END AS excepcion_aportar,
+        'N' AS relacion_laboral,
+        'N' AS tipo_trabajo,
+        CAST(0 AS DECIMAL(19, 2)) AS remuneracion,
+        CAST(0 AS DECIMAL(19, 2)) AS topafp,
+        CAST(0 AS DECIMAL(19, 4)) AS insuredpercentage,
+        CAST(0 AS DECIMAL(19, 2)) AS aporte_obligatorio,
+        CAST(0 AS DECIMAL(19, 2)) AS aporte_empleador,
+        CAST(0 AS DECIMAL(19, 2)) AS total_fondo_pensiones,
+        CAST(0 AS DECIMAL(19, 2)) AS seguro,
+        CAST(0 AS DECIMAL(19, 2)) AS seguro_esperado,
+        CAST(0 AS DECIMAL(19, 2)) AS comision,
+        CAST(0 AS DECIMAL(19, 2)) AS total_retenciones,
+        CAST(0 AS DECIMAL(19, 2)) AS aporte_riesgo_trab,
+        ISNULL((
+            SELECT CASE LTRIM(RTRIM(ISNULL(S.pdt, '')))
+                WHEN '01' THEN '0'
+                WHEN '04' THEN '1'
+                WHEN '02' THEN '2'
+                WHEN '03' THEN '2'
+                WHEN '13' THEN '3'
+                WHEN '11' THEN '3'
+                WHEN '07' THEN '4'
+                ELSE '0'
+            END
+            FROM sy_persondocumenttype S (NOLOCK)
+            WHERE S.PersonDocumentType = P.employeedocumenttype
+        ), '0') AS tipodoc
+    FROM PR_EmployeeConcept EC (NOLOCK)
+        INNER JOIN PR_Employee E (NOLOCK)
+            ON EC.Person = E.Person
+           AND EC.Company = E.Company
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON EC.Concept = C.Concept
+           AND C.Company = @cia
+        INNER JOIN sy_person P (NOLOCK)
+            ON EC.Person = P.person
+    WHERE EC.Company = @cia
+      AND C.FormulaCode = 'FLAG_JUBILADO'
+      AND EC.FlagFrecuencyType IN ('P', 'T')
+      AND (
+            EC.FlagFrecuencyType = 'P'
+            OR (EC.FlagFrecuencyType = 'T' AND LEFT(EC.PRPeriodStart, 6) = @period)
+          )
+      AND (@payroll_all = 'Y' OR EC.PayRollType = @payroll)
+      AND (@employee_all = 'Y' OR EC.Person = @employee)
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_EmployeeAFP A2 (NOLOCK)
+            WHERE A2.person = EC.Person
+              AND A2.company = @cia
+              AND LEFT(A2.prperiod, 6) = @period
+      )
+
+    ORDER BY afp_description, lastname1;
 END
 GO

@@ -508,7 +508,7 @@ def _afpnet_limpia_texto(valor):
 
 
 def _cuspp_afpnet_es_valido(cuspp):
-    return bool(re.fullmatch(r'[A-Za-z0-9]{12}', str(cuspp or '').strip()))
+    return bool(re.fullmatch(r'[A-Za-z0-9Ññ]{12}', str(cuspp or '').strip()))
 
 
 def _fecha_ddmmyyyy_en_periodo(fecha_txt, period_yyyymm):
@@ -547,12 +547,12 @@ def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
     if excepcion not in ('J', 'I', 'O', 'L', 'U', 'P') and not _cuspp_afpnet_es_valido(cuspp):
         errores.append(
             f'{etiqueta}: CUSPP inválido o vacío («{cuspp or "vacío"}»). '
-            'Debe tener exactamente 12 caracteres alfanuméricos.'
+            'Debe tener exactamente 12 caracteres alfanuméricos (incluye Ñ).'
         )
     elif cuspp and not _cuspp_afpnet_es_valido(cuspp):
         errores.append(
             f'{etiqueta}: CUSPP inválido («{cuspp}»). '
-            'Debe tener exactamente 12 caracteres alfanuméricos.'
+            'Debe tener exactamente 12 caracteres alfanuméricos (incluye Ñ).'
         )
 
     inicio = str(row.get('inicio_relacion') or '').strip().upper()

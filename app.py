@@ -823,6 +823,22 @@ def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas):
     }
 
 
+def _declaracion_afp_resumen_tiene_diferencias(resumen):
+    """True si hay diferencias de montos o conteo de trabajadores."""
+    if not resumen:
+        return False
+    try:
+        if abs(float(resumen.get('diferencia_montos') or 0)) >= 0.005:
+            return True
+    except (TypeError, ValueError):
+        pass
+    dif = resumen.get('diferencia_trabajadores') or {}
+    for key in ('nuevos', 'cesados', 'antiguos', 'total'):
+        if _declaracion_afp_resumen_int(dif.get(key)) != 0:
+            return True
+    return False
+
+
 def _plame_rows_archivo15_from_json(body):
     rows = body.get('rows')
     if not isinstance(rows, list):
@@ -975,6 +991,52 @@ def _normalize_estado_trabajador(raw):
 def _normalize_cesados_telecredito(raw, default='T'):
     v = str(raw or default).strip().upper()
     return v if v in ('T', 'Y', 'N') else default
+
+
+def _parse_optional_date(fecha_raw):
+    """Fecha opcional YYYY-MM-DD o dd/mm/yyyy; None si vacía o inválida."""
+    s = str(fecha_raw or '').strip()
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y'):
+        try:
+            return datetime.strptime(s[:10], fmt).date()
+        except ValueError:
+            continue
+    return None
+
+
+def _sql_date_str_param(fecha_raw):
+    """Cadena YYYY-MM-DD para ODBC legacy; vacío si no hay fecha válida."""
+    if fecha_raw is None:
+        return ''
+    if isinstance(fecha_raw, date):
+        return fecha_raw.strftime('%Y-%m-%d')
+    parsed = _parse_optional_date(fecha_raw)
+    return parsed.strftime('%Y-%m-%d') if parsed else ''
+
+
+def _trabajadores_fecha_ingreso_from_json(body):
+    """Sin filtro o rango con ISNULL(ReEntryDate, EntryDate) si está activo el checkbox."""
+    body = body or {}
+    activo = body.get('fecha_ingreso_activo')
+    if activo is None:
+        activo = body.get('fechaIngresoActivo')
+    if activo is None:
+        modo = str(
+            body.get('fecha_ingreso_modo')
+            or body.get('fechaIngresoModo')
+            or body.get('fecha_ingreso_all')
+            or 'T'
+        ).strip().upper()
+        activo = modo in ('N', 'R', 'RANGO', 'RANGE')
+    elif isinstance(activo, str):
+        activo = activo.strip().lower() in ('1', 'true', 'y', 's', 'si', 'sí')
+    if not activo:
+        return 'Y', None, None
+    desde = _parse_optional_date(body.get('fecha_ingreso_desde') or body.get('fechaIngresoDesde'))
+    hasta = _parse_optional_date(body.get('fecha_ingreso_hasta') or body.get('fechaIngresoHasta'))
+    return 'N', desde, hasta
 
 
 def _normalize_todos_bancos_banbif(raw, default='N'):
@@ -1625,12 +1687,43 @@ def _cargar_selectores_bancario(cursor, cia):
     return bancos, formas_pago, tipos_cuenta
 
 
+def _cargar_selectores_pensiones(cursor, cia):
+    pension_types = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorpensiontype_web @cia=?', (cia,))
+    regime_health = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorregimehealth_web @cia=?', (cia,))
+    return pension_types, regime_health
+
+
+def _trabajadores_editar_seccion(raw):
+    seccion = str(raw or 'bancario').strip().lower()
+    return seccion if seccion in ('bancario', 'pensiones') else 'bancario'
+
+
+def _empleado_pensiones_desde_form(form):
+    return {
+        'pensiontype': str(form.get('pensiontype') or '').strip(),
+        'pensioninscriptiondate': str(form.get('pensioninscriptiondate') or '').strip(),
+        'regimehealth': str(form.get('regimehealth') or '').strip(),
+        'flagmixta': 'Y' if form.get('flagmixta') == 'Y' else 'N',
+        'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
+    }
+
+
+def _empleado_pensiones_para_form(empleado):
+    """Fechas en YYYY-MM-DD para <input type=\"date\"> (pyodbc devuelve datetime)."""
+    if not empleado:
+        return empleado
+    out = dict(empleado)
+    out['pensioninscriptiondate'] = _sql_date_str_param(out.get('pensioninscriptiondate'))
+    return out
+
+
 @app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
 @login_required
 def trabajadores_editar(person_id):
-    """Edición de datos bancarios y CTS del trabajador."""
+    """Edición de datos bancarios, CTS y pensiones del trabajador."""
     person_id = str(person_id or '').strip()
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
+    seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion'))
 
     if not person_id:
         flash('Trabajador no indicado.', 'warning')
@@ -1643,6 +1736,27 @@ def trabajadores_editar(person_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        if request.method == 'POST' and seccion == 'pensiones':
+            datos = _empleado_pensiones_desde_form(request.form)
+            cursor.execute(
+                'EXEC sp_pr_actualizar_pensiones_trabajador_web '
+                '@cia=?, @person=?, @pensiontype=?, @pensioninscriptiondate=?, '
+                '@regimehealth=?, @flagmixta=?, @flagasigfamiliar=?, @xlastuser=?',
+                (
+                    cia,
+                    person_id,
+                    datos['pensiontype'],
+                    _sql_date_str_param(datos['pensioninscriptiondate']),
+                    datos['regimehealth'],
+                    datos['flagmixta'],
+                    datos['flagasigfamiliar'],
+                    str(getattr(current_user, 'username', '') or '')[:20],
+                ),
+            )
+            conn.commit()
+            flash('Datos de pensiones actualizados correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones'))
 
         if request.method == 'POST':
             collectionform = str(request.form.get('collectionform') or '').strip()
@@ -1682,10 +1796,13 @@ def trabajadores_editar(person_id):
                     'trabajadores_editar.html',
                     cia=cia,
                     person_id=person_id,
+                    seccion=seccion,
                     empleado=empleado,
                     bancos=bancos,
                     formas_pago=formas_pago,
                     tipos_cuenta=tipos_cuenta,
+                    pension_types=[],
+                    regime_health=[],
                 )
 
             cursor.execute(
@@ -1708,28 +1825,40 @@ def trabajadores_editar(person_id):
             )
             conn.commit()
             flash('Datos bancarios actualizados correctamente.', 'success')
-            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia))
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario'))
 
-        cursor.execute(
-            'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
-            (cia, person_id),
-        )
+        if seccion == 'pensiones':
+            cursor.execute(
+                'EXEC sp_pr_obtener_pensiones_trabajador_web @cia=?, @person=?',
+                (cia, person_id),
+            )
+        else:
+            cursor.execute(
+                'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
+                (cia, person_id),
+            )
         rows = _dicts_first_nonempty_resultset(cursor)
         if not rows:
             flash('No se encontró el trabajador indicado.', 'warning')
             return redirect(url_for('trabajadores_page'))
 
         empleado = rows[0]
+        if seccion == 'pensiones':
+            empleado = _empleado_pensiones_para_form(empleado)
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
+        pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
 
         return render_template(
             'trabajadores_editar.html',
             cia=cia,
             person_id=person_id,
+            seccion=seccion,
             empleado=empleado,
             bancos=bancos,
             formas_pago=formas_pago,
             tipos_cuenta=tipos_cuenta,
+            pension_types=pension_types,
+            regime_health=regime_health,
         )
     except Exception as e:
         if conn:
@@ -2241,6 +2370,41 @@ def api_declaracion_afp_listado():
                 pass
 
 
+@app.route('/api/declaracion-afp/validar-resumen', methods=['POST'])
+@login_required
+def api_declaracion_afp_validar_resumen():
+    """Resumen de verificación AFPnet sin generar Excel ni actualizar datos."""
+    body = request.get_json(silent=True) or {}
+    p = _declaracion_afp_params_from_json(body)
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _declaracion_afp_rows_from_json(body)
+    if not filas:
+        return jsonify({"error": "No hay registros en el listado para validar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
+        resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
+        return jsonify({
+            'resumen': resumen,
+            'tiene_diferencias': _declaracion_afp_resumen_tiene_diferencias(resumen),
+        })
+    except Exception as e:
+        logging.exception("api_declaracion_afp_validar_resumen")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/declaracion-afp/generar-xlsx', methods=['POST'])
 @login_required
 def api_declaracion_afp_generar_xlsx():
@@ -2269,10 +2433,12 @@ def api_declaracion_afp_generar_xlsx():
 
         buf = _declaracion_afp_generar_xlsx_bytes(filas)
         filename = f'AFPNET_{p["period"]}_{ruc}.xlsx'
+        tiene_diferencias = _declaracion_afp_resumen_tiene_diferencias(resumen)
         return jsonify({
             'filename': filename,
             'file_base64': base64.b64encode(buf.getvalue()).decode('ascii'),
-            'resumen': resumen,
+            'resumen': resumen if tiene_diferencias else None,
+            'tiene_diferencias': tiene_diferencias,
             'rows': filas,
             'validaciones': validaciones,
         })
@@ -3686,7 +3852,7 @@ def api_periodos_asig():
 @app.route('/api/trabajadores/listado', methods=['POST'])
 @login_required
 def api_trabajadores_listado():
-    """sp_pr_listatrabajadores_web @cia, @payrolltype, @person, @docnro, @nombre, @estado, @salarybank, @cesados."""
+    """sp_pr_listatrabajadores_web: listado con filtros incl. rango fecha de ingreso."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
@@ -3696,9 +3862,15 @@ def api_trabajadores_listado():
     estado = _normalize_estado_trabajador(body.get('estado'))
     salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
 
     headers_es = [
         'Tipo planilla',
@@ -3720,10 +3892,16 @@ def api_trabajadores_listado():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
+        fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
         cursor.execute(
             "EXEC sp_pr_listatrabajadores_web "
-            "@cia=?, @payrolltype=?, @person=?, @docnro=?, @nombre=?, @estado=?, @salarybank=?, @cesados=?",
-            (cia, payrolltype, person, docnro, nombre, estado, salarybank, cesados),
+            "@cia=?, @payrolltype=?, @person=?, @docnro=?, @nombre=?, @estado=?, "
+            "@salarybank=?, @cesados=?, @fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?",
+            (
+                cia, payrolltype, person, docnro, nombre, estado, salarybank, cesados,
+                fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
+            ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []

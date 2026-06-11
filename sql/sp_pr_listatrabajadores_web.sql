@@ -1,22 +1,30 @@
 /*
     Listado de trabajadores para el módulo web de Planillas.
     Filtros: compañía (obligatorio), tipo planilla, trabajador (person), DNI, nombre,
-    estado, banco haberes y cesados.
+    estado, banco haberes, cesados y fecha de ingreso (rango opcional).
     Parámetros opcionales con valor '0' o vacío = sin filtro (excepto estado: A = Activos por defecto).
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @fecha_ingreso_all: Y = todas las fechas, N = filtrar por rango.
+    Fecha de ingreso efectiva: ISNULL(ReEntryDate, EntryDate).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatrabajadores_web]
-    @cia          VARCHAR(4),
-    @payrolltype  VARCHAR(20),
-    @person       VARCHAR(20),
-    @docnro       VARCHAR(20),
-    @nombre       VARCHAR(100),
-    @estado       VARCHAR(1),
-    @salarybank   VARCHAR(20),
-    @cesados      CHAR(1)
+    @cia                  VARCHAR(4),
+    @payrolltype          VARCHAR(20),
+    @person               VARCHAR(20),
+    @docnro               VARCHAR(20),
+    @nombre               VARCHAR(100),
+    @estado               VARCHAR(1),
+    @salarybank           VARCHAR(20),
+    @cesados              CHAR(1),
+    @fecha_ingreso_all    CHAR(1)      = 'Y',
+    @fecha_ingreso_desde  VARCHAR(10)  = '',
+    @fecha_ingreso_hasta  VARCHAR(10)  = ''
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    DECLARE @fd DATE = NULL;
+    DECLARE @fh DATE = NULL;
 
     IF RTRIM(ISNULL(@payrolltype, '')) = '' SET @payrolltype = '0';
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
@@ -26,6 +34,15 @@ BEGIN
     IF RTRIM(ISNULL(@estado, '')) = '' SET @estado = 'A';
     IF RTRIM(ISNULL(@salarybank, '')) = '' SET @salarybank = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
+    SET @fecha_ingreso_all = UPPER(LTRIM(RTRIM(ISNULL(@fecha_ingreso_all, 'Y'))));
+    IF @fecha_ingreso_all NOT IN ('Y', 'N') SET @fecha_ingreso_all = 'Y';
+    SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
+    SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
+
+    IF @fecha_ingreso_desde <> ''
+        SET @fd = TRY_CONVERT(DATE, @fecha_ingreso_desde, 23);
+    IF @fecha_ingreso_hasta <> ''
+        SET @fh = TRY_CONVERT(DATE, @fecha_ingreso_hasta, 23);
 
     SELECT
         PR_PAYROLLTYPE.DESCRIPTION AS tipoplanilla,
@@ -43,7 +60,7 @@ BEGIN
         END AS estado,
         SY_PERSONDOCUMENTTYPE.DESCRIPTION AS tipodocumento,
         SY_PERSON_A.DOCUMENTNUMBER AS numerodocumento,
-        PR_EMPLOYEE.ENTRYDATE AS fechaingreso,
+        ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) AS fechaingreso,
         PR_EMPLOYEE.CEASEDATE AS fechacese,
         PR_POSITION.DESCRIPTION AS cargo,
         ISNULL(AC_COSTCENTER.NAME, PR_EMPLOYEE.COSTCENTERNAME) AS centrocosto,
@@ -90,6 +107,16 @@ BEGIN
           @estado = 'T'
           OR (@estado = 'A' AND PR_EMPLOYEE.STATUS = 'N')
           OR (@estado = 'I' AND ISNULL(PR_EMPLOYEE.STATUS, '') <> 'N')
+      )
+      AND (
+            @fecha_ingreso_all = 'Y'
+         OR (
+                ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) IS NOT NULL
+            AND (@fd IS NULL
+                 OR CAST(ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) AS DATE) >= @fd)
+            AND (@fh IS NULL
+                 OR CAST(ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) AS DATE) <= @fh)
+            )
       )
     ORDER BY nombre, codigo;
 END

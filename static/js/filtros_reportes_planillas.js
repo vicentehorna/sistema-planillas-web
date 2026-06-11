@@ -1181,6 +1181,9 @@
                     estadoFiltro: val('cboEstado') || 'A',
                     cesados: val('cboCesados') || 'T',
                     salarybank: val('cboBancoHaberes') || '0',
+                    fechaIngresoActivo: !!document.getElementById('chkFechaIngreso')?.checked,
+                    fechaIngresoDesde: val('txtFechaIngresoDesde'),
+                    fechaIngresoHasta: val('txtFechaIngresoHasta'),
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY_TRABAJADORES, JSON.stringify(estado));
@@ -1282,12 +1285,32 @@
                 txtNombre.value = String(filtros.nombre);
             }
 
+            const chkFechaIngreso = document.getElementById('chkFechaIngreso');
+            const txtFechaIngresoDesde = document.getElementById('txtFechaIngresoDesde');
+            const txtFechaIngresoHasta = document.getElementById('txtFechaIngresoHasta');
+            const usarRango = filtros.fechaIngresoActivo === true;
+            if (chkFechaIngreso) {
+                chkFechaIngreso.checked = usarRango;
+            }
+            if (txtFechaIngresoDesde) {
+                txtFechaIngresoDesde.disabled = !usarRango;
+                txtFechaIngresoDesde.value = usarRango && filtros.fechaIngresoDesde
+                    ? String(filtros.fechaIngresoDesde).trim()
+                    : '';
+            }
+            if (txtFechaIngresoHasta) {
+                txtFechaIngresoHasta.disabled = !usarRango;
+                txtFechaIngresoHasta.value = usarRango && filtros.fechaIngresoHasta
+                    ? String(filtros.fechaIngresoHasta).trim()
+                    : '';
+            }
+
             guardar();
             return true;
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes', 'chkFechaIngreso', 'txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

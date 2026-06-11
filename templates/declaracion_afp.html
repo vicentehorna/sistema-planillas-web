@@ -124,10 +124,13 @@
                 </select>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-warning btn-sm px-4" id="btnValidarAfpnet" disabled>
+                    <i class="bi bi-check2-square"></i> Validar
+                </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarAfpnet" disabled>
                     <i class="bi bi-file-earmark-excel"></i> Generar Archivo AFPnet
                 </button>
-                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <span class="ms-auto text-muted small fw-bold">
                     Registros: <span id="lblRowCountAfp">0</span>
                 </span>
@@ -231,6 +234,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         : null;
 
     const URL_LISTADO = {{ url_for('api_declaracion_afp_listado') | tojson }};
+    const URL_VALIDAR = {{ url_for('api_declaracion_afp_validar_resumen') | tojson }};
     const URL_GENERAR = {{ url_for('api_declaracion_afp_generar_xlsx') | tojson }};
     const DEFAULT_CIA = 'BGT';
     let lastRowsAfp = [];
@@ -373,8 +377,19 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function actualizarContadores() {
         const total = Array.isArray(lastRowsAfp) ? lastRowsAfp.length : 0;
+        const hayRegistros = total > 0;
         document.getElementById('lblRowCountAfp').textContent = String(total);
-        document.getElementById('btnGenerarAfpnet').disabled = total <= 0;
+        document.getElementById('btnGenerarAfpnet').disabled = !hayRegistros;
+        document.getElementById('btnValidarAfpnet').disabled = !hayRegistros;
+    }
+
+    function resumenTieneDiferencias(resumen) {
+        if (!resumen) return false;
+        if (Math.abs(Number(resumen.diferencia_montos) || 0) >= 0.005) return true;
+        const dif = resumen.diferencia_trabajadores || {};
+        return ['nuevos', 'cesados', 'antiguos', 'total'].some(
+            (k) => Number(dif[k] || 0) !== 0
+        );
     }
 
     function renderizarValidaciones(validaciones) {
@@ -415,7 +430,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         return escapeHtml(texto);
     }
 
-    function renderizarResumenAfpnet(resumen) {
+    function renderizarResumenAfpnet(resumen, opciones) {
+        const opts = opciones || {};
         const card = document.getElementById('cardResumenAfpnet');
         const tbodyMontos = document.getElementById('tbodyResumenMontosAfp');
         const tbodyTrab = document.getElementById('tbodyResumenTrabajadoresAfp');
@@ -492,7 +508,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         `;
 
         card.classList.remove('d-none');
-        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (opts.scroll) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
     }
 
     function descargarArchivoBase64(filename, fileBase64) {
@@ -653,6 +671,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         document.getElementById('lblRowCountAfp').textContent = '0';
         document.getElementById('btnGenerarAfpnet').disabled = true;
+        document.getElementById('btnValidarAfpnet').disabled = true;
         document.getElementById('tfoot-declaracion-afp').innerHTML = '';
         document.getElementById('cardValidacionesAfp').classList.add('d-none');
         document.getElementById('cardResumenAfpnet').classList.add('d-none');
@@ -679,6 +698,43 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(err);
             document.getElementById('cardResultadoAfp').classList.add('d-none');
             alert('Error de red o del servidor.');
+        }
+    }
+
+    async function ejecutarValidacion() {
+        const payload = payloadFiltros();
+        if (!payload.cia || !/^\d{6}$/.test(payload.period)) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        if (!lastRowsAfp.length) {
+            alert('Consulte el listado antes de validar.');
+            return;
+        }
+
+        const btnValidar = document.getElementById('btnValidarAfpnet');
+        const textoOriginal = btnValidar.innerHTML;
+        btnValidar.disabled = true;
+        btnValidar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+
+        try {
+            const res = await fetch(URL_VALIDAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...payload, rows: lastRowsAfp })
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.error) {
+                alert(data.error || 'No se pudo validar el resumen.');
+                return;
+            }
+            renderizarResumenAfpnet(data.resumen || null, { scroll: true });
+        } catch (err) {
+            console.error(err);
+            alert('Error al validar el resumen.');
+        } finally {
+            btnValidar.innerHTML = textoOriginal;
+            actualizarContadores();
         }
     }
 
@@ -709,7 +765,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
 
-            renderizarResumenAfpnet(data.resumen || null);
+            if (data.tiene_diferencias || resumenTieneDiferencias(data.resumen)) {
+                renderizarResumenAfpnet(data.resumen, { scroll: true });
+            } else {
+                renderizarResumenAfpnet(null);
+            }
 
             if (Array.isArray(data.rows)) {
                 lastRowsAfp = data.rows;
@@ -734,6 +794,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         ejecutarConsulta();
     });
 
+    document.getElementById('btnValidarAfpnet').addEventListener('click', ejecutarValidacion);
     document.getElementById('btnGenerarAfpnet').addEventListener('click', generarArchivoAfpnet);
 
     document.getElementById('cboCompania').addEventListener('change', async function () {

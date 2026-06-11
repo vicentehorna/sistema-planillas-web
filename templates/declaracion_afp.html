@@ -179,10 +179,12 @@
                                 <th class="col-num-resumen">CESADOS</th>
                                 <th class="col-num-resumen">ANTIGUOS</th>
                                 <th class="col-num-resumen">TOTAL</th>
+                                <th class="col-num-resumen">TOTAL PLANILLA</th>
                             </tr>
                         </thead>
                         <tbody id="tbodyResumenTrabajadoresAfp"></tbody>
                     </table>
+                    <div id="notasResumenTrabajadoresAfp" class="small text-muted mt-2 d-none"></div>
                 </div>
             </div>
         </div>
@@ -402,7 +404,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!resumen) return false;
         if (Math.abs(Number(resumen.diferencia_montos) || 0) >= 0.005) return true;
         const dif = resumen.diferencia_trabajadores || {};
-        return ['nuevos', 'cesados', 'antiguos', 'total'].some(
+        if (Array.isArray(resumen.detalle_diferencias_trabajadores) && resumen.detalle_diferencias_trabajadores.length) {
+            return true;
+        }
+        return ['nuevos', 'cesados', 'antiguos', 'total', 'total_planilla'].some(
             (k) => Number(dif[k] || 0) !== 0
         );
     }
@@ -450,11 +455,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         const card = document.getElementById('cardResumenAfpnet');
         const tbodyMontos = document.getElementById('tbodyResumenMontosAfp');
         const tbodyTrab = document.getElementById('tbodyResumenTrabajadoresAfp');
+        const notasTrab = document.getElementById('notasResumenTrabajadoresAfp');
 
         if (!resumen) {
             card.classList.add('d-none');
             tbodyMontos.innerHTML = '';
             tbodyTrab.innerHTML = '';
+            if (notasTrab) {
+                notasTrab.innerHTML = '';
+                notasTrab.classList.add('d-none');
+            }
             return;
         }
 
@@ -494,6 +504,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-num-resumen">${celdaNumeroResumen(plan.cesados, false)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(plan.antiguos, false)}</td>
                 <td class="col-num-resumen fw-bold">${celdaNumeroResumen(plan.total, false)}</td>
+                <td class="col-num-resumen fw-bold">${celdaNumeroResumen(plan.total_planilla, false)}</td>
             </tr>
             <tr>
                 <td>TRABAJADORES EN AFP NET</td>
@@ -501,6 +512,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-num-resumen">${celdaNumeroResumen(afp.cesados, false)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(afp.antiguos, false)}</td>
                 <td class="col-num-resumen fw-bold">${celdaNumeroResumen(afp.total, false)}</td>
+                <td class="col-num-resumen fw-bold">${celdaNumeroResumen(afp.total_planilla, false)}</td>
             </tr>
             <tr class="fila-resumen-destacada fila-resumen-total">
                 <td>DIFERENCIA (INDICAR DETALLE)</td>
@@ -508,8 +520,25 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.cesados, true)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.antiguos, true)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.total, true)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(dif.total_planilla, true)}</td>
             </tr>
         `;
+
+        const detalleDif = Array.isArray(resumen.detalle_diferencias_trabajadores)
+            ? resumen.detalle_diferencias_trabajadores
+            : [];
+        if (notasTrab) {
+            if (detalleDif.length) {
+                notasTrab.innerHTML = `
+                    <div class="fw-semibold mb-1">Detalle de diferencias por trabajador:</div>
+                    ${detalleDif.map((item) => `<div class="texto-diferencia">${escapeHtml(item.mensaje || '')}</div>`).join('')}
+                `;
+                notasTrab.classList.remove('d-none');
+            } else {
+                notasTrab.innerHTML = '';
+                notasTrab.classList.add('d-none');
+            }
+        }
 
         card.classList.remove('d-none');
         if (opts.scroll) {

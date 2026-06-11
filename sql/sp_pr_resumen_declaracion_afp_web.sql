@@ -134,26 +134,31 @@ BEGIN
             WHERE T.person = LTRIM(RTRIM(EC.Person))
       );
 
-    /* --- Resultset 2: conteo planilla --- */
+    /* --- Resultset 2: conteo planilla ---
+       Nuevos/cesados por bandera en el periodo (pueden coincidir en un mismo trabajador).
+       total_planilla = trabajadores únicos en la población. */
     SELECT
-        SUM(CASE WHEN clasificacion = 'NUEVO' THEN 1 ELSE 0 END) AS nuevos,
-        SUM(CASE WHEN clasificacion = 'CESADO' THEN 1 ELSE 0 END) AS cesados,
-        SUM(CASE WHEN clasificacion = 'ANTIGUO' THEN 1 ELSE 0 END) AS antiguos,
-        COUNT(*) AS total
+        SUM(CASE WHEN inicio_en_periodo = 1 THEN 1 ELSE 0 END) AS nuevos,
+        SUM(CASE WHEN cese_en_periodo = 1 THEN 1 ELSE 0 END) AS cesados,
+        SUM(CASE WHEN inicio_en_periodo = 0 AND cese_en_periodo = 0 THEN 1 ELSE 0 END) AS antiguos,
+        COUNT(*) AS total_planilla
     FROM (
         SELECT
             T.person,
             CASE
-                WHEN T.es_jubilado = 'S' THEN 'ANTIGUO'
+                WHEN T.es_jubilado = 'S' THEN 0
                 WHEN E.reentrydate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'NUEVO'
+                 AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
                 WHEN E.reentrydate IS NULL
                  AND E.entrydate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'NUEVO'
+                 AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 1
+                ELSE 0
+            END AS inicio_en_periodo,
+            CASE
                 WHEN E.ceasedate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'CESADO'
-                ELSE 'ANTIGUO'
-            END AS clasificacion
+                 AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 1
+                ELSE 0
+            END AS cese_en_periodo
         FROM #TrabajadoresPlanilla T
             INNER JOIN PR_Employee E (NOLOCK)
                 ON E.person = T.person

@@ -58,7 +58,11 @@ BEGIN
     SELECT
         E.person,
         LTRIM(RTRIM(ISNULL(F.description, ''))) AS afp_description,
-        LTRIM(RTRIM(ISNULL(A.afpcard, ''))) AS cuspp,
+        LTRIM(RTRIM(COALESCE(
+            NULLIF(LTRIM(RTRIM(ISNULL(A.afpcard, ''))), ''),
+            NULLIF(LTRIM(RTRIM(ISNULL(E.AFPCard, ''))), ''),
+            ''
+        ))) AS cuspp,
         LTRIM(RTRIM(ISNULL(P.documentnumber, ''))) AS documentnumber,
         LTRIM(RTRIM(ISNULL(P.lastname1, ''))) AS lastname1,
         LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,

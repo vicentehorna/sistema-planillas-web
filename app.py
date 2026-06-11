@@ -837,14 +837,61 @@ def _declaracion_afp_diferencia_activa(diferencia, clave):
     return _declaracion_afp_resumen_int((diferencia or {}).get(clave)) != 0
 
 
-def _declaracion_afp_mensaje_diferencia_trabajador(row, motivo):
-    dni = str(row.get('documentnumber') or '').strip()
-    nombre = _declaracion_afp_nombre_completo_trabajador(row)
-    etiqueta = f'DNI {dni} — {nombre}' if dni else nombre
+def _declaracion_afp_flag_si(valor):
+    if valor in (1, '1', True):
+        return True
+    return str(valor or '').strip().upper() in ('S', 'Y', '1')
+
+
+def _declaracion_afp_etiqueta_trabajador_datos(documentnumber, nombre):
+    dni = str(documentnumber or '').strip()
+    nombre = str(nombre or '').strip()
+    if dni and nombre:
+        return f'DNI {dni} — {nombre}'
+    return dni or nombre or 'Trabajador'
+
+
+def _declaracion_afp_mensaje_diferencia_trabajador(documentnumber, nombre, motivo):
+    etiqueta = _declaracion_afp_etiqueta_trabajador_datos(documentnumber, nombre)
     return f'Trabajador {etiqueta}: {motivo}'
 
 
-def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia):
+def _declaracion_afp_nombre_completo_desde_partes(row):
+    partes = [
+        str(row.get('lastname1') or '').strip(),
+        str(row.get('lastname2') or '').strip(),
+        str(row.get('names') or '').strip(),
+    ]
+    nombre = ' '.join(p for p in partes if p)
+    return nombre or _declaracion_afp_etiqueta_trabajador(row)
+
+
+def _declaracion_afp_flags_afpnet(row):
+    return (
+        _declaracion_afp_inicio_relacion_mes(row),
+        _declaracion_afp_cese_relacion_mes(row),
+    )
+
+
+def _declaracion_afp_flags_planilla(reg):
+    es_jubilado = str(reg.get('es_jubilado') or '').strip().upper() == 'S'
+    inicio = (not es_jubilado) and _declaracion_afp_flag_si(reg.get('inicio_en_periodo'))
+    cese = _declaracion_afp_flag_si(reg.get('cese_en_periodo'))
+    return inicio, cese
+
+
+def _declaracion_afp_describe_flags(inicio, cese):
+    partes = []
+    if inicio:
+        partes.append('nuevo')
+    if cese:
+        partes.append('cesado')
+    if not partes:
+        partes.append('antiguo')
+    return ' y '.join(partes)
+
+
+def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia, planilla_trabajadores=None):
     """Identifica trabajadores que explican diferencias entre planilla y AFPnet."""
     dif = diferencia or {}
     claves = ('nuevos', 'cesados', 'antiguos', 'total', 'total_planilla')
@@ -854,67 +901,126 @@ def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia):
     detalles = []
     vistos = set()
 
-    def agregar(row, motivo):
-        clave = (str(row.get('person') or '').strip(), motivo)
+    def agregar(person, documentnumber, nombre, motivo):
+        person_key = str(person or '').strip()
+        clave = (person_key, motivo)
         if clave in vistos:
             return
         vistos.add(clave)
         detalles.append({
-            'person': _jsonable_value(row.get('person')),
-            'documentnumber': _jsonable_value(row.get('documentnumber')),
-            'nombre': _declaracion_afp_nombre_completo_trabajador(row),
-            'mensaje': _declaracion_afp_mensaje_diferencia_trabajador(row, motivo),
+            'person': _jsonable_value(person),
+            'documentnumber': _jsonable_value(documentnumber),
+            'nombre': nombre,
+            'mensaje': _declaracion_afp_mensaje_diferencia_trabajador(documentnumber, nombre, motivo),
         })
 
     filas = filas or []
+    filas_por_persona = {}
+    for row in filas:
+        person = str(row.get('person') or '').strip()
+        if person:
+            filas_por_persona[person] = row
+
+    planilla_por_persona = {}
+    for reg in planilla_trabajadores or []:
+        person = str(reg.get('person') or '').strip()
+        if person:
+            planilla_por_persona[person] = reg
+
+    personas_planilla = set(planilla_por_persona)
+    personas_afpnet = set(filas_por_persona)
+    solo_planilla = personas_planilla - personas_afpnet
+    solo_afpnet = personas_afpnet - personas_planilla
     overlap_rows = [r for r in filas if _declaracion_afp_ingreso_cese_mismo_mes(r)]
 
-    if _declaracion_afp_diferencia_activa(dif, 'total_planilla') or _declaracion_afp_diferencia_activa(dif, 'total'):
-        objetivo = abs(_declaracion_afp_resumen_int(dif.get('total_planilla'))) or abs(
-            _declaracion_afp_resumen_int(dif.get('total'))
+    def aplica_diferencia_categoria(inicio, cese):
+        if _declaracion_afp_diferencia_activa(dif, 'total'):
+            return True
+        if _declaracion_afp_diferencia_activa(dif, 'total_planilla'):
+            return True
+        if inicio and _declaracion_afp_diferencia_activa(dif, 'nuevos'):
+            return True
+        if cese and _declaracion_afp_diferencia_activa(dif, 'cesados'):
+            return True
+        if not inicio and not cese and _declaracion_afp_diferencia_activa(dif, 'antiguos'):
+            return True
+        return False
+
+    for person in sorted(solo_planilla):
+        reg = planilla_por_persona[person]
+        inicio, cese = _declaracion_afp_flags_planilla(reg)
+        if not aplica_diferencia_categoria(inicio, cese):
+            continue
+        agregar(
+            person,
+            reg.get('documentnumber'),
+            _declaracion_afp_nombre_completo_desde_partes(reg),
+            'está en la planilla del periodo pero no aparece en el listado AFPnet '
+            f'(se contabiliza como {_declaracion_afp_describe_flags(inicio, cese)} en planilla).',
         )
-        if overlap_rows and (not objetivo or len(overlap_rows) <= objetivo):
+
+    for person in sorted(solo_afpnet):
+        row = filas_por_persona[person]
+        inicio, cese = _declaracion_afp_flags_afpnet(row)
+        if not aplica_diferencia_categoria(inicio, cese):
+            continue
+        agregar(
+            person,
+            row.get('documentnumber'),
+            _declaracion_afp_nombre_completo_trabajador(row),
+            'aparece en el listado AFPnet pero no en la población del resumen de planilla '
+            f'(se contabiliza como {_declaracion_afp_describe_flags(inicio, cese)} en AFPnet).',
+        )
+
+    if (
+        not solo_planilla
+        and not solo_afpnet
+        and overlap_rows
+        and (
+            _declaracion_afp_diferencia_activa(dif, 'total_planilla')
+            or _declaracion_afp_diferencia_activa(dif, 'total')
+        )
+    ):
+        objetivo = abs(_declaracion_afp_resumen_int(dif.get('total_planilla')))
+        if not objetivo:
+            objetivo = abs(_declaracion_afp_resumen_int(dif.get('total')))
+        if objetivo and len(overlap_rows) == objetivo:
+            motivo_ingreso_cese_mismo_mes = (
+                'ingresó y cesó el mismo mes (se contabiliza en nuevos y en cesados; '
+                'genera diferencia en Total Planilla).'
+            )
             for row in overlap_rows:
                 agregar(
-                    row,
-                    'ingresó y cesó el mismo mes (se contabiliza en nuevos y en cesados; genera diferencia en Total Planilla).',
+                    str(row.get('person') or '').strip(),
+                    row.get('documentnumber'),
+                    _declaracion_afp_nombre_completo_trabajador(row),
+                    motivo_ingreso_cese_mismo_mes,
                 )
 
-    categorias = (
-        (
-            'nuevos',
-            lambda r: (
-                _declaracion_afp_inicio_relacion_mes(r)
-                and not _declaracion_afp_cese_relacion_mes(r)
-            ),
-            'inició relación laboral en el periodo (diferencia en nuevos).',
-        ),
-        (
-            'cesados',
-            lambda r: (
-                _declaracion_afp_cese_relacion_mes(r)
-                and not _declaracion_afp_inicio_relacion_mes(r)
-            ),
-            'cesó relación laboral en el periodo (diferencia en cesados).',
-        ),
-        (
-            'antiguos',
-            lambda r: (
-                not _declaracion_afp_inicio_relacion_mes(r)
-                and not _declaracion_afp_cese_relacion_mes(r)
-            ),
-            'trabajador antiguo en el periodo (diferencia en antiguos).',
-        ),
-    )
-
-    for clave, filtro, motivo in categorias:
-        if not _declaracion_afp_diferencia_activa(dif, clave):
+    for person in sorted(personas_planilla & personas_afpnet):
+        reg = planilla_por_persona[person]
+        row = filas_por_persona[person]
+        flags_planilla = _declaracion_afp_flags_planilla(reg)
+        flags_afpnet = _declaracion_afp_flags_afpnet(row)
+        if flags_planilla == flags_afpnet:
             continue
-        candidatos = [r for r in filas if filtro(r)]
-        objetivo = abs(_declaracion_afp_resumen_int(dif.get(clave)))
-        if objetivo and len(candidatos) == objetivo:
-            for row in candidatos:
-                agregar(row, motivo)
+        objetivo = 0
+        if flags_planilla[0] != flags_afpnet[0] and _declaracion_afp_diferencia_activa(dif, 'nuevos'):
+            objetivo = abs(_declaracion_afp_resumen_int(dif.get('nuevos')))
+        elif flags_planilla[1] != flags_afpnet[1] and _declaracion_afp_diferencia_activa(dif, 'cesados'):
+            objetivo = abs(_declaracion_afp_resumen_int(dif.get('cesados')))
+        elif _declaracion_afp_diferencia_activa(dif, 'antiguos'):
+            objetivo = abs(_declaracion_afp_resumen_int(dif.get('antiguos')))
+        if not objetivo:
+            continue
+        agregar(
+            person,
+            row.get('documentnumber'),
+            _declaracion_afp_nombre_completo_trabajador(row),
+            'clasificación distinta: planilla '
+            f'{_declaracion_afp_describe_flags(*flags_planilla)} vs AFPnet '
+            f'{_declaracion_afp_describe_flags(*flags_afpnet)}.',
+        )
 
     return detalles
 
@@ -951,7 +1057,8 @@ def _declaracion_afp_ejecutar_resumen_planilla(cursor, p):
     sets = _dicts_collect_nonempty_resultsets(cursor)
     montos_rows = sets[0] if len(sets) > 0 else []
     planilla_row = sets[1][0] if len(sets) > 1 and sets[1] else {}
-    return montos_rows, planilla_row
+    planilla_trabajadores = sets[2] if len(sets) > 2 else []
+    return montos_rows, planilla_row, planilla_trabajadores
 
 
 def _declaracion_afp_resumen_int(valor):
@@ -961,7 +1068,7 @@ def _declaracion_afp_resumen_int(valor):
         return 0
 
 
-def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas):
+def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas, planilla_trabajadores=None):
     montos = []
     total_planilla = 0.0
     for r in montos_rows or []:
@@ -1001,7 +1108,9 @@ def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas):
         'total': planilla['total'] - afpnet['total'],
         'total_planilla': planilla['total_planilla'] - afpnet['total_planilla'],
     }
-    detalle_diferencias = _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia)
+    detalle_diferencias = _declaracion_afp_detalle_diferencias_trabajadores(
+        filas, diferencia, planilla_trabajadores
+    )
     return {
         'montos_proceso': montos,
         'total_afecto_planilla': total_planilla,
@@ -2581,8 +2690,10 @@ def api_declaracion_afp_validar_resumen():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
-        resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
+        montos_rows, planilla_row, planilla_trabajadores = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
+        resumen = _declaracion_afp_build_resumen(
+            montos_rows, planilla_row, filas, planilla_trabajadores
+        )
         validaciones = _declaracion_afp_validar_regimen_pension_planilla(cursor, p)
         validaciones.extend(_declaracion_afp_validar_jubilados_filas(filas))
         return jsonify({
@@ -2621,8 +2732,10 @@ def api_declaracion_afp_generar_xlsx():
         if not filas:
             return jsonify({"error": "No hay registros para generar el archivo AFPnet."}), 400
 
-        montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
-        resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
+        montos_rows, planilla_row, planilla_trabajadores = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
+        resumen = _declaracion_afp_build_resumen(
+            montos_rows, planilla_row, filas, planilla_trabajadores
+        )
         filas, validaciones = _declaracion_afp_validaciones_completas(cursor, filas, p)
 
         ruc = _obtener_ruc_compania(cursor, p['cia']) or '00000000000'

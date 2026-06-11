@@ -134,7 +134,11 @@ BEGIN
         ISNULL(EPC.ConceptValue, 0),
         ISNULL(EPC.ConceptValueLo, 0),
         ISNULL(EPC.ConceptValueEx, 0),
-        LTRIM(RTRIM(EP.AFPCard)),
+        LTRIM(RTRIM(COALESCE(
+            NULLIF(LTRIM(RTRIM(ISNULL(EP.AFPCard, ''))), ''),
+            NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+            ''
+        ))),
         EP.CeaseDate,
         EP.EntryDate,
         LTRIM(RTRIM(EP.AFP)),
@@ -148,6 +152,9 @@ BEGIN
            AND EPC.PRPeriod = EP.PRPeriod
            AND EPC.Person = EP.Person
            AND EPC.ProcessType = EP.ProcessType
+        INNER JOIN PR_Employee EM (NOLOCK)
+            ON EPC.Company = EM.Company
+           AND EPC.Person = EM.person
         INNER JOIN #PlanillasProcesar PP
             ON EPC.PayRollType = PP.payrolltype
            AND EPC.ProcessType = PP.processtype
@@ -227,7 +234,11 @@ BEGIN
             S.costcentername,
             S.payrolltype,
             EM.ceasedate,
-            S.afpcard,
+            LTRIM(RTRIM(COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(S.afpcard, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+                ''
+            ))),
             ISNULL(EM.reentrydate, EM.entrydate) AS entrydate
         FROM (
             SELECT

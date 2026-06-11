@@ -6,6 +6,7 @@
     Resultset 1 — Montos TOTAL_REM_AFP por proceso (FIN_DE_MES, LIQUIDACION, SEMANAL).
               Jubilados (FLAG_JUBILADO) no suman: en AFPnet su remuneración asegurable es 0.
     Resultset 2 — Conteo trabajadores en planilla (nuevos / cesados / antiguos).
+    Resultset 3 — Detalle trabajadores en planilla (para identificar diferencias AFPnet).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_resumen_declaracion_afp_web]
     @cia              VARCHAR(10),
@@ -164,6 +165,36 @@ BEGIN
                 ON E.person = T.person
                AND E.company = @cia
     ) X;
+
+    /* --- Resultset 3: detalle población planilla --- */
+    SELECT
+        LTRIM(RTRIM(T.person)) AS person,
+        LTRIM(RTRIM(ISNULL(P.documentnumber, ''))) AS documentnumber,
+        LTRIM(RTRIM(ISNULL(P.lastname1, ''))) AS lastname1,
+        LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
+        LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
+        T.es_jubilado,
+        CASE
+            WHEN T.es_jubilado = 'S' THEN 0
+            WHEN E.reentrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
+            WHEN E.reentrydate IS NULL
+             AND E.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 1
+            ELSE 0
+        END AS inicio_en_periodo,
+        CASE
+            WHEN E.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 1
+            ELSE 0
+        END AS cese_en_periodo
+    FROM #TrabajadoresPlanilla T
+        INNER JOIN PR_Employee E (NOLOCK)
+            ON E.person = T.person
+           AND E.company = @cia
+        INNER JOIN sy_person P (NOLOCK)
+            ON P.person = T.person
+    ORDER BY P.lastname1, P.lastname2, P.name1, T.person;
 
     DROP TABLE #TrabajadoresPlanilla;
 END

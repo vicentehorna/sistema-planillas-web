@@ -524,13 +524,28 @@ def _fecha_ddmmyyyy_en_periodo(fecha_txt, period_yyyymm):
     return f'{anio}{mes}' == period
 
 
-def _declaracion_afp_etiqueta_fila(row, fila=None):
+def _declaracion_afp_nombre_completo_trabajador(row):
     partes = [
-        str(row.get('documentnumber') or '').strip(),
+        str(row.get('lastname1') or '').strip(),
+        str(row.get('lastname2') or '').strip(),
         str(row.get('names') or '').strip(),
-        str(row.get('person') or '').strip(),
     ]
-    etiqueta = ' — '.join([p for p in partes if p]) or 'Registro'
+    nombre = ' '.join(p for p in partes if p)
+    if nombre:
+        return nombre
+    return str(row.get('nombre') or '').strip()
+
+
+def _declaracion_afp_etiqueta_trabajador(row):
+    dni = str(row.get('documentnumber') or '').strip()
+    nombre = _declaracion_afp_nombre_completo_trabajador(row)
+    if dni and nombre:
+        return f'DNI {dni} — {nombre}'
+    return dni or nombre or 'Trabajador'
+
+
+def _declaracion_afp_etiqueta_fila(row, fila=None):
+    etiqueta = _declaracion_afp_etiqueta_trabajador(row)
     if fila is not None:
         return f'Fila {fila} ({etiqueta})'
     return etiqueta
@@ -581,23 +596,6 @@ def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
                 f'({ceasedate}) cae en el periodo {period[:4]}-{period[4:6]}.'
             )
 
-    try:
-        remuneracion = round(float(row.get('remuneracion') or 0), 2)
-        seguro = round(float(row.get('seguro') or 0), 2)
-        seguro_esperado = round(float(row.get('seguro_esperado') or 0), 2)
-    except (TypeError, ValueError):
-        remuneracion, seguro, seguro_esperado = 0.0, 0.0, 0.0
-    if remuneracion > 0 and abs(seguro - seguro_esperado) > 0.01:
-        try:
-            topafp = float(row.get('topafp') or 0)
-            pct = float(row.get('insuredpercentage') or 0)
-        except (TypeError, ValueError):
-            topafp, pct = 0.0, 0.0
-        errores.append(
-            f'{etiqueta}: Seguro registrado ({seguro:.2f}) no coincide con el cálculo '
-            f'topado ({seguro_esperado:.2f}). Tope AFP: {topafp:.2f}, tasa seguro: {pct:.4f}%.'
-        )
-
     return errores
 
 
@@ -636,23 +634,6 @@ def _declaracion_afp_validar_regimen_pension_planilla(cursor, p):
             f'{etiqueta}: sin régimen de pensión en la planilla (debe tener ONP o AFP).'
         )
     return mensajes
-
-
-def _declaracion_afp_etiqueta_trabajador(row):
-    nombre = str(row.get('nombre') or '').strip()
-    if not nombre:
-        partes_nombre = [
-            str(row.get('lastname1') or '').strip(),
-            str(row.get('lastname2') or '').strip(),
-            str(row.get('names') or '').strip(),
-        ]
-        nombre = ' '.join(p for p in partes_nombre if p)
-    partes = [
-        str(row.get('documentnumber') or '').strip(),
-        nombre,
-        str(row.get('person') or '').strip(),
-    ]
-    return ' — '.join(p for p in partes if p) or 'Trabajador'
 
 
 def _declaracion_afp_es_jubilado_afpnet(row):
@@ -819,18 +800,6 @@ def _declaracion_afp_ingreso_cese_mismo_mes(row):
         _declaracion_afp_inicio_relacion_mes(row)
         and _declaracion_afp_cese_relacion_mes(row)
     )
-
-
-def _declaracion_afp_nombre_completo_trabajador(row):
-    partes = [
-        str(row.get('lastname1') or '').strip(),
-        str(row.get('lastname2') or '').strip(),
-        str(row.get('names') or '').strip(),
-    ]
-    nombre = ' '.join(p for p in partes if p)
-    if nombre:
-        return nombre
-    return str(row.get('nombre') or '').strip() or _declaracion_afp_etiqueta_trabajador(row)
 
 
 def _declaracion_afp_diferencia_activa(diferencia, clave):

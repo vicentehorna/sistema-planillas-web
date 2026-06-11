@@ -97,7 +97,29 @@
      * @param {boolean} incluyeEmpleado
      * @param {boolean} incluyeBancoHaberes
      */
-    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes) {
+    function restaurarFechaIngresoDesdeFiltros(filtros) {
+        const chkFechaIngreso = document.getElementById('chkFechaIngreso');
+        const txtFechaIngresoDesde = document.getElementById('txtFechaIngresoDesde');
+        const txtFechaIngresoHasta = document.getElementById('txtFechaIngresoHasta');
+        const usarRango = filtros && filtros.fechaIngresoActivo === true;
+        if (chkFechaIngreso) {
+            chkFechaIngreso.checked = usarRango;
+        }
+        if (txtFechaIngresoDesde) {
+            txtFechaIngresoDesde.disabled = !usarRango;
+            txtFechaIngresoDesde.value = usarRango && filtros.fechaIngresoDesde
+                ? String(filtros.fechaIngresoDesde).trim()
+                : '';
+        }
+        if (txtFechaIngresoHasta) {
+            txtFechaIngresoHasta.disabled = !usarRango;
+            txtFechaIngresoHasta.value = usarRango && filtros.fechaIngresoHasta
+                ? String(filtros.fechaIngresoHasta).trim()
+                : '';
+        }
+    }
+
+    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso) {
         function guardar() {
             try {
                 const estado = {
@@ -112,6 +134,11 @@
                 }
                 if (incluyeBancoHaberes) {
                     estado.salarybank = val('cboBancoHaberes');
+                }
+                if (incluyeFechaIngreso) {
+                    estado.fechaIngresoActivo = !!document.getElementById('chkFechaIngreso')?.checked;
+                    estado.fechaIngresoDesde = val('txtFechaIngresoDesde');
+                    estado.fechaIngresoHasta = val('txtFechaIngresoHasta');
                 }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
@@ -209,6 +236,10 @@
                 }
             }
 
+            if (incluyeFechaIngreso) {
+                restaurarFechaIngresoDesdeFiltros(filtros);
+            }
+
             guardar();
             return true;
         }
@@ -225,6 +256,14 @@
             if (incluyeBancoHaberes) {
                 const b = document.getElementById('cboBancoHaberes');
                 if (b) b.addEventListener('change', guardar);
+            }
+            if (incluyeFechaIngreso) {
+                const chk = document.getElementById('chkFechaIngreso');
+                if (chk) chk.addEventListener('change', guardar);
+                ['txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('change', guardar);
+                });
             }
         }
 
@@ -1353,7 +1392,7 @@
             return crearPersistenciaReporte(STORAGE_KEY_PROMEDIO_LIQ, true);
         },
         planillaVertical: function () {
-            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true);
+            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true);
         },
         vacacionesDetalle: function () {
             return crearPersistenciaVacacionesDetalle();

@@ -84,7 +84,7 @@ BEGIN
     ) M ON M.proceso = P.proceso
     ORDER BY P.orden;
 
-    /* --- Población planilla: trabajadores con AFP (TOTAL_REM_AFP + jubilados) --- */
+    /* --- Población planilla: misma base que listado AFPnet (PR_EmployeeAFP + jubilados) --- */
     CREATE TABLE #TrabajadoresPlanilla (
         person VARCHAR(20) NOT NULL PRIMARY KEY,
         es_jubilado CHAR(1) NOT NULL DEFAULT 'N'
@@ -92,21 +92,24 @@ BEGIN
 
     INSERT INTO #TrabajadoresPlanilla (person, es_jubilado)
     SELECT DISTINCT
-        LTRIM(RTRIM(EPC.Person)),
+        LTRIM(RTRIM(A.person)),
         'N'
-    FROM PR_EmployeePayRollConcept EPC (NOLOCK)
-        INNER JOIN PR_Concept C (NOLOCK)
-            ON EPC.Concept = C.Concept
-           AND EPC.Company = C.Company
+    FROM PR_EmployeeAFP A (NOLOCK)
+        INNER JOIN PR_EmployeeAFPHeader H (NOLOCK)
+            ON H.company = A.company
+           AND H.prperiod = A.prperiod
+           AND H.afp = A.afp
+           AND H.replicationunit = A.replicationunit
+           AND H.costcenter = A.costcenter
+           AND H.payrolltype = A.payrolltype
         INNER JOIN PR_Employee E (NOLOCK)
-            ON E.person = EPC.Person
-           AND E.company = EPC.Company
-    WHERE EPC.Company = @cia
-      AND LEFT(EPC.PRPeriod, 6) = @period
-      AND C.FormulaCode = 'TOTAL_REM_AFP'
-      AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
+            ON E.person = A.person
+           AND E.company = A.company
+    WHERE A.company = @cia
+      AND LEFT(A.prperiod, 6) = @period
       AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
-      AND (@afp_all = 'Y' OR LTRIM(RTRIM(E.AFP)) = @afp);
+      AND (@payroll_all = 'Y' OR H.payrolltype = @payroll)
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(A.afp)) = @afp);
 
     INSERT INTO #TrabajadoresPlanilla (person, es_jubilado)
     SELECT DISTINCT
@@ -147,7 +150,6 @@ BEGIN
         SELECT
             T.person,
             CASE
-                WHEN T.es_jubilado = 'S' THEN 0
                 WHEN E.reentrydate IS NOT NULL
                  AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
                 WHEN E.reentrydate IS NULL
@@ -175,7 +177,6 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
         T.es_jubilado,
         CASE
-            WHEN T.es_jubilado = 'S' THEN 0
             WHEN E.reentrydate IS NOT NULL
              AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
             WHEN E.reentrydate IS NULL

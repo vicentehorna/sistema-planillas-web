@@ -273,11 +273,36 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.lastname1, ''))) AS lastname1,
         LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
-        '' AS fecha_cese,
-        CASE WHEN E.entrydate IS NULL THEN '' ELSE CONVERT(CHAR(10), E.entrydate, 103) END AS entrydate,
-        CASE WHEN ISNULL(E.ceasedate, '') = '' THEN '' ELSE CONVERT(CHAR(10), E.ceasedate, 103) END AS ceasedate,
-        'N' AS inicio_relacion,
-        'N' AS cese_relacion,
+        CASE
+            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate))))
+                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate)))), 2) <> LEFT(@period, 6)
+            THEN ''
+            ELSE CASE
+                WHEN ISNULL(E.ceasedate, '') = '' THEN '01 ' + CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+                ELSE '02 ' + CONVERT(CHAR(10), E.ceasedate, 103)
+            END
+        END AS fecha_cese,
+        CASE
+            WHEN ISNULL(E.reentrydate, E.entrydate) IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+        END AS entrydate,
+        CASE
+            WHEN ISNULL(E.ceasedate, '') = '' THEN ''
+            ELSE CONVERT(CHAR(10), E.ceasedate, 103)
+        END AS ceasedate,
+        CASE
+            WHEN E.reentrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'S'
+            WHEN E.reentrydate IS NULL
+             AND E.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
+            ELSE 'N'
+        END AS inicio_relacion,
+        CASE
+            WHEN E.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
+            ELSE 'N'
+        END AS cese_relacion,
         CASE
             WHEN ISNULL((
                 SELECT SUM(MR.Days)

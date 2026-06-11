@@ -15,6 +15,9 @@
       @period      — periodo (YYYYMM o YYYYMMDD; filtra por LEFT 6)
       @person      — código persona; '0' = todos
       @salarybank  — banco haberes; '' = todos
+      @fecha_ingreso_all   — Y = todas las fechas, N = filtrar por rango
+      @fecha_ingreso_desde — YYYY-MM-DD (fecha efectiva ISNULL(ReEntryDate, EntryDate))
+      @fecha_ingreso_hasta — YYYY-MM-DD
 
     Resultado final: una fila por trabajador con columnas fijas + concept01..concept65.
 
@@ -33,10 +36,25 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @process     VARCHAR(20),
     @period      VARCHAR(8),
     @person      VARCHAR(20),
-    @salarybank  VARCHAR(20)
+    @salarybank  VARCHAR(20),
+    @fecha_ingreso_all    CHAR(1)     = 'Y',
+    @fecha_ingreso_desde  VARCHAR(10) = '',
+    @fecha_ingreso_hasta  VARCHAR(10) = ''
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    SET @fecha_ingreso_all = UPPER(LTRIM(RTRIM(ISNULL(@fecha_ingreso_all, 'Y'))));
+    IF @fecha_ingreso_all NOT IN ('Y', 'N') SET @fecha_ingreso_all = 'Y';
+    SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
+    SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
+
+    DECLARE @fd DATE = NULL;
+    DECLARE @fh DATE = NULL;
+    IF @fecha_ingreso_desde <> ''
+        SET @fd = TRY_CONVERT(DATE, @fecha_ingreso_desde, 23);
+    IF @fecha_ingreso_hasta <> ''
+        SET @fh = TRY_CONVERT(DATE, @fecha_ingreso_hasta, 23);
 
     DECLARE @personid     VARCHAR(20);
     DECLARE @name         VARCHAR(255);
@@ -114,6 +132,16 @@ BEGIN
       AND EPC.ProcessType = @process
       AND (@salarybank = '' OR E.SalaryBank = @salarybank)
       AND (@person = '0' OR SY_PERSON.person = @person)
+      AND (
+            @fecha_ingreso_all = 'Y'
+         OR (
+                ISNULL(E.ReEntryDate, E.EntryDate) IS NOT NULL
+            AND (@fd IS NULL
+                 OR CAST(ISNULL(E.ReEntryDate, E.EntryDate) AS DATE) >= @fd)
+            AND (@fh IS NULL
+                 OR CAST(ISNULL(E.ReEntryDate, E.EntryDate) AS DATE) <= @fh)
+            )
+      )
       AND epc.Person <> 'T3549'
     GROUP BY
         PR.description,

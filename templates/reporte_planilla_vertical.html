@@ -89,6 +89,26 @@
         background-color: #ffdf7e !important;
         color: #4a3d00;
     }
+
+    .filtro-fecha-ingreso {
+        width: auto;
+        max-width: 100%;
+    }
+
+    .filtro-fecha-ingreso .input-fecha-ingreso {
+        width: 6.85rem;
+        min-width: 6.85rem;
+        max-width: 6.85rem;
+        flex: 0 0 6.85rem;
+        padding: 0.2rem 0.3rem;
+        font-size: 0.78rem;
+    }
+
+    .filtro-fecha-ingreso .input-fecha-ingreso::-webkit-calendar-picker-indicator {
+        margin: 0;
+        padding: 0;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -131,6 +151,18 @@
                 <select id="cboBancoHaberes" class="form-select form-select-sm" disabled>
                     <option value="" selected>Todos</option>
                 </select>
+            </div>
+            <div class="col-12 col-md-auto filtro-fecha-ingreso">
+                <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
+                <div class="d-flex align-items-center flex-wrap gap-1">
+                    <div class="form-check mb-0 me-1">
+                        <input class="form-check-input" type="checkbox" id="chkFechaIngreso" value="1">
+                        <label class="form-check-label small" for="chkFechaIngreso">Filtrar</label>
+                    </div>
+                    <input type="date" id="txtFechaIngresoDesde" class="form-control form-control-sm input-fecha-ingreso" title="Desde" disabled>
+                    <span class="small text-muted px-0">—</span>
+                    <input type="date" id="txtFechaIngresoHasta" class="form-control form-control-sm input-fecha-ingreso" title="Hasta" disabled>
+                </div>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
@@ -254,6 +286,52 @@ document.addEventListener('DOMContentLoaded', async function () {
         return opt ? opt.textContent.trim() : '';
     }
 
+    function rangoMesActual() {
+        const hoy = new Date();
+        const y = hoy.getFullYear();
+        const m = hoy.getMonth();
+        const pad = (n) => String(n).padStart(2, '0');
+        const ultimoDia = new Date(y, m + 1, 0).getDate();
+        return {
+            desde: `${y}-${pad(m + 1)}-01`,
+            hasta: `${y}-${pad(m + 1)}-${pad(ultimoDia)}`
+        };
+    }
+
+    function actualizarFiltroFechaIngreso(aplicarMesActual) {
+        const usarRango = document.getElementById('chkFechaIngreso').checked;
+        const desdeEl = document.getElementById('txtFechaIngresoDesde');
+        const hastaEl = document.getElementById('txtFechaIngresoHasta');
+        desdeEl.disabled = !usarRango;
+        hastaEl.disabled = !usarRango;
+        if (!usarRango) {
+            desdeEl.value = '';
+            hastaEl.value = '';
+            return;
+        }
+        const r = rangoMesActual();
+        if (aplicarMesActual) {
+            desdeEl.value = r.desde;
+            hastaEl.value = r.hasta;
+        } else {
+            if (!desdeEl.value.trim()) desdeEl.value = r.desde;
+            if (!hastaEl.value.trim()) hastaEl.value = r.hasta;
+        }
+    }
+
+    function leerFiltroFechaIngreso() {
+        const activo = document.getElementById('chkFechaIngreso').checked;
+        const desde = document.getElementById('txtFechaIngresoDesde').value.trim();
+        const hasta = document.getElementById('txtFechaIngresoHasta').value.trim();
+        return { activo, desde, hasta };
+    }
+
+    function etiquetaFechaIngresoFiltro(filtro) {
+        if (!filtro || !filtro.activo) return 'Todas';
+        if (filtro.desde && filtro.hasta) return `${filtro.desde} — ${filtro.hasta}`;
+        return 'Por rango';
+    }
+
     async function exportPlanillaVerticalExcel(payload, meta) {
         if (typeof ExcelJS === 'undefined') {
             alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
@@ -301,10 +379,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             'Tipo planilla', meta.tipoPlanilla || '',
             'Proceso', meta.proceso || '',
             'Periodo', meta.periodo || '',
-            'Banco haberes', meta.bancoHaberes || ''
+            'Banco haberes', meta.bancoHaberes || '',
+            'Fecha ingreso', meta.fechaIngreso || ''
         ]);
         metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            if (colNumber <= 8) {
+            if (colNumber <= 10) {
                 cell.fill = fill(F.meta);
                 cell.font = { bold: colNumber % 2 === 1 };
                 cell.alignment = alignCenter;
@@ -461,12 +540,33 @@ document.addEventListener('DOMContentLoaded', async function () {
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
         const salarybank = document.getElementById('cboBancoHaberes').value.trim();
+        const fechaIngreso = leerFiltroFechaIngreso();
+        if (fechaIngreso.activo) {
+            if (!fechaIngreso.desde || !fechaIngreso.hasta) {
+                alert('Indique fecha de ingreso desde y hasta.');
+                return;
+            }
+            if (fechaIngreso.desde > fechaIngreso.hasta) {
+                alert('La fecha de ingreso desde no puede ser mayor que hasta.');
+                return;
+            }
+        }
 
         try {
             const res = await fetch('/reporte_planilla_vertical', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payroll_type, process, period, person, salarybank })
+                body: JSON.stringify({
+                    cia,
+                    payroll_type,
+                    process,
+                    period,
+                    person,
+                    salarybank,
+                    fecha_ingreso_activo: fechaIngreso.activo,
+                    fecha_ingreso_desde: fechaIngreso.desde,
+                    fecha_ingreso_hasta: fechaIngreso.hasta
+                })
             });
             const payload = await res.json();
             if (!res.ok) {
@@ -494,7 +594,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
                     proceso: selectedText('cboProceso'),
                     periodo: selectedText('cboPeriodo'),
-                    bancoHaberes: selectedText('cboBancoHaberes')
+                    bancoHaberes: selectedText('cboBancoHaberes'),
+                    fechaIngreso: etiquetaFechaIngresoFiltro(fechaIngreso)
                 }
             };
             document.getElementById('btnExportExcel').disabled = false;
@@ -658,6 +759,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         } else {
             cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
             cboPeriodo.disabled = true;
+        }
+    });
+
+    actualizarFiltroFechaIngreso();
+    document.getElementById('chkFechaIngreso').addEventListener('change', function () {
+        actualizarFiltroFechaIngreso(this.checked);
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+    ['txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', function () {
+                if (filtrosPersist) filtrosPersist.guardar();
+            });
         }
     });
 

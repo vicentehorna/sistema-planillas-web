@@ -843,8 +843,7 @@ def _declaracion_afp_flags_afpnet(row):
 
 
 def _declaracion_afp_flags_planilla(reg):
-    es_jubilado = str(reg.get('es_jubilado') or '').strip().upper() == 'S'
-    inicio = (not es_jubilado) and _declaracion_afp_flag_si(reg.get('inicio_en_periodo'))
+    inicio = _declaracion_afp_flag_si(reg.get('inicio_en_periodo'))
     cese = _declaracion_afp_flag_si(reg.get('cese_en_periodo'))
     return inicio, cese
 
@@ -860,11 +859,28 @@ def _declaracion_afp_describe_flags(inicio, cese):
     return ' y '.join(partes)
 
 
-def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia, planilla_trabajadores=None):
-    """Identifica trabajadores que explican diferencias entre planilla y AFPnet."""
+def _declaracion_afp_gap_total_vs_planilla(conteo):
+    """Diferencia interna: Total (suma categorías) menos Total Planilla (personas únicas)."""
+    c = conteo or {}
+    return (
+        _declaracion_afp_resumen_int(c.get('total'))
+        - _declaracion_afp_resumen_int(c.get('total_planilla'))
+    )
+
+
+def _declaracion_afp_detalle_diferencias_trabajadores(
+    filas, diferencia, planilla_trabajadores=None, planilla=None, afpnet=None,
+):
+    """Identifica trabajadores que explican diferencias planilla vs AFPnet o Total vs Total Planilla."""
     dif = diferencia or {}
     claves = ('nuevos', 'cesados', 'antiguos', 'total', 'total_planilla')
-    if not any(_declaracion_afp_diferencia_activa(dif, k) for k in claves):
+    gap_planilla = _declaracion_afp_gap_total_vs_planilla(planilla)
+    gap_afpnet = _declaracion_afp_gap_total_vs_planilla(afpnet)
+    hay_gap_interno = gap_planilla != 0 or gap_afpnet != 0
+    if (
+        not any(_declaracion_afp_diferencia_activa(dif, k) for k in claves)
+        and not hay_gap_interno
+    ):
         return []
 
     detalles = []
@@ -900,7 +916,18 @@ def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia, planill
     personas_afpnet = set(filas_por_persona)
     solo_planilla = personas_planilla - personas_afpnet
     solo_afpnet = personas_afpnet - personas_planilla
-    overlap_rows = [r for r in filas if _declaracion_afp_ingreso_cese_mismo_mes(r)]
+    overlap_personas = set()
+    for row in filas or []:
+        if _declaracion_afp_ingreso_cese_mismo_mes(row):
+            person = str(row.get('person') or '').strip()
+            if person:
+                overlap_personas.add(person)
+    for reg in planilla_trabajadores or []:
+        inicio, cese = _declaracion_afp_flags_planilla(reg)
+        if inicio and cese:
+            person = str(reg.get('person') or '').strip()
+            if person:
+                overlap_personas.add(person)
 
     def aplica_diferencia_categoria(inicio, cese):
         if _declaracion_afp_diferencia_activa(dif, 'total'):
@@ -941,28 +968,20 @@ def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia, planill
             f'(se contabiliza como {_declaracion_afp_describe_flags(inicio, cese)} en AFPnet).',
         )
 
-    if (
-        not solo_planilla
-        and not solo_afpnet
-        and overlap_rows
-        and (
-            _declaracion_afp_diferencia_activa(dif, 'total_planilla')
-            or _declaracion_afp_diferencia_activa(dif, 'total')
-        )
-    ):
-        objetivo = abs(_declaracion_afp_resumen_int(dif.get('total_planilla')))
-        if not objetivo:
-            objetivo = abs(_declaracion_afp_resumen_int(dif.get('total')))
-        if objetivo and len(overlap_rows) == objetivo:
+    if not solo_planilla and not solo_afpnet and overlap_personas and hay_gap_interno:
+        objetivo = abs(gap_planilla) or abs(gap_afpnet)
+        if not objetivo or len(overlap_personas) == objetivo:
             motivo_ingreso_cese_mismo_mes = (
                 'ingresó y cesó el mismo mes (se contabiliza en nuevos y en cesados; '
-                'genera diferencia en Total Planilla).'
+                'por eso Total supera a Total Planilla en 1).'
             )
-            for row in overlap_rows:
+            for person in sorted(overlap_personas):
+                row = filas_por_persona.get(person)
+                reg = planilla_por_persona.get(person)
                 agregar(
-                    str(row.get('person') or '').strip(),
-                    row.get('documentnumber'),
-                    _declaracion_afp_nombre_completo_trabajador(row),
+                    person,
+                    (row or reg or {}).get('documentnumber'),
+                    _declaracion_afp_nombre_completo_trabajador(row or reg or {}),
                     motivo_ingreso_cese_mismo_mes,
                 )
 
@@ -994,15 +1013,31 @@ def _declaracion_afp_detalle_diferencias_trabajadores(filas, diferencia, planill
     return detalles
 
 
+def _declaracion_afp_flags_por_persona(filas):
+    """Unifica banderas inicio/cese por trabajador (evita duplicar filas PR_EmployeeAFP)."""
+    flags = {}
+    for row in filas or []:
+        person = str(row.get('person') or '').strip()
+        if not person:
+            continue
+        inicio = _declaracion_afp_inicio_relacion_mes(row)
+        cese = _declaracion_afp_cese_relacion_mes(row)
+        if person not in flags:
+            flags[person] = {'inicio': inicio, 'ceso': cese}
+            continue
+        flags[person]['inicio'] = flags[person]['inicio'] or inicio
+        flags[person]['ceso'] = flags[person]['ceso'] or cese
+    return flags
+
+
 def _declaracion_afp_conteo_trabajadores_afpnet(filas):
     """AFPnet: nuevos/cesados por bandera S; total suma categorías (puede duplicar ingreso+ceso)."""
-    filas = filas or []
-    nuevos = sum(1 for r in filas if _declaracion_afp_inicio_relacion_mes(r))
-    cesados = sum(1 for r in filas if _declaracion_afp_cese_relacion_mes(r))
+    flags = _declaracion_afp_flags_por_persona(filas)
+    nuevos = sum(1 for f in flags.values() if f['inicio'])
+    cesados = sum(1 for f in flags.values() if f['ceso'])
     antiguos = sum(
-        1 for r in filas
-        if not _declaracion_afp_inicio_relacion_mes(r)
-        and not _declaracion_afp_cese_relacion_mes(r)
+        1 for f in flags.values()
+        if not f['inicio'] and not f['ceso']
     )
     total_sum = nuevos + cesados + antiguos
     return {
@@ -1010,7 +1045,7 @@ def _declaracion_afp_conteo_trabajadores_afpnet(filas):
         'cesados': cesados,
         'antiguos': antiguos,
         'total': total_sum,
-        'total_planilla': total_sum,
+        'total_planilla': len(flags),
     }
 
 
@@ -1078,7 +1113,7 @@ def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas, planilla_tr
         'total_planilla': planilla['total_planilla'] - afpnet['total_planilla'],
     }
     detalle_diferencias = _declaracion_afp_detalle_diferencias_trabajadores(
-        filas, diferencia, planilla_trabajadores
+        filas, diferencia, planilla_trabajadores, planilla=planilla, afpnet=afpnet,
     )
     return {
         'montos_proceso': montos,
@@ -4434,7 +4469,8 @@ def reporte_resumen_total_post():
 @login_required
 def reporte_planilla_vertical_post():
     """
-    sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank.
+    sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank,
+    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta.
     Cabeceras dinámicas desde xx_plamevertical2 + PR_Concept; datos desde xx_reporteplanilla.
     """
     body = request.get_json(silent=True) or {}
@@ -4444,11 +4480,17 @@ def reporte_planilla_vertical_post():
     period = _normalize_pr_period(body.get('period'))
     person = (body.get('person') or '0').strip() or '0'
     salarybank = str(body.get('salarybank') if body.get('salarybank') is not None else body.get('salary_bank') or '').strip()
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
     if not payroll_type or not process or not period:
         return jsonify({"error": "Debe indicar tipo de planilla, proceso y periodo."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
 
     static_headers_es = [
         'Código',
@@ -4487,9 +4529,16 @@ def reporte_planilla_vertical_post():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
+        fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
         cursor.execute(
-            "EXEC sp_pr_reporteplamevertical_web @cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?",
-            (cia, payroll_type, process, period, person, salarybank),
+            "EXEC sp_pr_reporteplamevertical_web "
+            "@cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?, "
+            "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?",
+            (
+                cia, payroll_type, process, period, person, salarybank,
+                fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
+            ),
         )
         _drain_all_cursor_resultsets(cursor)
 

@@ -631,14 +631,49 @@ def _declaracion_afp_validar_regimen_pension_planilla(cursor, p):
     rows = _dicts_first_nonempty_resultset(cursor)
     mensajes = []
     for r in rows or []:
-        partes = [
-            str(r.get('documentnumber') or '').strip(),
-            str(r.get('nombre') or '').strip(),
-            str(r.get('person') or '').strip(),
-        ]
-        etiqueta = ' — '.join([p for p in partes if p]) or 'Trabajador'
+        etiqueta = _declaracion_afp_etiqueta_trabajador(r)
         mensajes.append(
             f'{etiqueta}: sin régimen de pensión en la planilla (debe tener ONP o AFP).'
+        )
+    return mensajes
+
+
+def _declaracion_afp_etiqueta_trabajador(row):
+    nombre = str(row.get('nombre') or '').strip()
+    if not nombre:
+        partes_nombre = [
+            str(row.get('lastname1') or '').strip(),
+            str(row.get('lastname2') or '').strip(),
+            str(row.get('names') or '').strip(),
+        ]
+        nombre = ' '.join(p for p in partes_nombre if p)
+    partes = [
+        str(row.get('documentnumber') or '').strip(),
+        nombre,
+        str(row.get('person') or '').strip(),
+    ]
+    return ' — '.join(p for p in partes if p) or 'Trabajador'
+
+
+def _declaracion_afp_es_jubilado_afpnet(row):
+    return str(row.get('afp_description') or '').strip() == '(Jubilado)'
+
+
+def _declaracion_afp_validar_jubilados_filas(filas):
+    """Advertencias: jubilados incluidos en el archivo AFPnet (remuneración 0)."""
+    jubilados = [r for r in (filas or []) if _declaracion_afp_es_jubilado_afpnet(r)]
+    if not jubilados:
+        return []
+    mensajes = [
+        'Jubilados en AFPnet ({}): se incluyen con remuneración 0 y excepción de aportar (J o L).'.format(
+            len(jubilados)
+        )
+    ]
+    for r in jubilados:
+        etiqueta = _declaracion_afp_etiqueta_trabajador(r)
+        exc = str(r.get('excepcion_aportar') or 'J').strip().upper() or 'J'
+        mensajes.append(
+            f'{etiqueta}: jubilado AFPnet (excepción {exc}, remuneración 0).'
         )
     return mensajes
 
@@ -646,6 +681,7 @@ def _declaracion_afp_validar_regimen_pension_planilla(cursor, p):
 def _declaracion_afp_validaciones_completas(cursor, filas, p):
     filas_val, validaciones = _declaracion_afp_aplicar_validaciones_filas(filas, p['period'])
     validaciones.extend(_declaracion_afp_validar_regimen_pension_planilla(cursor, p))
+    validaciones.extend(_declaracion_afp_validar_jubilados_filas(filas_val))
     return filas_val, validaciones
 
 
@@ -2418,6 +2454,7 @@ def api_declaracion_afp_validar_resumen():
         montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
         resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
         validaciones = _declaracion_afp_validar_regimen_pension_planilla(cursor, p)
+        validaciones.extend(_declaracion_afp_validar_jubilados_filas(filas))
         return jsonify({
             'resumen': resumen,
             'tiene_diferencias': _declaracion_afp_resumen_tiene_diferencias(resumen),

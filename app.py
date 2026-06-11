@@ -732,6 +732,97 @@ def _declaracion_afp_generar_xlsx_bytes(filas):
     return buf
 
 
+def _declaracion_afp_etiqueta_proceso(shortname):
+    labels = {
+        'FIN_DE_MES': 'FIN DE MES',
+        'LIQUIDACION': 'LIQUIDACION',
+        'SEMANAL': 'SEMANAL',
+    }
+    key = str(shortname or '').strip().upper()
+    return labels.get(key, key)
+
+
+def _declaracion_afp_clasificar_trabajador(row):
+    if str(row.get('cese_relacion') or '').strip().upper() == 'S':
+        return 'cesados'
+    if str(row.get('inicio_relacion') or '').strip().upper() == 'S':
+        return 'nuevos'
+    return 'antiguos'
+
+
+def _declaracion_afp_conteo_trabajadores_afpnet(filas):
+    conteos = {'nuevos': 0, 'cesados': 0, 'antiguos': 0, 'total': 0}
+    for row in filas or []:
+        conteos[_declaracion_afp_clasificar_trabajador(row)] += 1
+    conteos['total'] = len(filas or [])
+    return conteos
+
+
+def _declaracion_afp_ejecutar_resumen_planilla(cursor, p):
+    cursor.execute(
+        "EXEC sp_pr_resumen_declaracion_afp_web "
+        "@cia=?, @period=?, @payroll_all=?, @payroll=?, @afp_all=?, @afp=?",
+        (
+            p['cia'], p['period'], p['payroll_all'], p['payroll'] or None,
+            p['afp_all'], p['afp'] or None,
+        ),
+    )
+    sets = _dicts_collect_nonempty_resultsets(cursor)
+    montos_rows = sets[0] if len(sets) > 0 else []
+    planilla_row = sets[1][0] if len(sets) > 1 and sets[1] else {}
+    return montos_rows, planilla_row
+
+
+def _declaracion_afp_resumen_int(valor):
+    try:
+        return int(valor or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas):
+    montos = []
+    total_planilla = 0.0
+    for r in montos_rows or []:
+        proc = str(r.get('proceso') or '').strip()
+        try:
+            monto = round(float(r.get('monto') or 0), 2)
+        except (TypeError, ValueError):
+            monto = 0.0
+        total_planilla += monto
+        montos.append({
+            'proceso': proc,
+            'proceso_label': _declaracion_afp_etiqueta_proceso(proc),
+            'monto': monto,
+        })
+    total_planilla = round(total_planilla, 2)
+    total_afpnet = round(sum(_afpnet_remuneracion(r) for r in (filas or [])), 2)
+
+    planilla = {
+        'nuevos': _declaracion_afp_resumen_int(planilla_row.get('nuevos')),
+        'cesados': _declaracion_afp_resumen_int(planilla_row.get('cesados')),
+        'antiguos': _declaracion_afp_resumen_int(planilla_row.get('antiguos')),
+        'total': _declaracion_afp_resumen_int(planilla_row.get('total')),
+    }
+    afpnet = _declaracion_afp_conteo_trabajadores_afpnet(filas)
+    diferencia = {
+        'nuevos': planilla['nuevos'] - afpnet['nuevos'],
+        'cesados': planilla['cesados'] - afpnet['cesados'],
+        'antiguos': planilla['antiguos'] - afpnet['antiguos'],
+        'total': planilla['total'] - afpnet['total'],
+    }
+    return {
+        'montos_proceso': montos,
+        'total_afecto_planilla': total_planilla,
+        'remuneracion_afecta_afpnet': total_afpnet,
+        'diferencia_montos': round(total_planilla - total_afpnet, 2),
+        'trabajadores_planilla': planilla,
+        'trabajadores_afpnet': afpnet,
+        'diferencia_trabajadores': diferencia,
+        'codigos_movimiento': {'nuevos': '01', 'cesados': '02'},
+    }
+
+
 def _plame_rows_archivo15_from_json(body):
     rows = body.get('rows')
     if not isinstance(rows, list):
@@ -1094,6 +1185,29 @@ def _dicts_first_nonempty_resultset(cursor):
         if not cursor.nextset():
             break
     return []
+
+
+def _dicts_collect_nonempty_resultsets(cursor, max_sets=10):
+    """Lista de resultsets no vacíos; cada uno es una lista de dicts."""
+    result = []
+    sets_read = 0
+    while sets_read < max_sets:
+        if cursor.description:
+            cols = [str(c[0]).strip() for c in cursor.description]
+            rows = cursor.fetchall()
+            if rows:
+                out = []
+                for row in rows:
+                    rd = {}
+                    for i, cname in enumerate(cols):
+                        key = (cname or f"col{i}").lower()
+                        rd[key] = row[i]
+                    out.append(rd)
+                result.append(out)
+            sets_read += 1
+        if not cursor.nextset():
+            break
+    return result
 
 
 def _sanitize_dynamic_procedure_name(name):
@@ -2147,16 +2261,21 @@ def api_declaracion_afp_generar_xlsx():
         if not filas:
             return jsonify({"error": "No hay registros para generar el archivo AFPnet."}), 400
 
+        montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
+        resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
+        filas, validaciones = _declaracion_afp_aplicar_validaciones_filas(filas, p['period'])
+
         ruc = _obtener_ruc_compania(cursor, p['cia']) or '00000000000'
 
         buf = _declaracion_afp_generar_xlsx_bytes(filas)
         filename = f'AFPNET_{p["period"]}_{ruc}.xlsx'
-        return send_file(
-            buf,
-            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            as_attachment=True,
-            download_name=filename,
-        )
+        return jsonify({
+            'filename': filename,
+            'file_base64': base64.b64encode(buf.getvalue()).decode('ascii'),
+            'resumen': resumen,
+            'rows': filas,
+            'validaciones': validaciones,
+        })
     except Exception as e:
         logging.exception("api_declaracion_afp_generar_xlsx")
         return jsonify({"error": str(e)}), 500

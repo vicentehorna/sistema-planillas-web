@@ -58,6 +58,40 @@
         padding-left: 1.2rem;
         font-size: 0.85rem;
     }
+
+    .table-resumen-afp {
+        font-size: 12px;
+        margin-bottom: 0;
+    }
+
+    .table-resumen-afp th,
+    .table-resumen-afp td {
+        padding: 0.35rem 0.6rem;
+        vertical-align: middle;
+    }
+
+    .table-resumen-afp .col-monto-resumen {
+        text-align: right;
+        min-width: 7rem;
+    }
+
+    .table-resumen-afp .col-num-resumen {
+        text-align: center;
+        min-width: 4.5rem;
+    }
+
+    .table-resumen-afp tr.fila-resumen-destacada td {
+        background-color: #d9edf7;
+    }
+
+    .table-resumen-afp tr.fila-resumen-total td {
+        font-weight: 700;
+    }
+
+    .table-resumen-afp .texto-diferencia {
+        color: #c0392b;
+        font-weight: 700;
+    }
 </style>
 {% endblock %}
 
@@ -108,6 +142,47 @@
             <strong>Validaciones AFPnet (advertencias)</strong>
             <span class="d-block small mt-1">Puede generar el archivo Excel aunque existan advertencias.</span>
             <ul id="listaValidacionesAfp"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardResumenAfpnet">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">Resumen de verificación AFPnet</h5>
+        <p class="text-muted small text-center mb-3">
+            Revise los cuadros antes de enviar el archivo a AFPnet.
+        </p>
+        <div class="row g-4 justify-content-center">
+            <div class="col-12 col-lg-5">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm table-resumen-afp align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th>PROCESO</th>
+                                <th class="col-monto-resumen">MONTO AFECTO PLANILLA</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyResumenMontosAfp"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="col-12 col-lg-7">
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm table-resumen-afp align-middle">
+                        <thead>
+                            <tr class="table-light">
+                                <th></th>
+                                <th class="col-num-resumen">NUEVOS</th>
+                                <th class="col-num-resumen">CESADOS</th>
+                                <th class="col-num-resumen">ANTIGUOS</th>
+                                <th class="col-num-resumen">TOTAL</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyResumenTrabajadoresAfp"></tbody>
+                        <tfoot id="tfootResumenCodigosAfp"></tfoot>
+                    </table>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -315,6 +390,131 @@ document.addEventListener('DOMContentLoaded', async function () {
         card.classList.remove('d-none');
     }
 
+    function formatearMontoResumen(valor, vacioSiCero) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return vacioSiCero ? '-' : '0.00';
+        if (vacioSiCero && Math.abs(n) < 0.005) return '-';
+        return 'S/ ' + n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function celdaMontoResumen(valor, esDiferencia) {
+        const n = Number(valor);
+        const texto = formatearMontoResumen(valor, false);
+        if (esDiferencia && Number.isFinite(n) && Math.abs(n) >= 0.005) {
+            return `<span class="texto-diferencia">${escapeHtml(texto)}</span>`;
+        }
+        return escapeHtml(texto);
+    }
+
+    function celdaNumeroResumen(valor, esDiferencia) {
+        const n = Number(valor);
+        const texto = Number.isFinite(n) ? String(n) : '0';
+        if (esDiferencia && Number.isFinite(n) && n !== 0) {
+            return `<span class="texto-diferencia">${escapeHtml(texto)}</span>`;
+        }
+        return escapeHtml(texto);
+    }
+
+    function renderizarResumenAfpnet(resumen) {
+        const card = document.getElementById('cardResumenAfpnet');
+        const tbodyMontos = document.getElementById('tbodyResumenMontosAfp');
+        const tbodyTrab = document.getElementById('tbodyResumenTrabajadoresAfp');
+        const tfootCodigos = document.getElementById('tfootResumenCodigosAfp');
+
+        if (!resumen) {
+            card.classList.add('d-none');
+            tbodyMontos.innerHTML = '';
+            tbodyTrab.innerHTML = '';
+            tfootCodigos.innerHTML = '';
+            return;
+        }
+
+        const montos = Array.isArray(resumen.montos_proceso) ? resumen.montos_proceso : [];
+        const filasMontos = montos.map((item) => `
+            <tr>
+                <td>${escapeHtml(item.proceso_label || item.proceso || '')}</td>
+                <td class="col-monto-resumen">${celdaMontoResumen(item.monto, false)}</td>
+            </tr>
+        `).join('');
+
+        tbodyMontos.innerHTML = filasMontos + `
+            <tr class="fila-resumen-total">
+                <td>TOTAL AFECTO PLANILLA</td>
+                <td class="col-monto-resumen">${celdaMontoResumen(resumen.total_afecto_planilla, false)}</td>
+            </tr>
+            <tr class="fila-resumen-total">
+                <td>REMUNERACIÓN AFECTA AFP NET</td>
+                <td class="col-monto-resumen">${celdaMontoResumen(resumen.remuneracion_afecta_afpnet, false)}</td>
+            </tr>
+            <tr class="fila-resumen-total">
+                <td>DIFERENCIAS</td>
+                <td class="col-monto-resumen">${celdaMontoResumen(resumen.diferencia_montos, true)}</td>
+            </tr>
+        `;
+
+        const plan = resumen.trabajadores_planilla || {};
+        const afp = resumen.trabajadores_afpnet || {};
+        const dif = resumen.diferencia_trabajadores || {};
+        const codigos = resumen.codigos_movimiento || {};
+
+        tbodyTrab.innerHTML = `
+            <tr class="fila-resumen-destacada">
+                <td>TRABAJADORES EN PLANILLA</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(plan.nuevos, false)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(plan.cesados, false)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(plan.antiguos, false)}</td>
+                <td class="col-num-resumen fw-bold">${celdaNumeroResumen(plan.total, false)}</td>
+            </tr>
+            <tr>
+                <td>TRABAJADORES EN AFP NET</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(afp.nuevos, false)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(afp.cesados, false)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(afp.antiguos, false)}</td>
+                <td class="col-num-resumen fw-bold">${celdaNumeroResumen(afp.total, false)}</td>
+            </tr>
+            <tr class="fila-resumen-destacada fila-resumen-total">
+                <td>DIFERENCIA (INDICAR DETALLE)</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(dif.nuevos, true)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(dif.cesados, true)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(dif.antiguos, true)}</td>
+                <td class="col-num-resumen">${celdaNumeroResumen(dif.total, true)}</td>
+            </tr>
+        `;
+
+        tfootCodigos.innerHTML = `
+            <tr class="fila-resumen-destacada">
+                <td>CODIGO DE MOVIMIENTO AFP</td>
+                <td class="col-num-resumen">${escapeHtml(codigos.nuevos || '01')}</td>
+                <td class="col-num-resumen">${escapeHtml(codigos.cesados || '02')}</td>
+                <td class="col-num-resumen"></td>
+                <td class="col-num-resumen"></td>
+            </tr>
+        `;
+
+        card.classList.remove('d-none');
+        card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function descargarArchivoBase64(filename, fileBase64) {
+        if (!fileBase64) return;
+        const bin = atob(fileBase64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i += 1) {
+            bytes[i] = bin.charCodeAt(i);
+        }
+        const blob = new Blob([bytes], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'AFPNET.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
     function mostrarErroresValidacion(mensaje, validaciones) {
         const items = Array.isArray(validaciones) ? validaciones : [];
         if (items.length) {
@@ -455,6 +655,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('btnGenerarAfpnet').disabled = true;
         document.getElementById('tfoot-declaracion-afp').innerHTML = '';
         document.getElementById('cardValidacionesAfp').classList.add('d-none');
+        document.getElementById('cardResumenAfpnet').classList.add('d-none');
         lastValidacionesAfp = [];
 
         try {
@@ -491,41 +692,40 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Consulte el listado antes de generar el archivo.');
             return;
         }
+        const btnGenerar = document.getElementById('btnGenerarAfpnet');
+        const textoOriginal = btnGenerar.innerHTML;
+        btnGenerar.disabled = true;
+        btnGenerar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+
         try {
             const res = await fetch(URL_GENERAR, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ...payload, rows: lastRowsAfp })
             });
-            if (!res.ok) {
-                let msg = 'No se pudo generar el archivo.';
-                let validaciones = [];
-                try {
-                    const err = await res.json();
-                    if (err && err.error) msg = err.error;
-                    if (err && Array.isArray(err.validaciones)) validaciones = err.validaciones;
-                } catch (e) {}
-                mostrarErroresValidacion(msg, validaciones);
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || data.error) {
+                mostrarErroresValidacion(data.error || 'No se pudo generar el archivo.', data.validaciones);
                 return;
             }
 
-            const blob = await res.blob();
-            let filename = 'AFPNET.xlsx';
-            const cd = res.headers.get('Content-Disposition') || '';
-            const m = cd.match(/filename="?([^"]+)"?/i);
-            if (m) filename = m[1];
+            renderizarResumenAfpnet(data.resumen || null);
 
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = filename;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
+            if (Array.isArray(data.rows)) {
+                lastRowsAfp = data.rows;
+                lastValidacionesAfp = Array.isArray(data.validaciones) ? data.validaciones : [];
+                renderizarValidaciones(lastValidacionesAfp);
+                renderizarTabla(lastRowsAfp);
+                document.getElementById('cardResultadoAfp').classList.remove('d-none');
+            }
+
+            descargarArchivoBase64(data.filename, data.file_base64);
         } catch (err) {
             console.error(err);
             alert('Error al generar el archivo Excel.');
+        } finally {
+            btnGenerar.innerHTML = textoOriginal;
+            actualizarContadores();
         }
     }
 

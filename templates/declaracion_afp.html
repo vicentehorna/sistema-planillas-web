@@ -151,7 +151,7 @@
 
 <div class="card shadow-sm border-0 d-none mb-3" id="cardResumenAfpnet">
     <div class="card-body pt-3">
-        <h5 class="fw-bold mb-3 text-center">Resumen de verificación AFPnet</h5>
+        <h5 class="fw-bold mb-3 text-center" id="tituloResumenAfpnet">Resumen de verificación AFPnet</h5>
         <p class="text-muted small text-center mb-3">
             Revise los cuadros antes de enviar el archivo a AFPnet.
         </p>
@@ -182,7 +182,6 @@
                             </tr>
                         </thead>
                         <tbody id="tbodyResumenTrabajadoresAfp"></tbody>
-                        <tfoot id="tfootResumenCodigosAfp"></tfoot>
                     </table>
                 </div>
             </div>
@@ -294,6 +293,22 @@ document.addEventListener('DOMContentLoaded', async function () {
     function periodoYyyymm(prperiod) {
         const s = String(prperiod || '').replace(/\D/g, '');
         return s.length >= 6 ? s.slice(0, 6) : s;
+    }
+
+    function tituloResumenAfpnet(period) {
+        const yyyymm = periodoYyyymm(period);
+        const base = 'Resumen de verificación AFPnet';
+        if (/^\d{6}$/.test(yyyymm)) {
+            return `${base} ${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}`;
+        }
+        return base;
+    }
+
+    function actualizarTituloResumenAfpnet() {
+        const el = document.getElementById('tituloResumenAfpnet');
+        if (el) {
+            el.textContent = tituloResumenAfpnet(document.getElementById('cboPeriodo').value);
+        }
     }
 
     function optionExists(select, value) {
@@ -435,15 +450,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         const card = document.getElementById('cardResumenAfpnet');
         const tbodyMontos = document.getElementById('tbodyResumenMontosAfp');
         const tbodyTrab = document.getElementById('tbodyResumenTrabajadoresAfp');
-        const tfootCodigos = document.getElementById('tfootResumenCodigosAfp');
 
         if (!resumen) {
             card.classList.add('d-none');
             tbodyMontos.innerHTML = '';
             tbodyTrab.innerHTML = '';
-            tfootCodigos.innerHTML = '';
             return;
         }
+
+        actualizarTituloResumenAfpnet();
 
         const montos = Array.isArray(resumen.montos_proceso) ? resumen.montos_proceso : [];
         const filasMontos = montos.map((item) => `
@@ -471,7 +486,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         const plan = resumen.trabajadores_planilla || {};
         const afp = resumen.trabajadores_afpnet || {};
         const dif = resumen.diferencia_trabajadores || {};
-        const codigos = resumen.codigos_movimiento || {};
 
         tbodyTrab.innerHTML = `
             <tr class="fila-resumen-destacada">
@@ -494,16 +508,6 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.cesados, true)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.antiguos, true)}</td>
                 <td class="col-num-resumen">${celdaNumeroResumen(dif.total, true)}</td>
-            </tr>
-        `;
-
-        tfootCodigos.innerHTML = `
-            <tr class="fila-resumen-destacada">
-                <td>CODIGO DE MOVIMIENTO AFP</td>
-                <td class="col-num-resumen">${escapeHtml(codigos.nuevos || '01')}</td>
-                <td class="col-num-resumen">${escapeHtml(codigos.cesados || '02')}</td>
-                <td class="col-num-resumen"></td>
-                <td class="col-num-resumen"></td>
             </tr>
         `;
 

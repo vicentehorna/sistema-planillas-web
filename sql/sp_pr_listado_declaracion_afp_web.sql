@@ -90,12 +90,7 @@ BEGIN
         END AS inicio_relacion,
         CASE
             WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period
-             AND (
-                    E.reentrydate IS NULL
-                    OR LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) <> @period
-                    OR E.reentrydate > E.ceasedate
-                 ) THEN 'S'
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS cese_relacion,
         CASE
@@ -151,12 +146,7 @@ BEGIN
              AND E.entrydate IS NOT NULL
              AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
             WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period
-             AND (
-                    E.reentrydate IS NULL
-                    OR LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) <> @period
-                    OR E.reentrydate > E.ceasedate
-                 ) THEN 'S'
+             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS relacion_laboral,
         CASE

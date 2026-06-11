@@ -145,18 +145,13 @@ BEGIN
             T.person,
             CASE
                 WHEN T.es_jubilado = 'S' THEN 'ANTIGUO'
-                WHEN E.ceasedate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period
-                 AND (
-                        E.reentrydate IS NULL
-                        OR LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) <> @period
-                        OR E.reentrydate > E.ceasedate
-                     ) THEN 'CESADO'
                 WHEN E.reentrydate IS NOT NULL
                  AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'NUEVO'
                 WHEN E.reentrydate IS NULL
                  AND E.entrydate IS NOT NULL
                  AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'NUEVO'
+                WHEN E.ceasedate IS NOT NULL
+                 AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'CESADO'
                 ELSE 'ANTIGUO'
             END AS clasificacion
         FROM #TrabajadoresPlanilla T

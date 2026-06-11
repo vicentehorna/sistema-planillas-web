@@ -771,10 +771,10 @@ def _declaracion_afp_etiqueta_proceso(shortname):
 
 
 def _declaracion_afp_clasificar_trabajador(row):
-    if str(row.get('cese_relacion') or '').strip().upper() == 'S':
-        return 'cesados'
     if str(row.get('inicio_relacion') or '').strip().upper() == 'S':
         return 'nuevos'
+    if str(row.get('cese_relacion') or '').strip().upper() == 'S':
+        return 'cesados'
     return 'antiguos'
 
 
@@ -847,7 +847,6 @@ def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas):
         'trabajadores_planilla': planilla,
         'trabajadores_afpnet': afpnet,
         'diferencia_trabajadores': diferencia,
-        'codigos_movimiento': {'nuevos': '01', 'cesados': '02'},
     }
 
 

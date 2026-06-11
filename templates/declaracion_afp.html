@@ -729,6 +729,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             renderizarResumenAfpnet(data.resumen || null, { scroll: true });
+            const extras = Array.isArray(data.validaciones) ? data.validaciones : [];
+            if (extras.length) {
+                const merged = [...lastValidacionesAfp];
+                extras.forEach((msg) => {
+                    if (merged.indexOf(msg) < 0) merged.push(msg);
+                });
+                lastValidacionesAfp = merged;
+                renderizarValidaciones(lastValidacionesAfp);
+            }
         } catch (err) {
             console.error(err);
             alert('Error al validar el resumen.');

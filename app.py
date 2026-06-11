@@ -621,6 +621,34 @@ def _declaracion_afp_aplicar_validaciones_filas(filas, period):
     return resultado, todas
 
 
+def _declaracion_afp_validar_regimen_pension_planilla(cursor, p):
+    """Advertencias: trabajadores en planilla del periodo sin régimen ONP/AFP."""
+    cursor.execute(
+        'EXEC sp_pr_trabajadores_sin_regimen_pension_afp_web '
+        '@cia=?, @period=?, @payroll_all=?, @payroll=?',
+        (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    mensajes = []
+    for r in rows or []:
+        partes = [
+            str(r.get('documentnumber') or '').strip(),
+            str(r.get('nombre') or '').strip(),
+            str(r.get('person') or '').strip(),
+        ]
+        etiqueta = ' — '.join([p for p in partes if p]) or 'Trabajador'
+        mensajes.append(
+            f'{etiqueta}: sin régimen de pensión en la planilla (debe tener ONP o AFP).'
+        )
+    return mensajes
+
+
+def _declaracion_afp_validaciones_completas(cursor, filas, p):
+    filas_val, validaciones = _declaracion_afp_aplicar_validaciones_filas(filas, p['period'])
+    validaciones.extend(_declaracion_afp_validar_regimen_pension_planilla(cursor, p))
+    return filas_val, validaciones
+
+
 def _afpnet_sn(valor, default='N'):
     """AFPnet col. H/I/J: solo S o N."""
     v = str(valor or '').strip().upper()
@@ -2352,7 +2380,7 @@ def api_declaracion_afp_listado():
         conn = get_db_connection()
         cursor = conn.cursor()
         resultado = _declaracion_afp_ejecutar_listado(cursor, p)
-        filas, validaciones = _declaracion_afp_aplicar_validaciones_filas(resultado, p['period'])
+        filas, validaciones = _declaracion_afp_validaciones_completas(cursor, resultado, p)
         return jsonify({
             "rows": filas,
             "total": len(filas),
@@ -2390,9 +2418,11 @@ def api_declaracion_afp_validar_resumen():
         cursor = conn.cursor()
         montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
         resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
+        validaciones = _declaracion_afp_validar_regimen_pension_planilla(cursor, p)
         return jsonify({
             'resumen': resumen,
             'tiene_diferencias': _declaracion_afp_resumen_tiene_diferencias(resumen),
+            'validaciones': validaciones,
         })
     except Exception as e:
         logging.exception("api_declaracion_afp_validar_resumen")
@@ -2427,7 +2457,7 @@ def api_declaracion_afp_generar_xlsx():
 
         montos_rows, planilla_row = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
         resumen = _declaracion_afp_build_resumen(montos_rows, planilla_row, filas)
-        filas, validaciones = _declaracion_afp_aplicar_validaciones_filas(filas, p['period'])
+        filas, validaciones = _declaracion_afp_validaciones_completas(cursor, filas, p)
 
         ruc = _obtener_ruc_compania(cursor, p['cia']) or '00000000000'
 

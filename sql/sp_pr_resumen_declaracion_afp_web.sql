@@ -4,6 +4,7 @@
     Usado por: POST /api/declaracion-afp/generar-xlsx
 
     Resultset 1 — Montos TOTAL_REM_AFP por proceso (FIN_DE_MES, LIQUIDACION, SEMANAL).
+              Jubilados (FLAG_JUBILADO) no suman: en AFPnet su remuneración asegurable es 0.
     Resultset 2 — Conteo trabajadores en planilla (nuevos / cesados / antiguos).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_resumen_declaracion_afp_web]
@@ -61,6 +62,23 @@ BEGIN
           AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
           AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
           AND (@afp_all = 'Y' OR LTRIM(RTRIM(E.AFP)) = @afp)
+          /* Jubilados: no incluir su TOTAL_REM_AFP (AFPnet reporta remuneración 0). */
+          AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeeConcept EC (NOLOCK)
+                    INNER JOIN PR_Concept Cj (NOLOCK)
+                        ON EC.Concept = Cj.Concept
+                       AND Cj.Company = @cia
+                WHERE EC.Company = @cia
+                  AND EC.Person = EPC.Person
+                  AND Cj.FormulaCode = 'FLAG_JUBILADO'
+                  AND EC.FlagFrecuencyType IN ('P', 'T')
+                  AND (
+                        EC.FlagFrecuencyType = 'P'
+                        OR (EC.FlagFrecuencyType = 'T' AND LEFT(EC.PRPeriodStart, 6) = @period)
+                      )
+                  AND (@payroll_all = 'Y' OR EC.PayRollType = @payroll)
+          )
         GROUP BY LTRIM(RTRIM(PT.ShortName))
     ) M ON M.proceso = P.proceso
     ORDER BY P.orden;

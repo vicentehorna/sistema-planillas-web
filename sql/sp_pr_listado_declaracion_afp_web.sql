@@ -353,6 +353,7 @@ BEGIN
           )
       AND (@payroll_all = 'Y' OR EC.PayRollType = @payroll)
       AND (@employee_all = 'Y' OR EC.Person = @employee)
+      AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
       AND NOT EXISTS (
             SELECT 1
             FROM PR_EmployeeAFP A2 (NOLOCK)

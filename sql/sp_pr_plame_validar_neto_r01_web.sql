@@ -9,6 +9,7 @@
       - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
       - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
       - Respeta flag PDT por planilla/proceso cuando está configurado
+      - En liquidación: FormulaCode NETO o LIQ_NETO (resto de procesos: solo NETO)
 
     Parámetros:
       @cia         — compañía
@@ -160,7 +161,13 @@ BEGIN
                 WHERE EPC.Company = @cia
                   AND EPC.Person = EM.person
                   AND LEFT(EPC.PRPeriod, 6) = @period
-                  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+                  AND (
+                        UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+                     OR (
+                            EPC.ProcessType = M.LiquidacionProcess
+                            AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
+                        )
+                  )
                   AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
                   AND EPC.ProcessType IN (
                         M.CTSProcessType,

@@ -432,7 +432,7 @@
                     </ul>
                 </li>
 
-                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page') %}
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_validar_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
                        class="sidebar-parent-link"
@@ -462,6 +462,11 @@
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo26_page' else '' }}">
                             <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.toc)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.toc)</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'plame_validar_page' else '' }}">
+                            <a href="{{ url_for('plame_validar_page') }}" title="Validar PLAME">
+                                <i class="bi bi-shield-check"></i><span class="sidebar-link-text">Validar PLAME</span>
                             </a>
                         </li>
                     </ul>

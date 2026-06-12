@@ -95,6 +95,16 @@
             max-width: 10rem;
         }
     }
+
+    .table-plame18 tr.fila-invalida td {
+        background-color: #fff3cd;
+    }
+
+    #cardValidacionesPlame18 ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
 </style>
 {% endblock %}
 
@@ -145,6 +155,16 @@
     </div>
 </div>
 
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesPlame18">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Validaciones Archivo 18 (advertencias)</strong>
+            <span class="d-block small mt-1">Revise las incidencias antes de generar el archivo TXT.</span>
+            <ul id="listaValidacionesPlame18"></ul>
+        </div>
+    </div>
+</div>
+
 <div class="card shadow-sm border-0 d-none" id="cardResultadoPlame18">
     <div class="card-body pt-3">
         <h5 class="fw-bold mb-3 text-center">PLAME — Archivo 18 (.rem)</h5>
@@ -181,6 +201,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_plame_archivo18_listado') | tojson }};
     const URL_GENERAR = {{ url_for('api_plame_archivo18_generar_txt') | tojson }};
     let lastRowsPlame18 = [];
+    let lastValidacionesPlame18 = [];
 
     function escapeHtml(s) {
         return String(s || '')
@@ -259,6 +280,19 @@ document.addEventListener('DOMContentLoaded', async function () {
         chk.indeterminate = marcados > 0 && marcados < all.length;
     }
 
+    function renderizarValidaciones(validaciones) {
+        const card = document.getElementById('cardValidacionesPlame18');
+        const lista = document.getElementById('listaValidacionesPlame18');
+        const items = Array.isArray(validaciones) ? validaciones : [];
+        if (!items.length) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+        lista.innerHTML = items.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
     function renderizarTabla(rows) {
         const tbody = document.getElementById('tbody-plame18');
         tbody.innerHTML = '';
@@ -266,6 +300,9 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         filas.forEach((row) => {
             const tr = document.createElement('tr');
+            if (row.incidencia === true) {
+                tr.classList.add('fila-invalida');
+            }
             const key = rowKey(row);
             tr.innerHTML = `
                 <td class="text-center">
@@ -349,6 +386,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('lblRowCountPlame18').textContent = '0';
         document.getElementById('lblSeleccionadosPlame18').textContent = '0';
         document.getElementById('btnGenerarPlame18').disabled = true;
+        document.getElementById('cardValidacionesPlame18').classList.add('d-none');
+        document.getElementById('listaValidacionesPlame18').innerHTML = '';
 
         try {
             const res = await fetch(URL_LISTADO, {
@@ -364,10 +403,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             const payload = await res.json();
             if (!res.ok || payload.error) {
                 document.getElementById('cardResultadoPlame18').classList.add('d-none');
+                document.getElementById('cardValidacionesPlame18').classList.add('d-none');
                 alert(payload.error || 'Error al consultar el listado.');
                 return;
             }
             lastRowsPlame18 = Array.isArray(payload.rows) ? payload.rows : [];
+            lastValidacionesPlame18 = Array.isArray(payload.validaciones) ? payload.validaciones : [];
+            renderizarValidaciones(lastValidacionesPlame18);
             renderizarTabla(lastRowsPlame18);
             document.getElementById('cardResultadoPlame18').classList.remove('d-none');
         } catch (err) {

@@ -1,0 +1,557 @@
+{% extends "layout.html" %}
+
+{% block title %}Validar PLAME{% endblock %}
+
+{% block extra_css %}
+<style>
+    .plame-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .plame-info code {
+        font-size: 0.78rem;
+    }
+
+    .plame-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-compania {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .plame-filtro-compania {
+            flex: 0 0 35%;
+            max-width: 35%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .plame-filtro-compania {
+            flex: 0 0 28%;
+            max-width: 28%;
+        }
+    }
+
+    .plame-filtro-periodo {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-periodo {
+            flex: 0 0 10rem;
+            max-width: 10rem;
+        }
+    }
+
+    .archivo-sunat-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #6c757d;
+    }
+
+    .estado-carga-ok {
+        border-left: 4px solid #198754;
+    }
+
+    .estado-carga-vacio {
+        border-left: 4px solid #adb5bd;
+    }
+
+    .table-validacion-plame {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-validacion-plame th,
+    .table-validacion-plame td {
+        padding: 0.3rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-validacion-plame thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+    }
+
+    .table-validacion-plame .col-monto {
+        text-align: right;
+        min-width: 6rem;
+    }
+
+    .texto-diferencia-plame {
+        color: #c0392b;
+        font-weight: 700;
+    }
+
+    .fila-ok-plame td {
+        color: #6c757d;
+    }
+
+    .resumen-validacion-plame .valor-dif {
+        color: #c0392b;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border plame-info mb-3" role="note">
+    <strong>Validación PLAME — archivos SUNAT.</strong>
+    Suba los tres XML descargados de SUNAT para el periodo: <code>R01</code>, <code>R04</code> y <code>R05</code>.
+    Nombre esperado: <code>RRRRRRRRRRR_YYYYMM_r01.xml</code> (ej. <code>20552055234_202604_r01.xml</code>).
+    La información quedará guardada para validar contra la planilla del mismo periodo.
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmPlameValidar" class="row g-3" enctype="multipart/form-data">
+            <div class="col-12 col-sm-6 plame-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-auto plame-filtro-periodo">
+                <label for="cboPeriodoTributario" class="form-label small fw-bold text-muted">Periodo tributario</label>
+                <select id="cboPeriodoTributario" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <label for="fileR01" class="form-label archivo-sunat-label">Archivo R01 (.xml)</label>
+                <input type="file" class="form-control form-control-sm" id="fileR01" name="file_r01" accept=".xml,text/xml,application/xml">
+            </div>
+            <div class="col-12 col-md-4">
+                <label for="fileR04" class="form-label archivo-sunat-label">Archivo R04 (.xml)</label>
+                <input type="file" class="form-control form-control-sm" id="fileR04" name="file_r04" accept=".xml,text/xml,application/xml">
+            </div>
+            <div class="col-12 col-md-4">
+                <label for="fileR05" class="form-label archivo-sunat-label">Archivo R05 (.xml)</label>
+                <input type="file" class="form-control form-control-sm" id="fileR05" name="file_r05" accept=".xml,text/xml,application/xml">
+            </div>
+
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnConsultarCarga">
+                    <i class="bi bi-arrow-repeat"></i> Consultar carga
+                </button>
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnSubirArchivos">
+                    <i class="bi bi-cloud-upload"></i> Cargar archivos SUNAT
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnValidarPlame" disabled>
+                    <i class="bi bi-shield-check"></i> Validar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none estado-carga-vacio" id="cardEstadoCarga">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3">Estado de la carga SUNAT</h5>
+        <div id="contenidoEstadoCarga" class="small text-muted">
+            No hay carga registrada para este periodo.
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-4" id="cardValidacionPlame">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center" id="tituloValidacionPlame">Validación PLAME — Neto a pagar (R01) vs planilla</h5>
+        <div id="resumenValidacionPlame" class="resumen-validacion-plame small mb-3"></div>
+        <div class="table-scroll-container" style="max-height: 55vh; overflow: auto; border: 1px solid #dee2e6;">
+            <table class="table table-bordered table-sm table-hover table-validacion-plame align-middle">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th>DNI</th>
+                        <th>Trabajador</th>
+                        <th class="col-monto">Neto SUNAT (R01)</th>
+                        <th class="col-monto">Neto planilla</th>
+                        <th class="col-monto">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyValidacionPlame"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameValidar
+        ? window.FiltrosPlanillasReportes.plameValidar()
+        : null;
+
+    const URL_ESTADO = {{ url_for('api_plame_validar_estado') | tojson }};
+    const URL_CARGA = {{ url_for('api_plame_validar_carga') | tojson }};
+    const URL_VALIDAR_NETO = {{ url_for('api_plame_validar_neto_r01') | tojson }};
+    let hayCargaSunat = false;
+
+    function periodoTributarioYyyymm() {
+        const raw = String(document.getElementById('cboPeriodoTributario').value || '').replace(/\D/g, '');
+        return raw.length >= 6 ? raw.slice(0, 6) : raw;
+    }
+
+    function periodoTributarioEsValido() {
+        return /^\d{6}$/.test(periodoTributarioYyyymm());
+    }
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    function formatearMonto(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function celdaMonto(valor, resaltar) {
+        const texto = formatearMonto(valor);
+        if (resaltar && Math.abs(Number(valor) || 0) >= 0.005) {
+            return `<span class="texto-diferencia-plame">${escapeHtml(texto)}</span>`;
+        }
+        return escapeHtml(texto);
+    }
+
+    function etiquetaEstado(estado) {
+        const map = {
+            OK: 'OK',
+            DIFERENCIA: 'Diferencia',
+            SOLO_SUNAT: 'Solo SUNAT',
+            SOLO_PLANILLA: 'Solo planilla',
+        };
+        return map[estado] || estado || '';
+    }
+
+    function actualizarBotonValidar() {
+        document.getElementById('btnValidarPlame').disabled = !hayCargaSunat;
+    }
+
+    function tituloValidacion() {
+        const period = periodoTributarioYyyymm();
+        if (/^\d{6}$/.test(period)) {
+            return `Validación PLAME — Neto a pagar (R01) vs planilla ${period.slice(0, 4)}-${period.slice(4, 6)}`;
+        }
+        return 'Validación PLAME — Neto a pagar (R01) vs planilla';
+    }
+
+    function renderValidacion(resultado) {
+        const card = document.getElementById('cardValidacionPlame');
+        const resumenEl = document.getElementById('resumenValidacionPlame');
+        const tbody = document.getElementById('tbodyValidacionPlame');
+        const titulo = document.getElementById('tituloValidacionPlame');
+
+        if (!resultado) {
+            card.classList.add('d-none');
+            resumenEl.innerHTML = '';
+            tbody.innerHTML = '';
+            return;
+        }
+
+        titulo.textContent = tituloValidacion();
+        const res = resultado.resumen || {};
+        const difTotal = Number(res.total_diferencia) || 0;
+        const hayDif = Boolean(resultado.tiene_diferencias);
+        resumenEl.innerHTML = `
+            <div class="row g-2">
+                <div class="col-md-3"><strong>Trabajadores:</strong> ${Number(res.total_filas || 0)}</div>
+                <div class="col-md-3"><strong>Coinciden:</strong> ${Number(res.coinciden || 0)}</div>
+                <div class="col-md-3"><strong>Con diferencia:</strong> <span class="${Number(res.con_diferencia) ? 'valor-dif' : ''}">${Number(res.con_diferencia || 0)}</span></div>
+                <div class="col-md-3"><strong>Solo SUNAT / Solo planilla:</strong> ${Number(res.solo_sunat || 0)} / ${Number(res.solo_planilla || 0)}</div>
+                <div class="col-md-4"><strong>Total neto SUNAT:</strong> S/ ${formatearMonto(res.total_neto_sunat)}</div>
+                <div class="col-md-4"><strong>Total neto planilla:</strong> S/ ${formatearMonto(res.total_neto_planilla)}</div>
+                <div class="col-md-4"><strong>Diferencia total:</strong> <span class="${hayDif ? 'valor-dif' : ''}">S/ ${formatearMonto(difTotal)}</span></div>
+            </div>
+        `;
+
+        const filas = Array.isArray(resultado.filas) ? resultado.filas : [];
+        tbody.innerHTML = filas.map((f) => {
+            const esOk = f.estado === 'OK';
+            const resaltar = !esOk;
+            return `
+                <tr class="${esOk ? 'fila-ok-plame' : ''}">
+                    <td class="${resaltar ? 'texto-diferencia-plame' : ''}">${escapeHtml(etiquetaEstado(f.estado))}</td>
+                    <td>${escapeHtml(f.documentnumber || '')}</td>
+                    <td>${escapeHtml(f.nombre || '')}</td>
+                    <td class="col-monto">${celdaMonto(f.neto_sunat, resaltar)}</td>
+                    <td class="col-monto">${celdaMonto(f.neto_planilla, resaltar)}</td>
+                    <td class="col-monto">${celdaMonto(f.diferencia, resaltar)}</td>
+                </tr>
+            `;
+        }).join('');
+
+        card.classList.remove('d-none');
+        if (hayDif) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
+    async function ejecutarValidacion() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+        if (!hayCargaSunat) {
+            alert('Primero cargue los archivos SUNAT (R01, R04 y R05).');
+            return;
+        }
+
+        const btn = document.getElementById('btnValidarPlame');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+
+        try {
+            const res = await fetch(URL_VALIDAR_NETO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, period }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'No se pudo ejecutar la validación.');
+                return;
+            }
+            renderValidacion(data);
+        } catch (err) {
+            console.error(err);
+            alert('Error al validar.');
+        } finally {
+            btn.disabled = !hayCargaSunat;
+            btn.innerHTML = textoOriginal;
+        }
+    }
+
+    function renderEstadoCarga(carga) {
+        const card = document.getElementById('cardEstadoCarga');
+        const cont = document.getElementById('contenidoEstadoCarga');
+        card.classList.remove('d-none');
+
+        if (!carga) {
+            card.classList.remove('estado-carga-ok');
+            card.classList.add('estado-carga-vacio');
+            cont.innerHTML = '<div class="text-muted">No hay carga registrada para este periodo. Suba los archivos R01, R04 y R05.</div>';
+            hayCargaSunat = false;
+            actualizarBotonValidar();
+            renderValidacion(null);
+            return;
+        }
+
+        hayCargaSunat = true;
+        actualizarBotonValidar();
+        card.classList.add('estado-carga-ok');
+        card.classList.remove('estado-carga-vacio');
+        cont.innerHTML = `
+            <div class="row g-2">
+                <div class="col-md-6"><strong>RUC:</strong> ${escapeHtml(carga.ruc)}</div>
+                <div class="col-md-6"><strong>Periodo SUNAT:</strong> ${escapeHtml(carga.periodosunat || carga.period)}</div>
+                <div class="col-12"><strong>Empleador:</strong> ${escapeHtml(carga.employername || '-')}</div>
+                <div class="col-md-4"><strong>R01:</strong> ${escapeHtml(carga.filer01name || '-')} (${Number(carga.rowsr01 || 0)} trab.)</div>
+                <div class="col-md-4"><strong>R04:</strong> ${escapeHtml(carga.filer04name || '-')} (${Number(carga.rowsr04 || 0)} trab.)</div>
+                <div class="col-md-4"><strong>R05:</strong> ${escapeHtml(carga.filer05name || '-')} (${Number(carga.rowsr05 || 0)} trab.)</div>
+                <div class="col-md-6"><strong>Cargado:</strong> ${escapeHtml(carga.uploadedat || '-')} por ${escapeHtml(carga.uploadedby || '-')}</div>
+            </div>
+        `;
+    }
+
+    async function consultarEstado() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        if (!cia || !periodoTributarioEsValido()) {
+            document.getElementById('cardEstadoCarga').classList.add('d-none');
+            return;
+        }
+        try {
+            const res = await fetch(`${URL_ESTADO}?cia=${encodeURIComponent(cia)}&period=${encodeURIComponent(period)}`);
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'No se pudo consultar la carga.');
+                return;
+            }
+            renderEstadoCarga(data.carga || null);
+        } catch (err) {
+            console.error(err);
+            alert('Error al consultar la carga.');
+        }
+    }
+
+    async function poblarPeriodosPlame(cia, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = true;
+        }
+    }
+
+    async function poblarSelect(url, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    document.getElementById('frmPlameValidar').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+
+        const fileR01 = document.getElementById('fileR01').files[0];
+        const fileR04 = document.getElementById('fileR04').files[0];
+        const fileR05 = document.getElementById('fileR05').files[0];
+        if (!fileR01 || !fileR04 || !fileR05) {
+            alert('Debe seleccionar los tres archivos: R01, R04 y R05.');
+            return;
+        }
+
+        const btn = document.getElementById('btnSubirArchivos');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Cargando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('cia', cia);
+            fd.append('period', period);
+            fd.append('file_r01', fileR01);
+            fd.append('file_r04', fileR04);
+            fd.append('file_r05', fileR05);
+
+            const res = await fetch(URL_CARGA, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'No se pudo cargar los archivos.');
+                return;
+            }
+            renderEstadoCarga(data.carga || null);
+            if (data.ejecutar_validacion) {
+                await ejecutarValidacion();
+            } else {
+                alert(data.mensaje || 'Archivos cargados correctamente.');
+            }
+            document.getElementById('fileR01').value = '';
+            document.getElementById('fileR04').value = '';
+            document.getElementById('fileR05').value = '';
+        } catch (err) {
+            console.error(err);
+            alert('Error al subir los archivos.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    });
+
+    document.getElementById('btnConsultarCarga').addEventListener('click', consultarEstado);
+    document.getElementById('btnValidarPlame').addEventListener('click', ejecutarValidacion);
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodo = document.getElementById('cboPeriodoTributario');
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    async function onCompaniaChange(cia, periodoRestaurar) {
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        document.getElementById('cardEstadoCarga').classList.add('d-none');
+        if (cia) {
+            await poblarPeriodosPlame(cia, cboPeriodo);
+            if (periodoRestaurar && Array.from(cboPeriodo.options).some((o) => o.value === periodoRestaurar)) {
+                cboPeriodo.value = periodoRestaurar;
+            }
+            if (filtrosPersist) filtrosPersist.guardar();
+            if (periodoTributarioEsValido()) {
+                await consultarEstado();
+                if (hayCargaSunat) {
+                    await ejecutarValidacion();
+                }
+            }
+        }
+    }
+
+    async function onPeriodoChange() {
+        if (filtrosPersist) filtrosPersist.guardar();
+        renderValidacion(null);
+        await consultarEstado();
+        if (hayCargaSunat) {
+            await ejecutarValidacion();
+        }
+    }
+
+    if (filtrosPersist) {
+        const guardado = filtrosPersist.leer();
+        if (guardado && guardado.cia) {
+            if (Array.from(cboCia.options).some((o) => String(o.value).trim().toUpperCase() === String(guardado.cia).trim().toUpperCase())) {
+                cboCia.value = guardado.cia;
+            }
+            const periodoGuardado = guardado.period != null ? String(guardado.period).trim() : '';
+            await onCompaniaChange(cboCia.value.trim(), periodoGuardado);
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+        cboPeriodo.addEventListener('change', onPeriodoChange);
+    } else {
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+        cboPeriodo.addEventListener('change', onPeriodoChange);
+    }
+});
+</script>
+{% endblock %}

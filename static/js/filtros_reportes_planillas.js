@@ -963,6 +963,49 @@
         };
     }
 
+    function crearPersistenciaPlameValidar() {
+        const STORAGE_KEY = 'filtros_plame_validar';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    period: val('cboPeriodoTributario'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame validar: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoTributario'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaPlameArchivo15() {
         const STORAGE_KEY = 'filtros_plame_archivo15';
 
@@ -1441,6 +1484,9 @@
         },
         plameArchivo26: function () {
             return crearPersistenciaPlameArchivo26();
+        },
+        plameValidar: function () {
+            return crearPersistenciaPlameValidar();
         },
         declaracionAfp: function () {
             return crearPersistenciaDeclaracionAfp();

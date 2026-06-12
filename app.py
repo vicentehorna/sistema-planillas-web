@@ -7,6 +7,7 @@ import logging
 import io
 import zipfile
 import base64
+import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from decimal import Decimal
 
@@ -39,6 +40,7 @@ except Exception as _weasy_err:
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
 from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas
+from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
 
 load_dotenv()
 app = Flask(__name__)
@@ -319,6 +321,47 @@ def _plame_linea_archivo15(row):
         susp,
         str(days).zfill(2),
     ]) + '|'
+
+
+def _plame_validar_archivo14_incidencias(cursor, p):
+    """sp_pr_plame_validar_archivo14_web → mensajes y personas con incidencia por fila."""
+    cursor.execute(
+        'EXEC sp_pr_plame_validar_archivo14_web @cia=?, @period=?',
+        (p['cia'], p['period']),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    mensajes = []
+    personas = set()
+    for r in rows or []:
+        person = str(r.get('person') or '').strip()
+        msg = str(r.get('mensaje') or r.get('observacion') or '').strip()
+        if not msg:
+            continue
+        mensajes.append(msg)
+        if person:
+            personas.add(person)
+    return mensajes, personas
+
+
+def _plame_validar_archivo18_incidencias(cursor, p):
+    """sp_pr_plame_validar_archivo18_web → mensajes y personas con incidencia por fila."""
+    cursor.execute(
+        'EXEC sp_pr_plame_validar_archivo18_web '
+        '@cia=?, @period=?, @payroll_all=?, @payroll=?, @cesados=?',
+        (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None, p['cesados']),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    mensajes = []
+    personas = set()
+    for r in rows or []:
+        person = str(r.get('person') or '').strip()
+        msg = str(r.get('mensaje') or r.get('observacion') or '').strip()
+        if not msg:
+            continue
+        mensajes.append(msg)
+        if person:
+            personas.add(person)
+    return mensajes, personas
 
 
 def _plame_params_archivo18_from_json(body):
@@ -2283,6 +2326,325 @@ def plame_archivo26_page():
     return render_template('plame_archivo26.html')
 
 
+@app.route('/plame/validar')
+@login_required
+def plame_validar_page():
+    return render_template('plame_validar.html')
+
+
+def _plame_sunat_obtener_carga(cursor, cia, period):
+    cursor.execute(
+        "EXEC sp_pr_plame_sunat_obtener_carga_web @cia=?, @period=?",
+        (cia, period),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    return rows[0] if rows else None
+
+
+def _plame_sunat_carga_a_json(row):
+    if not row:
+        return None
+    uploaded_at = row.get('uploadedat')
+    if isinstance(uploaded_at, datetime):
+        uploaded_at = uploaded_at.strftime('%Y-%m-%d %H:%M:%S')
+    return {
+        'cargaid': row.get('cargaid'),
+        'company': row.get('company'),
+        'period': row.get('period'),
+        'ruc': row.get('ruc'),
+        'employername': row.get('employername'),
+        'periodosunat': row.get('periodosunat'),
+        'filer01name': row.get('filer01name'),
+        'filer04name': row.get('filer04name'),
+        'filer05name': row.get('filer05name'),
+        'rowsr01': int(row.get('rowsr01') or 0),
+        'rowsr04': int(row.get('rowsr04') or 0),
+        'rowsr05': int(row.get('rowsr05') or 0),
+        'uploadedat': uploaded_at,
+        'uploadedby': row.get('uploadedby'),
+    }
+
+
+def _plame_sunat_validar_archivos(parsed_bundle, filenames, cia, period):
+    metas = [parsed_bundle[t]['meta'] for t in ARCHIVOS_SUNAT]
+    rucs = {m.get('ruc') for m in metas if m.get('ruc')}
+    if len(rucs) != 1:
+        return 'Los tres XML deben corresponder al mismo RUC.'
+    periodos = {m.get('period_yyyymm') for m in metas if m.get('period_yyyymm')}
+    if len(periodos) != 1:
+        return 'Los tres XML deben corresponder al mismo periodo tributario.'
+    periodo_xml = next(iter(periodos))
+    if periodo_xml != period:
+        return (
+            f'El periodo del XML ({periodo_xml}) no coincide con el seleccionado ({period}).'
+        )
+    for tipo in ARCHIVOS_SUNAT:
+        fn_info = parse_filename(filenames.get(tipo))
+        if fn_info and fn_info.get('period') != period:
+            return f'El nombre de {tipo} no coincide con el periodo seleccionado.'
+        if fn_info and fn_info.get('tipo') != tipo:
+            return f'El archivo {filenames.get(tipo)} no corresponde a {tipo}.'
+    return None
+
+
+def _plame_sunat_guardar_carga(conn, cia, period, parsed_bundle, filenames, username):
+    meta = parsed_bundle['R01']['meta']
+    cursor = conn.cursor()
+    cursor.execute(
+        "EXEC sp_pr_plame_sunat_eliminar_carga_web @cia=?, @period=?",
+        (cia, period),
+    )
+    _drain_pyodbc_cursor(cursor)
+    cursor.execute(
+        """
+        INSERT INTO PR_PlameSunatCarga (
+            Company, Period, Ruc, EmployerName, PeriodoSunat,
+            FileR01Name, FileR04Name, FileR05Name,
+            RowsR01, RowsR04, RowsR05, UploadedBy
+        )
+        OUTPUT INSERTED.CargaId
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            cia,
+            period,
+            meta.get('ruc') or '',
+            (meta.get('employername') or '')[:300],
+            (meta.get('periodosunat') or '')[:7],
+            (filenames.get('R01') or '')[:260],
+            (filenames.get('R04') or '')[:260],
+            (filenames.get('R05') or '')[:260],
+            parsed_bundle['R01']['rows_count'],
+            parsed_bundle['R04']['rows_count'],
+            parsed_bundle['R05']['rows_count'],
+            (username or '')[:50],
+        ),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        _drain_pyodbc_cursor(cursor)
+        row = _plame_sunat_obtener_carga(cursor, cia, period)
+        carga_id = int(row.get('cargaid') or 0) if row else 0
+    else:
+        carga_id = int(row[0])
+    if not carga_id:
+        raise RuntimeError('No se pudo registrar la cabecera de la carga SUNAT.')
+
+    insert_sql = """
+        INSERT INTO PR_PlameSunatFila (
+            CargaId, Archivo, NumFila, TipoDoc, DocumentNumber,
+            LastName1, LastName2, Names, Situacion, MontosJson
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    """
+    params = []
+    for tipo in ARCHIVOS_SUNAT:
+        for fila in parsed_bundle[tipo]['filas']:
+            params.append((
+                carga_id,
+                fila['archivo'],
+                fila['num_fila'],
+                fila['tipodoc'],
+                fila['documentnumber'],
+                fila['lastname1'][:100],
+                fila['lastname2'][:100],
+                fila['names'][:200],
+                fila['situacion'][:80],
+                fila['montos_json'],
+            ))
+    batch_size = 50
+    for i in range(0, len(params), batch_size):
+        cursor.executemany(insert_sql, params[i:i + batch_size])
+    conn.commit()
+    return carga_id
+
+
+@app.route('/api/plame/validar/estado', methods=['GET'])
+@login_required
+def api_plame_validar_estado():
+    """Estado de la carga SUNAT R01/R04/R05 para compañía y periodo."""
+    cia = str(request.args.get('cia') or '').strip()
+    period = _plame_period_yyyymm(request.args.get('period'))
+    if not cia or len(period) != 6:
+        return jsonify({'carga': None})
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        row = _plame_sunat_obtener_carga(cursor, cia, period)
+        return jsonify({'carga': _plame_sunat_carga_a_json(row)})
+    except Exception as e:
+        logging.exception('api_plame_validar_estado')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/validar/carga', methods=['POST'])
+@login_required
+def api_plame_validar_carga():
+    """Sube y parsea los XML SUNAT R01, R04 y R05 para un periodo."""
+    cia = str(request.form.get('cia') or '').strip()
+    period = _plame_period_yyyymm(request.form.get('period'))
+    err = _plame_validar_params({'cia': cia, 'period': period})
+    if err:
+        return jsonify({'error': err}), 400
+
+    file_map = {
+        'R01': request.files.get('file_r01'),
+        'R04': request.files.get('file_r04'),
+        'R05': request.files.get('file_r05'),
+    }
+    for tipo in ARCHIVOS_SUNAT:
+        f = file_map.get(tipo)
+        if not f or not f.filename:
+            return jsonify({'error': f'Debe seleccionar el archivo {tipo}.'}), 400
+
+    parsed_bundle = {}
+    filenames = {}
+    try:
+        for tipo in ARCHIVOS_SUNAT:
+            f = file_map[tipo]
+            filenames[tipo] = f.filename
+            raw = f.read()
+            if not raw:
+                return jsonify({'error': f'El archivo {tipo} está vacío.'}), 400
+            parsed_bundle[tipo] = parse_sunat_xml(raw, tipo)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except ET.ParseError:
+        return jsonify({'error': 'Uno de los archivos no es un XML válido.'}), 400
+    except Exception as e:
+        logging.exception('api_plame_validar_carga parse')
+        return jsonify({'error': f'Error al leer XML: {e}'}), 400
+
+    err = _plame_sunat_validar_archivos(parsed_bundle, filenames, cia, period)
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        username = str(getattr(current_user, 'username', '') or getattr(current_user, 'id', ''))
+        carga_id = _plame_sunat_guardar_carga(
+            conn, cia, period, parsed_bundle, filenames, username,
+        )
+        cursor = conn.cursor()
+        row = _plame_sunat_obtener_carga(cursor, cia, period)
+        return jsonify({
+            'ok': True,
+            'cargaid': carga_id,
+            'carga': _plame_sunat_carga_a_json(row),
+            'mensaje': 'Archivos SUNAT cargados correctamente.',
+            'ejecutar_validacion': True,
+        })
+    except Exception as e:
+        logging.exception('api_plame_validar_carga')
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _plame_validar_neto_r01_ejecutar(cursor, cia, period):
+    cursor.execute(
+        "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?",
+        (cia, period),
+    )
+    sets = _dicts_collect_nonempty_resultsets(cursor)
+    resumen = sets[0][0] if len(sets) > 0 and sets[0] else {}
+    filas = sets[1] if len(sets) > 1 else []
+    return resumen, filas
+
+
+def _plame_validar_neto_r01_json(resumen, filas):
+    def num(val):
+        try:
+            return round(float(val or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def int_val(val):
+        try:
+            return int(val or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    res = resumen or {}
+    out_filas = []
+    for r in filas or []:
+        out_filas.append({
+            'tipodoc': _jsonable_value(r.get('tipodoc')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'nombre': _jsonable_value(r.get('nombre')),
+            'neto_sunat': num(r.get('neto_sunat')),
+            'neto_planilla': num(r.get('neto_planilla')),
+            'diferencia': num(r.get('diferencia')),
+            'estado': _jsonable_value(r.get('estado')),
+        })
+    tiene_diferencias = any(
+        f.get('estado') != 'OK' for f in out_filas
+    )
+    return {
+        'resumen': {
+            'total_filas': int_val(res.get('total_filas')),
+            'coinciden': int_val(res.get('coinciden')),
+            'con_diferencia': int_val(res.get('con_diferencia')),
+            'solo_sunat': int_val(res.get('solo_sunat')),
+            'solo_planilla': int_val(res.get('solo_planilla')),
+            'total_neto_sunat': num(res.get('total_neto_sunat')),
+            'total_neto_planilla': num(res.get('total_neto_planilla')),
+            'total_diferencia': num(res.get('total_diferencia')),
+        },
+        'filas': out_filas,
+        'tiene_diferencias': tiene_diferencias,
+    }
+
+
+@app.route('/api/plame/validar/neto-r01', methods=['POST'])
+@login_required
+def api_plame_validar_neto_r01():
+    """Compara Neto a pagar (R01 SUNAT) vs Neto planilla (FormulaCode NETO)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if not _plame_sunat_obtener_carga(cursor, p['cia'], p['period']):
+            return jsonify({
+                'error': 'No hay carga SUNAT para este periodo. Suba los archivos R01, R04 y R05 primero.',
+            }), 400
+        _drain_pyodbc_cursor(cursor)
+        resumen, filas = _plame_validar_neto_r01_ejecutar(cursor, p['cia'], p['period'])
+        resultado = _plame_validar_neto_r01_json(resumen, filas)
+        return jsonify(resultado)
+    except Exception as e:
+        logging.exception('api_plame_validar_neto_r01')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/plame/archivo-14/listado', methods=['POST'])
 @login_required
 def api_plame_archivo14_listado():
@@ -2302,6 +2664,7 @@ def api_plame_archivo14_listado():
             (p['cia'], p['period']),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
+        validaciones, personas_incidencia = _plame_validar_archivo14_incidencias(cursor, p)
         resultado = []
         for r in rows:
             wh = r.get('workinghours')
@@ -2314,7 +2677,12 @@ def api_plame_archivo14_listado():
                 eh_num = float(eh) if eh is not None else 0.0
             except Exception:
                 eh_num = 0.0
+            person = _jsonable_value(r.get('person'))
+            person_key = str(person or '').strip()
+            sin_horas = wh_num <= 0
+            incidencia = sin_horas or person_key in personas_incidencia
             resultado.append({
+                "person": person,
                 "documenttype": _jsonable_value(r.get('documenttype')),
                 "documentnumber": _jsonable_value(r.get('documentnumber')),
                 "name": _jsonable_value(r.get('name')),
@@ -2323,8 +2691,13 @@ def api_plame_archivo14_listado():
                 "extrahours": eh_num,
                 "extraminutes": _jsonable_value(r.get('extraminutes')),
                 "selection": _jsonable_value(r.get('selection')),
+                "incidencia": incidencia,
             })
-        return jsonify({"rows": resultado, "total": len(resultado)})
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "validaciones": validaciones,
+        })
     except Exception as e:
         logging.exception("api_plame_archivo14_listado")
         return jsonify({"error": str(e)}), 500
@@ -2492,6 +2865,7 @@ def api_plame_archivo18_listado():
             (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None, p['cesados']),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
+        validaciones, personas_incidencia = _plame_validar_archivo18_incidencias(cursor, p)
         resultado = []
         for r in rows:
             try:
@@ -2502,8 +2876,11 @@ def api_plame_archivo18_listado():
                 cl = float(r.get('conceptvaluelo') or 0)
             except (TypeError, ValueError):
                 cl = 0.0
+            person = _jsonable_value(r.get('person'))
+            person_key = str(person or '').strip()
+            incidencia = person_key in personas_incidencia
             resultado.append({
-                "person": _jsonable_value(r.get('person')),
+                "person": person,
                 "documenttype": _jsonable_value(r.get('documenttype')),
                 "documentnumber": _jsonable_value(r.get('documentnumber')),
                 "name": _jsonable_value(r.get('name')),
@@ -2511,8 +2888,13 @@ def api_plame_archivo18_listado():
                 "conceptvalue": cv,
                 "conceptvaluelo": cl,
                 "selection": _jsonable_value(r.get('selection')),
+                "incidencia": incidencia,
             })
-        return jsonify({"rows": resultado, "total": len(resultado)})
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "validaciones": validaciones,
+        })
     except Exception as e:
         logging.exception("api_plame_archivo18_listado")
         return jsonify({"error": str(e)}), 500

@@ -1,17 +1,15 @@
 /*
-    Listado PLAME Archivo 14 — Jornada laboral y sobretiempo.
-    Usado por: POST /api/plame/archivo-14/listado (plame_archivo14.html).
+    PLAME Archivo 14 — Validaciones de incidencias (trabajadores y horas trabajadas).
 
-    Basado en sp_pr_listado_plame14 legacy (PowerBuilder).
+    Usado por: POST /api/plame/archivo-14/listado
 
-    Parámetros:
-      @cia    — código de compañía
-      @period — periodo tributario YYYYMM (6 dígitos)
+    Reglas:
+      - Cantidad de trabajadores del Archivo 14 = planilla del periodo (fin / semana).
+      - Todo trabajador de planilla debe tener horas trabajadas (conceptos PLAME 14 type WH).
 
-    Campos exportables (pipe |):
-      Tipo doc (2), N° doc (15), Horas ord (3), Min ord (2), Horas extra (3), Min extra (2)
+    Parámetros: mismos que sp_pr_listado_plame14_web.
 */
-CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame14_web]
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_archivo14_web]
     @cia    VARCHAR(4),
     @period VARCHAR(20)
 AS
@@ -20,20 +18,30 @@ BEGIN
 
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
 
+    CREATE TABLE #Trab (
+        person          VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY,
+        documentnumber  VARCHAR(30) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+        name            VARCHAR(200) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+        workinghours    NUMERIC(19, 4) NOT NULL,
+        extrahours      NUMERIC(19, 4) NOT NULL
+    );
+
+    CREATE TABLE #msg (
+        person  VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
+        mensaje VARCHAR(500) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+    );
+
+    /* --- Misma población y cálculo que sp_pr_listado_plame14_web --- */
+    INSERT INTO #Trab (person, documentnumber, name, workinghours, extrahours)
     SELECT
-        person,
-        documenttype,
-        documentnumber,
-        name,
-        workinghours,
-        workingminutes,
-        extrahours,
-        extraminutes,
-        selection
+        T.person,
+        MAX(T.documentnumber) AS documentnumber,
+        MAX(T.name) AS name,
+        MAX(T.workinghours) AS workinghours,
+        MAX(T.extrahours) AS extrahours
     FROM (
         SELECT
             pr_employee.person AS person,
-            CASE WHEN sy_persondocumenttype.pdt = '03' THEN '04' ELSE sy_persondocumenttype.pdt END AS documenttype,
             sy_person.documentnumber AS documentnumber,
             LTRIM(RTRIM(
                 ISNULL(sy_person.lastname1, '') + ' ' +
@@ -56,7 +64,6 @@ BEGIN
                         AND P.type = 'WH'
                     )
             ), 0) AS workinghours,
-            0 AS workingminutes,
             ISNULL((
                 SELECT SUM(ISNULL(E.ConceptValueLo, E.ConceptValue) * CASE WHEN P.applysum = 'P' THEN 1 ELSE -1 END)
                 FROM PR_EmployeePayRollConcept E
@@ -71,9 +78,7 @@ BEGIN
                         AND P.plame = '14'
                         AND P.type = 'HE'
                     )
-            ), 0) AS extrahours,
-            0 AS extraminutes,
-            'N' AS selection
+            ), 0) AS extrahours
         FROM pr_employee (NOLOCK)
             INNER JOIN SY_Company ON (PR_Employee.Company = SY_Company.Company AND pr_employee.company = @cia)
             INNER JOIN sy_person (NOLOCK) ON (sy_person.person = pr_employee.person)
@@ -89,16 +94,47 @@ BEGIN
         WHERE pr_employeecategory.PDT IN ('1')
           AND SUBSTRING(pr_employeepayroll.PRPeriod, 1, 6) = @period
     ) T
-    GROUP BY
+    GROUP BY T.person;
+
+    /* --- Horas trabajadas en cero --- */
+    INSERT INTO #msg (person, mensaje)
+    SELECT
         person,
-        documenttype,
-        documentnumber,
-        name,
-        workinghours,
-        workingminutes,
-        extrahours,
-        extraminutes,
-        selection
-    ORDER BY name ASC;
+        'Trabajador sin horas trabajadas: '
+        + LTRIM(RTRIM(ISNULL(name, '')))
+        + ' (DNI '
+        + LTRIM(RTRIM(ISNULL(documentnumber, '')))
+        + ')'
+    FROM #Trab
+    WHERE ISNULL(workinghours, 0) <= 0;
+
+    /* --- Cantidad de trabajadores: Archivo 14 exportable vs planilla --- */
+    DECLARE @cnt_planilla INT;
+    DECLARE @cnt_archivo14 INT;
+
+    SELECT @cnt_planilla = COUNT(*) FROM #Trab;
+
+    SELECT @cnt_archivo14 = COUNT(*)
+    FROM #Trab
+    WHERE ISNULL(workinghours, 0) > 0;
+
+    IF @cnt_archivo14 <> @cnt_planilla
+    BEGIN
+        INSERT INTO #msg (person, mensaje)
+        VALUES (
+            NULL,
+            'Cantidad de trabajadores no coincide: Archivo 14 tiene '
+            + CAST(@cnt_archivo14 AS VARCHAR(10))
+            + ', planilla tiene '
+            + CAST(@cnt_planilla AS VARCHAR(10)) + '.'
+        );
+    END;
+
+    SELECT person, mensaje
+    FROM #msg
+    ORDER BY CASE WHEN person IS NULL THEN 0 ELSE 1 END, mensaje;
+
+    DROP TABLE #msg;
+    DROP TABLE #Trab;
 END
 GO

@@ -19,8 +19,14 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | Archivo | Procedimiento | Pantalla / API |
 |---------|---------------|----------------|
 | `sp_pr_listado_plame14_web.sql` | `sp_pr_listado_plame14_web` | Archivo 14 `.jor` |
+| `sp_pr_plame_validar_archivo14_web.sql` | `sp_pr_plame_validar_archivo14_web` | Incidencias Archivo 14 (trabajadores y horas) |
 | `sp_pr_listado_plame15_web.sql` | `sp_pr_listado_plame15_web` | Archivo 15 `.snl` |
 | `sp_pr_listado_plame18_web.sql` | `sp_pr_listado_plame18_web` | Archivo 18 `.rem` |
+| `sp_pr_plame_validar_archivo18_web.sql` | `sp_pr_plame_validar_archivo18_web` | Incidencias Archivo 18 (PDT y trabajadores) |
+| `tables_pr_plame_sunat_web.sql` | Tablas PR_PlameSunat* | Validar PLAME |
+| `sp_pr_plame_sunat_obtener_carga_web.sql` | Carga SUNAT | Validar PLAME |
+| `sp_pr_plame_sunat_eliminar_carga_web.sql` | Eliminar carga SUNAT | Validar PLAME |
+| `sp_pr_plame_validar_neto_r01_web.sql` | Neto R01 vs planilla NETO | Validar PLAME |
 | `sp_pr_selectorperiodos_plame_web.sql` | `sp_pr_selectorperiodos_plame_web` | Selector periodos PLAME |
 | `sp_pr_selectorperiodoactivo_web.sql` | `sp_pr_selectorperiodoactivo_web` | Periodo activo (`PR_ProcessControl`) |
 
@@ -52,6 +58,10 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | Archivo | Procedimiento |
 |---------|---------------|
 | `sp_pr_listatrabajadores_web.sql` | Búsqueda trabajadores |
+| `sp_pr_selectorcompanias_web.sql` | Compañías activas |
+| `sp_pr_selectorplanillas_web.sql` | Tipos de planilla por compañía |
+| `sp_pr_selectorprocesos_web.sql` | Procesos por compañía y planilla |
+| `sp_pr_selectorperiodos_web.sql` | Periodos por compañía, planilla y proceso |
 | `sp_pr_calcularplanillas_web.sql` | Cálculo planillas |
 | `sp_pr_validar_calculo_web.sql` | Validaciones post-cálculo → POST `/api/procesar-planilla/validar-calculo` |
 | `sp_pr_selectorbancos_web.sql` | Bancos |

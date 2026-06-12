@@ -193,7 +193,7 @@
 
 <div class="card shadow-sm border-0 d-none" id="cardResultadoAfp">
     <div class="card-body pt-3">
-        <h5 class="fw-bold mb-3 text-center">Planilla de AFPnet</h5>
+        <h5 class="fw-bold mb-3 text-center" id="tituloPlanillaAfpnet">Planilla de AFPnet</h5>
         <div class="table-scroll-container">
             <table class="table table-bordered table-sm table-hover table-declaracion-afp align-middle">
                 <thead>
@@ -297,19 +297,31 @@ document.addEventListener('DOMContentLoaded', async function () {
         return s.length >= 6 ? s.slice(0, 6) : s;
     }
 
-    function tituloResumenAfpnet(period) {
+    function tituloConPeriodo(base, period) {
         const yyyymm = periodoYyyymm(period);
-        const base = 'Resumen de verificación AFPnet';
         if (/^\d{6}$/.test(yyyymm)) {
             return `${base} ${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}`;
         }
         return base;
     }
 
-    function actualizarTituloResumenAfpnet() {
-        const el = document.getElementById('tituloResumenAfpnet');
-        if (el) {
-            el.textContent = tituloResumenAfpnet(document.getElementById('cboPeriodo').value);
+    function tituloResumenAfpnet(period) {
+        return tituloConPeriodo('Resumen de verificación AFPnet', period);
+    }
+
+    function tituloPlanillaAfpnet(period) {
+        return tituloConPeriodo('Planilla de AFPnet', period);
+    }
+
+    function actualizarTitulosAfpnet() {
+        const period = document.getElementById('cboPeriodo').value;
+        const tituloResumen = document.getElementById('tituloResumenAfpnet');
+        const tituloPlanilla = document.getElementById('tituloPlanillaAfpnet');
+        if (tituloResumen) {
+            tituloResumen.textContent = tituloResumenAfpnet(period);
+        }
+        if (tituloPlanilla) {
+            tituloPlanilla.textContent = tituloPlanillaAfpnet(period);
         }
     }
 
@@ -468,7 +480,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        actualizarTituloResumenAfpnet();
+        actualizarTitulosAfpnet();
 
         const montos = Array.isArray(resumen.montos_proceso) ? resumen.montos_proceso : [];
         const filasMontos = montos.map((item) => `
@@ -726,6 +738,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             lastValidacionesAfp = Array.isArray(data.validaciones) ? data.validaciones : [];
             renderizarValidaciones(lastValidacionesAfp);
             renderizarTabla(lastRowsAfp);
+            actualizarTitulosAfpnet();
             document.getElementById('cardResultadoAfp').classList.remove('d-none');
         } catch (err) {
             console.error(err);
@@ -853,6 +866,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     ['cboPeriodo', 'cboPlanilla', 'cboAfp'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', function () {
+            if (id === 'cboPeriodo') actualizarTitulosAfpnet();
             if (filtrosPersist) filtrosPersist.guardar();
         });
     });

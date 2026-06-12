@@ -160,6 +160,7 @@ BEGIN
            AND EPC.ProcessType = PP.processtype
     WHERE EPC.Company = @cia
       AND LEFT(EPC.PRPeriod, 6) = @period
+      AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
       AND (
             EPC.Concept = @AFPAssureableRemConcept
          OR EPC.Concept = @AFPFixedAmountConcept
@@ -233,13 +234,13 @@ BEGIN
             S.costcenter,
             S.costcentername,
             S.payrolltype,
-            EM.ceasedate,
+            S.ceasedate,
             LTRIM(RTRIM(COALESCE(
                 NULLIF(LTRIM(RTRIM(ISNULL(S.afpcard, ''))), ''),
                 NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
                 ''
             ))),
-            ISNULL(EM.reentrydate, EM.entrydate) AS entrydate
+            S.entrydate AS entrydate
         FROM (
             SELECT
                 C.person,
@@ -271,6 +272,8 @@ BEGIN
                 MAX(C.costcentername) AS costcentername,
                 MAX(C.payrolltype) AS payrolltype,
                 MAX(C.afpcard) AS afpcard,
+                MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.ceasedate END) AS ceasedate,
+                MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.entrydate END) AS entrydate,
                 SUM(CASE
                     WHEN C.concept IN (
                         @AFPFixedAmountConcept, @AFPVariableAmountConcept,
@@ -278,12 +281,16 @@ BEGIN
                     ) THEN 1 ELSE 0
                 END) AS tiene_aportes
             FROM #ConceptosAfp C
+                INNER JOIN PR_ProcessType PT (NOLOCK)
+                    ON PT.ProcessType = C.processtype
+                   AND PT.Company = C.company
             GROUP BY C.person, C.company, C.payrolltype, LEFT(C.prperiod, 6) + SUBSTRING(C.prperiod, 5, 2)
         ) S
             INNER JOIN pr_employee EM (NOLOCK)
                 ON EM.person = S.person
                AND EM.company = S.company
-        WHERE S.tiene_aportes > 0;
+        WHERE S.tiene_aportes > 0
+          AND ISNULL(LTRIM(RTRIM(S.afp)), '') <> '';
 
         INSERT INTO PR_EmployeeAFPHeader (
             Company, ReplicationUnit, PRPeriod, PayRollType, AFP, costcenter,

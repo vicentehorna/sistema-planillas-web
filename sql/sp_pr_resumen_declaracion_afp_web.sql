@@ -3,6 +3,8 @@
 
     Usado por: POST /api/declaracion-afp/generar-xlsx
 
+    Criterio planilla manda: régimen AFP, ingreso y cese según PR_EmployeePayRoll del periodo.
+
     Resultset 1 — Montos TOTAL_REM_AFP por proceso (FIN_DE_MES, LIQUIDACION, SEMANAL).
               Jubilados (FLAG_JUBILADO) no suman: en AFPnet su remuneración asegurable es 0.
     Resultset 2 — Conteo trabajadores en planilla (nuevos / cesados / antiguos).
@@ -25,13 +27,46 @@ BEGIN
     SET @payroll = LTRIM(RTRIM(ISNULL(@payroll, '')));
     SET @afp_all = UPPER(LTRIM(RTRIM(ISNULL(@afp_all, 'Y'))));
     SET @afp = LTRIM(RTRIM(ISNULL(@afp, '')));
-
     IF @payroll_all NOT IN ('Y', 'N') SET @payroll_all = 'Y';
     IF @afp_all NOT IN ('Y', 'N') SET @afp_all = 'Y';
     IF @payroll_all = 'Y' SET @payroll = '';
     IF @afp_all = 'Y' SET @afp = '';
 
-    /* Solo trabajadores con régimen AFP (legacy: ISNULL(PR_Employee.AFP,'') <> ''). */
+    CREATE TABLE #AfpPlanilla (
+        person VARCHAR(20) NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE #PlanillaFechas (
+        person VARCHAR(20) NOT NULL PRIMARY KEY,
+        entrydate DATETIME NULL,
+        ceasedate DATETIME NULL
+    );
+
+    INSERT INTO #AfpPlanilla (person)
+    SELECT DISTINCT LTRIM(RTRIM(EP.Person))
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp);
+
+    INSERT INTO #PlanillaFechas (person, entrydate, ceasedate)
+    SELECT
+        LTRIM(RTRIM(EP.Person)),
+        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.EntryDate END),
+        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.CeaseDate END)
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+        INNER JOIN PR_ProcessType PT (NOLOCK)
+            ON PT.ProcessType = EP.ProcessType
+           AND PT.Company = EP.Company
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+      AND LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES'
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp)
+    GROUP BY LTRIM(RTRIM(EP.Person));
 
     /* --- Resultset 1: montos por proceso --- */
     SELECT
@@ -53,17 +88,21 @@ BEGIN
             INNER JOIN PR_ProcessType PT (NOLOCK)
                 ON EPC.ProcessType = PT.ProcessType
                AND PT.Company = @cia
-            INNER JOIN PR_Employee E (NOLOCK)
-                ON E.person = EPC.Person
-               AND E.company = EPC.Company
+            INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+                ON EP.Company = EPC.Company
+               AND EP.Person = EPC.Person
+               AND EP.PayRollType = EPC.PayRollType
+               AND EP.ProcessType = EPC.ProcessType
+               AND EP.PRPeriod = EPC.PRPeriod
+            INNER JOIN #AfpPlanilla AP
+                ON AP.person = LTRIM(RTRIM(EPC.Person))
         WHERE EPC.Company = @cia
           AND LEFT(EPC.PRPeriod, 6) = @period
           AND C.FormulaCode = 'TOTAL_REM_AFP'
           AND LTRIM(RTRIM(PT.ShortName)) IN ('FIN_DE_MES', 'LIQUIDACION', 'SEMANAL')
           AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
-          AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
-          AND (@afp_all = 'Y' OR LTRIM(RTRIM(E.AFP)) = @afp)
-          /* Jubilados: no incluir su TOTAL_REM_AFP (AFPnet reporta remuneración 0). */
+          AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+          AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp)
           AND NOT EXISTS (
                 SELECT 1
                 FROM PR_EmployeeConcept EC (NOLOCK)
@@ -84,7 +123,6 @@ BEGIN
     ) M ON M.proceso = P.proceso
     ORDER BY P.orden;
 
-    /* --- Población planilla: misma base que listado AFPnet (PR_EmployeeAFP + jubilados) --- */
     CREATE TABLE #TrabajadoresPlanilla (
         person VARCHAR(20) NOT NULL PRIMARY KEY,
         es_jubilado CHAR(1) NOT NULL DEFAULT 'N'
@@ -102,12 +140,10 @@ BEGIN
            AND H.replicationunit = A.replicationunit
            AND H.costcenter = A.costcenter
            AND H.payrolltype = A.payrolltype
-        INNER JOIN PR_Employee E (NOLOCK)
-            ON E.person = A.person
-           AND E.company = A.company
+        INNER JOIN #AfpPlanilla AP
+            ON AP.person = LTRIM(RTRIM(A.person))
     WHERE A.company = @cia
       AND LEFT(A.prperiod, 6) = @period
-      AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
       AND (@payroll_all = 'Y' OR H.payrolltype = @payroll)
       AND (@afp_all = 'Y' OR LTRIM(RTRIM(A.afp)) = @afp);
 
@@ -119,9 +155,8 @@ BEGIN
         INNER JOIN PR_Concept C (NOLOCK)
             ON EC.Concept = C.Concept
            AND C.Company = @cia
-        INNER JOIN PR_Employee E (NOLOCK)
-            ON E.person = EC.Person
-           AND E.company = EC.Company
+        INNER JOIN #AfpPlanilla AP
+            ON AP.person = LTRIM(RTRIM(EC.Person))
     WHERE EC.Company = @cia
       AND C.FormulaCode = 'FLAG_JUBILADO'
       AND EC.FlagFrecuencyType IN ('P', 'T')
@@ -130,17 +165,12 @@ BEGIN
             OR (EC.FlagFrecuencyType = 'T' AND LEFT(EC.PRPeriodStart, 6) = @period)
           )
       AND (@payroll_all = 'Y' OR EC.PayRollType = @payroll)
-      AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
-      AND (@afp_all = 'Y' OR LTRIM(RTRIM(E.AFP)) = @afp)
       AND NOT EXISTS (
             SELECT 1
             FROM #TrabajadoresPlanilla T
             WHERE T.person = LTRIM(RTRIM(EC.Person))
       );
 
-    /* --- Resultset 2: conteo planilla ---
-       Nuevos/cesados por bandera en el periodo (pueden coincidir en un mismo trabajador).
-       total_planilla = trabajadores únicos en la población. */
     SELECT
         SUM(CASE WHEN inicio_en_periodo = 1 THEN 1 ELSE 0 END) AS nuevos,
         SUM(CASE WHEN cese_en_periodo = 1 THEN 1 ELSE 0 END) AS cesados,
@@ -150,25 +180,20 @@ BEGIN
         SELECT
             T.person,
             CASE
-                WHEN E.reentrydate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
-                WHEN E.reentrydate IS NULL
-                 AND E.entrydate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 1
+                WHEN PL.entrydate IS NOT NULL
+                 AND LEFT(CONVERT(VARCHAR(8), PL.entrydate, 112), 6) = @period THEN 1
                 ELSE 0
             END AS inicio_en_periodo,
             CASE
-                WHEN E.ceasedate IS NOT NULL
-                 AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 1
+                WHEN PL.ceasedate IS NOT NULL
+                 AND LEFT(CONVERT(VARCHAR(8), PL.ceasedate, 112), 6) = @period THEN 1
                 ELSE 0
             END AS cese_en_periodo
         FROM #TrabajadoresPlanilla T
-            INNER JOIN PR_Employee E (NOLOCK)
-                ON E.person = T.person
-               AND E.company = @cia
+            INNER JOIN #PlanillaFechas PL
+                ON PL.person = T.person
     ) X;
 
-    /* --- Resultset 3: detalle población planilla --- */
     SELECT
         LTRIM(RTRIM(T.person)) AS person,
         LTRIM(RTRIM(ISNULL(P.documentnumber, ''))) AS documentnumber,
@@ -177,26 +202,24 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
         T.es_jubilado,
         CASE
-            WHEN E.reentrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 1
-            WHEN E.reentrydate IS NULL
-             AND E.entrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 1
+            WHEN PL.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.entrydate, 112), 6) = @period THEN 1
             ELSE 0
         END AS inicio_en_periodo,
         CASE
-            WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 1
+            WHEN PL.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.ceasedate, 112), 6) = @period THEN 1
             ELSE 0
         END AS cese_en_periodo
     FROM #TrabajadoresPlanilla T
-        INNER JOIN PR_Employee E (NOLOCK)
-            ON E.person = T.person
-           AND E.company = @cia
+        INNER JOIN #PlanillaFechas PL
+            ON PL.person = T.person
         INNER JOIN sy_person P (NOLOCK)
             ON P.person = T.person
     ORDER BY P.lastname1, P.lastname2, P.name1, T.person;
 
     DROP TABLE #TrabajadoresPlanilla;
+    DROP TABLE #PlanillaFechas;
+    DROP TABLE #AfpPlanilla;
 END
 GO

@@ -55,6 +55,43 @@ BEGIN
     IF @flagcostcenter NOT IN ('Y', 'N') SET @flagcostcenter = 'Y';
     IF @employee_all NOT IN ('Y', 'N') SET @employee_all = 'Y';
 
+    /* Régimen AFP y fechas ingreso/cese según planilla del periodo (PR_EmployeePayRoll). */
+    CREATE TABLE #AfpPlanilla (
+        person VARCHAR(20) NOT NULL PRIMARY KEY
+    );
+
+    INSERT INTO #AfpPlanilla (person)
+    SELECT DISTINCT LTRIM(RTRIM(EP.Person))
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp);
+
+    CREATE TABLE #PlanillaFechas (
+        person VARCHAR(20) NOT NULL PRIMARY KEY,
+        entrydate DATETIME NULL,
+        ceasedate DATETIME NULL
+    );
+
+    INSERT INTO #PlanillaFechas (person, entrydate, ceasedate)
+    SELECT
+        LTRIM(RTRIM(EP.Person)),
+        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.EntryDate END),
+        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.CeaseDate END)
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+        INNER JOIN PR_ProcessType PT (NOLOCK)
+            ON PT.ProcessType = EP.ProcessType
+           AND PT.Company = EP.Company
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+      AND LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES'
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp)
+    GROUP BY LTRIM(RTRIM(EP.Person));
+
     SELECT
         E.person,
         LTRIM(RTRIM(ISNULL(F.description, ''))) AS afp_description,
@@ -68,33 +105,30 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
         CASE
-            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate))))
-                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate)))), 2) <> LEFT(A.prperiod, 6)
+            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(PL.ceasedate, PL.entrydate)))
+                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(PL.ceasedate, PL.entrydate))), 2) <> LEFT(A.prperiod, 6)
             THEN ''
             ELSE CASE
-                WHEN ISNULL(E.ceasedate, '') = '' THEN '01 ' + CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
-                ELSE '02 ' + CONVERT(CHAR(10), E.ceasedate, 103)
+                WHEN PL.ceasedate IS NULL THEN '01 ' + CONVERT(CHAR(10), PL.entrydate, 103)
+                ELSE '02 ' + CONVERT(CHAR(10), PL.ceasedate, 103)
             END
         END AS fecha_cese,
         CASE
-            WHEN ISNULL(E.reentrydate, E.entrydate) IS NULL THEN ''
-            ELSE CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+            WHEN PL.entrydate IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), PL.entrydate, 103)
         END AS entrydate,
         CASE
-            WHEN ISNULL(E.ceasedate, '') = '' THEN ''
-            ELSE CONVERT(CHAR(10), E.ceasedate, 103)
+            WHEN PL.ceasedate IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), PL.ceasedate, 103)
         END AS ceasedate,
         CASE
-            WHEN E.reentrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'S'
-            WHEN E.reentrydate IS NULL
-             AND E.entrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
+            WHEN PL.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.entrydate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS inicio_relacion,
         CASE
-            WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
+            WHEN PL.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.ceasedate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS cese_relacion,
         CASE
@@ -149,8 +183,10 @@ BEGIN
             WHEN E.reentrydate IS NULL
              AND E.entrydate IS NOT NULL
              AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
-            WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
+            WHEN PL.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.entrydate, 112), 6) = @period THEN 'S'
+            WHEN PL.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.ceasedate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS relacion_laboral,
         CASE
@@ -253,6 +289,10 @@ BEGIN
         INNER JOIN pr_employee E (NOLOCK)
             ON A.person = E.person
            AND A.company = E.company
+        INNER JOIN #AfpPlanilla AP (NOLOCK)
+            ON AP.person = LTRIM(RTRIM(A.person))
+        INNER JOIN #PlanillaFechas PL (NOLOCK)
+            ON PL.person = LTRIM(RTRIM(A.person))
         INNER JOIN sy_company C (NOLOCK) ON A.company = C.company
     WHERE A.company = @cia
       AND LEFT(A.prperiod, 6) = @period
@@ -274,33 +314,30 @@ BEGIN
         LTRIM(RTRIM(ISNULL(P.lastname2, ''))) AS lastname2,
         LTRIM(RTRIM(ISNULL(P.name1, '') + ' ' + ISNULL(P.name2, ''))) AS names,
         CASE
-            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate))))
-                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(E.ceasedate, ISNULL(E.reentrydate, E.entrydate)))), 2) <> LEFT(@period, 6)
+            WHEN CONVERT(VARCHAR(4), YEAR(ISNULL(PL.ceasedate, PL.entrydate)))
+                 + RIGHT('00' + CONVERT(VARCHAR(2), MONTH(ISNULL(PL.ceasedate, PL.entrydate))), 2) <> LEFT(@period, 6)
             THEN ''
             ELSE CASE
-                WHEN ISNULL(E.ceasedate, '') = '' THEN '01 ' + CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
-                ELSE '02 ' + CONVERT(CHAR(10), E.ceasedate, 103)
+                WHEN PL.ceasedate IS NULL THEN '01 ' + CONVERT(CHAR(10), PL.entrydate, 103)
+                ELSE '02 ' + CONVERT(CHAR(10), PL.ceasedate, 103)
             END
         END AS fecha_cese,
         CASE
-            WHEN ISNULL(E.reentrydate, E.entrydate) IS NULL THEN ''
-            ELSE CONVERT(CHAR(10), ISNULL(E.reentrydate, E.entrydate), 103)
+            WHEN PL.entrydate IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), PL.entrydate, 103)
         END AS entrydate,
         CASE
-            WHEN ISNULL(E.ceasedate, '') = '' THEN ''
-            ELSE CONVERT(CHAR(10), E.ceasedate, 103)
+            WHEN PL.ceasedate IS NULL THEN ''
+            ELSE CONVERT(CHAR(10), PL.ceasedate, 103)
         END AS ceasedate,
         CASE
-            WHEN E.reentrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.reentrydate, 112), 6) = @period THEN 'S'
-            WHEN E.reentrydate IS NULL
-             AND E.entrydate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.entrydate, 112), 6) = @period THEN 'S'
+            WHEN PL.entrydate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.entrydate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS inicio_relacion,
         CASE
-            WHEN E.ceasedate IS NOT NULL
-             AND LEFT(CONVERT(VARCHAR(8), E.ceasedate, 112), 6) = @period THEN 'S'
+            WHEN PL.ceasedate IS NOT NULL
+             AND LEFT(CONVERT(VARCHAR(8), PL.ceasedate, 112), 6) = @period THEN 'S'
             ELSE 'N'
         END AS cese_relacion,
         CASE
@@ -363,6 +400,10 @@ BEGIN
            AND C.Company = @cia
         INNER JOIN sy_person P (NOLOCK)
             ON EC.Person = P.person
+        INNER JOIN #AfpPlanilla AP (NOLOCK)
+            ON AP.person = LTRIM(RTRIM(EC.Person))
+        INNER JOIN #PlanillaFechas PL (NOLOCK)
+            ON PL.person = LTRIM(RTRIM(EC.Person))
     WHERE EC.Company = @cia
       AND C.FormulaCode = 'FLAG_JUBILADO'
       AND EC.FlagFrecuencyType IN ('P', 'T')
@@ -372,7 +413,6 @@ BEGIN
           )
       AND (@payroll_all = 'Y' OR EC.PayRollType = @payroll)
       AND (@employee_all = 'Y' OR EC.Person = @employee)
-      AND ISNULL(LTRIM(RTRIM(E.AFP)), '') <> ''
       AND NOT EXISTS (
             SELECT 1
             FROM PR_EmployeeAFP A2 (NOLOCK)
@@ -382,5 +422,8 @@ BEGIN
       )
 
     ORDER BY afp_description, lastname1;
+
+    DROP TABLE #PlanillaFechas;
+    DROP TABLE #AfpPlanilla;
 END
 GO

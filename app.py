@@ -868,6 +868,20 @@ def _declaracion_afp_gap_total_vs_planilla(conteo):
     )
 
 
+def _declaracion_afp_diferencia_con_gap_interno(diferencia, planilla, afpnet):
+    """Si planilla y AFPnet coinciden pero Total supera a Total Planilla, exponer -1 en total_planilla."""
+    dif = dict(diferencia or {})
+    claves = ('nuevos', 'cesados', 'antiguos', 'total', 'total_planilla')
+    if any(_declaracion_afp_diferencia_activa(dif, k) for k in claves):
+        return dif
+    gap = _declaracion_afp_gap_total_vs_planilla(planilla)
+    if gap == 0:
+        gap = _declaracion_afp_gap_total_vs_planilla(afpnet)
+    if gap != 0:
+        dif['total_planilla'] = -gap
+    return dif
+
+
 def _declaracion_afp_detalle_diferencias_trabajadores(
     filas, diferencia, planilla_trabajadores=None, planilla=None, afpnet=None,
 ):
@@ -1115,6 +1129,7 @@ def _declaracion_afp_build_resumen(montos_rows, planilla_row, filas, planilla_tr
     detalle_diferencias = _declaracion_afp_detalle_diferencias_trabajadores(
         filas, diferencia, planilla_trabajadores, planilla=planilla, afpnet=afpnet,
     )
+    diferencia = _declaracion_afp_diferencia_con_gap_interno(diferencia, planilla, afpnet)
     return {
         'montos_proceso': montos,
         'total_afecto_planilla': total_planilla,

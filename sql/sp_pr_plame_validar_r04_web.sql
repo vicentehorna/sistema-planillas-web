@@ -1,24 +1,18 @@
 /*
-    Validación PLAME: Neto a pagar (R01 SUNAT) vs Neto a recibir (planilla, FormulaCode = NETO).
+    Validación PLAME R04: tributos del trabajador (AFP aporte/comisión/seguro, ONP, 5ta) vs planilla.
 
-    Usado por: POST /api/plame/validar/neto-r01
+    Usado por: POST /api/plame/validar/r04
 
-    La población de planilla es la misma que Archivo 18 (sp_pr_listado_plame18_web):
-      - Todas las planillas (@payroll_all = Y por defecto)
-      - Procesos: CTS, fin de mes, semana, vacaciones, liquidación, utilidades
-      - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
-      - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
-      - Respeta flag PDT por planilla/proceso cuando está configurado
-      - En liquidación: FormulaCode NETO o LIQ_NETO (resto de procesos: solo NETO)
+    Mapeo R04 SUNAT (MontosJson) → FormulaCode planilla:
+      Aporte AFP     → AFP_APORTE_PORC_8      (S.P.P. Aporte Obligatorio)
+      Comisión AFP   → AFP_COMISION_VARIABL   (S.P.P. Comisión)
+      Seguro AFP     → AFP_SEGUROS            (S.P.P. Seguro)
+      ONP            → ONP                    (S.N.P. D.Ley 19990 + Asegura tu pensión)
+      5ta categoría  → RET_5TA_CATEGORIA      (Imp. Renta 5ta.categ.)
 
-    Parámetros:
-      @cia         — compañía
-      @period      — periodo tributario YYYYMM
-      @payroll_all — Y = todas las planillas (default, igual Archivo 18)
-      @payroll     — tipo de planilla (si @payroll_all = N)
-      @cesados     — T/Y/N (default T, igual Archivo 18)
+    Población planilla: misma que Archivo 18 / validación R01.
 */
-CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_neto_r01_web]
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_r04_web]
     @cia         VARCHAR(10),
     @period      VARCHAR(6),
     @payroll_all CHAR(1)     = 'Y',
@@ -53,13 +47,24 @@ BEGIN
         person VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY
     );
 
-    /* --- Misma población que Archivo 18 --- */
+    CREATE TABLE #ConceptosMap (
+        concepto        VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY,
+        concepto_nombre NVARCHAR(80) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+        formula_code    VARCHAR(30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+    );
+
+    INSERT INTO #ConceptosMap (concepto, concepto_nombre, formula_code) VALUES
+        ('APORTE',   'Aporte AFP',           'AFP_APORTE_PORC_8'),
+        ('COMISION', 'Comisión AFP',         'AFP_COMISION_VARIABL'),
+        ('SEGURO',   'Seguro AFP',           'AFP_SEGUROS'),
+        ('ONP',      'ONP',                  'ONP'),
+        ('5TA',      'Renta 5ta categoría',  'RET_5TA_CATEGORIA');
+
+    /* --- Población planilla (Archivo 18) --- */
     INSERT INTO #Empleados (person)
     SELECT DISTINCT pr_employee.person
     FROM pr_employee (NOLOCK)
         INNER JOIN sy_person (NOLOCK) ON sy_person.person = pr_employee.person
-        LEFT JOIN sy_persondocumenttype (NOLOCK)
-            ON sy_person.employeedocumenttype = sy_persondocumenttype.persondocumenttype
         INNER JOIN pr_concept (NOLOCK) ON 1 = 1
         INNER JOIN pr_concepttype (NOLOCK) ON pr_concepttype.concepttype = pr_concept.concepttype
         INNER JOIN pr_employeepayrollconcept (NOLOCK) ON pr_employeepayrollconcept.concept = pr_concept.concept
@@ -135,7 +140,7 @@ BEGIN
       )
       AND NOT EXISTS (SELECT 1 FROM #Empleados E WHERE E.person = A.person);
 
-    /* --- Con neto en planilla (ej. semanal construcción civil) aunque no tenga I/A Archivo 18 --- */
+    /* --- Con tributos en planilla aunque no tenga I/A Archivo 18 --- */
     INSERT INTO #Empleados (person)
     SELECT DISTINCT EPC.Person
     FROM PR_EmployeePayRollConcept EPC (NOLOCK)
@@ -150,12 +155,12 @@ BEGIN
          OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
          OR (@cesados = 'N' AND E.CeaseDate IS NULL)
       )
-      AND (
-            UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
-         OR (
-                EPC.ProcessType = M.LiquidacionProcess
-                AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
-            )
+      AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) IN (
+            'AFP_APORTE_PORC_8',
+            'AFP_COMISION_VARIABL',
+            'AFP_SEGUROS',
+            'ONP',
+            'RET_5TA_CATEGORIA'
       )
       AND EPC.ProcessType IN (
             M.CTSProcessType,
@@ -175,9 +180,8 @@ BEGIN
       AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EPC.Person);
 
-    ;WITH SunatR01 AS (
+    ;WITH SunatR04Base AS (
         SELECT
-            LTRIM(RTRIM(ISNULL(F.TipoDoc, ''))) AS tipodoc,
             LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) AS documentnumber,
             CASE
                 WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = '' THEN ''
@@ -185,16 +189,40 @@ BEGIN
                     THEN CAST(TRY_CAST(LTRIM(RTRIM(F.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
                 ELSE UPPER(LTRIM(RTRIM(F.DocumentNumber)))
             END AS doc_key,
-            LTRIM(RTRIM(ISNULL(F.LastName1, ''))) AS lastname1,
-            LTRIM(RTRIM(ISNULL(F.LastName2, ''))) AS lastname2,
-            LTRIM(RTRIM(ISNULL(F.Names, ''))) AS names,
-            TRY_CAST(JSON_VALUE(F.MontosJson, '$."Neto a pagar"') AS DECIMAL(18, 2)) AS neto_sunat
+            LTRIM(RTRIM(
+                ISNULL(F.LastName1, '') + ' ' +
+                ISNULL(F.LastName2, '') + ' ' +
+                ISNULL(F.Names, '')
+            )) AS nombre,
+            F.MontosJson
         FROM PR_PlameSunatFila F (NOLOCK)
         WHERE F.CargaId = @cargaid
-          AND F.Archivo = 'R01'
+          AND F.Archivo = 'R04'
           AND ISNULL(LTRIM(RTRIM(F.DocumentNumber)), '') <> ''
     ),
-    PlanillaNeto AS (
+    SunatMontos AS (
+        SELECT documentnumber, doc_key, nombre, 'APORTE' AS concepto, 'Aporte AFP' AS concepto_nombre,
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Aporte Obligatorio"') AS DECIMAL(18, 2)), 0) AS monto_sunat
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'COMISION', 'Comisión AFP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Comisión"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'SEGURO', 'Seguro AFP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Seguro"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'ONP', 'ONP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. D.Ley 19990 (ONP)"') AS DECIMAL(18, 2)), 0)
+          + ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. Asegura tu pensión (ONP)"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, '5TA', 'Renta 5ta categoría',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."Imp. Renta 5ta.categ."') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+    ),
+    PlanillaMontos AS (
         SELECT
             LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) AS documentnumber,
             CASE
@@ -203,6 +231,14 @@ BEGIN
                     THEN CAST(TRY_CAST(LTRIM(RTRIM(P.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
                 ELSE UPPER(LTRIM(RTRIM(P.DocumentNumber)))
             END AS doc_key,
+            LTRIM(RTRIM(
+                ISNULL(P.LastName1, '') + ' ' +
+                ISNULL(P.LastName2, '') + ' ' +
+                ISNULL(P.Name1, '') + ' ' +
+                ISNULL(P.Name2, '')
+            )) AS nombre,
+            CM.concepto,
+            CM.concepto_nombre,
             ISNULL((
                 SELECT SUM(ISNULL(EPC.ConceptValueLo, 0))
                 FROM PR_EmployeePayRollConcept EPC (NOLOCK)
@@ -213,13 +249,7 @@ BEGIN
                 WHERE EPC.Company = @cia
                   AND EPC.Person = EM.person
                   AND LEFT(EPC.PRPeriod, 6) = @period
-                  AND (
-                        UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
-                     OR (
-                            EPC.ProcessType = M.LiquidacionProcess
-                            AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
-                        )
-                  )
+                  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = UPPER(CM.formula_code)
                   AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
                   AND EPC.ProcessType IN (
                         M.CTSProcessType,
@@ -247,55 +277,77 @@ BEGIN
                               AND PTP.flagpdt = 'Y'
                         )
                     )
-            ), 0) AS neto_planilla
+            ), 0) AS monto_planilla
         FROM #Empleados EM
             INNER JOIN SY_Person P (NOLOCK) ON EM.person = P.Person
+            CROSS JOIN #ConceptosMap CM
         WHERE ISNULL(LTRIM(RTRIM(P.DocumentNumber)), '') <> ''
     )
     SELECT
-        COALESCE(S.tipodoc, '') AS tipodoc,
+        COALESCE(S.concepto, P.concepto) AS concepto,
+        COALESCE(S.concepto_nombre, P.concepto_nombre) AS concepto_nombre,
         COALESCE(S.documentnumber, P.documentnumber) AS documentnumber,
-        LTRIM(RTRIM(
-            COALESCE(S.lastname1, '') + ' ' +
-            COALESCE(S.lastname2, '') + ' ' +
-            COALESCE(S.names, '')
-        )) AS nombre,
-        ISNULL(S.neto_sunat, 0) AS neto_sunat,
-        ISNULL(P.neto_planilla, 0) AS neto_planilla,
-        ROUND(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0), 2) AS diferencia,
+        LTRIM(RTRIM(COALESCE(NULLIF(S.nombre, ''), P.nombre))) AS nombre,
+        ISNULL(S.monto_sunat, 0) AS monto_sunat,
+        ISNULL(P.monto_planilla, 0) AS monto_planilla,
+        ROUND(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0), 2) AS diferencia,
         CASE
             WHEN S.doc_key IS NULL THEN 'SOLO_PLANILLA'
             WHEN P.doc_key IS NULL THEN 'SOLO_SUNAT'
-            WHEN ABS(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0)) < 0.005 THEN 'OK'
+            WHEN ABS(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0)) < 0.005 THEN 'OK'
             ELSE 'DIFERENCIA'
         END AS estado
     INTO #Comparacion
-    FROM SunatR01 S
-        FULL OUTER JOIN PlanillaNeto P
+    FROM SunatMontos S
+        FULL OUTER JOIN PlanillaMontos P
             ON S.doc_key = P.doc_key
-           AND S.doc_key <> '';
+           AND S.doc_key <> ''
+           AND S.concepto = P.concepto;
 
+    /* Resumen por concepto */
     SELECT
+        concepto,
+        concepto_nombre,
         COUNT(*) AS total_filas,
         SUM(CASE WHEN estado = 'OK' THEN 1 ELSE 0 END) AS coinciden,
         SUM(CASE WHEN estado = 'DIFERENCIA' THEN 1 ELSE 0 END) AS con_diferencia,
         SUM(CASE WHEN estado = 'SOLO_SUNAT' THEN 1 ELSE 0 END) AS solo_sunat,
         SUM(CASE WHEN estado = 'SOLO_PLANILLA' THEN 1 ELSE 0 END) AS solo_planilla,
-        ROUND(SUM(neto_sunat), 2) AS total_neto_sunat,
-        ROUND(SUM(neto_planilla), 2) AS total_neto_planilla,
-        ROUND(SUM(neto_sunat) - SUM(neto_planilla), 2) AS total_diferencia
-    FROM #Comparacion;
+        ROUND(SUM(monto_sunat), 2) AS total_sunat,
+        ROUND(SUM(monto_planilla), 2) AS total_planilla,
+        ROUND(SUM(monto_sunat) - SUM(monto_planilla), 2) AS total_diferencia
+    FROM #Comparacion
+    GROUP BY concepto, concepto_nombre
+    ORDER BY
+        CASE concepto
+            WHEN 'APORTE' THEN 1
+            WHEN 'COMISION' THEN 2
+            WHEN 'SEGURO' THEN 3
+            WHEN 'ONP' THEN 4
+            WHEN '5TA' THEN 5
+            ELSE 9
+        END;
 
+    /* Detalle */
     SELECT
-        tipodoc,
+        concepto,
+        concepto_nombre,
         documentnumber,
         nombre,
-        neto_sunat,
-        neto_planilla,
+        monto_sunat,
+        monto_planilla,
         diferencia,
         estado
     FROM #Comparacion
     ORDER BY
+        CASE concepto
+            WHEN 'APORTE' THEN 1
+            WHEN 'COMISION' THEN 2
+            WHEN 'SEGURO' THEN 3
+            WHEN 'ONP' THEN 4
+            WHEN '5TA' THEN 5
+            ELSE 9
+        END,
         CASE estado
             WHEN 'DIFERENCIA' THEN 1
             WHEN 'SOLO_SUNAT' THEN 2
@@ -306,6 +358,7 @@ BEGIN
         documentnumber;
 
     DROP TABLE #Comparacion;
+    DROP TABLE #ConceptosMap;
     DROP TABLE #Empleados;
 END
 GO

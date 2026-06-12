@@ -27,6 +27,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_plame_sunat_obtener_carga_web.sql` | Carga SUNAT | Validar PLAME |
 | `sp_pr_plame_sunat_eliminar_carga_web.sql` | Eliminar carga SUNAT | Validar PLAME |
 | `sp_pr_plame_validar_neto_r01_web.sql` | Neto R01 vs planilla NETO | Validar PLAME |
+| `sp_pr_plame_validar_r04_web.sql` | Tributos R04 vs planilla (AFP, ONP, 5ta) | Validar PLAME |
 | `sp_pr_selectorperiodos_plame_web.sql` | `sp_pr_selectorperiodos_plame_web` | Selector periodos PLAME |
 | `sp_pr_selectorperiodoactivo_web.sql` | `sp_pr_selectorperiodoactivo_web` | Periodo activo (`PR_ProcessControl`) |
 

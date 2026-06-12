@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-06-12 00:42
+  Generado: 2026-06-12 01:08
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -20,7 +20,7 @@
   Tablas de trabajo requeridas por algunos reportes:
     xx_plamevertical2, xx_reporteplanilla (reporte planilla vertical)
 
-  Archivos incluidos (64):
+  Archivos incluidos (65):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_processtype_add_procedurename.sql
     - tables_pr_plame_sunat_web.sql
@@ -58,6 +58,7 @@
     - sp_pr_plame_validar_archivo14_web.sql
     - sp_pr_plame_validar_archivo18_web.sql
     - sp_pr_plame_validar_neto_r01_web.sql
+    - sp_pr_plame_validar_r04_web.sql
     - sp_pr_r019_vacationdetail_web.sql
     - sp_pr_reportelistadopagos_web.sql
     - sp_pr_reporteplame_total_web.sql
@@ -92,7 +93,7 @@ GO
 
 
 -- ============================================================================
--- [01/64] alter_pr_mapping_add_banbifbank.sql
+-- [01/65] alter_pr_mapping_add_banbifbank.sql
 -- ============================================================================
 
 /*
@@ -126,7 +127,7 @@ GO
 
 
 -- ============================================================================
--- [02/64] alter_pr_processtype_add_procedurename.sql
+-- [02/65] alter_pr_processtype_add_procedurename.sql
 -- ============================================================================
 
 /*
@@ -218,7 +219,7 @@ GO
 
 
 -- ============================================================================
--- [03/64] tables_pr_plame_sunat_web.sql
+-- [03/65] tables_pr_plame_sunat_web.sql
 -- ============================================================================
 
 /*
@@ -293,7 +294,7 @@ GO
 
 
 -- ============================================================================
--- [04/64] SP_PR_EjecutarFormula.sql
+-- [04/65] SP_PR_EjecutarFormula.sql
 -- ============================================================================
 
 /*
@@ -818,7 +819,7 @@ GO
 
 
 -- ============================================================================
--- [05/64] SP_PR_ReportePromedioLiquidacion.sql
+-- [05/65] SP_PR_ReportePromedioLiquidacion.sql
 -- ============================================================================
 
 /*
@@ -1329,7 +1330,7 @@ GO
 
 
 -- ============================================================================
--- [06/64] sp_pr_actualizar_bancario_trabajador_web.sql
+-- [06/65] sp_pr_actualizar_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -1385,7 +1386,7 @@ GO
 
 
 -- ============================================================================
--- [07/64] sp_pr_actualizar_datos_afp_web.sql
+-- [07/65] sp_pr_actualizar_datos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -1733,7 +1734,7 @@ GO
 
 
 -- ============================================================================
--- [08/64] sp_pr_actualizar_pensiones_trabajador_web.sql
+-- [08/65] sp_pr_actualizar_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -1787,7 +1788,7 @@ GO
 
 
 -- ============================================================================
--- [09/64] sp_pr_aperturarperiodo_proceso_web.sql
+-- [09/65] sp_pr_aperturarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -1934,7 +1935,7 @@ GO
 
 
 -- ============================================================================
--- [10/64] sp_pr_calcularplanillas_web.sql
+-- [10/65] sp_pr_calcularplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -2002,7 +2003,7 @@ GO
 
 
 -- ============================================================================
--- [11/64] sp_pr_cerrarperiodo_proceso_web.sql
+-- [11/65] sp_pr_cerrarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -2043,7 +2044,7 @@ GO
 
 
 -- ============================================================================
--- [12/64] sp_pr_eliminarasignacionconcepto_web.sql
+-- [12/65] sp_pr_eliminarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -2094,7 +2095,7 @@ GO
 
 
 -- ============================================================================
--- [13/64] sp_pr_generar_banbif_web.sql
+-- [13/65] sp_pr_generar_banbif_web.sql
 -- ============================================================================
 
 /*
@@ -2302,7 +2303,7 @@ GO
 
 
 -- ============================================================================
--- [14/64] sp_pr_generar_continental_web.sql
+-- [14/65] sp_pr_generar_continental_web.sql
 -- ============================================================================
 
 /*
@@ -2581,7 +2582,7 @@ GO
 
 
 -- ============================================================================
--- [15/64] sp_pr_generar_interbank_web.sql
+-- [15/65] sp_pr_generar_interbank_web.sql
 -- ============================================================================
 
 /*
@@ -2821,7 +2822,7 @@ GO
 
 
 -- ============================================================================
--- [16/64] sp_pr_generar_telecredito_web.sql
+-- [16/65] sp_pr_generar_telecredito_web.sql
 -- ============================================================================
 
 /*
@@ -3105,7 +3106,7 @@ GO
 
 
 -- ============================================================================
--- [17/64] sp_pr_guardarasignacionconcepto_web.sql
+-- [17/65] sp_pr_guardarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -3364,7 +3365,7 @@ GO
 
 
 -- ============================================================================
--- [18/64] sp_pr_listaasignacionconceptos_web.sql
+-- [18/65] sp_pr_listaasignacionconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -3560,7 +3561,7 @@ GO
 
 
 -- ============================================================================
--- [19/64] sp_pr_listabanbif_web.sql
+-- [19/65] sp_pr_listabanbif_web.sql
 -- ============================================================================
 
 /*
@@ -3690,7 +3691,7 @@ GO
 
 
 -- ============================================================================
--- [20/64] sp_pr_listacontinental_web.sql
+-- [20/65] sp_pr_listacontinental_web.sql
 -- ============================================================================
 
 /*
@@ -3789,7 +3790,7 @@ GO
 
 
 -- ============================================================================
--- [21/64] sp_pr_listado_declaracion_afp_web.sql
+-- [21/65] sp_pr_listado_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -4225,7 +4226,7 @@ GO
 
 
 -- ============================================================================
--- [22/64] sp_pr_listado_plame14_web.sql
+-- [22/65] sp_pr_listado_plame14_web.sql
 -- ============================================================================
 
 /*
@@ -4336,7 +4337,7 @@ GO
 
 
 -- ============================================================================
--- [23/64] sp_pr_listado_plame15_web.sql
+-- [23/65] sp_pr_listado_plame15_web.sql
 -- ============================================================================
 
 /*
@@ -4455,7 +4456,7 @@ GO
 
 
 -- ============================================================================
--- [24/64] sp_pr_listado_plame18_web.sql
+-- [24/65] sp_pr_listado_plame18_web.sql
 -- ============================================================================
 
 /*
@@ -4716,7 +4717,7 @@ GO
 
 
 -- ============================================================================
--- [25/64] sp_pr_listado_plame26_web.sql
+-- [25/65] sp_pr_listado_plame26_web.sql
 -- ============================================================================
 
 /*
@@ -4809,7 +4810,7 @@ GO
 
 
 -- ============================================================================
--- [26/64] sp_pr_listainterbank_web.sql
+-- [26/65] sp_pr_listainterbank_web.sql
 -- ============================================================================
 
 /*
@@ -4910,7 +4911,7 @@ GO
 
 
 -- ============================================================================
--- [27/64] sp_pr_listaprocesscontrol_apertura_web.sql
+-- [27/65] sp_pr_listaprocesscontrol_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -4990,7 +4991,7 @@ GO
 
 
 -- ============================================================================
--- [28/64] sp_pr_listatelecredito_web.sql
+-- [28/65] sp_pr_listatelecredito_web.sql
 -- ============================================================================
 
 /*
@@ -5100,7 +5101,7 @@ GO
 
 
 -- ============================================================================
--- [29/64] sp_pr_listatrabajadores_web.sql
+-- [29/65] sp_pr_listatrabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -5230,7 +5231,7 @@ GO
 
 
 -- ============================================================================
--- [30/64] sp_pr_obtener_bancario_trabajador_web.sql
+-- [30/65] sp_pr_obtener_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5291,7 +5292,7 @@ GO
 
 
 -- ============================================================================
--- [31/64] sp_pr_obtener_pensiones_trabajador_web.sql
+-- [31/65] sp_pr_obtener_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5346,7 +5347,7 @@ GO
 
 
 -- ============================================================================
--- [32/64] sp_pr_obtenerasignacionconcepto_web.sql
+-- [32/65] sp_pr_obtenerasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -5409,7 +5410,7 @@ GO
 
 
 -- ============================================================================
--- [33/64] sp_pr_plame_sunat_eliminar_carga_web.sql
+-- [33/65] sp_pr_plame_sunat_eliminar_carga_web.sql
 -- ============================================================================
 
 /*
@@ -5435,7 +5436,7 @@ GO
 
 
 -- ============================================================================
--- [34/64] sp_pr_plame_sunat_obtener_carga_web.sql
+-- [34/65] sp_pr_plame_sunat_obtener_carga_web.sql
 -- ============================================================================
 
 /*
@@ -5476,7 +5477,7 @@ GO
 
 
 -- ============================================================================
--- [35/64] sp_pr_plame_validar_archivo14_web.sql
+-- [35/65] sp_pr_plame_validar_archivo14_web.sql
 -- ============================================================================
 
 /*
@@ -5623,7 +5624,7 @@ GO
 
 
 -- ============================================================================
--- [36/64] sp_pr_plame_validar_archivo18_web.sql
+-- [36/65] sp_pr_plame_validar_archivo18_web.sql
 -- ============================================================================
 
 /*
@@ -5947,7 +5948,7 @@ GO
 
 
 -- ============================================================================
--- [37/64] sp_pr_plame_validar_neto_r01_web.sql
+-- [37/65] sp_pr_plame_validar_neto_r01_web.sql
 -- ============================================================================
 
 /*
@@ -6087,10 +6088,56 @@ BEGIN
       )
       AND NOT EXISTS (SELECT 1 FROM #Empleados E WHERE E.person = A.person);
 
+    /* --- Con neto en planilla (ej. semanal construcción civil) aunque no tenga I/A Archivo 18 --- */
+    INSERT INTO #Empleados (person)
+    SELECT DISTINCT EPC.Person
+    FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_Concept C (NOLOCK) ON EPC.Concept = C.Concept AND C.Company = @cia
+        INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = @cia
+        INNER JOIN PR_Employee E (NOLOCK) ON EPC.Person = E.Person AND EPC.Company = E.Company
+    WHERE EPC.Company = @cia
+      AND LEFT(EPC.PRPeriod, 6) = @period
+      AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
+      AND (
+            UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+         OR (
+                EPC.ProcessType = M.LiquidacionProcess
+                AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
+            )
+      )
+      AND EPC.ProcessType IN (
+            M.CTSProcessType,
+            M.PlanillaProcess,
+            M.PlanillaSemProcess,
+            M.VacationProcess,
+            M.LiquidacionProcess,
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+      )
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_ProcessType PT
+            WHERE PT.ProcessType = EPC.ProcessType
+              AND PT.Company = @cia
+              AND PT.ShortName = 'QUINCENA'
+        )
+      AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
+      AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EPC.Person);
+
     ;WITH SunatR01 AS (
         SELECT
             LTRIM(RTRIM(ISNULL(F.TipoDoc, ''))) AS tipodoc,
             LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) AS documentnumber,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = '' THEN ''
+                WHEN LTRIM(RTRIM(F.DocumentNumber)) NOT LIKE '%[^0-9]%'
+                    THEN CAST(TRY_CAST(LTRIM(RTRIM(F.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
+                ELSE UPPER(LTRIM(RTRIM(F.DocumentNumber)))
+            END AS doc_key,
             LTRIM(RTRIM(ISNULL(F.LastName1, ''))) AS lastname1,
             LTRIM(RTRIM(ISNULL(F.LastName2, ''))) AS lastname2,
             LTRIM(RTRIM(ISNULL(F.Names, ''))) AS names,
@@ -6103,6 +6150,12 @@ BEGIN
     PlanillaNeto AS (
         SELECT
             LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) AS documentnumber,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) = '' THEN ''
+                WHEN LTRIM(RTRIM(P.DocumentNumber)) NOT LIKE '%[^0-9]%'
+                    THEN CAST(TRY_CAST(LTRIM(RTRIM(P.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
+                ELSE UPPER(LTRIM(RTRIM(P.DocumentNumber)))
+            END AS doc_key,
             ISNULL((
                 SELECT SUM(ISNULL(EPC.ConceptValueLo, 0))
                 FROM PR_EmployeePayRollConcept EPC (NOLOCK)
@@ -6164,15 +6217,16 @@ BEGIN
         ISNULL(P.neto_planilla, 0) AS neto_planilla,
         ROUND(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0), 2) AS diferencia,
         CASE
-            WHEN S.documentnumber IS NULL THEN 'SOLO_PLANILLA'
-            WHEN P.documentnumber IS NULL THEN 'SOLO_SUNAT'
+            WHEN S.doc_key IS NULL THEN 'SOLO_PLANILLA'
+            WHEN P.doc_key IS NULL THEN 'SOLO_SUNAT'
             WHEN ABS(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0)) < 0.005 THEN 'OK'
             ELSE 'DIFERENCIA'
         END AS estado
     INTO #Comparacion
     FROM SunatR01 S
         FULL OUTER JOIN PlanillaNeto P
-            ON S.documentnumber = P.documentnumber;
+            ON S.doc_key = P.doc_key
+           AND S.doc_key <> '';
 
     SELECT
         COUNT(*) AS total_filas,
@@ -6212,7 +6266,378 @@ GO
 
 
 -- ============================================================================
--- [38/64] sp_pr_r019_vacationdetail_web.sql
+-- [38/65] sp_pr_plame_validar_r04_web.sql
+-- ============================================================================
+
+/*
+    Validación PLAME R04: tributos del trabajador (AFP aporte/comisión/seguro, ONP, 5ta) vs planilla.
+
+    Usado por: POST /api/plame/validar/r04
+
+    Mapeo R04 SUNAT (MontosJson) → FormulaCode planilla:
+      Aporte AFP     → AFP_APORTE_PORC_8      (S.P.P. Aporte Obligatorio)
+      Comisión AFP   → AFP_COMISION_VARIABL   (S.P.P. Comisión)
+      Seguro AFP     → AFP_SEGUROS            (S.P.P. Seguro)
+      ONP            → ONP                    (S.N.P. D.Ley 19990 + Asegura tu pensión)
+      5ta categoría  → RET_5TA_CATEGORIA      (Imp. Renta 5ta.categ.)
+
+    Población planilla: misma que Archivo 18 / validación R01.
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_r04_web]
+    @cia         VARCHAR(10),
+    @period      VARCHAR(6),
+    @payroll_all CHAR(1)     = 'Y',
+    @payroll     VARCHAR(20) = NULL,
+    @cesados     CHAR(1)     = 'T'
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @payroll_all = UPPER(LTRIM(RTRIM(ISNULL(@payroll_all, 'Y'))));
+    SET @payroll = LTRIM(RTRIM(ISNULL(@payroll, '')));
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    IF @payroll_all NOT IN ('Y', 'N') SET @payroll_all = 'Y';
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
+
+    DECLARE @cargaid INT;
+
+    SELECT @cargaid = C.CargaId
+    FROM PR_PlameSunatCarga C (NOLOCK)
+    WHERE C.Company = @cia
+      AND C.Period = @period;
+
+    IF @cargaid IS NULL
+    BEGIN
+        RAISERROR('No hay carga SUNAT para la compañía y periodo indicados.', 16, 1);
+        RETURN;
+    END
+
+    CREATE TABLE #Empleados (
+        person VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY
+    );
+
+    CREATE TABLE #ConceptosMap (
+        concepto        VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY,
+        concepto_nombre NVARCHAR(80) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
+        formula_code    VARCHAR(30) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL
+    );
+
+    INSERT INTO #ConceptosMap (concepto, concepto_nombre, formula_code) VALUES
+        ('APORTE',   'Aporte AFP',           'AFP_APORTE_PORC_8'),
+        ('COMISION', 'Comisión AFP',         'AFP_COMISION_VARIABL'),
+        ('SEGURO',   'Seguro AFP',           'AFP_SEGUROS'),
+        ('ONP',      'ONP',                  'ONP'),
+        ('5TA',      'Renta 5ta categoría',  'RET_5TA_CATEGORIA');
+
+    /* --- Población planilla (Archivo 18) --- */
+    INSERT INTO #Empleados (person)
+    SELECT DISTINCT pr_employee.person
+    FROM pr_employee (NOLOCK)
+        INNER JOIN sy_person (NOLOCK) ON sy_person.person = pr_employee.person
+        INNER JOIN pr_concept (NOLOCK) ON 1 = 1
+        INNER JOIN pr_concepttype (NOLOCK) ON pr_concepttype.concepttype = pr_concept.concepttype
+        INNER JOIN pr_employeepayrollconcept (NOLOCK) ON pr_employeepayrollconcept.concept = pr_concept.concept
+        INNER JOIN pr_mapping (NOLOCK) ON pr_mapping.company = @cia
+        INNER JOIN pr_employeecategory (NOLOCK) ON pr_employee.employeecategory = pr_employeecategory.employeecategory
+    WHERE pr_employee.company = @cia
+      AND pr_mapping.company = @cia
+      AND pr_employeecategory.PDT = '1'
+      AND pr_concepttype.shortname IN ('I', 'A')
+      AND (@payroll_all = 'Y' OR pr_employeepayrollconcept.payrolltype = @payroll)
+      AND pr_employeepayrollconcept.person = pr_employee.person
+      AND pr_employeepayrollconcept.company = pr_employee.company
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND pr_employee.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND pr_employee.CeaseDate IS NULL)
+      )
+      AND pr_employeepayrollconcept.processtype IN (
+            pr_mapping.CTSProcessType,
+            pr_mapping.planillaprocess,
+            pr_mapping.planillasemprocess,
+            pr_mapping.VacationProcess,
+            pr_mapping.liquidacionprocess,
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+      )
+      AND LEFT(pr_employeepayrollconcept.prperiod, 6) = @period
+      AND pr_employeepayrollconcept.conceptvaluelo IS NOT NULL
+      AND pr_concept.flagismonetary = 'Y'
+      AND pr_concept.FLAGPAYROLLTICKET = 'Y'
+      AND (
+            (SELECT COUNT(*) FROM sy_company WHERE company = @cia AND description LIKE '%PLANINVES%') = 0
+         OR (
+                (SELECT COUNT(*) FROM sy_company WHERE company = @cia AND description LIKE '%PLANINVES%') > 0
+                AND ISNULL(sy_person.isrecruiter, 'N') = 'N'
+            )
+      );
+
+    INSERT INTO #Empleados (person)
+    SELECT A.person
+    FROM PR_Employee A
+        INNER JOIN SY_Person B ON A.Person = B.Person AND A.Status = 'N' AND A.Company = @cia
+        INNER JOIN PR_Mapping M ON A.Company = M.Company
+    WHERE NOT EXISTS (
+            SELECT 1
+            FROM pr_employeepayrollconcept P
+                INNER JOIN PR_Concept C ON P.Concept = C.Concept AND C.FormulaCode = 'TOTALINGRESO'
+            WHERE P.Company = A.Company
+              AND P.Person = A.Person
+              AND LEFT(P.PRPeriod, 6) = @period
+        )
+      AND ISNULL((
+            SELECT SUM(X.Days)
+            FROM PR_EmployeeMedicalRest X
+                INNER JOIN PR_MedicalRestType Y
+                    ON X.person = A.person
+                   AND X.MedicalRestType = Y.MedicalRestType
+                   AND Y.pdt = '05'
+                   AND LEFT(X.PRPeriod, 6) = @period
+                   AND A.Company = @cia
+        ), 0) >= 30
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_EmployeePayRoll P
+            WHERE P.Person = A.Person
+              AND P.Company = A.Company
+              AND LEFT(P.PRPeriod, 6) = @period
+              AND P.ProcessType = M.CTSProcessType
+        )
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND A.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND A.CeaseDate IS NULL)
+      )
+      AND NOT EXISTS (SELECT 1 FROM #Empleados E WHERE E.person = A.person);
+
+    /* --- Con tributos en planilla aunque no tenga I/A Archivo 18 --- */
+    INSERT INTO #Empleados (person)
+    SELECT DISTINCT EPC.Person
+    FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_Concept C (NOLOCK) ON EPC.Concept = C.Concept AND C.Company = @cia
+        INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = @cia
+        INNER JOIN PR_Employee E (NOLOCK) ON EPC.Person = E.Person AND EPC.Company = E.Company
+    WHERE EPC.Company = @cia
+      AND LEFT(EPC.PRPeriod, 6) = @period
+      AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
+      AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) IN (
+            'AFP_APORTE_PORC_8',
+            'AFP_COMISION_VARIABL',
+            'AFP_SEGUROS',
+            'ONP',
+            'RET_5TA_CATEGORIA'
+      )
+      AND EPC.ProcessType IN (
+            M.CTSProcessType,
+            M.PlanillaProcess,
+            M.PlanillaSemProcess,
+            M.VacationProcess,
+            M.LiquidacionProcess,
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+      )
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_ProcessType PT
+            WHERE PT.ProcessType = EPC.ProcessType
+              AND PT.Company = @cia
+              AND PT.ShortName = 'QUINCENA'
+        )
+      AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
+      AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EPC.Person);
+
+    ;WITH SunatR04Base AS (
+        SELECT
+            LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) AS documentnumber,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = '' THEN ''
+                WHEN LTRIM(RTRIM(F.DocumentNumber)) NOT LIKE '%[^0-9]%'
+                    THEN CAST(TRY_CAST(LTRIM(RTRIM(F.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
+                ELSE UPPER(LTRIM(RTRIM(F.DocumentNumber)))
+            END AS doc_key,
+            LTRIM(RTRIM(
+                ISNULL(F.LastName1, '') + ' ' +
+                ISNULL(F.LastName2, '') + ' ' +
+                ISNULL(F.Names, '')
+            )) AS nombre,
+            F.MontosJson
+        FROM PR_PlameSunatFila F (NOLOCK)
+        WHERE F.CargaId = @cargaid
+          AND F.Archivo = 'R04'
+          AND ISNULL(LTRIM(RTRIM(F.DocumentNumber)), '') <> ''
+    ),
+    SunatMontos AS (
+        SELECT documentnumber, doc_key, nombre, 'APORTE' AS concepto, 'Aporte AFP' AS concepto_nombre,
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Aporte Obligatorio"') AS DECIMAL(18, 2)), 0) AS monto_sunat
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'COMISION', 'Comisión AFP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Comisión"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'SEGURO', 'Seguro AFP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Seguro"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, 'ONP', 'ONP',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. D.Ley 19990 (ONP)"') AS DECIMAL(18, 2)), 0)
+          + ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. Asegura tu pensión (ONP)"') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+        UNION ALL
+        SELECT documentnumber, doc_key, nombre, '5TA', 'Renta 5ta categoría',
+            ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."Imp. Renta 5ta.categ."') AS DECIMAL(18, 2)), 0)
+        FROM SunatR04Base
+    ),
+    PlanillaMontos AS (
+        SELECT
+            LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) AS documentnumber,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) = '' THEN ''
+                WHEN LTRIM(RTRIM(P.DocumentNumber)) NOT LIKE '%[^0-9]%'
+                    THEN CAST(TRY_CAST(LTRIM(RTRIM(P.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
+                ELSE UPPER(LTRIM(RTRIM(P.DocumentNumber)))
+            END AS doc_key,
+            LTRIM(RTRIM(
+                ISNULL(P.LastName1, '') + ' ' +
+                ISNULL(P.LastName2, '') + ' ' +
+                ISNULL(P.Name1, '') + ' ' +
+                ISNULL(P.Name2, '')
+            )) AS nombre,
+            CM.concepto,
+            CM.concepto_nombre,
+            ISNULL((
+                SELECT SUM(ISNULL(EPC.ConceptValueLo, 0))
+                FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+                    INNER JOIN PR_Concept C (NOLOCK)
+                        ON EPC.Concept = C.Concept
+                       AND C.Company = @cia
+                    INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = @cia
+                WHERE EPC.Company = @cia
+                  AND EPC.Person = EM.person
+                  AND LEFT(EPC.PRPeriod, 6) = @period
+                  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = UPPER(CM.formula_code)
+                  AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
+                  AND EPC.ProcessType IN (
+                        M.CTSProcessType,
+                        M.PlanillaProcess,
+                        M.PlanillaSemProcess,
+                        M.VacationProcess,
+                        M.LiquidacionProcess,
+                        (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                  )
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM PR_ProcessType PT
+                        WHERE PT.ProcessType = EPC.ProcessType
+                          AND PT.Company = @cia
+                          AND PT.ShortName = 'QUINCENA'
+                    )
+                  AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
+                  AND (
+                        (SELECT COUNT(*) FROM pr_payrolltypeprocess WHERE company = @cia AND flagpdt = 'Y') = 0
+                     OR EXISTS (
+                            SELECT 1
+                            FROM pr_payrolltypeprocess PTP
+                            WHERE PTP.PayRollType = EPC.PayRollType
+                              AND PTP.ProcessType = EPC.ProcessType
+                              AND PTP.flagpdt = 'Y'
+                        )
+                    )
+            ), 0) AS monto_planilla
+        FROM #Empleados EM
+            INNER JOIN SY_Person P (NOLOCK) ON EM.person = P.Person
+            CROSS JOIN #ConceptosMap CM
+        WHERE ISNULL(LTRIM(RTRIM(P.DocumentNumber)), '') <> ''
+    )
+    SELECT
+        COALESCE(S.concepto, P.concepto) AS concepto,
+        COALESCE(S.concepto_nombre, P.concepto_nombre) AS concepto_nombre,
+        COALESCE(S.documentnumber, P.documentnumber) AS documentnumber,
+        LTRIM(RTRIM(COALESCE(NULLIF(S.nombre, ''), P.nombre))) AS nombre,
+        ISNULL(S.monto_sunat, 0) AS monto_sunat,
+        ISNULL(P.monto_planilla, 0) AS monto_planilla,
+        ROUND(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0), 2) AS diferencia,
+        CASE
+            WHEN S.doc_key IS NULL THEN 'SOLO_PLANILLA'
+            WHEN P.doc_key IS NULL THEN 'SOLO_SUNAT'
+            WHEN ABS(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0)) < 0.005 THEN 'OK'
+            ELSE 'DIFERENCIA'
+        END AS estado
+    INTO #Comparacion
+    FROM SunatMontos S
+        FULL OUTER JOIN PlanillaMontos P
+            ON S.doc_key = P.doc_key
+           AND S.doc_key <> ''
+           AND S.concepto = P.concepto;
+
+    /* Resumen por concepto */
+    SELECT
+        concepto,
+        concepto_nombre,
+        COUNT(*) AS total_filas,
+        SUM(CASE WHEN estado = 'OK' THEN 1 ELSE 0 END) AS coinciden,
+        SUM(CASE WHEN estado = 'DIFERENCIA' THEN 1 ELSE 0 END) AS con_diferencia,
+        SUM(CASE WHEN estado = 'SOLO_SUNAT' THEN 1 ELSE 0 END) AS solo_sunat,
+        SUM(CASE WHEN estado = 'SOLO_PLANILLA' THEN 1 ELSE 0 END) AS solo_planilla,
+        ROUND(SUM(monto_sunat), 2) AS total_sunat,
+        ROUND(SUM(monto_planilla), 2) AS total_planilla,
+        ROUND(SUM(monto_sunat) - SUM(monto_planilla), 2) AS total_diferencia
+    FROM #Comparacion
+    GROUP BY concepto, concepto_nombre
+    ORDER BY
+        CASE concepto
+            WHEN 'APORTE' THEN 1
+            WHEN 'COMISION' THEN 2
+            WHEN 'SEGURO' THEN 3
+            WHEN 'ONP' THEN 4
+            WHEN '5TA' THEN 5
+            ELSE 9
+        END;
+
+    /* Detalle */
+    SELECT
+        concepto,
+        concepto_nombre,
+        documentnumber,
+        nombre,
+        monto_sunat,
+        monto_planilla,
+        diferencia,
+        estado
+    FROM #Comparacion
+    ORDER BY
+        CASE concepto
+            WHEN 'APORTE' THEN 1
+            WHEN 'COMISION' THEN 2
+            WHEN 'SEGURO' THEN 3
+            WHEN 'ONP' THEN 4
+            WHEN '5TA' THEN 5
+            ELSE 9
+        END,
+        CASE estado
+            WHEN 'DIFERENCIA' THEN 1
+            WHEN 'SOLO_SUNAT' THEN 2
+            WHEN 'SOLO_PLANILLA' THEN 3
+            ELSE 4
+        END,
+        nombre,
+        documentnumber;
+
+    DROP TABLE #Comparacion;
+    DROP TABLE #ConceptosMap;
+    DROP TABLE #Empleados;
+END
+GO
+
+
+
+-- ============================================================================
+-- [39/65] sp_pr_r019_vacationdetail_web.sql
 -- ============================================================================
 
 /*
@@ -6279,7 +6704,7 @@ GO
 
 
 -- ============================================================================
--- [39/64] sp_pr_reportelistadopagos_web.sql
+-- [40/65] sp_pr_reportelistadopagos_web.sql
 -- ============================================================================
 
 /*
@@ -6415,7 +6840,7 @@ GO
 
 
 -- ============================================================================
--- [40/64] sp_pr_reporteplame_total_web.sql
+-- [41/65] sp_pr_reporteplame_total_web.sql
 -- ============================================================================
 
 /*
@@ -6880,7 +7305,7 @@ GO
 
 
 -- ============================================================================
--- [41/64] sp_pr_reporteplamevertical_web.sql
+-- [42/65] sp_pr_reporteplamevertical_web.sql
 -- ============================================================================
 
 /*
@@ -7224,7 +7649,7 @@ GO
 
 
 -- ============================================================================
--- [42/64] sp_pr_reportesdescansos_medicos_web.sql
+-- [43/65] sp_pr_reportesdescansos_medicos_web.sql
 -- ============================================================================
 
 /*
@@ -7287,7 +7712,7 @@ GO
 
 
 -- ============================================================================
--- [43/64] sp_pr_resumen_declaracion_afp_web.sql
+-- [44/65] sp_pr_resumen_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -7519,7 +7944,7 @@ GO
 
 
 -- ============================================================================
--- [44/64] sp_pr_saldovacaciones_web.sql
+-- [45/65] sp_pr_saldovacaciones_web.sql
 -- ============================================================================
 
 /*
@@ -7812,7 +8237,7 @@ GO
 
 
 -- ============================================================================
--- [45/64] sp_pr_selectorafp_web.sql
+-- [46/65] sp_pr_selectorafp_web.sql
 -- ============================================================================
 
 /*
@@ -7843,7 +8268,7 @@ GO
 
 
 -- ============================================================================
--- [46/64] sp_pr_selectorbancos_web.sql
+-- [47/65] sp_pr_selectorbancos_web.sql
 -- ============================================================================
 
 /*
@@ -7868,7 +8293,7 @@ GO
 
 
 -- ============================================================================
--- [47/64] sp_pr_selectorcompanias_web.sql
+-- [48/65] sp_pr_selectorcompanias_web.sql
 -- ============================================================================
 
 /*
@@ -7895,7 +8320,7 @@ GO
 
 
 -- ============================================================================
--- [48/64] sp_pr_selectorconceptoneto_web.sql
+-- [49/65] sp_pr_selectorconceptoneto_web.sql
 -- ============================================================================
 
 /*
@@ -7927,7 +8352,7 @@ GO
 
 
 -- ============================================================================
--- [49/64] sp_pr_selectorconceptos_web.sql
+-- [50/65] sp_pr_selectorconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -7953,7 +8378,7 @@ GO
 
 
 -- ============================================================================
--- [50/64] sp_pr_selectorformapago_web.sql
+-- [51/65] sp_pr_selectorformapago_web.sql
 -- ============================================================================
 
 /*
@@ -7978,7 +8403,7 @@ GO
 
 
 -- ============================================================================
--- [51/64] sp_pr_selectorpensiontype_web.sql
+-- [52/65] sp_pr_selectorpensiontype_web.sql
 -- ============================================================================
 
 /*
@@ -8007,7 +8432,7 @@ GO
 
 
 -- ============================================================================
--- [52/64] sp_pr_selectorperiodoactivo_planilla_web.sql
+-- [53/65] sp_pr_selectorperiodoactivo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -8034,7 +8459,7 @@ GO
 
 
 -- ============================================================================
--- [53/64] sp_pr_selectorperiodoactivo_web.sql
+-- [54/65] sp_pr_selectorperiodoactivo_web.sql
 -- ============================================================================
 
 /*
@@ -8068,7 +8493,7 @@ GO
 
 
 -- ============================================================================
--- [54/64] sp_pr_selectorperiodos_apertura_web.sql
+-- [55/65] sp_pr_selectorperiodos_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -8104,7 +8529,7 @@ GO
 
 
 -- ============================================================================
--- [55/64] sp_pr_selectorperiodos_plame_web.sql
+-- [56/65] sp_pr_selectorperiodos_plame_web.sql
 -- ============================================================================
 
 /*
@@ -8134,7 +8559,7 @@ GO
 
 
 -- ============================================================================
--- [56/64] sp_pr_selectorperiodos_web.sql
+-- [57/65] sp_pr_selectorperiodos_web.sql
 -- ============================================================================
 
 /*
@@ -8176,7 +8601,7 @@ GO
 
 
 -- ============================================================================
--- [57/64] sp_pr_selectorplanillas_web.sql
+-- [58/65] sp_pr_selectorplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -8206,7 +8631,7 @@ GO
 
 
 -- ============================================================================
--- [58/64] sp_pr_selectorprocesos_web.sql
+-- [59/65] sp_pr_selectorprocesos_web.sql
 -- ============================================================================
 
 /*
@@ -8244,7 +8669,7 @@ GO
 
 
 -- ============================================================================
--- [59/64] sp_pr_selectorregimehealth_web.sql
+-- [60/65] sp_pr_selectorregimehealth_web.sql
 -- ============================================================================
 
 /*
@@ -8273,7 +8698,7 @@ GO
 
 
 -- ============================================================================
--- [60/64] sp_pr_selectorsctrpension_web.sql
+-- [61/65] sp_pr_selectorsctrpension_web.sql
 -- ============================================================================
 
 /*
@@ -8304,7 +8729,7 @@ GO
 
 
 -- ============================================================================
--- [61/64] sp_pr_selectortipocuenta_web.sql
+-- [62/65] sp_pr_selectortipocuenta_web.sql
 -- ============================================================================
 
 /*
@@ -8328,7 +8753,7 @@ GO
 
 
 -- ============================================================================
--- [62/64] sp_pr_selectorunidades_web.sql
+-- [63/65] sp_pr_selectorunidades_web.sql
 -- ============================================================================
 
 /*
@@ -8353,7 +8778,7 @@ GO
 
 
 -- ============================================================================
--- [63/64] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
+-- [64/65] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
 -- ============================================================================
 
 /*
@@ -8420,7 +8845,7 @@ GO
 
 
 -- ============================================================================
--- [64/64] sp_pr_validar_calculo_web.sql
+-- [65/65] sp_pr_validar_calculo_web.sql
 -- ============================================================================
 
 /*

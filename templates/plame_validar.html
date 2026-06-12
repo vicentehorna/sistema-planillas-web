@@ -190,6 +190,29 @@
         </div>
     </div>
 </div>
+
+<div class="card shadow-sm border-0 d-none mb-4" id="cardValidacionR04Plame">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center" id="tituloValidacionR04Plame">Validación PLAME — Tributos trabajador (R04) vs planilla</h5>
+        <div id="resumenValidacionR04Plame" class="resumen-validacion-plame small mb-3"></div>
+        <div class="table-scroll-container" style="max-height: 55vh; overflow: auto; border: 1px solid #dee2e6;">
+            <table class="table table-bordered table-sm table-hover table-validacion-plame align-middle">
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th>Estado</th>
+                        <th>DNI</th>
+                        <th>Trabajador</th>
+                        <th class="col-monto">Monto SUNAT (R04)</th>
+                        <th class="col-monto">Monto planilla</th>
+                        <th class="col-monto">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyValidacionR04Plame"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -203,6 +226,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_ESTADO = {{ url_for('api_plame_validar_estado') | tojson }};
     const URL_CARGA = {{ url_for('api_plame_validar_carga') | tojson }};
     const URL_VALIDAR_NETO = {{ url_for('api_plame_validar_neto_r01') | tojson }};
+    const URL_VALIDAR_R04 = {{ url_for('api_plame_validar_r04') | tojson }};
     let hayCargaSunat = false;
 
     function periodoTributarioYyyymm() {
@@ -254,6 +278,85 @@ document.addEventListener('DOMContentLoaded', async function () {
             return `Validación PLAME — Neto a pagar (R01) vs planilla ${period.slice(0, 4)}-${period.slice(4, 6)}`;
         }
         return 'Validación PLAME — Neto a pagar (R01) vs planilla';
+    }
+
+    function renderValidacionR04(resultado) {
+        const card = document.getElementById('cardValidacionR04Plame');
+        const resumenEl = document.getElementById('resumenValidacionR04Plame');
+        const tbody = document.getElementById('tbodyValidacionR04Plame');
+        const titulo = document.getElementById('tituloValidacionR04Plame');
+
+        if (!resultado) {
+            card.classList.add('d-none');
+            resumenEl.innerHTML = '';
+            tbody.innerHTML = '';
+            return;
+        }
+
+        titulo.textContent = tituloValidacionR04();
+        const conceptos = Array.isArray(resultado.conceptos) ? resultado.conceptos : [];
+        resumenEl.innerHTML = conceptos.length ? `
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead>
+                        <tr>
+                            <th>Concepto</th>
+                            <th class="text-end">Coinciden</th>
+                            <th class="text-end">Diferencias</th>
+                            <th class="text-end">Solo SUNAT</th>
+                            <th class="text-end">Total SUNAT</th>
+                            <th class="text-end">Total planilla</th>
+                            <th class="text-end">Dif. total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${conceptos.map((c) => {
+                            const dif = Number(c.total_diferencia) || 0;
+                            const hayDifConcepto = Number(c.con_diferencia) > 0 || Number(c.solo_sunat) > 0 || Math.abs(dif) >= 0.005;
+                            return `
+                                <tr>
+                                    <td>${escapeHtml(c.concepto_nombre || c.concepto || '')}</td>
+                                    <td class="text-end">${Number(c.coinciden || 0)}</td>
+                                    <td class="text-end ${Number(c.con_diferencia) ? 'valor-dif' : ''}">${Number(c.con_diferencia || 0)}</td>
+                                    <td class="text-end ${Number(c.solo_sunat) ? 'valor-dif' : ''}">${Number(c.solo_sunat || 0)}</td>
+                                    <td class="text-end">S/ ${formatearMonto(c.total_sunat)}</td>
+                                    <td class="text-end">S/ ${formatearMonto(c.total_planilla)}</td>
+                                    <td class="text-end ${hayDifConcepto ? 'valor-dif' : ''}">S/ ${formatearMonto(dif)}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : '<div class="text-muted">Sin datos de comparación R04.</div>';
+
+        const filas = (Array.isArray(resultado.filas) ? resultado.filas : [])
+            .filter((f) => f.estado === 'DIFERENCIA' || f.estado === 'SOLO_SUNAT');
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin diferencias ni registros Solo SUNAT en el detalle.</td></tr>';
+        } else {
+            tbody.innerHTML = filas.map((f) => `
+                <tr>
+                    <td>${escapeHtml(f.concepto_nombre || f.concepto || '')}</td>
+                    <td class="texto-diferencia-plame">${escapeHtml(etiquetaEstado(f.estado))}</td>
+                    <td>${escapeHtml(f.documentnumber || '')}</td>
+                    <td>${escapeHtml(f.nombre || '')}</td>
+                    <td class="col-monto">${celdaMonto(f.monto_sunat, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.monto_planilla, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.diferencia, true)}</td>
+                </tr>
+            `).join('');
+        }
+
+        card.classList.remove('d-none');
+    }
+
+    function tituloValidacionR04() {
+        const period = periodoTributarioYyyymm();
+        if (/^\d{6}$/.test(period)) {
+            return `Validación PLAME — Tributos R04 vs planilla ${period.slice(0, 4)}-${period.slice(4, 6)}`;
+        }
+        return 'Validación PLAME — Tributos trabajador (R04) vs planilla';
     }
 
     function renderValidacion(resultado) {
@@ -326,17 +429,24 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
 
         try {
-            const res = await fetch(URL_VALIDAR_NETO, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, period }),
-            });
-            const data = await res.json();
-            if (!res.ok || data.error) {
-                alert(data.error || 'No se pudo ejecutar la validación.');
+            const body = JSON.stringify({ cia, period });
+            const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body };
+            const [resNeto, resR04] = await Promise.all([
+                fetch(URL_VALIDAR_NETO, opts),
+                fetch(URL_VALIDAR_R04, opts),
+            ]);
+            const dataNeto = await resNeto.json();
+            const dataR04 = await resR04.json();
+            if (!resNeto.ok || dataNeto.error) {
+                alert(dataNeto.error || 'No se pudo ejecutar la validación R01.');
                 return;
             }
-            renderValidacion(data);
+            if (!resR04.ok || dataR04.error) {
+                alert(dataR04.error || 'No se pudo ejecutar la validación R04.');
+                return;
+            }
+            renderValidacion(dataNeto);
+            renderValidacionR04(dataR04);
         } catch (err) {
             console.error(err);
             alert('Error al validar.');
@@ -358,6 +468,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             hayCargaSunat = false;
             actualizarBotonValidar();
             renderValidacion(null);
+            renderValidacionR04(null);
             return;
         }
 
@@ -527,6 +638,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function onPeriodoChange() {
         if (filtrosPersist) filtrosPersist.guardar();
         renderValidacion(null);
+        renderValidacionR04(null);
         await consultarEstado();
         if (hayCargaSunat) {
             await ejecutarValidacion();

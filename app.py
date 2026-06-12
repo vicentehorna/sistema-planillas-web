@@ -2616,6 +2616,107 @@ def _plame_validar_neto_r01_json(resumen, filas):
     }
 
 
+def _plame_validar_r04_ejecutar(cursor, cia, period):
+    cursor.execute(
+        'EXEC sp_pr_plame_validar_r04_web '
+        '@cia=?, @period=?, @payroll_all=?, @payroll=?, @cesados=?',
+        (cia, period, 'Y', None, 'T'),
+    )
+    sets = _dicts_collect_nonempty_resultsets(cursor)
+    resumen = sets[0] if len(sets) > 0 else []
+    filas = sets[1] if len(sets) > 1 else []
+    return resumen, filas
+
+
+def _plame_validar_r04_json(resumen_filas, detalle_filas):
+    def num(val):
+        try:
+            return round(float(val or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def int_val(val):
+        try:
+            return int(val or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    conceptos = []
+    for r in resumen_filas or []:
+        conceptos.append({
+            'concepto': _jsonable_value(r.get('concepto')),
+            'concepto_nombre': _jsonable_value(r.get('concepto_nombre')),
+            'total_filas': int_val(r.get('total_filas')),
+            'coinciden': int_val(r.get('coinciden')),
+            'con_diferencia': int_val(r.get('con_diferencia')),
+            'solo_sunat': int_val(r.get('solo_sunat')),
+            'solo_planilla': int_val(r.get('solo_planilla')),
+            'total_sunat': num(r.get('total_sunat')),
+            'total_planilla': num(r.get('total_planilla')),
+            'total_diferencia': num(r.get('total_diferencia')),
+        })
+
+    out_filas = []
+    for r in detalle_filas or []:
+        estado = str(r.get('estado') or '').strip()
+        if estado not in ('DIFERENCIA', 'SOLO_SUNAT'):
+            continue
+        out_filas.append({
+            'concepto': _jsonable_value(r.get('concepto')),
+            'concepto_nombre': _jsonable_value(r.get('concepto_nombre')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'nombre': _jsonable_value(r.get('nombre')),
+            'monto_sunat': num(r.get('monto_sunat')),
+            'monto_planilla': num(r.get('monto_planilla')),
+            'diferencia': num(r.get('diferencia')),
+            'estado': estado,
+        })
+
+    tiene_diferencias = any(
+        c.get('con_diferencia', 0) > 0
+        or c.get('solo_sunat', 0) > 0
+        or c.get('solo_planilla', 0) > 0
+        for c in conceptos
+    )
+    return {
+        'conceptos': conceptos,
+        'filas': out_filas,
+        'tiene_diferencias': tiene_diferencias,
+    }
+
+
+@app.route('/api/plame/validar/r04', methods=['POST'])
+@login_required
+def api_plame_validar_r04():
+    """Compara tributos R04 (AFP, ONP, 5ta) vs planilla por FormulaCode."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if not _plame_sunat_obtener_carga(cursor, p['cia'], p['period']):
+            return jsonify({
+                'error': 'No hay carga SUNAT para este periodo. Suba los archivos R01, R04 y R05 primero.',
+            }), 400
+        _drain_pyodbc_cursor(cursor)
+        resumen, filas = _plame_validar_r04_ejecutar(cursor, p['cia'], p['period'])
+        return jsonify(_plame_validar_r04_json(resumen, filas))
+    except Exception as e:
+        logging.exception('api_plame_validar_r04')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/plame/validar/neto-r01', methods=['POST'])
 @login_required
 def api_plame_validar_neto_r01():

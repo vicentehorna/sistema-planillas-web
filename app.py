@@ -2596,6 +2596,10 @@ def _plame_validar_neto_r01_json(resumen, filas):
     tiene_diferencias = any(
         f.get('estado') != 'OK' for f in out_filas
     )
+    filas_detalle = [
+        f for f in out_filas
+        if f.get('estado') in ('DIFERENCIA', 'SOLO_SUNAT')
+    ]
     return {
         'resumen': {
             'total_filas': int_val(res.get('total_filas')),
@@ -2607,7 +2611,7 @@ def _plame_validar_neto_r01_json(resumen, filas):
             'total_neto_planilla': num(res.get('total_neto_planilla')),
             'total_diferencia': num(res.get('total_diferencia')),
         },
-        'filas': out_filas,
+        'filas': filas_detalle,
         'tiene_diferencias': tiene_diferencias,
     }
 

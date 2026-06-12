@@ -285,21 +285,22 @@ document.addEventListener('DOMContentLoaded', async function () {
             </div>
         `;
 
-        const filas = Array.isArray(resultado.filas) ? resultado.filas : [];
-        tbody.innerHTML = filas.map((f) => {
-            const esOk = f.estado === 'OK';
-            const resaltar = !esOk;
-            return `
-                <tr class="${esOk ? 'fila-ok-plame' : ''}">
-                    <td class="${resaltar ? 'texto-diferencia-plame' : ''}">${escapeHtml(etiquetaEstado(f.estado))}</td>
+        const filas = (Array.isArray(resultado.filas) ? resultado.filas : [])
+            .filter((f) => f.estado === 'DIFERENCIA' || f.estado === 'SOLO_SUNAT');
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin diferencias ni registros Solo SUNAT en el detalle.</td></tr>';
+        } else {
+            tbody.innerHTML = filas.map((f) => `
+                <tr>
+                    <td class="texto-diferencia-plame">${escapeHtml(etiquetaEstado(f.estado))}</td>
                     <td>${escapeHtml(f.documentnumber || '')}</td>
                     <td>${escapeHtml(f.nombre || '')}</td>
-                    <td class="col-monto">${celdaMonto(f.neto_sunat, resaltar)}</td>
-                    <td class="col-monto">${celdaMonto(f.neto_planilla, resaltar)}</td>
-                    <td class="col-monto">${celdaMonto(f.diferencia, resaltar)}</td>
+                    <td class="col-monto">${celdaMonto(f.neto_sunat, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.neto_planilla, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.diferencia, true)}</td>
                 </tr>
-            `;
-        }).join('');
+            `).join('');
+        }
 
         card.classList.remove('d-none');
         if (hayDif) {

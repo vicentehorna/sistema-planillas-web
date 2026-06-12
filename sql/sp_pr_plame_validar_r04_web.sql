@@ -11,6 +11,7 @@
       5ta categoría  → RET_5TA_CATEGORIA      (Imp. Renta 5ta.categ.)
 
     Población planilla: misma que Archivo 18 / validación R01.
+    Excluye planilla PRACTICANTES (no se declara en PLAME R01/R04/R05).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_r04_web]
     @cia         VARCHAR(10),
@@ -202,6 +203,21 @@ BEGIN
             (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
       )
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EP.Person);
+
+    /* --- Practicantes: no se declaran en PLAME R01/R04/R05 --- */
+    DELETE EM
+    FROM #Empleados EM
+    WHERE EXISTS (
+        SELECT 1
+        FROM PR_EmployeePayRoll EP (NOLOCK)
+            INNER JOIN PR_PayRollType PT (NOLOCK)
+                ON PT.PayRollType = EP.PayRollType
+               AND PT.Company = @cia
+        WHERE EP.Company = @cia
+          AND EP.Person = EM.person
+          AND LEFT(EP.PRPeriod, 6) = @period
+          AND UPPER(LTRIM(RTRIM(ISNULL(PT.ShortName, '')))) = 'PRACTICANTES'
+    );
 
     ;WITH SunatR04Base AS (
         SELECT

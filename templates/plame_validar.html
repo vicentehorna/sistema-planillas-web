@@ -105,6 +105,18 @@
         color: #c0392b;
         font-weight: 700;
     }
+
+    .resumen-validacion-r01 {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.35rem 1.25rem;
+    }
+
+    @media (max-width: 767.98px) {
+        .resumen-validacion-r01 {
+            grid-template-columns: 1fr;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -377,14 +389,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         const difTotal = Number(res.total_diferencia) || 0;
         const hayDif = Boolean(resultado.tiene_diferencias);
         resumenEl.innerHTML = `
-            <div class="row g-2">
-                <div class="col-md-3"><strong>Trabajadores:</strong> ${Number(res.total_filas || 0)}</div>
-                <div class="col-md-3"><strong>Coinciden:</strong> ${Number(res.coinciden || 0)}</div>
-                <div class="col-md-3"><strong>Con diferencia:</strong> <span class="${Number(res.con_diferencia) ? 'valor-dif' : ''}">${Number(res.con_diferencia || 0)}</span></div>
-                <div class="col-md-3"><strong>Solo SUNAT / Solo planilla:</strong> ${Number(res.solo_sunat || 0)} / ${Number(res.solo_planilla || 0)}</div>
-                <div class="col-md-4"><strong>Total neto SUNAT:</strong> S/ ${formatearMonto(res.total_neto_sunat)}</div>
-                <div class="col-md-4"><strong>Total neto planilla:</strong> S/ ${formatearMonto(res.total_neto_planilla)}</div>
-                <div class="col-md-4"><strong>Diferencia total:</strong> <span class="${hayDif ? 'valor-dif' : ''}">S/ ${formatearMonto(difTotal)}</span></div>
+            <div class="resumen-validacion-r01">
+                <div><strong>Trabajadores:</strong> ${Number(res.total_filas || 0)}</div>
+                <div><strong>Coinciden:</strong> ${Number(res.coinciden || 0)}</div>
+                <div>
+                    <strong>Con diferencia:</strong>
+                    <span class="${Number(res.con_diferencia) ? 'valor-dif' : ''}">${Number(res.con_diferencia || 0)}</span>
+                </div>
+                <div><strong>Solo SUNAT / Solo planilla:</strong> ${Number(res.solo_sunat || 0)} / ${Number(res.solo_planilla || 0)}</div>
+                <div><strong>Total neto SUNAT:</strong> S/ ${formatearMonto(res.total_neto_sunat)}</div>
+                <div><strong>Total neto planilla:</strong> S/ ${formatearMonto(res.total_neto_planilla)}</div>
+                <div><strong>Diferencia total:</strong> <span class="${hayDif ? 'valor-dif' : ''}">S/ ${formatearMonto(difTotal)}</span></div>
             </div>
         `;
 

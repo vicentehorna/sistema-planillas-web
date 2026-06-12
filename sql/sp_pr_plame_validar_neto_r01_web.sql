@@ -9,7 +9,8 @@
       - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
       - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
       - Respeta flag PDT por planilla/proceso cuando está configurado
-      - En liquidación: FormulaCode NETO o LIQ_NETO (resto de procesos: solo NETO)
+      - En liquidación: FormulaCode LIQ_NETO; en CTS: FormulaCode CTS; resto: NETO
+      - Excluye planilla PRACTICANTES (no se declara en PLAME R01/R04/R05)
 
     Parámetros:
       @cia         — compañía
@@ -151,10 +152,17 @@ BEGIN
          OR (@cesados = 'N' AND E.CeaseDate IS NULL)
       )
       AND (
-            UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+            (
+                EPC.ProcessType NOT IN (M.CTSProcessType, M.LiquidacionProcess)
+                AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+            )
          OR (
                 EPC.ProcessType = M.LiquidacionProcess
                 AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
+            )
+         OR (
+                EPC.ProcessType = M.CTSProcessType
+                AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'CTS'
             )
       )
       AND EPC.ProcessType IN (
@@ -198,6 +206,21 @@ BEGIN
             (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
       )
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EP.Person);
+
+    /* --- Practicantes: no se declaran en PLAME R01/R04/R05 --- */
+    DELETE EM
+    FROM #Empleados EM
+    WHERE EXISTS (
+        SELECT 1
+        FROM PR_EmployeePayRoll EP (NOLOCK)
+            INNER JOIN PR_PayRollType PT (NOLOCK)
+                ON PT.PayRollType = EP.PayRollType
+               AND PT.Company = @cia
+        WHERE EP.Company = @cia
+          AND EP.Person = EM.person
+          AND LEFT(EP.PRPeriod, 6) = @period
+          AND UPPER(LTRIM(RTRIM(ISNULL(PT.ShortName, '')))) = 'PRACTICANTES'
+    );
 
     ;WITH SunatR01 AS (
         SELECT
@@ -285,10 +308,17 @@ BEGIN
                   AND EPC.Person = EM.person
                   AND LEFT(EPC.PRPeriod, 6) = @period
                   AND (
-                        UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+                        (
+                            EPC.ProcessType NOT IN (M.CTSProcessType, M.LiquidacionProcess)
+                            AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
+                        )
                      OR (
                             EPC.ProcessType = M.LiquidacionProcess
                             AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'LIQ_NETO'
+                        )
+                     OR (
+                            EPC.ProcessType = M.CTSProcessType
+                            AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'CTS'
                         )
                   )
                   AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)

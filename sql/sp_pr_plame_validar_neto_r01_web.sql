@@ -175,34 +175,105 @@ BEGIN
       AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EPC.Person);
 
+    /* --- Cualquier trabajador con planilla procesada en el periodo (incl. semanal) --- */
+    INSERT INTO #Empleados (person)
+    SELECT DISTINCT EP.Person
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+        INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = @cia
+        INNER JOIN PR_Employee E (NOLOCK) ON EP.Person = E.Person AND EP.Company = E.Company
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
+      AND EP.ProcessType IN (
+            M.CTSProcessType,
+            M.PlanillaProcess,
+            M.PlanillaSemProcess,
+            M.VacationProcess,
+            M.LiquidacionProcess,
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+      )
+      AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EP.Person);
+
     ;WITH SunatR01 AS (
         SELECT
             LTRIM(RTRIM(ISNULL(F.TipoDoc, ''))) AS tipodoc,
             LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) AS documentnumber,
-            CASE
-                WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = '' THEN ''
-                WHEN LTRIM(RTRIM(F.DocumentNumber)) NOT LIKE '%[^0-9]%'
-                    THEN CAST(TRY_CAST(LTRIM(RTRIM(F.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
-                ELSE UPPER(LTRIM(RTRIM(F.DocumentNumber)))
-            END AS doc_key,
+            MAP.Person AS person,
             LTRIM(RTRIM(ISNULL(F.LastName1, ''))) AS lastname1,
             LTRIM(RTRIM(ISNULL(F.LastName2, ''))) AS lastname2,
             LTRIM(RTRIM(ISNULL(F.Names, ''))) AS names,
             TRY_CAST(JSON_VALUE(F.MontosJson, '$."Neto a pagar"') AS DECIMAL(18, 2)) AS neto_sunat
         FROM PR_PlameSunatFila F (NOLOCK)
+            OUTER APPLY (
+                SELECT TOP 1 E.Person
+                FROM PR_Employee E (NOLOCK)
+                    INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+                WHERE E.Company = @cia
+                  AND EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = E.Person)
+                  AND (
+                        LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = LTRIM(RTRIM(ISNULL(P.DocumentNumber, '')))
+                     OR (
+                            LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND ABS(
+                                LEN(LTRIM(RTRIM(F.DocumentNumber)))
+                                - LEN(LTRIM(RTRIM(P.DocumentNumber)))
+                            ) <= 1
+                            AND (
+                                LTRIM(RTRIM(P.DocumentNumber)) LIKE LTRIM(RTRIM(F.DocumentNumber)) + '%'
+                                OR LTRIM(RTRIM(F.DocumentNumber)) LIKE LTRIM(RTRIM(P.DocumentNumber)) + '%'
+                            )
+                        )
+                     OR (
+                            UPPER(LTRIM(RTRIM(ISNULL(F.LastName1, '')))) = UPPER(LTRIM(RTRIM(ISNULL(P.LastName1, ''))))
+                            AND (
+                                ISNULL(NULLIF(LTRIM(RTRIM(F.LastName2)), ''), '') = ''
+                                OR UPPER(LTRIM(RTRIM(ISNULL(F.LastName2, '')))) = UPPER(LTRIM(RTRIM(ISNULL(P.LastName2, ''))))
+                            )
+                            AND UPPER(LTRIM(RTRIM(ISNULL(P.Name1, '')))) = UPPER(LTRIM(LEFT(
+                                LTRIM(RTRIM(ISNULL(F.Names, ''))) + ' ',
+                                NULLIF(CHARINDEX(' ', LTRIM(RTRIM(ISNULL(F.Names, ''))) + ' '), 0) - 1
+                            )))
+                            AND LTRIM(RTRIM(ISNULL(F.LastName1, ''))) <> ''
+                        )
+                  )
+                ORDER BY
+                    CASE
+                        WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) THEN 0
+                        WHEN (
+                            LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND ABS(
+                                LEN(LTRIM(RTRIM(F.DocumentNumber)))
+                                - LEN(LTRIM(RTRIM(P.DocumentNumber)))
+                            ) <= 1
+                            AND (
+                                LTRIM(RTRIM(P.DocumentNumber)) LIKE LTRIM(RTRIM(F.DocumentNumber)) + '%'
+                                OR LTRIM(RTRIM(F.DocumentNumber)) LIKE LTRIM(RTRIM(P.DocumentNumber)) + '%'
+                            )
+                        ) THEN 1
+                        ELSE 2
+                    END
+            ) MAP
         WHERE F.CargaId = @cargaid
           AND F.Archivo = 'R01'
           AND ISNULL(LTRIM(RTRIM(F.DocumentNumber)), '') <> ''
     ),
     PlanillaNeto AS (
         SELECT
+            EM.person,
             LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) AS documentnumber,
-            CASE
-                WHEN LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) = '' THEN ''
-                WHEN LTRIM(RTRIM(P.DocumentNumber)) NOT LIKE '%[^0-9]%'
-                    THEN CAST(TRY_CAST(LTRIM(RTRIM(P.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
-                ELSE UPPER(LTRIM(RTRIM(P.DocumentNumber)))
-            END AS doc_key,
+            LTRIM(RTRIM(
+                ISNULL(P.LastName1, '') + ' ' +
+                ISNULL(P.LastName2, '') + ' ' +
+                ISNULL(P.Name1, '') + ' ' +
+                ISNULL(P.Name2, '')
+            )) AS nombre,
             ISNULL((
                 SELECT SUM(ISNULL(EPC.ConceptValueLo, 0))
                 FROM PR_EmployeePayRollConcept EPC (NOLOCK)
@@ -254,26 +325,30 @@ BEGIN
     )
     SELECT
         COALESCE(S.tipodoc, '') AS tipodoc,
-        COALESCE(S.documentnumber, P.documentnumber) AS documentnumber,
-        LTRIM(RTRIM(
-            COALESCE(S.lastname1, '') + ' ' +
-            COALESCE(S.lastname2, '') + ' ' +
-            COALESCE(S.names, '')
-        )) AS nombre,
+        COALESCE(NULLIF(P.documentnumber, ''), S.documentnumber) AS documentnumber,
+        COALESCE(
+            NULLIF(LTRIM(RTRIM(
+                COALESCE(S.lastname1, '') + ' ' +
+                COALESCE(S.lastname2, '') + ' ' +
+                COALESCE(S.names, '')
+            )), ''),
+            P.nombre
+        ) AS nombre,
         ISNULL(S.neto_sunat, 0) AS neto_sunat,
         ISNULL(P.neto_planilla, 0) AS neto_planilla,
         ROUND(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0), 2) AS diferencia,
         CASE
-            WHEN S.doc_key IS NULL THEN 'SOLO_PLANILLA'
-            WHEN P.doc_key IS NULL THEN 'SOLO_SUNAT'
+            WHEN S.documentnumber IS NULL THEN 'SOLO_PLANILLA'
+            WHEN P.person IS NULL THEN 'SOLO_SUNAT'
             WHEN ABS(ISNULL(S.neto_sunat, 0) - ISNULL(P.neto_planilla, 0)) < 0.005 THEN 'OK'
             ELSE 'DIFERENCIA'
         END AS estado
     INTO #Comparacion
     FROM SunatR01 S
         FULL OUTER JOIN PlanillaNeto P
-            ON S.doc_key = P.doc_key
-           AND S.doc_key <> '';
+            ON S.person IS NOT NULL
+           AND P.person IS NOT NULL
+           AND S.person = P.person;
 
     SELECT
         COUNT(*) AS total_filas,

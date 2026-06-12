@@ -180,15 +180,33 @@ BEGIN
       AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EPC.Person);
 
+    INSERT INTO #Empleados (person)
+    SELECT DISTINCT EP.Person
+    FROM PR_EmployeePayRoll EP (NOLOCK)
+        INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = @cia
+        INNER JOIN PR_Employee E (NOLOCK) ON EP.Person = E.Person AND EP.Company = E.Company
+    WHERE EP.Company = @cia
+      AND LEFT(EP.PRPeriod, 6) = @period
+      AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
+      AND EP.ProcessType IN (
+            M.CTSProcessType,
+            M.PlanillaProcess,
+            M.PlanillaSemProcess,
+            M.VacationProcess,
+            M.LiquidacionProcess,
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+      )
+      AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EP.Person);
+
     ;WITH SunatR04Base AS (
         SELECT
             LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) AS documentnumber,
-            CASE
-                WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = '' THEN ''
-                WHEN LTRIM(RTRIM(F.DocumentNumber)) NOT LIKE '%[^0-9]%'
-                    THEN CAST(TRY_CAST(LTRIM(RTRIM(F.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
-                ELSE UPPER(LTRIM(RTRIM(F.DocumentNumber)))
-            END AS doc_key,
+            MAP.Person AS person,
             LTRIM(RTRIM(
                 ISNULL(F.LastName1, '') + ' ' +
                 ISNULL(F.LastName2, '') + ' ' +
@@ -196,41 +214,87 @@ BEGIN
             )) AS nombre,
             F.MontosJson
         FROM PR_PlameSunatFila F (NOLOCK)
+            OUTER APPLY (
+                SELECT TOP 1 E.Person
+                FROM PR_Employee E (NOLOCK)
+                    INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+                WHERE E.Company = @cia
+                  AND EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = E.Person)
+                  AND (
+                        LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = LTRIM(RTRIM(ISNULL(P.DocumentNumber, '')))
+                     OR (
+                            LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND ABS(
+                                LEN(LTRIM(RTRIM(F.DocumentNumber)))
+                                - LEN(LTRIM(RTRIM(P.DocumentNumber)))
+                            ) <= 1
+                            AND (
+                                LTRIM(RTRIM(P.DocumentNumber)) LIKE LTRIM(RTRIM(F.DocumentNumber)) + '%'
+                                OR LTRIM(RTRIM(F.DocumentNumber)) LIKE LTRIM(RTRIM(P.DocumentNumber)) + '%'
+                            )
+                        )
+                     OR (
+                            UPPER(LTRIM(RTRIM(ISNULL(F.LastName1, '')))) = UPPER(LTRIM(RTRIM(ISNULL(P.LastName1, ''))))
+                            AND (
+                                ISNULL(NULLIF(LTRIM(RTRIM(F.LastName2)), ''), '') = ''
+                                OR UPPER(LTRIM(RTRIM(ISNULL(F.LastName2, '')))) = UPPER(LTRIM(RTRIM(ISNULL(P.LastName2, ''))))
+                            )
+                            AND UPPER(LTRIM(RTRIM(ISNULL(P.Name1, '')))) = UPPER(LTRIM(LEFT(
+                                LTRIM(RTRIM(ISNULL(F.Names, ''))) + ' ',
+                                NULLIF(CHARINDEX(' ', LTRIM(RTRIM(ISNULL(F.Names, ''))) + ' '), 0) - 1
+                            )))
+                            AND LTRIM(RTRIM(ISNULL(F.LastName1, ''))) <> ''
+                        )
+                  )
+                ORDER BY
+                    CASE
+                        WHEN LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) = LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) THEN 0
+                        WHEN (
+                            LTRIM(RTRIM(ISNULL(F.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) NOT LIKE '%[^0-9]%'
+                            AND ABS(
+                                LEN(LTRIM(RTRIM(F.DocumentNumber)))
+                                - LEN(LTRIM(RTRIM(P.DocumentNumber)))
+                            ) <= 1
+                            AND (
+                                LTRIM(RTRIM(P.DocumentNumber)) LIKE LTRIM(RTRIM(F.DocumentNumber)) + '%'
+                                OR LTRIM(RTRIM(F.DocumentNumber)) LIKE LTRIM(RTRIM(P.DocumentNumber)) + '%'
+                            )
+                        ) THEN 1
+                        ELSE 2
+                    END
+            ) MAP
         WHERE F.CargaId = @cargaid
           AND F.Archivo = 'R04'
           AND ISNULL(LTRIM(RTRIM(F.DocumentNumber)), '') <> ''
     ),
     SunatMontos AS (
-        SELECT documentnumber, doc_key, nombre, 'APORTE' AS concepto, 'Aporte AFP' AS concepto_nombre,
+        SELECT documentnumber, person, nombre, 'APORTE' AS concepto, 'Aporte AFP' AS concepto_nombre,
             ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Aporte Obligatorio"') AS DECIMAL(18, 2)), 0) AS monto_sunat
         FROM SunatR04Base
         UNION ALL
-        SELECT documentnumber, doc_key, nombre, 'COMISION', 'Comisión AFP',
+        SELECT documentnumber, person, nombre, 'COMISION', 'Comisión AFP',
             ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Comisión"') AS DECIMAL(18, 2)), 0)
         FROM SunatR04Base
         UNION ALL
-        SELECT documentnumber, doc_key, nombre, 'SEGURO', 'Seguro AFP',
+        SELECT documentnumber, person, nombre, 'SEGURO', 'Seguro AFP',
             ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.P.P. Seguro"') AS DECIMAL(18, 2)), 0)
         FROM SunatR04Base
         UNION ALL
-        SELECT documentnumber, doc_key, nombre, 'ONP', 'ONP',
+        SELECT documentnumber, person, nombre, 'ONP', 'ONP',
             ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. D.Ley 19990 (ONP)"') AS DECIMAL(18, 2)), 0)
           + ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."S.N.P. Asegura tu pensión (ONP)"') AS DECIMAL(18, 2)), 0)
         FROM SunatR04Base
         UNION ALL
-        SELECT documentnumber, doc_key, nombre, '5TA', 'Renta 5ta categoría',
+        SELECT documentnumber, person, nombre, '5TA', 'Renta 5ta categoría',
             ISNULL(TRY_CAST(JSON_VALUE(MontosJson, '$."Imp. Renta 5ta.categ."') AS DECIMAL(18, 2)), 0)
         FROM SunatR04Base
     ),
     PlanillaMontos AS (
         SELECT
+            EM.person,
             LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) AS documentnumber,
-            CASE
-                WHEN LTRIM(RTRIM(ISNULL(P.DocumentNumber, ''))) = '' THEN ''
-                WHEN LTRIM(RTRIM(P.DocumentNumber)) NOT LIKE '%[^0-9]%'
-                    THEN CAST(TRY_CAST(LTRIM(RTRIM(P.DocumentNumber)) AS BIGINT) AS VARCHAR(20))
-                ELSE UPPER(LTRIM(RTRIM(P.DocumentNumber)))
-            END AS doc_key,
             LTRIM(RTRIM(
                 ISNULL(P.LastName1, '') + ' ' +
                 ISNULL(P.LastName2, '') + ' ' +
@@ -286,22 +350,23 @@ BEGIN
     SELECT
         COALESCE(S.concepto, P.concepto) AS concepto,
         COALESCE(S.concepto_nombre, P.concepto_nombre) AS concepto_nombre,
-        COALESCE(S.documentnumber, P.documentnumber) AS documentnumber,
-        LTRIM(RTRIM(COALESCE(NULLIF(S.nombre, ''), P.nombre))) AS nombre,
+        COALESCE(NULLIF(P.documentnumber, ''), S.documentnumber) AS documentnumber,
+        COALESCE(NULLIF(LTRIM(RTRIM(S.nombre)), ''), P.nombre) AS nombre,
         ISNULL(S.monto_sunat, 0) AS monto_sunat,
         ISNULL(P.monto_planilla, 0) AS monto_planilla,
         ROUND(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0), 2) AS diferencia,
         CASE
-            WHEN S.doc_key IS NULL THEN 'SOLO_PLANILLA'
-            WHEN P.doc_key IS NULL THEN 'SOLO_SUNAT'
+            WHEN S.documentnumber IS NULL THEN 'SOLO_PLANILLA'
+            WHEN P.person IS NULL THEN 'SOLO_SUNAT'
             WHEN ABS(ISNULL(S.monto_sunat, 0) - ISNULL(P.monto_planilla, 0)) < 0.005 THEN 'OK'
             ELSE 'DIFERENCIA'
         END AS estado
     INTO #Comparacion
     FROM SunatMontos S
         FULL OUTER JOIN PlanillaMontos P
-            ON S.doc_key = P.doc_key
-           AND S.doc_key <> ''
+            ON S.person IS NOT NULL
+           AND P.person IS NOT NULL
+           AND S.person = P.person
            AND S.concepto = P.concepto;
 
     /* Resumen por concepto */

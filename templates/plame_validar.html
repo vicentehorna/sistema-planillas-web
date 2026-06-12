@@ -203,6 +203,28 @@
     </div>
 </div>
 
+<div class="card shadow-sm border-0 d-none mb-4" id="cardValidacionR05Plame">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center" id="tituloValidacionR05Plame">Validación PLAME — ESSALUD (R05) vs planilla</h5>
+        <div id="resumenValidacionR05Plame" class="resumen-validacion-plame small mb-3"></div>
+        <div class="table-scroll-container" style="max-height: 55vh; overflow: auto; border: 1px solid #dee2e6;">
+            <table class="table table-bordered table-sm table-hover table-validacion-plame align-middle">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th>DNI</th>
+                        <th>Trabajador</th>
+                        <th class="col-monto">ESSALUD SUNAT (R05)</th>
+                        <th class="col-monto">ESSALUD planilla</th>
+                        <th class="col-monto">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyValidacionR05Plame"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 <div class="card shadow-sm border-0 d-none mb-4" id="cardValidacionR04Plame">
     <div class="card-body pt-3">
         <h5 class="fw-bold mb-3 text-center" id="tituloValidacionR04Plame">Validación PLAME — Tributos trabajador (R04) vs planilla</h5>
@@ -239,6 +261,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_CARGA = {{ url_for('api_plame_validar_carga') | tojson }};
     const URL_VALIDAR_NETO = {{ url_for('api_plame_validar_neto_r01') | tojson }};
     const URL_VALIDAR_R04 = {{ url_for('api_plame_validar_r04') | tojson }};
+    const URL_VALIDAR_R05 = {{ url_for('api_plame_validar_r05') | tojson }};
     let hayCargaSunat = false;
 
     function periodoTributarioYyyymm() {
@@ -282,6 +305,23 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function actualizarBotonValidar() {
         document.getElementById('btnValidarPlame').disabled = !hayCargaSunat;
+    }
+
+    async function leerRespuestaJson(resp, etiqueta) {
+        const texto = await resp.text();
+        if (!texto) {
+            throw new Error(`${etiqueta}: respuesta vacía (HTTP ${resp.status}).`);
+        }
+        try {
+            return JSON.parse(texto);
+        } catch (err) {
+            const inicio = texto.replace(/\s+/g, ' ').trim().slice(0, 80);
+            throw new Error(
+                `${etiqueta}: respuesta no JSON (HTTP ${resp.status}). `
+                + 'Si acaba de actualizar el sistema, reinicie python app.py. '
+                + `Detalle: ${inicio}`
+            );
+        }
     }
 
     function tituloValidacion() {
@@ -371,6 +411,74 @@ document.addEventListener('DOMContentLoaded', async function () {
         return 'Validación PLAME — Tributos trabajador (R04) vs planilla';
     }
 
+    function tituloValidacionR05() {
+        const period = periodoTributarioYyyymm();
+        if (/^\d{6}$/.test(period)) {
+            return `Validación PLAME — ESSALUD (R05) vs planilla ${period.slice(0, 4)}-${period.slice(4, 6)}`;
+        }
+        return 'Validación PLAME — ESSALUD (R05) vs planilla';
+    }
+
+    function renderValidacionR05(resultado) {
+        const card = document.getElementById('cardValidacionR05Plame');
+        const resumenEl = document.getElementById('resumenValidacionR05Plame');
+        const tbody = document.getElementById('tbodyValidacionR05Plame');
+        const titulo = document.getElementById('tituloValidacionR05Plame');
+
+        if (!card || !resumenEl || !tbody || !titulo) {
+            console.error('No se encontró el contenedor de validación R05 en la página.');
+            return;
+        }
+
+        if (!resultado) {
+            card.classList.add('d-none');
+            resumenEl.innerHTML = '';
+            tbody.innerHTML = '';
+            return;
+        }
+
+        titulo.textContent = tituloValidacionR05();
+        const res = resultado.resumen || {};
+        const difTotal = Number(res.total_diferencia) || 0;
+        const hayDif = Boolean(resultado.tiene_diferencias);
+        resumenEl.innerHTML = `
+            <div class="resumen-validacion-r01">
+                <div><strong>Trabajadores:</strong> ${Number(res.total_filas || 0)}</div>
+                <div><strong>Coinciden:</strong> ${Number(res.coinciden || 0)}</div>
+                <div>
+                    <strong>Con diferencia:</strong>
+                    <span class="${Number(res.con_diferencia) ? 'valor-dif' : ''}">${Number(res.con_diferencia || 0)}</span>
+                </div>
+                <div><strong>Solo SUNAT / Solo planilla:</strong> ${Number(res.solo_sunat || 0)} / ${Number(res.solo_planilla || 0)}</div>
+                <div><strong>Total ESSALUD SUNAT:</strong> S/ ${formatearMonto(res.total_essalud_sunat)}</div>
+                <div><strong>Total ESSALUD planilla:</strong> S/ ${formatearMonto(res.total_essalud_planilla)}</div>
+                <div><strong>Diferencia total:</strong> <span class="${hayDif ? 'valor-dif' : ''}">S/ ${formatearMonto(difTotal)}</span></div>
+            </div>
+        `;
+
+        const filas = (Array.isArray(resultado.filas) ? resultado.filas : [])
+            .filter((f) => f.estado === 'DIFERENCIA' || f.estado === 'SOLO_SUNAT');
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin diferencias ni registros Solo SUNAT en el detalle.</td></tr>';
+        } else {
+            tbody.innerHTML = filas.map((f) => `
+                <tr>
+                    <td class="texto-diferencia-plame">${escapeHtml(etiquetaEstado(f.estado))}</td>
+                    <td>${escapeHtml(f.documentnumber || '')}</td>
+                    <td>${escapeHtml(f.nombre || '')}</td>
+                    <td class="col-monto">${celdaMonto(f.essalud_sunat, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.essalud_planilla, true)}</td>
+                    <td class="col-monto">${celdaMonto(f.diferencia, true)}</td>
+                </tr>
+            `).join('');
+        }
+
+        card.classList.remove('d-none');
+        if (hayDif) {
+            card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+    }
+
     function renderValidacion(resultado) {
         const card = document.getElementById('cardValidacionPlame');
         const resumenEl = document.getElementById('resumenValidacionPlame');
@@ -446,12 +554,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         try {
             const body = JSON.stringify({ cia, period });
             const opts = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body };
-            const [resNeto, resR04] = await Promise.all([
+            const [resNeto, resR04, resR05] = await Promise.all([
                 fetch(URL_VALIDAR_NETO, opts),
                 fetch(URL_VALIDAR_R04, opts),
+                fetch(URL_VALIDAR_R05, opts),
             ]);
-            const dataNeto = await resNeto.json();
-            const dataR04 = await resR04.json();
+            const dataNeto = await leerRespuestaJson(resNeto, 'R01');
+            const dataR04 = await leerRespuestaJson(resR04, 'R04');
+            const dataR05 = await leerRespuestaJson(resR05, 'R05');
             if (!resNeto.ok || dataNeto.error) {
                 alert(dataNeto.error || 'No se pudo ejecutar la validación R01.');
                 return;
@@ -460,11 +570,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                 alert(dataR04.error || 'No se pudo ejecutar la validación R04.');
                 return;
             }
+            if (!resR05.ok || dataR05.error) {
+                alert(dataR05.error || 'No se pudo ejecutar la validación R05.');
+                return;
+            }
             renderValidacion(dataNeto);
             renderValidacionR04(dataR04);
+            renderValidacionR05(dataR05);
         } catch (err) {
             console.error(err);
-            alert('Error al validar.');
+            alert(err && err.message ? err.message : 'Error al validar.');
         } finally {
             btn.disabled = !hayCargaSunat;
             btn.innerHTML = textoOriginal;
@@ -484,6 +599,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             actualizarBotonValidar();
             renderValidacion(null);
             renderValidacionR04(null);
+            renderValidacionR05(null);
             return;
         }
 
@@ -654,6 +770,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (filtrosPersist) filtrosPersist.guardar();
         renderValidacion(null);
         renderValidacionR04(null);
+        renderValidacionR05(null);
         await consultarEstado();
         if (hayCargaSunat) {
             await ejecutarValidacion();

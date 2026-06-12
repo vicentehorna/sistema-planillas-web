@@ -2685,6 +2685,98 @@ def _plame_validar_r04_json(resumen_filas, detalle_filas):
     }
 
 
+def _plame_validar_r05_ejecutar(cursor, cia, period):
+    cursor.execute(
+        'EXEC sp_pr_plame_validar_r05_web '
+        '@cia=?, @period=?, @payroll_all=?, @payroll=?, @cesados=?',
+        (cia, period, 'Y', None, 'T'),
+    )
+    sets = _dicts_collect_nonempty_resultsets(cursor)
+    resumen = sets[0][0] if len(sets) > 0 and sets[0] else {}
+    filas = sets[1] if len(sets) > 1 else []
+    return resumen, filas
+
+
+def _plame_validar_r05_json(resumen, filas):
+    def num(val):
+        try:
+            return round(float(val or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def int_val(val):
+        try:
+            return int(val or 0)
+        except (TypeError, ValueError):
+            return 0
+
+    res = resumen or {}
+    out_filas = []
+    for r in filas or []:
+        out_filas.append({
+            'tipodoc': _jsonable_value(r.get('tipodoc')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'nombre': _jsonable_value(r.get('nombre')),
+            'essalud_sunat': num(r.get('essalud_sunat')),
+            'essalud_planilla': num(r.get('essalud_planilla')),
+            'diferencia': num(r.get('diferencia')),
+            'estado': _jsonable_value(r.get('estado')),
+        })
+    tiene_diferencias = any(
+        f.get('estado') != 'OK' for f in out_filas
+    )
+    filas_detalle = [
+        f for f in out_filas
+        if f.get('estado') in ('DIFERENCIA', 'SOLO_SUNAT')
+    ]
+    return {
+        'resumen': {
+            'total_filas': int_val(res.get('total_filas')),
+            'coinciden': int_val(res.get('coinciden')),
+            'con_diferencia': int_val(res.get('con_diferencia')),
+            'solo_sunat': int_val(res.get('solo_sunat')),
+            'solo_planilla': int_val(res.get('solo_planilla')),
+            'total_essalud_sunat': num(res.get('total_essalud_sunat')),
+            'total_essalud_planilla': num(res.get('total_essalud_planilla')),
+            'total_diferencia': num(res.get('total_diferencia')),
+        },
+        'filas': filas_detalle,
+        'tiene_diferencias': tiene_diferencias,
+    }
+
+
+@app.route('/api/plame/validar/r05', methods=['POST'])
+@login_required
+def api_plame_validar_r05():
+    """Compara ESSALUD Seguro de Salud (R05 SUNAT) vs planilla (FormulaCode ESSALUD)."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if not _plame_sunat_obtener_carga(cursor, p['cia'], p['period']):
+            return jsonify({
+                'error': 'No hay carga SUNAT para este periodo. Suba los archivos R01, R04 y R05 primero.',
+            }), 400
+        _drain_pyodbc_cursor(cursor)
+        resumen, filas = _plame_validar_r05_ejecutar(cursor, p['cia'], p['period'])
+        return jsonify(_plame_validar_r05_json(resumen, filas))
+    except Exception as e:
+        logging.exception('api_plame_validar_r05')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/plame/validar/r04', methods=['POST'])
 @login_required
 def api_plame_validar_r04():

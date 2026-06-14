@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-06-13 23:14
+  Generado: 2026-06-13 23:34
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -6214,7 +6214,9 @@ GO
     Reglas:
       - Conceptos I, D y A con movimiento en el periodo deben tener código PDT
         (excepto descuento ONP y aporte ESSALUD).
-      - Cantidad de trabajadores del Archivo 18 (#Empleados) = planilla del periodo.
+      - Cantidad de trabajadores distintos del Archivo 18 (#Empleados activos en el periodo)
+        = trabajadores distintos en planilla activa del periodo.
+      - El filtro de vigencia en el periodo solo aplica a la comparacion; el listado no cambia.
 
     Parámetros: mismos que sp_pr_listado_plame18_web.
 */
@@ -6234,6 +6236,17 @@ BEGIN
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
     IF @payroll_all NOT IN ('Y', 'N') SET @payroll_all = 'Y';
     IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
+
+    DECLARE @fecha_inicio_mes DATE;
+    DECLARE @fecha_fin_mes DATE;
+    DECLARE @period_ym CHAR(6);
+
+    SET @period_ym = LEFT(@period, 6);
+    IF LEN(@period_ym) = 6 AND @period_ym NOT LIKE '%[^0-9]%'
+    BEGIN
+        SET @fecha_inicio_mes = CONVERT(DATE, @period_ym + '01', 112);
+        SET @fecha_fin_mes = EOMONTH(@fecha_inicio_mes);
+    END;
 
     CREATE TABLE #Empleados (
         person VARCHAR(20) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL PRIMARY KEY
@@ -6394,11 +6407,23 @@ BEGIN
           AND EPC.ProcessType NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
     ) T;
 
-    /* --- Cantidad de trabajadores: Archivo 18 vs planilla --- */
+    /* --- Cantidad de trabajadores distintos: Archivo 18 vs planilla (activos en el periodo) --- */
     DECLARE @cnt_archivo18 INT;
     DECLARE @cnt_planilla INT;
 
-    SELECT @cnt_archivo18 = COUNT(*) FROM #Empleados;
+    SELECT @cnt_archivo18 = COUNT(DISTINCT EM.person)
+    FROM #Empleados EM
+        INNER JOIN PR_Employee E (NOLOCK) ON E.Company = @cia AND E.Person = EM.person
+    WHERE (
+            @fecha_fin_mes IS NULL
+         OR (
+                CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
+                AND (
+                    E.CeaseDate IS NULL
+                    OR CONVERT(DATE, E.CeaseDate) >= @fecha_inicio_mes
+                )
+            )
+      );
 
     SELECT @cnt_planilla = COUNT(DISTINCT EP.Person)
     FROM PR_EmployeePayRoll EP (NOLOCK)
@@ -6422,6 +6447,16 @@ BEGIN
             @cesados = 'T'
          OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
          OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
+      AND (
+            @fecha_fin_mes IS NULL
+         OR (
+                CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
+                AND (
+                    E.CeaseDate IS NULL
+                    OR CONVERT(DATE, E.CeaseDate) >= @fecha_inicio_mes
+                )
+            )
       )
       AND (
             (SELECT COUNT(*) FROM SY_Company WHERE Company = @cia AND Description LIKE '%PLANINVES%') = 0
@@ -6475,6 +6510,16 @@ BEGIN
              OR (@cesados = 'N' AND E.CeaseDate IS NULL)
           )
           AND (
+                @fecha_fin_mes IS NULL
+             OR (
+                    CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
+                    AND (
+                        E.CeaseDate IS NULL
+                        OR CONVERT(DATE, E.CeaseDate) >= @fecha_inicio_mes
+                    )
+                )
+          )
+          AND (
                 (SELECT COUNT(*) FROM SY_Company WHERE Company = @cia AND Description LIKE '%PLANINVES%') = 0
              OR ISNULL(SP.IsRecruiter, 'N') = 'N'
           )
@@ -6496,9 +6541,22 @@ BEGIN
         FROM #Empleados EM
             INNER JOIN PR_Employee E (NOLOCK) ON E.Company = @cia AND E.Person = EM.person
             INNER JOIN SY_Person SP (NOLOCK) ON E.Person = SP.Person
-        WHERE NOT EXISTS (
+        WHERE (
+                @fecha_fin_mes IS NULL
+             OR (
+                    CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
+                    AND (
+                        E.CeaseDate IS NULL
+                        OR CONVERT(DATE, E.CeaseDate) >= @fecha_inicio_mes
+                    )
+                )
+          )
+          AND NOT EXISTS (
             SELECT 1
             FROM PR_EmployeePayRoll EP (NOLOCK)
+                INNER JOIN PR_Employee EP_E (NOLOCK)
+                    ON EP_E.Company = EP.Company
+                   AND EP_E.Person = EP.Person
                 INNER JOIN PR_Mapping M (NOLOCK) ON M.Company = EP.Company
             WHERE EP.Company = @cia
               AND EP.Person = EM.person
@@ -6511,6 +6569,16 @@ BEGIN
                     M.VacationProcess,
                     M.LiquidacionProcess,
                     (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+              )
+              AND (
+                    @fecha_fin_mes IS NULL
+                 OR (
+                        CONVERT(DATE, ISNULL(EP_E.ReEntryDate, EP_E.EntryDate)) <= @fecha_fin_mes
+                        AND (
+                            EP_E.CeaseDate IS NULL
+                            OR CONVERT(DATE, EP_E.CeaseDate) >= @fecha_inicio_mes
+                        )
+                    )
               )
         );
     END;

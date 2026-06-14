@@ -58,10 +58,29 @@
             border: 2px solid #1a4b84;
         }
 
-        /* Firmas */
+        /* Firmas e imágenes corporativas */
+        .logo-img {
+            max-height: 55px;
+            max-width: 200px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: right center;
+            display: block;
+            margin-left: auto;
+        }
         .firmas-table { margin-top: 60px; text-align: center; }
         .linea-firma { border-top: 1px solid #000; width: 220px; margin: 0 auto; padding-top: 5px; font-weight: bold; font-size: 10px; }
-        .firma-img { height: 75px; object-fit: contain; margin-bottom: 5px; }
+        .firma-img {
+            max-height: 80px;
+            max-width: 220px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: center bottom;
+            margin: 0 auto 5px;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -73,9 +92,9 @@
                     <div class="empresa-info">RUC: {{ cabecera.ruc_empresa }}</div>
                     <div class="empresa-info">{{ cabecera.direccion_empresa }}</div>
                 </td>
-                <td width="30%" style="text-align: right;">
-                    {% if logo_b64 %}
-                    <img src="data:image/png;base64,{{ logo_b64 }}" style="max-height: 55px;">
+                <td width="30%" style="text-align: right; vertical-align: middle;">
+                    {% if logo_src %}
+                    <img src="{{ logo_src }}" class="logo-img" alt="Logo empresa">
                     {% endif %}
                 </td>
             </tr>
@@ -94,8 +113,14 @@
             <tr>
                 <td class="label">Código:</td>
                 <td class="value">{{ cabecera.employeecode }}</td>
-                <td class="label">{{ cabecera.DocumentType }}</td>
+                <td class="label">{{ cabecera.DocumentType or 'DNI:' }}</td>
                 <td class="value">{{ cabecera.dni }}</td>
+            </tr>
+            <tr>
+                <td class="label">Rem. Básica:</td>
+                <td class="value">{{ (cabecera.salaryconcept or cabecera.sueldobasico or cabecera.rem_basica)|importe }}</td>
+                <td class="label">Centro Costo:</td>
+                <td class="value">{{ cabecera.cccode }}</td>
             </tr>
             <tr>
                 <td class="label">Fecha Ingreso:</td>
@@ -104,28 +129,80 @@
                 <td class="value">{{ cabecera.fecha_cese|fecha if cabecera.fecha_cese else '---' }}</td>
             </tr>
             <tr>
+                <td class="label">Reg. Pensión:</td>
+                <td class="value" colspan="3">
+                    {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
+                        NINGUNO
+                    {% else %}
+                        {{ cabecera.afp_description or cabecera.regimenpension or '' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                    {% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td class="label">CUSPP:</td>
+                <td class="value">{{ cabecera.cupss or '---' }}</td>
                 <td class="label">Cargo:</td>
                 <td class="value">{{ cabecera.cargo_trabajador }}</td>
-                <td class="label">Centro Costo:</td>
-                <td class="value">{{ cabecera.cccode }}</td>
             </tr>
             <tr>
-                <td class="label">Régimen Pensión:</td>
-                <td class="value">{{ cabecera.regimenpension }} {{ cabecera.afp_description }}</td>
-                <td class="label">CUSPP:</td>
-                <td class="value">{{ cabecera.cupss }}</td>
-            </tr>
-            <tr>
-                <td class="label">Días Laborados:</td>
-                <td class="value">{{ cabecera.dias_laborables }}</td>
+                <td class="label">Días Laborables:</td>
+                <td class="value">{{ cabecera.dias_laborables|dias }}</td>
                 <td class="label">Días Vacaciones:</td>
-                <td class="value">{{ cabecera.dias_vacaciones }}</td>
+                <td class="value">{{ cabecera.dias_vacaciones|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Días Lic. Sin Goce:</td>
+                <td class="value">{{ cabecera.diassingoce|dias }}</td>
+                <td class="label">Días Lic. Con Goce:</td>
+                <td class="value">{{ cabecera.diascongoce|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Días Subsidiados:</td>
+                <td class="value">{{ cabecera.dias_subsidio|dias }}</td>
+                <td class="label">Días No Subsid.:</td>
+                <td class="value">{{ cabecera.dias_no_subsidiados|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Días Faltas Injust:</td>
+                <td class="value">{{ cabecera.dias_faltas_injustif|dias }}</td>
+                <td class="label">Días Faltas Just:</td>
+                <td class="value">{{ cabecera.dias_faltas_justif|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Días Fallecimiento:</td>
+                <td class="value">{{ cabecera.dias_fallecimiento|dias }}</td>
+                <td class="label">Días No Laborados:</td>
+                <td class="value">{{ cabecera.dias_no_laborados|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Días Paternidad:</td>
+                <td class="value">{{ cabecera.dias_paternidad|dias }}</td>
+                <td class="label">Clasificación:</td>
+                <td class="value">{{ cabecera.clasificacion or '---' }}</td>
             </tr>
             <tr>
                 <td class="label">Banco Salario:</td>
-                <td class="value">{{ cabecera.bancosalario }}</td>
+                <td class="value">{{ cabecera.bancosalario or '---' }}</td>
                 <td class="label">Cuenta Salario:</td>
-                <td class="value">{{ cabecera.numerocuenta }}</td>
+                <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
+            </tr>
+            <tr>
+                <td class="label">Aporte:</td>
+                <td class="value">{{ cabecera.aporte|pct }}</td>
+                <td class="label">Com. Flujo:</td>
+                <td class="value">{{ cabecera.comisionflujo|pct }}</td>
+            </tr>
+            <tr>
+                <td class="label">Com. Mixta:</td>
+                <td class="value">{{ cabecera.comisionmixta|pct }}</td>
+                <td class="label">Seguro:</td>
+                <td class="value">{{ cabecera.seguro|pct }}</td>
+            </tr>
+            <tr>
+                <td class="label">SNP:</td>
+                <td class="value">{{ cabecera.snp|pct }}</td>
+                <td class="label"></td>
+                <td class="value"></td>
             </tr>
         </table>
 
@@ -209,16 +286,16 @@
         <table class="firmas-table">
             <tr>
                 <td width="50%">
-                    {% if firma_b64 %}
-                    <img src="data:image/png;base64,{{ firma_b64 }}" class="firma-img">
+                    {% if firma_src %}
+                    <img src="{{ firma_src }}" class="firma-img" alt="Firma empleador">
                     {% else %}
-                    <div style="height: 75px;"></div>
+                    <div style="height: 80px;"></div>
                     {% endif %}
                     <div class="linea-firma">EMPLEADOR</div>
                     <div style="font-size: 9px; color: #555;">{{ cabecera.nombre_representante }}<br>{{ cabecera.cargo_representante }}</div>
                 </td>
                 <td width="50%">
-                    <div style="height: 75px;"></div>
+                    <div style="height: 80px;"></div>
                     <div class="linea-firma">TRABAJADOR</div>
                     <div style="font-size: 9px; color: #555;">DNI: {{ cabecera.dni }}</div>
                 </td>

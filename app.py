@@ -99,6 +99,17 @@ def fecha_filter(value):
     return s
 
 
+@app.template_filter('dias')
+def format_dias(value):
+    try:
+        v = float(value or 0)
+        if abs(v - round(v)) < 0.00005:
+            return '{:,.0f}'.format(v)
+        return '{:,.2f}'.format(v)
+    except Exception:
+        return '0'
+
+
 @app.context_processor
 def inject_now():
     return {
@@ -160,6 +171,13 @@ def _normalize_pr_period(period_raw):
     if len(s) >= 8 and s[:8].isdigit():
         return s[:8]
     return str(period_raw or '').strip()
+
+
+def _boleta_pdf_filename(person, period_raw):
+    """Nombre estándar: boleta_{person}_{yyyymmdd}.pdf"""
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
+    return f'boleta_{person_safe}_{period_safe}.pdf'
 
 
 def _asignacion_concepto_pk_from_json(body):
@@ -1837,6 +1855,44 @@ def get_image_base64(file_path):
         return ''
 
 
+def _image_data_uri(file_path):
+    """Data URI con MIME según extensión (para WeasyPrint / HTML embebido)."""
+    if not file_path or not os.path.exists(file_path):
+        return ''
+    ext = os.path.splitext(file_path)[1].lower()
+    mime = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+    }.get(ext, 'image/png')
+    try:
+        with open(file_path, 'rb') as f:
+            encoded = base64.b64encode(f.read()).decode('utf-8')
+        return f'data:{mime};base64,{encoded}'
+    except Exception:
+        logging.exception('_image_data_uri')
+        return ''
+
+
+def _boleta_imagenes_paths(cia):
+    """Rutas logo/firma del PDF boleta desde static/img, fallback PR_mapping2."""
+    img_dir = os.path.join(app.root_path, 'static', 'img')
+    logo_aci = os.path.join(img_dir, 'logoaci.jpg')
+    firma_aci = os.path.join(img_dir, 'firmaaci.jpg')
+
+    cfg = get_config_empresa(cia)
+    nombre_logo = str(cfg[0]).strip() if cfg and len(cfg) > 0 and cfg[0] else 'default_logo.png'
+    nombre_firma = str(cfg[1]).strip() if cfg and len(cfg) > 1 and cfg[1] else 'default_firma.png'
+    ruta_logo_fb = os.path.join(app.root_path, 'static', 'assets', nombre_logo)
+    ruta_firma_fb = os.path.join(app.root_path, 'static', 'assets', nombre_firma)
+
+    ruta_logo = logo_aci if os.path.exists(logo_aci) else ruta_logo_fb
+    ruta_firma = firma_aci if os.path.exists(firma_aci) else ruta_firma_fb
+    return ruta_logo, ruta_firma
+
+
 def _bool_env(name, default=False):
     raw = str(os.getenv(name, str(default))).strip().lower()
     return raw in ('1', 'true', 'yes', 'on')
@@ -1859,7 +1915,7 @@ def formatear_periodo_texto(periodo_str):
         return str(periodo_str or "")
 
 
-def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io):
+def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
     """Envía boleta por Resend API con PDF adjunto."""
     if not destinatario or '@' not in str(destinatario):
         return False, "Sin correo"
@@ -1890,7 +1946,7 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io):
             "attachments": [
                 {
                     "content": pdf_base64,
-                    "filename": f"Boleta_{periodo_legible}.pdf",
+                    "filename": _boleta_pdf_filename(person or nombre_empleado, periodo),
                 }
             ],
         }
@@ -1948,24 +2004,17 @@ def generar_pdf_en_memoria(params):
             except Exception:
                 pass
 
-    # Nombres de archivos configurados por compañía (tabla PR_mapping2).
-    cfg = get_config_empresa(cia)
-    nombre_logo = str(cfg[0]).strip() if cfg and len(cfg) > 0 and cfg[0] else 'default_logo.png'
-    nombre_firma = str(cfg[1]).strip() if cfg and len(cfg) > 1 and cfg[1] else 'default_firma.png'
-    ruta_logo = os.path.join(app.root_path, 'static', 'assets', nombre_logo)
-    ruta_firma = os.path.join(app.root_path, 'static', 'assets', nombre_firma)
-    logo_b64 = get_image_base64(ruta_logo)
-    firma_b64 = get_image_base64(ruta_firma)
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
     if _bool_env('LOG_BOLETA_ASSETS', False):
         logging.info(
-            '[boleta assets] cia=%s logo="%s" exists=%s fallback=%s | firma="%s" exists=%s fallback=%s',
+            '[boleta assets] cia=%s logo="%s" exists=%s | firma="%s" exists=%s',
             cia,
-            nombre_logo,
+            ruta_logo,
             os.path.exists(ruta_logo),
-            nombre_logo == 'default_logo.png',
-            nombre_firma,
+            ruta_firma,
             os.path.exists(ruta_firma),
-            nombre_firma == 'default_firma.png',
         )
 
     if WEASYPRINT_AVAILABLE:
@@ -1975,8 +2024,8 @@ def generar_pdf_en_memoria(params):
             ingresos=ingresos,
             descuentos=descuentos,
             aportes=aportes,
-            logo_b64=logo_b64,
-            firma_b64=firma_b64,
+            logo_src=logo_src,
+            firma_src=firma_src,
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)
@@ -4177,6 +4226,7 @@ def get_lista_boletas():
 def preview_boleta():
     params = request.args
     person = str(params.get('person') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
     try:
         pdf_buffer = generar_pdf_en_memoria(params)
     except ValueError as e:
@@ -4188,7 +4238,7 @@ def preview_boleta():
         pdf_buffer,
         mimetype='application/pdf',
         as_attachment=False,
-        download_name=f'boleta_{person or "preview"}.pdf',
+        download_name=_boleta_pdf_filename(person, period),
     )
 
 
@@ -4233,7 +4283,7 @@ def procesar_boletas_masivo():
                         'period': period,
                     }
                 )
-                zf.writestr(f'boleta_{pid}.pdf', pdf_data.getvalue())
+                zf.writestr(_boleta_pdf_filename(pid, period), pdf_data.getvalue())
         memory_file.seek(0)
         return send_file(
             memory_file,
@@ -4296,11 +4346,7 @@ def descargar_zip_boletas():
                     'person': person_id,
                 }
                 pdf_io = generar_pdf_en_memoria(params)
-                fullname = str(emp.get('nombre') or emp.get('fullname') or '').strip()
-                safe_name = re.sub(r'[^A-Za-z0-9_\\-]+', '_', fullname).strip('_')
-                if not safe_name:
-                    safe_name = person_id
-                nombre_pdf = f'{person_id}_{safe_name}.pdf'
+                nombre_pdf = _boleta_pdf_filename(person_id, period)
                 zip_file.writestr(nombre_pdf, pdf_io.getvalue())
             except Exception as e:
                 logging.exception('descargar_zip_boletas persona=%s', person_id)
@@ -4378,6 +4424,7 @@ def enviar_boletas_masivo():
                     periodo=period,
                     sexo=emp.get('sex', emp.get('sexo', 0)),
                     pdf_io=pdf_buffer,
+                    person=emp_code,
                 )
                 if exito:
                     enviados += 1

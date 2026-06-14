@@ -43,6 +43,38 @@ from database import User, get_datos_usuario_web, cambiar_password, get_db_conne
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
 
 load_dotenv()
+
+
+def _env_var(*names, default=''):
+    """Lee variable de entorno (Render, .env local). Quita espacios y comillas."""
+    for name in names:
+        raw = os.getenv(name)
+        if raw is None:
+            continue
+        val = str(raw).strip()
+        if len(val) >= 2 and val[0] == val[-1] and val[0] in ('"', "'"):
+            val = val[1:-1].strip()
+        if val:
+            return val
+    return default
+
+
+def _resend_api_key():
+    return _env_var('RESEND_API_KEY', 'RESEND_KEY', 'RESEND_APIKEY')
+
+
+def _resend_api_key_diagnostico():
+    """Ayuda segura cuando falta la API key (sin exponer secretos)."""
+    candidatas = []
+    for k, v in os.environ.items():
+        if 'RESEND' not in k.upper():
+            continue
+        candidatas.append(f'{k}={"set" if str(v).strip() else "vacía"}')
+    if candidatas:
+        return ' Variables detectadas: ' + ', '.join(candidatas) + '.'
+    return ' No hay ninguna variable de entorno cuyo nombre contenga RESEND.'
+
+
 app = Flask(__name__)
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'dev-key-123')
 
@@ -1920,10 +1952,10 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
     if not destinatario or '@' not in str(destinatario):
         return False, "Sin correo"
 
-    resend.api_key = os.getenv('RESEND_API_KEY')
+    resend.api_key = _resend_api_key()
     if not resend.api_key:
-        return False, "RESEND_API_KEY no configurada"
-    remitente = os.getenv('MAIL_FROM', 'onboarding@resend.dev')
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
 
     try:
         sexo_val = int(sexo)

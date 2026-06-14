@@ -228,7 +228,7 @@ BEGIN
           AND C.pdt = '0605'
     );
 
-    /* 0601 — comisión: valor 0 si el trabajador no tiene comisión en el periodo */
+    /* 0601 — comisión AFP: valor 0 solo si el trabajador tiene AFP y no tiene comisión en el periodo */
     INSERT INTO #Conceptos (person, pdt, conceptvalue, conceptvaluelo)
     SELECT E.person, '0601', 0, 0
     FROM #Empleados E
@@ -237,6 +237,15 @@ BEGIN
         FROM #Conceptos C
         WHERE C.person = E.person
           AND C.pdt = '0601'
+    )
+      AND EXISTS (
+        SELECT 1
+        FROM PR_EmployeePayRoll EP (NOLOCK)
+        WHERE EP.Company = @cia
+          AND EP.Person = E.person
+          AND LEFT(EP.PRPeriod, 6) = @period
+          AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+          AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
     );
 
     SELECT

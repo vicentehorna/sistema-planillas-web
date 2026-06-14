@@ -403,13 +403,21 @@ def _plame_params_archivo18_from_json(body):
     return base
 
 
+def _plame_pdt_monto_cero_obligatorio(pdt):
+    """PDT que deben exportarse con 0|0 aunque no tengan movimiento (comisión, ret. 5ta)."""
+    s = str(pdt or '').strip()
+    if s.isdigit():
+        s = s.zfill(4)
+    return s in ('0601', '0605')
+
+
 def _plame_format_monto_rem(valor, pdt=None):
     """Monto PLAME .rem: entero sin decimales o hasta 2 decimales con punto."""
     pdt_norm = str(pdt or '').strip()
     if pdt_norm.isdigit():
         pdt_norm = pdt_norm.zfill(4)
     if valor is None or valor == '':
-        if pdt_norm == '0605':
+        if _plame_pdt_monto_cero_obligatorio(pdt_norm):
             return '0'
         return ''
     try:
@@ -417,7 +425,7 @@ def _plame_format_monto_rem(valor, pdt=None):
     except (TypeError, ValueError):
         return ''
     if abs(v) < 0.00005:
-        if pdt_norm == '0605':
+        if _plame_pdt_monto_cero_obligatorio(pdt_norm):
             return '0'
         return ''
     redondeado = round(v, 2)
@@ -427,7 +435,7 @@ def _plame_format_monto_rem(valor, pdt=None):
 
 
 def _plame_es_descuento_tabla22(pdt):
-    """Códigos 07xx (descuentos): solo monto pagado/descontado en el .rem."""
+    """Códigos 07xx (descuentos): solo monto pagado si no hay devengado en el .rem."""
     s = str(pdt or '').strip()
     if s.isdigit():
         s = s.zfill(4)
@@ -445,12 +453,9 @@ def _plame_linea_archivo18(row):
         pdt = pdt.zfill(4)
     devengado_val = row.get('conceptvalue', row.get('devengado'))
     pagado_val = row.get('conceptvaluelo', row.get('pagado'))
-    if _plame_es_descuento_tabla22(pdt):
-        devengado = ''
-        pagado = _plame_format_monto_rem(pagado_val, pdt)
-    else:
-        devengado = _plame_format_monto_rem(devengado_val, pdt)
-        pagado = _plame_format_monto_rem(pagado_val, pdt)
+    devengado = _plame_format_monto_rem(devengado_val, pdt)
+    pagado = _plame_format_monto_rem(pagado_val, pdt)
+    if not (_plame_es_descuento_tabla22(pdt) and not devengado):
         if devengado and not pagado:
             pagado = devengado
         elif pagado and not devengado:
@@ -476,7 +481,7 @@ def _plame_rows_archivo18_from_json(body):
         except (TypeError, ValueError):
             cv, cl = 0.0, 0.0
         pdt_norm = pdt.zfill(4) if pdt.isdigit() else pdt
-        if abs(cv) < 0.00005 and abs(cl) < 0.00005 and pdt_norm != '0605':
+        if abs(cv) < 0.00005 and abs(cl) < 0.00005 and not _plame_pdt_monto_cero_obligatorio(pdt_norm):
             continue
         resultado.append({
             'documenttype': str(r.get('documenttype') or '').strip(),

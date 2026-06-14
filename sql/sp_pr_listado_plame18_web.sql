@@ -228,6 +228,17 @@ BEGIN
           AND C.pdt = '0605'
     );
 
+    /* 0601 — comisión: valor 0 si el trabajador no tiene comisión en el periodo */
+    INSERT INTO #Conceptos (person, pdt, conceptvalue, conceptvaluelo)
+    SELECT E.person, '0601', 0, 0
+    FROM #Empleados E
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM #Conceptos C
+        WHERE C.person = E.person
+          AND C.pdt = '0601'
+    );
+
     SELECT
         C.person,
         CASE WHEN S.pdt = '03' THEN '04' ELSE S.pdt END AS documenttype,

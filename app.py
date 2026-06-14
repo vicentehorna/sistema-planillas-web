@@ -276,10 +276,10 @@ def _plame_linea_archivo14(row):
     return '|'.join([
         doc_type,
         doc_num,
-        str(wh).zfill(3),
-        str(wm).zfill(2),
-        str(eh).zfill(3),
-        str(em).zfill(2),
+        str(wh),
+        str(wm),
+        str(eh),
+        str(em),
     ]) + '|'
 
 

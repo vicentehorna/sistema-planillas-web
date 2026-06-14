@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-06-13 23:34
+  Generado: 2026-06-13 23:55
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -8064,6 +8064,11 @@ GO
     Agrupa importes monetarios con flag de boleta por:
     Mensual (FIN_DE_MES), Semanal, Vacaciones, Liquidación, CTS y Gratificación.
 
+    Filtro de periodo:
+      - Mensual (FIN_DE_MES): periodo exacto (@period).
+      - Semanal: año-mes LEFT(prperiod, 6) = LEFT(@period, 6), proceso PR_Mapping.PlanillaSemProcess.
+      - Demás columnas: año-mes LEFT(prperiod, 6) = LEFT(@period, 6).
+
     Parámetros:
       @cia, @payrolltype, @period — obligatorios para filtrar.
       @person — reservado (la web envía NULL).
@@ -8079,6 +8084,10 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplame_total_web]
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+    SET @payrolltype = LTRIM(RTRIM(ISNULL(@payrolltype, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
 
     CREATE TABLE [#Temporal] (
         [Tipo]         VARCHAR(50) COLLATE SQL_Latin1_General_CP1_CI_AS NULL,
@@ -8190,7 +8199,7 @@ BEGIN
                AND PR_EmployeePayRoll.PayRollType = PR_EmployeePayRollConcept.PayRollType
                AND PR_EmployeePayRoll.Person = PR_EmployeePayRollConcept.Person
         WHERE PR_Mapping.Company = @cia
-          AND LEFT(PR_EmployeePayRollConcept.PRPeriod, 6) = LEFT(@period, 6)
+          AND LTRIM(RTRIM(PR_EmployeePayRollConcept.PRPeriod)) = @period
           AND ISNULL(PR_Concept.FlagPayRollTicket, 'N') = 'Y'
           AND PR_ConceptType.ShortName IN ('I', 'D', 'A', 'T')
           AND PR_Concept.FlagIsMonetary = 'Y'
@@ -8249,17 +8258,11 @@ BEGIN
                AND PR_EmployeePayRoll.PayRollType = PR_EmployeePayRollConcept.PayRollType
                AND PR_EmployeePayRoll.Person = PR_EmployeePayRollConcept.Person
         WHERE PR_Mapping.Company = @cia
-          AND LEFT(PR_EmployeePayRollConcept.PRPeriod, 6) = LEFT(@period, 6)
+          AND LEFT(LTRIM(RTRIM(PR_EmployeePayRollConcept.PRPeriod)), 6) = LEFT(@period, 6)
           AND ISNULL(PR_Concept.FlagPayRollTicket, 'N') = 'Y'
           AND PR_ConceptType.ShortName IN ('I', 'D', 'A', 'T')
           AND PR_Concept.FlagIsMonetary = 'Y'
-          AND PR_EmployeePayRollConcept.PayRollType = @payrolltype
-          AND EXISTS (
-                SELECT 1
-                FROM PR_ProcessType pt
-                WHERE pt.ProcessType = PR_EmployeePayRollConcept.ProcessType
-                  AND pt.ShortName IN ('SEMANAL')
-          )
+          AND PR_EmployeePayRollConcept.ProcessType = PR_Mapping.PlanillaSemProcess
         GROUP BY
             PR_ConceptType.ORDEN,
             UPPER(PR_ConceptType.Description),

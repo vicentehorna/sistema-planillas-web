@@ -72,6 +72,26 @@
         padding-left: 1.2rem;
         font-size: 0.85rem;
     }
+
+    .btn-eliminar-calculo {
+        background-color: #e8b4b8;
+        border-color: #d4a0a4;
+        color: #5c3d3f;
+    }
+
+    .btn-eliminar-calculo:hover:not(:disabled),
+    .btn-eliminar-calculo:focus:not(:disabled) {
+        background-color: #ddb0b4;
+        border-color: #c89498;
+        color: #4a3032;
+    }
+
+    .btn-eliminar-calculo:disabled {
+        background-color: #e8b4b8;
+        border-color: #d4a0a4;
+        color: #5c3d3f;
+        opacity: 0.55;
+    }
 </style>
 {% endblock %}
 
@@ -122,6 +142,9 @@
                 </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnCalcular" disabled>
                     <i class="bi bi-calculator"></i> Calcular planilla
+                </button>
+                <button type="button" class="btn btn-eliminar-calculo btn-sm px-4" id="btnEliminarCalculo" disabled>
+                    <i class="bi bi-trash"></i> Eliminar cálculo
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
                     Registros: <span id="lblRowCountPlanilla">0</span>
@@ -198,6 +221,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_trabajadores') | tojson }};
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
     const URL_VALIDAR_CALCULO = {{ url_for('api_procesar_planilla_validar_calculo') | tojson }};
+    const URL_ELIMINAR_CALCULO = {{ url_for('api_procesar_planilla_eliminar_calculo') | tojson }};
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
@@ -237,7 +261,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         const sel = document.querySelectorAll('.check-trabajador:checked').length;
         document.getElementById('lblRowCountPlanilla').textContent = String(total);
         document.getElementById('lblSeleccionadosPlanilla').textContent = String(sel);
-        document.getElementById('btnCalcular').disabled = sel === 0;
+        const haySel = sel > 0;
+        document.getElementById('btnCalcular').disabled = !haySel;
+        document.getElementById('btnEliminarCalculo').disabled = !haySel;
     }
 
     function sincronizarCheckAll() {
@@ -469,6 +495,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             'cboUnidad',
             'txtPeriodoDesc',
             'btnConsultarPlanilla',
+            'btnEliminarCalculo',
             'checkAll'
         ];
         ids.forEach((id) => {
@@ -742,6 +769,72 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     document.getElementById('btnCalcular').addEventListener('click', function () {
         iniciarCalculo();
+    });
+
+    async function eliminarCalculo() {
+        const checks = document.querySelectorAll('.check-trabajador:checked');
+        const listaPerson = Array.from(checks)
+            .map((c) => String(c.value).trim())
+            .filter(Boolean);
+        if (!listaPerson.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPt.value.trim();
+        const processtype = cboProc.value.trim();
+        const period = document.getElementById('hidPeriodoCalculo').value.trim();
+        if (!cia || !payrolltype || !processtype || !period) {
+            alert('Complete compañía, tipo de planilla, proceso y periodo antes de eliminar.');
+            return;
+        }
+        const msg = listaPerson.length === 1
+            ? '¿Eliminar el cálculo del trabajador seleccionado?'
+            : `¿Eliminar el cálculo de ${listaPerson.length} trabajadores seleccionados?`;
+        if (!window.confirm(msg)) {
+            return;
+        }
+
+        const btn = document.getElementById('btnEliminarCalculo');
+        btn.disabled = true;
+        setUiCalculoEnCurso(true);
+        ocultarValidacionesCalculo();
+
+        try {
+            const res = await fetch(URL_ELIMINAR_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype,
+                    processtype,
+                    period,
+                    trabajadores: listaPerson
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'No se pudo eliminar el cálculo.');
+                return;
+            }
+            if (Array.isArray(data.errores) && data.errores.length) {
+                alert((data.mensaje || 'Proceso concluido.') + '\n\n' + data.errores.join('\n'));
+            } else {
+                alert(data.mensaje || 'Proceso concluido.');
+            }
+            await listarTrabajadores({ seleccionPersonas: listaPerson });
+            await consultarValidacionesCalculo();
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            setUiCalculoEnCurso(false);
+            actualizarContadores();
+        }
+    }
+
+    document.getElementById('btnEliminarCalculo').addEventListener('click', function () {
+        eliminarCalculo();
     });
 
     document.getElementById('tbodyTrabajadores').addEventListener('change', function (e) {

@@ -11,6 +11,8 @@
       @payrolltype — tipo de planilla
       @processtype — proceso
       @period      — periodo PRPeriod (ej. 20260505)
+
+    Solo valida trabajadores con ingreso/reingreso <= ultimo dia del mes del periodo.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_validar_calculo_web]
     @cia         VARCHAR(10),
@@ -26,6 +28,13 @@ BEGIN
     SET @processtype = LTRIM(RTRIM(ISNULL(@processtype, '')));
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
 
+    DECLARE @fecha_fin_mes DATE;
+    DECLARE @period_ym CHAR(6);
+
+    SET @period_ym = LEFT(@period, 6);
+    IF LEN(@period_ym) = 6 AND @period_ym NOT LIKE '%[^0-9]%'
+        SET @fecha_fin_mes = EOMONTH(CONVERT(DATE, @period_ym + '01', 112));
+
     CREATE TABLE #errores (
         person      VARCHAR(20) NULL,
         name        VARCHAR(200) NULL,
@@ -36,9 +45,25 @@ BEGIN
         person VARCHAR(20) NOT NULL PRIMARY KEY
     );
 
+    CREATE TABLE #empleados_periodo (
+        person VARCHAR(20) NOT NULL PRIMARY KEY
+    );
+
+    INSERT INTO #empleados_periodo (person)
+    SELECT E.Person
+    FROM PR_Employee E (NOLOCK)
+    WHERE E.Company = @cia
+      AND E.PayRollType = @payrolltype
+      AND E.Status = 'N'
+      AND (
+            @fecha_fin_mes IS NULL
+            OR CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
+          );
+
     INSERT INTO #lista_rem_basica (person)
     SELECT EC.Person
     FROM PR_EmployeeConcept EC (NOLOCK)
+        INNER JOIN #empleados_periodo EP ON EC.Person = EP.person
         INNER JOIN PR_Concept C (NOLOCK)
             ON EC.Concept = C.Concept
            AND C.Company = @cia
@@ -78,6 +103,7 @@ BEGIN
         'No registra Remuneración Básica'
     FROM PR_Employee E (NOLOCK)
         INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
     WHERE E.Company = @cia
       AND E.PayRollType = @payrolltype
       AND E.Status = 'N'
@@ -117,6 +143,7 @@ BEGIN
            AND E.Company = @cia
            AND E.PayRollType = @payrolltype
            AND E.Status = 'N'
+        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
     WHERE ROUND(T.total_ingresos, 2) - ROUND(T.total_egresos, 2) <> ROUND(T.neto, 2);
 
@@ -164,6 +191,7 @@ BEGIN
             PT.PDT
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
             INNER JOIN PR_EmployeeCategory ECAT (NOLOCK)
                 ON E.EmployeeCategory = ECAT.EmployeeCategory
                AND ECAT.PDT = '1'
@@ -189,6 +217,7 @@ BEGIN
             E.Position
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         WHERE E.Company = @cia
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
@@ -209,6 +238,7 @@ BEGIN
             E.SalaryAccount
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         WHERE E.Company = @cia
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
@@ -229,6 +259,7 @@ BEGIN
             E.SalaryBank
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         WHERE E.Company = @cia
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
@@ -249,6 +280,7 @@ BEGIN
             E.SalaryAccountType
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         WHERE E.Company = @cia
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
@@ -269,6 +301,7 @@ BEGIN
             E.AccountProfile
         FROM PR_Employee E (NOLOCK)
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
         WHERE E.Company = @cia
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'

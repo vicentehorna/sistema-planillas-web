@@ -5,6 +5,8 @@
     @cia, @payrolltype, @processtype, @period: obligatorios para fecha de cálculo.
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
     @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
+
+    Solo incluye trabajadores con fecha de ingreso/reingreso <= ultimo dia del mes del periodo.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcularplanillas_web]
     @cia          VARCHAR(10),
@@ -24,6 +26,13 @@ BEGIN
 
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+
+    DECLARE @fecha_fin_mes DATE;
+    DECLARE @period_ym CHAR(6);
+
+    SET @period_ym = LEFT(@period, 6);
+    IF LEN(@period_ym) = 6 AND @period_ym NOT LIKE '%[^0-9]%'
+        SET @fecha_fin_mes = EOMONTH(CONVERT(DATE, @period_ym + '01', 112));
 
     SELECT
         LTRIM(RTRIM(
@@ -56,6 +65,10 @@ BEGIN
          OR (@cesados = 'N' AND PR_EMPLOYEE.CEASEDATE IS NULL)
       )
       AND (@repunit = '0' OR SY_PERSON.REPLICATIONUNIT = @repunit)
+      AND (
+            @fecha_fin_mes IS NULL
+            OR CONVERT(DATE, ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE)) <= @fecha_fin_mes
+      )
     ORDER BY [name], person;
 END
 GO

@@ -110,6 +110,13 @@
                                    class="form-control form-control-sm"
                                    value="{{ empleado.pensioninscriptiondate or '' }}">
                         </div>
+                        <div class="col-md-6">
+                            <label for="txtCuspp" class="form-label small fw-bold text-muted">CUSPP</label>
+                            <input type="text" id="txtCuspp" name="cuspp" class="form-control form-control-sm font-monospace"
+                                   maxlength="12" value="{{ empleado.cuspp or '' }}" autocomplete="off"
+                                   placeholder="12 caracteres alfanuméricos">
+                            <div class="form-text">Código único del sistema privado de pensiones (AFP).</div>
+                        </div>
                         <div class="col-12">
                             <label for="cboRegimeHealth" class="form-label small fw-bold text-muted">Régimen de Aseguramiento de Salud</label>
                             <select id="cboRegimeHealth" name="regimehealth" class="form-select form-select-sm">
@@ -246,6 +253,23 @@ document.addEventListener('DOMContentLoaded', function () {
     const seccion = {{ (seccion or 'bancario') | tojson }};
 
     if (seccion === 'pensiones') {
+        const frmPensiones = document.getElementById('frmPensiones');
+        const txtCuspp = document.getElementById('txtCuspp');
+        if (txtCuspp) {
+            txtCuspp.addEventListener('input', function () {
+                this.value = this.value.toUpperCase().replace(/[^A-Z0-9Ñ]/g, '').slice(0, 12);
+            });
+        }
+        if (frmPensiones && txtCuspp) {
+            frmPensiones.addEventListener('submit', function (e) {
+                const cuspp = (txtCuspp.value || '').trim();
+                if (cuspp && !/^[A-Z0-9Ñ]{12}$/.test(cuspp)) {
+                    e.preventDefault();
+                    alert('El CUSPP debe tener exactamente 12 caracteres alfanuméricos.');
+                    txtCuspp.focus();
+                }
+            });
+        }
         return;
     }
 

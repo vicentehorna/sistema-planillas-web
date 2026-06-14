@@ -30,7 +30,8 @@ BEGIN
         ISNULL(e.regimehealth, '') AS regimehealth,
         ISNULL(rh.description, '') AS regimehealth_desc,
         CASE WHEN LTRIM(RTRIM(ISNULL(e.flagmixta, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagmixta,
-        CASE WHEN LTRIM(RTRIM(ISNULL(e.flagasigfamiliar, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar
+        CASE WHEN LTRIM(RTRIM(ISNULL(e.flagasigfamiliar, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar,
+        LTRIM(RTRIM(ISNULL(e.afpcard, ''))) AS cuspp
     FROM pr_employee e
         INNER JOIN sy_person sp
             ON sp.person = e.person

@@ -17,6 +17,7 @@
     const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
     const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
     const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
+    const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
 
     function val(id) {
@@ -1407,6 +1408,43 @@
         };
     }
 
+    function crearPersistenciaRegistroVacaciones() {
+        function guardar() {
+            try {
+                localStorage.setItem(STORAGE_KEY_REGISTRO_VACACIONES, JSON.stringify({
+                    cia: val('cboCompania'),
+                    payrolltype: val('cboTipoPlanilla') || '0',
+                }));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_REGISTRO_VACACIONES);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_REGISTRO_VACACIONES,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
@@ -1421,6 +1459,7 @@
         STORAGE_KEY_CONTINENTAL,
         STORAGE_KEY_BANBIF,
         STORAGE_KEY_LISTADO_PAGOS,
+        STORAGE_KEY_REGISTRO_VACACIONES,
         STORAGE_KEY_APERTURAR_PERIODOS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
@@ -1469,6 +1508,9 @@
         },
         asignacionConceptos: function () {
             return crearPersistenciaAsignacionConceptos();
+        },
+        registroVacaciones: function () {
+            return crearPersistenciaRegistroVacaciones();
         },
         aperturarPeriodos: function () {
             return crearPersistenciaAperturarPeriodos();

@@ -1,0 +1,948 @@
+{% extends "layout.html" %}
+
+{% block title %}Registro de Vacaciones{% endblock %}
+
+{% block extra_css %}
+<style>
+    .vac-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+
+    .vac-panel-izq {
+        flex: 0 0 30%;
+        max-width: 30%;
+        min-width: 220px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .vac-panel-der {
+        flex: 1 1 70%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .vac-grilla-trabajadores {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 4.5rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-trabajadores-vac {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-trabajadores-vac th,
+    .table-trabajadores-vac td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-trabajadores-vac thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-trabajadores-vac .col-dni {
+        width: 5.75rem;
+        max-width: 5.75rem;
+    }
+
+    .table-trabajadores-vac .col-ingreso {
+        width: 5.5rem;
+        max-width: 5.5rem;
+        text-align: center;
+    }
+
+    .table-trabajadores-vac .col-nombre {
+        min-width: 6rem;
+        max-width: 10rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row {
+        cursor: pointer;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row:hover {
+        background-color: #f8f9fa;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row.active {
+        background-color: #cfe2ff;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row.active td {
+        font-weight: 600;
+    }
+
+    .vac-resumen-cards {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+    }
+
+    .vac-resumen-card {
+        border: 1px solid #e9ecef;
+        border-radius: 0.5rem;
+        padding: 0.85rem 1rem;
+        background: #fff;
+    }
+
+    .vac-resumen-card .valor {
+        font-size: 1.65rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+
+    .vac-resumen-card.pendientes {
+        border-color: #ffc107;
+        background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
+    }
+
+    .vac-resumen-card.pendientes .valor {
+        color: #b45309;
+    }
+
+    .table-vacaciones {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-vacaciones th,
+    .table-vacaciones td {
+        padding: 0.3rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-scroll-sm {
+        max-height: 220px;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+
+    .table-scroll-md {
+        max-height: 280px;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+
+    .table-vacaciones thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-vacaciones tbody tr.periodo-row {
+        cursor: pointer;
+    }
+
+    .table-vacaciones tbody tr.periodo-row.active {
+        background-color: #cfe2ff;
+    }
+
+    .table-vacaciones tbody tr.detalle-row.selected {
+        background-color: #e7f1ff;
+    }
+
+    .table-vacaciones .col-acciones {
+        width: 4.5rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .table-vacaciones .col-acciones .btn-link {
+        font-size: 11px;
+        line-height: 1;
+        text-decoration: none;
+    }
+
+    .vac-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    .vac-alerta-dias {
+        display: none;
+        font-size: 0.85rem;
+    }
+
+    .vac-alerta-dias.visible {
+        display: block;
+    }
+
+    .vac-dias-calculados {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #0d6efd;
+    }
+
+    @media (max-width: 991.98px) {
+        .vac-layout {
+            flex-direction: column;
+        }
+
+        .vac-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .vac-grilla-trabajadores {
+            max-height: 240px;
+        }
+
+        .vac-resumen-cards {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmRegistroVacaciones" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="vac-layout">
+    <aside class="vac-panel-izq">
+        <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Buscar trabajador</label>
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
+        </div>
+        <div class="vac-grilla-trabajadores">
+            <table class="table table-bordered table-sm table-hover table-trabajadores-vac align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="col-dni">DNI</th>
+                        <th class="col-nombre">Nombre</th>
+                        <th class="col-ingreso">F. ingreso</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTrabajadoresVac">
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="lblConteoTrabajadores" class="small text-muted mt-2">0 trabajadores</div>
+    </aside>
+
+    <section class="vac-panel-der" id="panelDetalle">
+        <div id="placeholderDetalle" class="vac-placeholder">
+            <div>
+                <i class="bi bi-person-lines-fill fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione un trabajador de la lista para ver sus periodos y registrar vacaciones.
+            </div>
+        </div>
+
+        <div id="contenidoDetalle" class="d-none flex-column gap-3" style="display: none;">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <div>
+                        <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
+                        <div class="small text-muted">
+                            <span>DNI: <span id="lblDniTrabajador"></span></span>
+                            <span class="mx-1">·</span>
+                            <span>Ingreso: <span id="lblIngresoTrabajador"></span></span>
+                        </div>
+                    </div>
+                    <div class="vac-resumen-cards mt-3">
+                        <div class="vac-resumen-card">
+                            <div class="small text-muted text-uppercase fw-semibold">Días acumulados</div>
+                            <div class="valor" id="valDiasAcumulados">0</div>
+                        </div>
+                        <div class="vac-resumen-card">
+                            <div class="small text-muted text-uppercase fw-semibold">Días gozados</div>
+                            <div class="valor" id="valDiasGozados">0</div>
+                        </div>
+                        <div class="vac-resumen-card pendientes">
+                            <div class="small text-uppercase fw-semibold">Días pendientes</div>
+                            <div class="valor" id="valDiasPendientes">0</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="fw-semibold small text-uppercase text-muted">Periodos vacacionales</span>
+                    <span class="badge bg-secondary" id="badgePeriodoSeleccionado">Sin periodo</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-scroll-sm">
+                        <table class="table table-sm table-hover table-vacaciones mb-0" id="tblPeriodos">
+                            <thead>
+                                <tr>
+                                    <th>Periodo</th>
+                                    <th class="text-end">Días</th>
+                                    <th class="text-end">Adquiridos</th>
+                                    <th class="text-end">Consumidos</th>
+                                    <th class="text-end">Pendientes</th>
+                                    <th>Inicio prov.</th>
+                                    <th>Inicio derecho</th>
+                                    <th>Estado</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-semibold small text-uppercase text-muted">Detalle de utilización</span>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-scroll-md">
+                        <table class="table table-sm table-hover table-vacaciones mb-0" id="tblDetalle">
+                            <thead>
+                                <tr>
+                                    <th>Consumo efectivo</th>
+                                    <th>Inicio</th>
+                                    <th>Término</th>
+                                    <th class="text-end">Días</th>
+                                    <th>Tipo</th>
+                                    <th>Estado</th>
+                                    <th class="col-acciones">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2">
+                    <span class="fw-semibold small text-uppercase text-muted">Registrar utilización</span>
+                </div>
+                <div class="card-body">
+                    <form id="frmNuevaVacacion" class="row g-3 align-items-end">
+                        <div class="col-12 col-md-6 col-lg-3">
+                            <label for="cboConsumoEfectivo" class="form-label small fw-bold text-muted">Consumo efectivo</label>
+                            <select id="cboConsumoEfectivo" class="form-select form-select-sm" required disabled>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label for="txtFechaInicio" class="form-label small fw-bold text-muted">Fecha inicio</label>
+                            <input type="date" id="txtFechaInicio" class="form-control form-control-sm" required disabled>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label for="txtFechaFin" class="form-label small fw-bold text-muted">Fecha fin</label>
+                            <input type="date" id="txtFechaFin" class="form-control form-control-sm" required disabled>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label class="form-label small fw-bold text-muted">Días calendario</label>
+                            <div class="vac-dias-calculados" id="lblDiasCalculados">—</div>
+                        </div>
+                        <div class="col-6 col-md-3 col-lg-2">
+                            <label for="cboTipoVacacion" class="form-label small fw-bold text-muted">Tipo</label>
+                            <select id="cboTipoVacacion" class="form-select form-select-sm" disabled>
+                                <option value="D" selected>Descanso</option>
+                                <option value="V">Venta</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-lg-3">
+                            <button type="submit" id="btnGuardarVacaciones" class="btn btn-success btn-sm w-100" disabled>
+                                <i class="bi bi-check2-circle me-1"></i>Guardar vacaciones
+                            </button>
+                        </div>
+                        <div class="col-12">
+                            <div class="alert alert-warning py-2 mb-0 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Los días calculados superan el saldo pendiente del periodo seleccionado
+                                (<strong id="lblPendientesPeriodo">0</strong> día(s)).
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value);
+        return Array.from(select.options).some((o) => o.value === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function limpiarValorComboSiObsoleto(select) {
+        if (!select) return;
+        const v = String(select.value || '').trim();
+        if (!v) return;
+        const ok = Array.from(select.options).some((o) => String(o.value) === v);
+        if (!ok) select.value = '';
+    }
+
+    const poblarSelect = async (url, selectElement, opciones) => {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    };
+
+    const DEFAULT_CIA = 'BGT';
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.registroVacaciones
+        ? window.FiltrosPlanillasReportes.registroVacaciones()
+        : null;
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const txtBuscar = document.getElementById('txtBuscarTrabajador');
+    const tbodyTrabajadores = document.getElementById('tbodyTrabajadoresVac');
+    const lblConteo = document.getElementById('lblConteoTrabajadores');
+    const placeholderDetalle = document.getElementById('placeholderDetalle');
+    const contenidoDetalle = document.getElementById('contenidoDetalle');
+
+    let trabajadoresCache = [];
+    let trabajadorActivo = null;
+    let datosVacaciones = null;
+    let periodoSeleccionado = null;
+    let buscarTimer = null;
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function mostrarError(msg) {
+        alert(msg || 'Ocurrió un error.');
+    }
+
+    async function leerJson(res) {
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Error en la solicitud.');
+        }
+        return data;
+    }
+
+    function calcularDiasCalendario(inicio, fin) {
+        if (!inicio || !fin) return null;
+        const d1 = new Date(inicio + 'T00:00:00');
+        const d2 = new Date(fin + 'T00:00:00');
+        if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return null;
+        if (d2 < d1) return null;
+        const diff = Math.round((d2 - d1) / 86400000) + 1;
+        return diff > 0 ? diff : null;
+    }
+
+    function actualizarFormularioHabilitado(habilitar) {
+        ['cboConsumoEfectivo', 'txtFechaInicio', 'txtFechaFin', 'cboTipoVacacion'].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !habilitar;
+        });
+        if (!habilitar) {
+            document.getElementById('btnGuardarVacaciones').disabled = true;
+        } else {
+            validarDiasFormulario();
+        }
+    }
+
+    function validarDiasFormulario() {
+        const btn = document.getElementById('btnGuardarVacaciones');
+        const alerta = document.getElementById('alertaDiasExcedidos');
+        const lblDias = document.getElementById('lblDiasCalculados');
+        const lblPend = document.getElementById('lblPendientesPeriodo');
+        const inicio = document.getElementById('txtFechaInicio').value;
+        const fin = document.getElementById('txtFechaFin').value;
+        const consumo = document.getElementById('cboConsumoEfectivo').value;
+        const dias = calcularDiasCalendario(inicio, fin);
+
+        if (dias == null) {
+            lblDias.textContent = '—';
+            btn.disabled = true;
+            alerta.classList.remove('visible');
+            return;
+        }
+
+        lblDias.textContent = String(dias);
+
+        const pendientes = periodoSeleccionado ? Number(periodoSeleccionado.pendientes || 0) : 0;
+        lblPend.textContent = String(pendientes);
+
+        const excede = dias > pendientes;
+        const incompleto = !consumo || !inicio || !fin || !periodoSeleccionado;
+
+        alerta.classList.toggle('visible', excede);
+        btn.disabled = excede || incompleto || dias <= 0;
+    }
+
+    function formatearFechaIngreso(valor) {
+        if (!valor) return '—';
+        const s = String(valor).trim();
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+        return s;
+    }
+
+    function renderListaTrabajadores(rows) {
+        if (!rows.length) {
+            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores activos</td></tr>';
+            lblConteo.textContent = '0 trabajadores';
+            return;
+        }
+
+        tbodyTrabajadores.innerHTML = rows.map((t) => {
+            const activo = trabajadorActivo && trabajadorActivo.person === t.person;
+            const dni = escHtml(t.documento || t.person || '');
+            const nombre = escHtml(t.nombre || '');
+            const ingreso = escHtml(formatearFechaIngreso(t.fechaingreso));
+            return `<tr class="trabajador-row ${activo ? 'active' : ''}" data-person="${escHtml(t.person)}" title="${nombre}">
+                <td class="col-dni">${dni}</td>
+                <td class="col-nombre">${nombre}</td>
+                <td class="col-ingreso">${ingreso}</td>
+            </tr>`;
+        }).join('');
+
+        lblConteo.textContent = `${rows.length} trabajador${rows.length === 1 ? '' : 'es'}`;
+
+        tbodyTrabajadores.querySelectorAll('.trabajador-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const person = this.getAttribute('data-person');
+                const row = trabajadoresCache.find((x) => x.person === person);
+                if (row) await seleccionarTrabajador(row);
+            });
+        });
+
+        const filaActiva = tbodyTrabajadores.querySelector('.trabajador-row.active');
+        if (filaActiva) {
+            filaActiva.scrollIntoView({ block: 'nearest' });
+        }
+    }
+
+    async function cargarTrabajadores() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            trabajadoresCache = [];
+            renderListaTrabajadores([]);
+            return;
+        }
+
+        tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+
+        try {
+            const res = await fetch('/api/vacaciones/trabajadores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype: cboPlanilla.value || '0',
+                    busqueda: txtBuscar.value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            trabajadoresCache = data.rows || [];
+            renderListaTrabajadores(trabajadoresCache);
+        } catch (err) {
+            console.error(err);
+            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Error al cargar trabajadores</td></tr>';
+            mostrarError(err.message);
+        }
+    }
+
+    function mostrarPanelDetalle(visible) {
+        placeholderDetalle.classList.toggle('d-none', visible);
+        contenidoDetalle.classList.toggle('d-none', !visible);
+        if (visible) {
+            contenidoDetalle.style.display = 'flex';
+        } else {
+            contenidoDetalle.style.display = 'none';
+        }
+    }
+
+    function renderPeriodos(periodos) {
+        const tbody = document.querySelector('#tblPeriodos tbody');
+        if (!periodos.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin periodos vacacionales</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = periodos.map((p) => {
+            const activo = periodoSeleccionado && periodoSeleccionado.line === p.line;
+            return `<tr class="periodo-row ${activo ? 'active' : ''}" data-line="${p.line}">
+                <td>${escHtml(p.periodo)}</td>
+                <td class="text-end">${p.dias}</td>
+                <td class="text-end">${p.dias_adquiridos}</td>
+                <td class="text-end">${p.consumidos}</td>
+                <td class="text-end fw-semibold">${p.pendientes}</td>
+                <td>${escHtml(p.inicio_provision || '')}</td>
+                <td>${escHtml(p.inicio_derecho || '')}</td>
+                <td>${escHtml(p.estado_texto || '')}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.periodo-row').forEach((tr) => {
+            tr.addEventListener('click', function () {
+                const line = Number(this.getAttribute('data-line'));
+                const row = (datosVacaciones.periodos || []).find((x) => x.line === line);
+                if (row) seleccionarPeriodo(row);
+            });
+        });
+    }
+
+    function renderDetalle(detalle) {
+        const tbody = document.querySelector('#tblDetalle tbody');
+        let rows = detalle || [];
+        if (periodoSeleccionado) {
+            rows = rows.filter((d) => d.line === periodoSeleccionado.line);
+        }
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin registros de utilización</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map((d) => `<tr class="detalle-row" data-line="${d.line}" data-secuence="${d.secuence}">
+                <td>${escHtml(d.consumo_efectivo || d.prperiod || '')}</td>
+                <td>${escHtml(d.fecha_inicio || '')}</td>
+                <td>${escHtml(d.fecha_fin || '')}</td>
+                <td class="text-end">${d.dias}</td>
+                <td>${escHtml(d.tipo_texto || '')}</td>
+                <td><span class="badge bg-success-subtle text-success border">Registrado</span></td>
+                <td class="col-acciones">
+                    <button type="button" class="btn btn-link text-danger p-0 btn-eliminar-detalle" title="Eliminar registro">
+                        <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                </td>
+            </tr>`).join('');
+
+        tbody.querySelectorAll('.btn-eliminar-detalle').forEach((btn) => {
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                const tr = this.closest('.detalle-row');
+                if (!tr) return;
+                const line = Number(tr.getAttribute('data-line'));
+                const secuence = Number(tr.getAttribute('data-secuence'));
+                await eliminarDetalle(line, secuence);
+            });
+        });
+    }
+
+    async function poblarConsumoEfectivo() {
+        const cbo = document.getElementById('cboConsumoEfectivo');
+        const cia = cboCia.value.trim();
+        cbo.innerHTML = '<option value="">Cargando...</option>';
+        cbo.disabled = true;
+        if (!cia) {
+            cbo.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const items = await res.json();
+            cbo.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(items) ? items : []).forEach((it) => {
+                const opt = document.createElement('option');
+                opt.value = it.id != null ? String(it.id) : '';
+                opt.textContent = it.text != null ? String(it.text) : opt.value;
+                cbo.appendChild(opt);
+            });
+        } catch (err) {
+            console.error(err);
+            cbo.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function seleccionarPeriodo(periodo) {
+        periodoSeleccionado = periodo;
+        document.getElementById('badgePeriodoSeleccionado').textContent = periodo.periodo || `Línea ${periodo.line}`;
+        renderPeriodos(datosVacaciones.periodos || []);
+        renderDetalle(datosVacaciones.detalle || []);
+        actualizarFormularioHabilitado(true);
+        validarDiasFormulario();
+    }
+
+    function pintarResumen(resumen) {
+        const r = resumen || {};
+        document.getElementById('valDiasAcumulados').textContent = String(r.dias_acumulados || 0);
+        document.getElementById('valDiasGozados').textContent = String(r.dias_gozados || 0);
+        document.getElementById('valDiasPendientes').textContent = String(r.dias_pendientes || 0);
+    }
+
+    function pintarEmpleado(emp) {
+        document.getElementById('lblNombreTrabajador').textContent = emp.nombre || '—';
+        document.getElementById('lblDniTrabajador').textContent = emp.documento || '—';
+        document.getElementById('lblIngresoTrabajador').textContent = emp.fechaingreso || '—';
+    }
+
+    async function seleccionarTrabajador(row) {
+        trabajadorActivo = row;
+        renderListaTrabajadores(trabajadoresCache);
+
+        const cia = cboCia.value.trim();
+        mostrarPanelDetalle(true);
+        periodoSeleccionado = null;
+        document.getElementById('badgePeriodoSeleccionado').textContent = 'Sin periodo';
+        actualizarFormularioHabilitado(false);
+        document.getElementById('frmNuevaVacacion').reset();
+        document.getElementById('lblDiasCalculados').textContent = '—';
+        document.getElementById('alertaDiasExcedidos').classList.remove('visible');
+
+        try {
+            const res = await fetch('/api/vacaciones/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, person: row.person }),
+            });
+            datosVacaciones = await leerJson(res);
+            pintarEmpleado(datosVacaciones.empleado || {});
+            pintarResumen(datosVacaciones.resumen || {});
+            renderPeriodos(datosVacaciones.periodos || []);
+            renderDetalle(datosVacaciones.detalle || []);
+            await poblarConsumoEfectivo();
+
+            const periodos = datosVacaciones.periodos || [];
+            const periodoDefault = periodos.find((p) => p.status === 'A' && p.pendientes > 0) || periodos[0];
+            if (periodoDefault) {
+                seleccionarPeriodo(periodoDefault);
+            }
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        }
+    }
+
+    async function guardarVacacion(e) {
+        e.preventDefault();
+        if (!trabajadorActivo || !periodoSeleccionado) return;
+
+        const dias = calcularDiasCalendario(
+            document.getElementById('txtFechaInicio').value,
+            document.getElementById('txtFechaFin').value
+        );
+        if (!dias || dias > periodoSeleccionado.pendientes) return;
+
+        const btn = document.getElementById('btnGuardarVacaciones');
+        btn.disabled = true;
+
+        try {
+            const res = await fetch('/api/vacaciones/guardar-detalle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: trabajadorActivo.person,
+                    line: periodoSeleccionado.line,
+                    prperiod: document.getElementById('cboConsumoEfectivo').value,
+                    fecha_inicio: document.getElementById('txtFechaInicio').value,
+                    fecha_fin: document.getElementById('txtFechaFin').value,
+                    dias,
+                    vacationtype: document.getElementById('cboTipoVacacion').value,
+                }),
+            });
+            await leerJson(res);
+            document.getElementById('frmNuevaVacacion').reset();
+            document.getElementById('lblDiasCalculados').textContent = '—';
+            await seleccionarTrabajador(trabajadorActivo);
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+            validarDiasFormulario();
+        }
+    }
+
+    async function eliminarDetalle(line, secuence) {
+        if (!trabajadorActivo) return;
+        if (!confirm('¿Eliminar este registro de vacaciones?')) return;
+
+        try {
+            const res = await fetch('/api/vacaciones/eliminar-detalle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: trabajadorActivo.person,
+                    line,
+                    secuence,
+                }),
+            });
+            await leerJson(res);
+            await seleccionarTrabajador(trabajadorActivo);
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        }
+    }
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    limpiarValorComboSiObsoleto(cboCia);
+
+    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
+    if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {
+        cboCia.value = guardado.cia;
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(guardado.cia)}`,
+            cboPlanilla,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+        if (guardado.payrolltype && optionExists(cboPlanilla, guardado.payrolltype)) {
+            cboPlanilla.value = guardado.payrolltype;
+        }
+    } else if (!cboCia.value && seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value)}`,
+            cboPlanilla,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    if (cboCia.value.trim()) {
+        await cargarTrabajadores();
+    }
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value.trim();
+        trabajadorActivo = null;
+        datosVacaciones = null;
+        mostrarPanelDetalle(false);
+        if (cia) {
+            await poblarSelect(
+                `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+                cboPlanilla,
+                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            );
+            await cargarTrabajadores();
+        } else {
+            cboPlanilla.innerHTML = '<option value="0">Todos</option>';
+            cboPlanilla.disabled = true;
+            trabajadoresCache = [];
+            renderListaTrabajadores([]);
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    cboPlanilla.addEventListener('change', async function () {
+        await cargarTrabajadores();
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    txtBuscar.addEventListener('input', function () {
+        clearTimeout(buscarTimer);
+        buscarTimer = setTimeout(cargarTrabajadores, 280);
+    });
+
+    document.getElementById('frmRegistroVacaciones').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (!cboCia.value.trim()) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        await cargarTrabajadores();
+    });
+    document.getElementById('frmNuevaVacacion').addEventListener('submit', guardarVacacion);
+
+    ['txtFechaInicio', 'txtFechaFin', 'cboConsumoEfectivo'].forEach((id) => {
+        document.getElementById(id).addEventListener('change', validarDiasFormulario);
+        document.getElementById(id).addEventListener('input', validarDiasFormulario);
+    });
+
+    if (filtrosPersist) {
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+});
+</script>
+{% endblock %}

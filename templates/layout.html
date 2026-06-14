@@ -403,6 +403,12 @@
                     </a>
                 </li>
 
+                <li class="{{ 'active' if request.endpoint == 'registro_vacaciones_page' else '' }}">
+                    <a href="{{ url_for('registro_vacaciones_page') }}" title="Registro de Vacaciones">
+                        <i class="bi bi-calendar2-week"></i><span class="sidebar-link-text">Registro de Vacaciones</span>
+                    </a>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>

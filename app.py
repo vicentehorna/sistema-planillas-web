@@ -128,6 +128,29 @@ def _report_column_name(name):
     return name
 
 
+def _normalize_pr_period_vacacion(period_raw):
+    """Acepta YYYYMM o YYYYMMDD; devuelve solo dígitos (6 u 8)."""
+    s = str(period_raw or '').strip().replace('-', '').replace('/', '')
+    if len(s) >= 8 and s[:8].isdigit():
+        return s[:8]
+    if len(s) >= 6 and s[:6].isdigit():
+        return s[:6]
+    return s
+
+
+def _format_prperiod_mes(period_raw):
+    """YYYYMM o YYYYMMDD → YYYY-MM para pantalla."""
+    s = str(period_raw or '').strip().replace('-', '').replace('/', '')
+    if len(s) >= 6 and s[:6].isdigit():
+        return f'{s[:4]}-{s[4:6]}'
+    return str(period_raw or '').strip()
+
+
+def _xlastuser_id():
+    """UserID de sesión (no nombre de usuario)."""
+    return str(getattr(current_user, 'id', '') or '')[:20]
+
+
 def _normalize_pr_period(period_raw):
     """
     PRPeriod en BD es yyyymmdd (8 dígitos), p. ej. 20251212.
@@ -2069,6 +2092,7 @@ def _empleado_pensiones_desde_form(form):
         'regimehealth': str(form.get('regimehealth') or '').strip(),
         'flagmixta': 'Y' if form.get('flagmixta') == 'Y' else 'N',
         'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
+        'cuspp': str(form.get('cuspp') or '').strip().upper()[:20],
     }
 
 
@@ -2106,7 +2130,7 @@ def trabajadores_editar(person_id):
             cursor.execute(
                 'EXEC sp_pr_actualizar_pensiones_trabajador_web '
                 '@cia=?, @person=?, @pensiontype=?, @pensioninscriptiondate=?, '
-                '@regimehealth=?, @flagmixta=?, @flagasigfamiliar=?, @xlastuser=?',
+                '@regimehealth=?, @flagmixta=?, @flagasigfamiliar=?, @cuspp=?, @xlastuser=?',
                 (
                     cia,
                     person_id,
@@ -2115,6 +2139,7 @@ def trabajadores_editar(person_id):
                     datos['regimehealth'],
                     datos['flagmixta'],
                     datos['flagasigfamiliar'],
+                    datos['cuspp'],
                     str(getattr(current_user, 'username', '') or '')[:20],
                 ),
             )
@@ -2294,6 +2319,12 @@ def aperturar_periodos_page():
 @login_required
 def asignacion_conceptos_page():
     return render_template('asignacion_conceptos.html')
+
+
+@app.route('/registro-vacaciones')
+@login_required
+def registro_vacaciones_page():
+    return render_template('registro_vacaciones.html')
 
 
 @app.route('/plame/archivo-14')
@@ -5596,6 +5627,291 @@ def api_asignacion_conceptos_guardar():
                 pass
 
 
+def _jsonable_datetime(value):
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.strftime('%d/%m/%Y %H:%M:%S')
+    if isinstance(value, date):
+        return value.strftime('%d/%m/%Y')
+    return _jsonable_value(value)
+
+
+def _vacacion_empleado_dict(row):
+    if not row:
+        return {}
+    return {
+        'person': _jsonable_value(row.get('person')),
+        'codigo': _jsonable_value(row.get('codigo')),
+        'nombre': _jsonable_value(row.get('nombre')),
+        'documento': _jsonable_value(row.get('documento')),
+        'fechaingreso': _jsonable_value(row.get('fechaingreso')),
+        'payrolltype': _jsonable_value(row.get('payrolltype')),
+        'tipoplanilla': _jsonable_value(row.get('tipoplanilla')),
+    }
+
+
+def _vacacion_resumen_dict(row):
+    if not row:
+        return {'dias_acumulados': 0, 'dias_gozados': 0, 'dias_pendientes': 0}
+    return {
+        'dias_acumulados': int(row.get('dias_acumulados') or 0),
+        'dias_gozados': int(row.get('dias_gozados') or 0),
+        'dias_pendientes': int(row.get('dias_pendientes') or 0),
+    }
+
+
+def _vacacion_periodo_dict(row):
+    return {
+        'line': int(row.get('line') or 0),
+        'controlyear': _jsonable_value(row.get('controlyear')),
+        'periodo': _jsonable_value(row.get('periodo')),
+        'dias': int(row.get('dias') or 0),
+        'dias_adquiridos': int(row.get('dias_adquiridos') or 0),
+        'consumidos': int(row.get('consumidos') or 0),
+        'pendientes': int(row.get('pendientes') or 0),
+        'pagados': int(row.get('pagados') or 0),
+        'por_pagar': int(row.get('por_pagar') or 0),
+        'inicio_provision': _jsonable_value(row.get('inicio_provision')),
+        'inicio_derecho': _jsonable_value(row.get('inicio_derecho')),
+        'fin_derecho': _jsonable_value(row.get('fin_derecho')),
+        'limite_sin_indemnizacion': _jsonable_value(row.get('limite_sin_indemnizacion')),
+        'status': _jsonable_value(row.get('status')),
+        'estado_texto': _jsonable_value(row.get('estado_texto')),
+        'usuario': _jsonable_value(row.get('usuario')),
+        'fecha_modificacion': _jsonable_datetime(row.get('fecha_modificacion')),
+    }
+
+
+def _vacacion_detalle_dict(row):
+    prperiod_raw = row.get('prperiod')
+    consumo = row.get('consumo_efectivo') or _format_prperiod_mes(prperiod_raw)
+    return {
+        'line': int(row.get('line') or 0),
+        'secuence': int(row.get('secuence') or 0),
+        'prperiod': _jsonable_value(prperiod_raw),
+        'consumo_efectivo': _jsonable_value(consumo),
+        'fecha_inicio': _jsonable_value(row.get('fecha_inicio')),
+        'fecha_fin': _jsonable_value(row.get('fecha_fin')),
+        'dias': int(row.get('dias') or 0),
+        'vacationtype': _jsonable_value(row.get('vacationtype')),
+        'tipo_texto': _jsonable_value(row.get('tipo_texto')),
+        'usuario': _jsonable_value(row.get('usuario')),
+        'fecha_modificacion': _jsonable_datetime(row.get('fecha_modificacion')),
+    }
+
+
+@app.route('/api/vacaciones/trabajadores', methods=['POST'])
+@login_required
+def api_vacaciones_trabajadores():
+    """sp_pr_vacaciones_listar_trabajadores_web: trabajadores activos para panel izquierdo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    busqueda = str(body.get('busqueda') or body.get('nombre') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_vacaciones_listar_trabajadores_web @company=?, @payrolltype=?, @busqueda=?",
+            (cia, payrolltype, busqueda),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                'person': _jsonable_value(r.get('person')),
+                'codigo': _jsonable_value(r.get('codigo')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'documento': _jsonable_value(r.get('documento')),
+                'fechaingreso': _jsonable_value(r.get('fechaingreso')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+                'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_vacaciones_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/vacaciones/obtener', methods=['POST'])
+@login_required
+def api_vacaciones_obtener():
+    """sp_pr_vacaciones_obtener_trabajador_web: periodos y detalle de utilización."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_vacaciones_obtener_trabajador_web @company=?, @person=?",
+            (cia, person),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=6)
+        empleado = _vacacion_empleado_dict(sets[0][0] if len(sets) > 0 and sets[0] else None)
+        resumen = _vacacion_resumen_dict(sets[1][0] if len(sets) > 1 and sets[1] else None)
+        periodos = [_vacacion_periodo_dict(r) for r in (sets[2] if len(sets) > 2 else [])]
+        detalle = [_vacacion_detalle_dict(r) for r in (sets[3] if len(sets) > 3 else [])]
+        return jsonify({
+            "empleado": empleado,
+            "resumen": resumen,
+            "periodos": periodos,
+            "detalle": detalle,
+        })
+    except Exception as e:
+        logging.exception("api_vacaciones_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/vacaciones/guardar-detalle', methods=['POST'])
+@login_required
+def api_vacaciones_guardar_detalle():
+    """sp_pr_vacaciones_guardar_detalle_web: alta de utilización de vacaciones."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    line_raw = body.get('line')
+    prperiod = _normalize_pr_period_vacacion(body.get('prperiod') or body.get('consumo_efectivo') or '')
+    vacationtype = str(body.get('vacationtype') or body.get('tipo') or 'D').strip().upper()[:1] or 'D'
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if line_raw is None or str(line_raw).strip() == '':
+        return jsonify({"error": "Seleccione un periodo vacacional."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione el periodo de consumo efectivo."}), 400
+
+    try:
+        line = int(line_raw)
+    except Exception:
+        return jsonify({"error": "Periodo vacacional inválido."}), 400
+
+    fecha_inicio = _sql_date_str_param(body.get('fecha_inicio') or body.get('datebegin'))
+    fecha_fin = _sql_date_str_param(body.get('fecha_fin') or body.get('dateend'))
+    if not fecha_inicio or not fecha_fin:
+        return jsonify({"error": "Indique fecha de inicio y término."}), 400
+    if fecha_inicio > fecha_fin:
+        return jsonify({"error": "La fecha de término no puede ser anterior a la de inicio."}), 400
+
+    days_raw = body.get('dias') or body.get('days')
+    days_param = None
+    if days_raw is not None and str(days_raw).strip() != '':
+        try:
+            days_param = int(days_raw)
+        except Exception:
+            return jsonify({"error": "Días calculados inválidos."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_vacaciones_guardar_detalle_web "
+            "@company=?, @person=?, @line=?, @prperiod=?, @datebegin=?, @dateend=?, "
+            "@days=?, @vacationtype=?, @xlastuser=?",
+            (
+                cia, person, line, prperiod, fecha_inicio, fecha_fin,
+                days_param, vacationtype, xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        return jsonify({"ok": True, "row": rows[0] if rows else {}})
+    except Exception as e:
+        logging.exception("api_vacaciones_guardar_detalle")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/vacaciones/eliminar-detalle', methods=['POST'])
+@login_required
+def api_vacaciones_eliminar_detalle():
+    """sp_pr_vacaciones_eliminar_detalle_web: elimina utilización de vacaciones."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    line_raw = body.get('line')
+    secuence_raw = body.get('secuence')
+    xlastuser = _xlastuser_id()
+
+    if not cia or not person:
+        return jsonify({"error": "Faltan datos del trabajador."}), 400
+    if line_raw is None or secuence_raw is None:
+        return jsonify({"error": "Seleccione un registro de utilización."}), 400
+
+    try:
+        line = int(line_raw)
+        secuence = int(secuence_raw)
+    except Exception:
+        return jsonify({"error": "Registro de utilización inválido."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_vacaciones_eliminar_detalle_web "
+            "@company=?, @person=?, @line=?, @secuence=?, @xlastuser=?",
+            (cia, person, line, secuence, xlastuser),
+        )
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        logging.exception("api_vacaciones_eliminar_detalle")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/asignacion-conceptos/eliminar', methods=['POST'])
 @login_required
 def api_asignacion_conceptos_eliminar():
@@ -6236,6 +6552,73 @@ def api_procesar_planilla_validar_calculo():
         })
     except Exception as e:
         logging.exception("api_procesar_planilla_validar_calculo")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/procesar-planilla/eliminar-calculo', methods=['POST'])
+@login_required
+def api_procesar_planilla_eliminar_calculo():
+    """sp_pr_eliminar_calculo_planilla_web: elimina cálculo de trabajadores seleccionados."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    seleccionados = body.get('trabajadores')
+
+    if not isinstance(seleccionados, list) or len(seleccionados) == 0:
+        return jsonify({"error": "Debe seleccionar al menos un trabajador."}), 400
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Faltan compañía, tipo de planilla, proceso o periodo."}), 400
+
+    conn = None
+    exitos = 0
+    errores = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for person_id in seleccionados:
+            pid = str(person_id).strip()
+            if not pid:
+                continue
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_eliminar_calculo_planilla_web "
+                    "@company=?, @payrolltype=?, @processtype=?, @period=?, @person=?",
+                    (cia, payrolltype, processtype, period, pid),
+                )
+                _drain_pyodbc_cursor(cursor)
+                conn.commit()
+                exitos += 1
+            except Exception as e_individual:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                err = str(e_individual)
+                if 'RAISERROR' in err or '50000' in err:
+                    parts = err.split(']')
+                    if len(parts) > 1:
+                        err = parts[-1].strip(" ()'\"")
+                errores.append(f'{pid}: {err}')
+                logging.warning('api_procesar_planilla_eliminar_calculo persona %s: %s', pid, e_individual)
+
+        if errores and exitos == 0:
+            return jsonify({"error": '; '.join(errores), "exitos": exitos, "errores": errores}), 500
+        return jsonify({
+            "ok": True,
+            "exitos": exitos,
+            "errores": errores,
+            "mensaje": "Proceso concluido." if not errores else f"Proceso concluido con {len(errores)} error(es).",
+        })
+    except Exception as e:
+        logging.exception("api_procesar_planilla_eliminar_calculo")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

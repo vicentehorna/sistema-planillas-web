@@ -62,6 +62,8 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_selectorcompanias_web.sql` | Compañías activas |
 | `sp_pr_selectorplanillas_web.sql` | Tipos de planilla por compañía |
 | `sp_pr_selectorprocesos_web.sql` | Procesos por compañía y planilla |
+| `sp_pr_selectorprocesoscalculo_web.sql` | Procesos de cálculo (Procesar planilla) |
+| `sp_pr_selectorperiodocalculo_web.sql` | Periodos de cálculo (Procesar planilla) |
 | `sp_pr_selectorperiodos_web.sql` | Periodos por compañía, planilla y proceso |
 | `sp_pr_calcularplanillas_web.sql` | Cálculo planillas |
 | `sp_pr_validar_calculo_web.sql` | Validaciones post-cálculo → POST `/api/procesar-planilla/validar-calculo` |

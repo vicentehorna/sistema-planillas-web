@@ -92,15 +92,21 @@ def get_db_connection():
 
 def get_config_empresa(company_id):
     """
-    Obtiene nombres de archivo de logo/firma para la compañía.
-    Retorna tupla (LogoNombre, FirmaNombre) o None.
+    Logo y firma de boleta por compañía (SY_Company.logoname, SY_Company.signaturename).
+    Retorna tupla (logoname, signaturename) o None.
     """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT LogoNombre, FirmaNombre FROM PR_mapping2 WHERE company = ?",
+            """
+            SELECT
+                LTRIM(RTRIM(ISNULL(logoname, ''))),
+                LTRIM(RTRIM(ISNULL(signaturename, '')))
+            FROM SY_Company
+            WHERE Company = ?
+            """,
             (company_id,),
         )
         row = cursor.fetchone()

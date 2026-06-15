@@ -8,6 +8,7 @@ OUT = SQL_DIR / "deploy_planillas_web_completo.sql"
 ALTER_FIRST = [
     "alter_pr_mapping_add_banbifbank.sql",
     "alter_pr_processtype_add_procedurename.sql",
+    "alter_sy_company_add_logoname_signaturename.sql",
     "tables_pr_plame_sunat_web.sql",
 ]
 LEGACY_NEXT = ["SP_PR_EjecutarFormula.sql"]

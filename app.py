@@ -1908,21 +1908,25 @@ def _image_data_uri(file_path):
         return ''
 
 
+def _boleta_imagen_ruta(img_dir, nombre_archivo):
+    """Resuelve ruta en static/img; solo el nombre de archivo (sin rutas)."""
+    nombre = os.path.basename(str(nombre_archivo or '').strip())
+    if not nombre:
+        return ''
+    ruta = os.path.join(img_dir, nombre)
+    return ruta if os.path.exists(ruta) else ''
+
+
 def _boleta_imagenes_paths(cia):
-    """Rutas logo/firma del PDF boleta desde static/img, fallback PR_mapping2."""
+    """Logo y firma desde SY_Company (logoname, signaturename) en static/img."""
     img_dir = os.path.join(app.root_path, 'static', 'img')
-    logo_aci = os.path.join(img_dir, 'logoaci.jpg')
-    firma_aci = os.path.join(img_dir, 'firmaaci.jpg')
-
     cfg = get_config_empresa(cia)
-    nombre_logo = str(cfg[0]).strip() if cfg and len(cfg) > 0 and cfg[0] else 'default_logo.png'
-    nombre_firma = str(cfg[1]).strip() if cfg and len(cfg) > 1 and cfg[1] else 'default_firma.png'
-    ruta_logo_fb = os.path.join(app.root_path, 'static', 'assets', nombre_logo)
-    ruta_firma_fb = os.path.join(app.root_path, 'static', 'assets', nombre_firma)
-
-    ruta_logo = logo_aci if os.path.exists(logo_aci) else ruta_logo_fb
-    ruta_firma = firma_aci if os.path.exists(firma_aci) else ruta_firma_fb
-    return ruta_logo, ruta_firma
+    nombre_logo = str(cfg[0]).strip() if cfg and len(cfg) > 0 and cfg[0] else ''
+    nombre_firma = str(cfg[1]).strip() if cfg and len(cfg) > 1 and cfg[1] else ''
+    return (
+        _boleta_imagen_ruta(img_dir, nombre_logo),
+        _boleta_imagen_ruta(img_dir, nombre_firma),
+    )
 
 
 def _bool_env(name, default=False):

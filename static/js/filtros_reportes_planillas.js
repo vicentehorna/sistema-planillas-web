@@ -10,6 +10,7 @@
     const STORAGE_KEY_SALDO_VACACIONES = 'filtros_saldo_vacaciones';
     const STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE = 'filtros_descansos_medicos_detalle';
     const STORAGE_KEY_PROCESAR_PLANILLA = 'filtros_procesar_planilla';
+    const STORAGE_KEY_LOG_CALCULO = 'filtros_log_calculo';
     const STORAGE_KEY_TRABAJADORES = 'filtros_trabajadores';
     const STORAGE_KEY_TELECREDITO = 'filtros_pago_haberes_telecredito';
     const STORAGE_KEY_INTERBANK = 'filtros_pago_haberes_interbank';
@@ -1453,6 +1454,7 @@
         STORAGE_KEY_SALDO_VACACIONES,
         STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE,
         STORAGE_KEY_PROCESAR_PLANILLA,
+        STORAGE_KEY_LOG_CALCULO,
         STORAGE_KEY_TRABAJADORES,
         STORAGE_KEY_TELECREDITO,
         STORAGE_KEY_INTERBANK,
@@ -1487,6 +1489,9 @@
         },
         procesarPlanilla: function () {
             return crearPersistenciaProcesarPlanilla();
+        },
+        logCalculo: function () {
+            return crearPersistenciaReporte(STORAGE_KEY_LOG_CALCULO, true);
         },
         trabajadores: function () {
             return crearPersistenciaTrabajadores();

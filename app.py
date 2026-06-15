@@ -2387,6 +2387,12 @@ def reporte_descansos_medicos_detalle_page():
     return render_template('reporte_descansos_medicos_detalle.html')
 
 
+@app.route('/reporte-log-calculo')
+@login_required
+def reporte_log_calculo_page():
+    return render_template('reporte_log_calculo.html')
+
+
 @app.route('/reporte-listado-pagos')
 @login_required
 def reporte_listado_pagos_page():
@@ -6088,6 +6094,85 @@ def api_reporte_listado_pagos():
         return jsonify({"rows": resultado, "total": len(resultado)})
     except Exception as e:
         logging.exception("api_reporte_listado_pagos")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/reporte_log_calculo', methods=['POST'])
+@login_required
+def reporte_log_calculo_post():
+    """sp_pr_reportelog_calculo_web @cia, @payrolltype, @process, @period, @person."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    process = str(body.get('process') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payroll_type or not process or not period:
+        return jsonify({"error": "Debe indicar tipo de planilla, proceso y periodo."}), 400
+
+    headers_es = [
+        'Código',
+        'Nombre',
+        'Fecha',
+        'Concepto',
+        'Cód. fórmula',
+        'Importe',
+        'Tipo concepto',
+        'Tipo cálculo',
+        'Insertar',
+        'Afecto 5ta',
+        'Afecto AFP',
+        'Periodo inicio',
+    ]
+    keys_datos = [
+        'person',
+        'name',
+        'fecha',
+        'concepto',
+        'formulacode',
+        'importe',
+        'tipoconcepto',
+        'tipocalculo',
+        'flaginsertar',
+        'flagafecto5ta',
+        'flagafectoafp',
+        'periodbegin',
+    ]
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reportelog_calculo_web @cia=?, @payrolltype=?, @process=?, @period=?, @person=?",
+            (cia, payroll_type, process, period, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            fila = []
+            for key in keys_datos:
+                val = r.get(key)
+                if key == 'importe' and val is not None:
+                    try:
+                        fila.append(float(val))
+                    except Exception:
+                        fila.append(_jsonable_value(val))
+                else:
+                    fila.append(_jsonable_value(val))
+            resultado.append(fila)
+        return jsonify({"headers": headers_es, "data": resultado})
+    except Exception as e:
+        logging.exception("reporte_log_calculo_post")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

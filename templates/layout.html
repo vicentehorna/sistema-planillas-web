@@ -413,7 +413,7 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>
 
-                {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'procesar_planilla_page') %}
+                {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'procesar_planilla_page', 'reporte_log_calculo_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if calculos_active else '' }}">
                     <a href="#submenuCalculos"
                        class="sidebar-parent-link"
@@ -433,6 +433,11 @@
                         <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
                             <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar Planilla">
                                 <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar Planilla</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_log_calculo_page' else '' }}">
+                            <a href="{{ url_for('reporte_log_calculo_page') }}" title="Log de Cálculo de Planillas">
+                                <i class="bi bi-journal-text"></i><span class="sidebar-link-text">Log de Cálculo de Planillas</span>
                             </a>
                         </li>
                     </ul>

@@ -775,6 +775,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             renderizarResumenAfpnet(data.resumen || null, { scroll: true });
+            if (Array.isArray(data.rows) && data.rows.length) {
+                lastRowsAfp = data.rows;
+                renderizarTabla(lastRowsAfp);
+            }
             const extras = Array.isArray(data.validaciones) ? data.validaciones : [];
             if (extras.length) {
                 const merged = [...lastValidacionesAfp];

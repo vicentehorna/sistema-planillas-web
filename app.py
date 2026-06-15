@@ -863,6 +863,32 @@ def _declaracion_afp_actualizar_datos(cursor, conn, p, xlastuser='WEB'):
     return {'actualizado': 0, 'mensaje': 'Sin respuesta del control de datos AFP.'}
 
 
+def _declaracion_afp_xlastuser():
+    return str(session.get('person') or 'WEB').strip() or 'WEB'
+
+
+def _declaracion_afp_sincronizar_planilla(cursor, conn, p):
+    """Alimenta PR_EmployeeAFP / PR_EmployeeAFPHeader desde la planilla del periodo."""
+    sync = _declaracion_afp_actualizar_datos(cursor, conn, p, _declaracion_afp_xlastuser())
+    if sync.get('actualizado') == 0:
+        msg = str(sync.get('mensaje') or '').strip()
+        if msg:
+            logging.info('AFPnet sync periodo %s cia %s: %s', p.get('period'), p.get('cia'), msg)
+    return sync
+
+
+def _declaracion_afp_validaciones_sync_afp(validaciones, sync):
+    """Incluye advertencia si no hubo planilla/proceso con TOTAL_REM_AFP."""
+    if sync.get('actualizado') != 0:
+        return validaciones
+    msg = str(sync.get('mensaje') or '').strip()
+    if not msg:
+        msg = 'No hay combinaciones planilla/proceso con concepto TOTAL_REM_AFP para el periodo.'
+    if msg not in (validaciones or []):
+        return [msg] + list(validaciones or [])
+    return validaciones
+
+
 def _declaracion_afp_ejecutar_listado(cursor, p):
     cursor.execute(
         "EXEC sp_pr_listado_declaracion_afp_web "
@@ -3378,13 +3404,20 @@ def api_declaracion_afp_listado():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        sync_afp = _declaracion_afp_sincronizar_planilla(cursor, conn, p)
         resultado = _declaracion_afp_ejecutar_listado(cursor, p)
         filas, validaciones = _declaracion_afp_validaciones_completas(cursor, resultado, p)
+        validaciones = _declaracion_afp_validaciones_sync_afp(validaciones, sync_afp)
         return jsonify({
             "rows": filas,
             "total": len(filas),
             "validaciones": validaciones,
             "puede_generar_xlsx": len(filas) > 0,
+            "sync_afp": {
+                "actualizado": sync_afp.get('actualizado'),
+                "filas_afp": sync_afp.get('filas_afp'),
+                "mensaje": sync_afp.get('mensaje'),
+            },
         })
     except Exception as e:
         logging.exception("api_declaracion_afp_listado")
@@ -3415,6 +3448,10 @@ def api_declaracion_afp_validar_resumen():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        _declaracion_afp_sincronizar_planilla(cursor, conn, p)
+        filas = _declaracion_afp_ejecutar_listado(cursor, p)
+        if not filas:
+            return jsonify({"error": "No hay registros para validar después de sincronizar AFP."}), 400
         montos_rows, planilla_row, planilla_trabajadores = _declaracion_afp_ejecutar_resumen_planilla(cursor, p)
         resumen = _declaracion_afp_build_resumen(
             montos_rows, planilla_row, filas, planilla_trabajadores
@@ -3425,6 +3462,7 @@ def api_declaracion_afp_validar_resumen():
             'resumen': resumen,
             'tiene_diferencias': _declaracion_afp_resumen_tiene_diferencias(resumen),
             'validaciones': validaciones,
+            'rows': filas,
         })
     except Exception as e:
         logging.exception("api_declaracion_afp_validar_resumen")
@@ -3451,8 +3489,7 @@ def api_declaracion_afp_generar_xlsx():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        xlastuser = str(session.get('person') or 'WEB').strip() or 'WEB'
-        _declaracion_afp_actualizar_datos(cursor, conn, p, xlastuser)
+        _declaracion_afp_sincronizar_planilla(cursor, conn, p)
         filas = _declaracion_afp_ejecutar_listado(cursor, p)
         if not filas:
             return jsonify({"error": "No hay registros para generar el archivo AFPnet."}), 400

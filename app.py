@@ -5480,15 +5480,16 @@ def reporte_saldo_vacaciones_post():
         'Faltas',
         'Licencias',
         'Descansos',
+        'Saldo',
     ]
     keys_datos = [
         'tipoplanillas', 'person', 'name', 'description', 'entrydate', 'ceasedate',
         'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
-        'faltas', 'licencias', 'descansos',
+        'faltas', 'licencias', 'descansos', 'saldo',
     ]
     keys_numericos = {
         'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
-        'faltas', 'licencias', 'descansos',
+        'faltas', 'licencias', 'descansos', 'saldo',
     }
 
     conn = None

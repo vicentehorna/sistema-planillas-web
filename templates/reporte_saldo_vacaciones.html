@@ -57,15 +57,28 @@
         z-index: 3;
         background-color: #f8f9fa;
     }
+
+    .table-planilla-vertical thead th.col-saldo-final {
+        background-color: #ffe69c !important;
+        color: #5c4a00;
+        font-weight: 700;
+    }
+
+    .table-planilla-vertical tbody td.col-saldo-final {
+        background-color: #fff8e1;
+        font-weight: 700;
+        color: #4a3d00;
+    }
+
+    .table-planilla-vertical tbody tr:hover td.col-saldo-final {
+        background-color: #ffefb3;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
-    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
-        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-calendar-check"></i> Saldo de vacaciones</h5>
-    </div>
-    <div class="card-body">
+    <div class="card-body pt-3">
         <form id="frmSaldoVacaciones" class="row g-3">
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
@@ -134,9 +147,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     const IDX_STICKY_2 = 2;
     /** Centrados: F. ingreso, F. cese */
     const IDX_CENTRO = new Set([4, 5]);
-    /** Numéricos alineados a la derecha: saldos, faltas, licencias, descansos */
-    const IDX_NUMERICOS = new Set([6, 7, 8, 9, 10, 11, 12, 13]);
+    /** Numéricos alineados a la derecha: saldos, faltas, licencias, descansos, saldo */
+    const IDX_NUMERICOS = new Set([6, 7, 8, 9, 10, 11, 12, 13, 14]);
     const IDX_ENTEROS = new Set([11, 12, 13]);
+    const IDX_SALDO_FINAL = 14;
 
     let lastExportSaldoVac = null;
 
@@ -215,7 +229,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             else if (index === IDX_STICKY_2) sticky = 'sticky-col-2';
             const cen = IDX_CENTRO.has(index) ? ' text-center' : '';
             const num = IDX_NUMERICOS.has(index) ? ' text-end' : '';
-            htmlHeaders += `<th class="${sticky}${cen}${num}">${escapeHtml(header)}</th>`;
+            const saldoFinal = index === IDX_SALDO_FINAL ? ' col-saldo-final' : '';
+            htmlHeaders += `<th class="${sticky}${cen}${num}${saldoFinal}">${escapeHtml(header)}</th>`;
         });
         htmlHeaders += '</tr>';
         thead.innerHTML = htmlHeaders;
@@ -232,13 +247,14 @@ document.addEventListener('DOMContentLoaded', async function () {
                 let align = '';
                 if (IDX_CENTRO.has(index)) align = 'text-center';
                 else if (isNum && IDX_NUMERICOS.has(index)) align = 'text-end';
+                const saldoFinal = index === IDX_SALDO_FINAL ? 'col-saldo-final' : '';
                 const txt =
                     isNum && IDX_ENTEROS.has(index)
                         ? fmtCelda(valor, { entero: true })
                         : isNum
                             ? fmtCelda(valor)
                             : escapeHtml(fmtCelda(valor));
-                htmlBody += `<td class="${[sticky, align].filter(Boolean).join(' ')}">${txt}</td>`;
+                htmlBody += `<td class="${[sticky, align, saldoFinal].filter(Boolean).join(' ')}">${txt}</td>`;
             });
             htmlBody += '</tr>';
         });
@@ -261,7 +277,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             title: 'FFE9ECEF',
             meta: 'FFF8F9FA',
             header: 'FFF8F9FA',
-            data: 'FFFFFFFF'
+            data: 'FFFFFFFF',
+            saldoFinal: 'FFFFF8E1',
+            saldoFinalHeader: 'FFFFE69C'
         };
         const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
         const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
@@ -306,6 +324,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         hRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
             const idx = colNumber - 1;
             cell.fill = fill(F.header);
+            if (idx === IDX_SALDO_FINAL) {
+                cell.fill = fill(F.saldoFinalHeader);
+                cell.font = { bold: true };
+            }
             if (IDX_NUMERICOS.has(idx)) {
                 cell.alignment = { horizontal: 'right', vertical: 'middle' };
             } else if (IDX_CENTRO.has(idx)) {
@@ -326,6 +348,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const v = rowVals && rowVals[idx];
                 cell.fill = fill(F.data);
                 cell.border = allBorders;
+                if (idx === IDX_SALDO_FINAL) {
+                    cell.fill = fill(F.saldoFinal);
+                    cell.font = { bold: true };
+                }
                 if (typeof v === 'number' && Number.isFinite(v)) {
                     cell.numFmt = IDX_ENTEROS.has(idx) ? '0' : '#,##0.00';
                     cell.alignment = { horizontal: 'right', vertical: 'middle' };

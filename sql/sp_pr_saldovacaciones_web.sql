@@ -268,9 +268,20 @@ BEGIN
         ISNULL(saldo3, 0) AS saldo3,
         ISNULL(saldo4, 0) AS saldo4,
         ISNULL(saldo5, 0) AS saldo5,
-        xx_saldovacaciones.faltas,
-        xx_saldovacaciones.licencias,
-        0 AS descansos
+        ISNULL(xx_saldovacaciones.faltas, 0) AS faltas,
+        ISNULL(xx_saldovacaciones.licencias, 0) AS licencias,
+        ISNULL(xx_saldovacaciones.descansos, 0) AS descansos,
+        ROUND(
+            ISNULL(saldo1, 0) + ISNULL(saldo2, 0) + ISNULL(saldo3, 0) + ISNULL(saldo4, 0) + ISNULL(saldo5, 0)
+            - ROUND(ISNULL(xx_saldovacaciones.faltas, 0) * 2.5 / 30.0, 2)
+            - ROUND(ISNULL(xx_saldovacaciones.licencias, 0) * 2.5 / 30.0, 2)
+            - CASE
+                WHEN ISNULL(xx_saldovacaciones.descansos, 0) >= 60
+                THEN ROUND(ISNULL(xx_saldovacaciones.descansos, 0) * 2.5 / 30.0, 2)
+                ELSE 0
+              END,
+            2
+        ) AS saldo
     FROM xx_saldovacaciones
         INNER JOIN PR_PayRollType
             ON xx_saldovacaciones.payrolltype = PR_PayRollType.PayRollType

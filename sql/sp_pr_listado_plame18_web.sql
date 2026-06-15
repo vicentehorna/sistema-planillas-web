@@ -228,7 +228,7 @@ BEGIN
           AND C.pdt = '0605'
     );
 
-    /* 0601 — comisión AFP: valor 0 solo si el trabajador tiene AFP y no tiene comisión en el periodo */
+    /* 0601 — comisión AFP: valor 0 solo si el trabajador tiene régimen AFP (no ONP) y no tiene comisión en el periodo */
     INSERT INTO #Conceptos (person, pdt, conceptvalue, conceptvaluelo)
     SELECT E.person, '0601', 0, 0
     FROM #Empleados E
@@ -240,13 +240,32 @@ BEGIN
     )
       AND EXISTS (
         SELECT 1
-        FROM PR_EmployeePayRoll EP (NOLOCK)
-        WHERE EP.Company = @cia
-          AND EP.Person = E.person
-          AND LEFT(EP.PRPeriod, 6) = @period
-          AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
-          AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+        FROM PR_Employee EM (NOLOCK)
+            LEFT JOIN PR_PensionType PT (NOLOCK)
+                ON PT.PensionType = EM.PensionType
+               AND (
+                    LTRIM(RTRIM(ISNULL(PT.Company, ''))) = ''
+                    OR PT.Company = EM.Company
+               )
+        WHERE EM.Company = @cia
+          AND EM.Person = E.person
+          AND LTRIM(RTRIM(ISNULL(PT.PDT, ''))) IN ('21', '22', '23', '24', '25')
     );
+
+    /* 0601 solo aplica a AFP: excluir ONP (PDT 02) y sin régimen aunque exista dato residual en planilla */
+    DELETE C
+    FROM #Conceptos C
+        INNER JOIN PR_Employee EM (NOLOCK)
+            ON EM.Person = C.person
+           AND EM.Company = @cia
+        LEFT JOIN PR_PensionType PT (NOLOCK)
+            ON PT.PensionType = EM.PensionType
+           AND (
+                LTRIM(RTRIM(ISNULL(PT.Company, ''))) = ''
+                OR PT.Company = EM.Company
+           )
+    WHERE C.pdt = '0601'
+      AND LTRIM(RTRIM(ISNULL(PT.PDT, ''))) NOT IN ('21', '22', '23', '24', '25');
 
     SELECT
         C.person,

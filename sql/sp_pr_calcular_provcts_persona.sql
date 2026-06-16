@@ -19,7 +19,7 @@
     Cálculo de provisión CTS por persona.
     Proceso: PROVISION CTS (sp_pr_calcular_provcts_persona).
 
-    XDIASCTS (activo): 30 días del mes en provisión (semestres Nov-Abr y May-Oct).
+    XDIASCTS (activo): 30 días del mes en provisión, prorrateado si ingresa después del día 1 del mes del periodo.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcular_provcts_persona]
 @company varchar(4), @payrolltype varchar(20),  @processtype varchar(20), @period varchar(20), @person varchar(20), @UserID varchar(20), @tc numeric(19,4)
@@ -145,18 +145,44 @@ begin
 	/*
 	    XDIASCTS - Provisión CTS mensual.
 	    Semestres: Nov-Abr (meses 11,12,1-4) y May-Oct (meses 5-10).
-	    Trabajador activo: 30 días del mes en provisión (no acumulado desde ingreso).
+	    Trabajador activo: 30 días del mes, salvo ingreso en el mismo mes del periodo
+	    (después del día 1): prorrateo f_getDias360(fecha ingreso, fin de mes).
 	    Trabajador cesado: mantiene lógica de días truncos por semestre.
 	*/
-	set @dia_cts_trunca = 
+	declare @inicio_mes date, @fin_mes date, @inicio_semestre date, @anio_periodo int
+
+	set @anio_periodo = convert(int, left(@period, 4))
+	set @inicio_mes = convert(date, left(@period, 6) + '01')
+	set @fin_mes = convert(date, left(@period, 6) + '30')
+
+	if @mes_periodo between 5 and 10
+		set @inicio_semestre = convert(date, left(@period, 4) + '0501')
+	else if @mes_periodo in (11, 12)
+		set @inicio_semestre = convert(date, left(@period, 4) + '1101')
+	else
+		set @inicio_semestre = convert(date, convert(char(4), @anio_periodo - 1) + '1101')
+
+	set @dia_cts_trunca =
 					case when @ceasedate is null then
 						case
-							when @mes_periodo between 5 and 10 then 30
-							when @mes_periodo in (11, 12, 1, 2, 3, 4) then 30
+							when @mes_periodo between 5 and 10 or @mes_periodo in (11, 12, 1, 2, 3, 4) then
+								case
+									when convert(date, @fechaingreso) > @inicio_mes
+									 and convert(date, @fechaingreso) <= @fin_mes
+									 and left(convert(varchar(8), @fechaingreso, 112), 6) = left(@period, 6)
+									then dbo.f_getDias360(convert(date, @fechaingreso), @fin_mes)
+									when convert(date, @fechaingreso) <= @inicio_mes
+									  or convert(date, @fechaingreso) < @inicio_semestre
+									then 30
+									when convert(date, @fechaingreso) >= @inicio_semestre
+									 and convert(date, @fechaingreso) < @inicio_mes
+									then 30
+									else 30
+								end
 							else
-								case when convert(date,@fechaingreso) > convert(datetime,convert(char(4),convert(int,left(@period,4)) - 1)+'1031')
-									then dbo.f_getDias360(convert(date,@fechaingreso), convert(date,convert(datetime,left(@period,6)+'30')))
-									else dbo.f_getDias360(convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1101'), convert(date,convert(datetime,left(@period,6)+'30')))
+								case when convert(date, @fechaingreso) > convert(datetime, convert(char(4), @anio_periodo - 1) + '1031')
+									then dbo.f_getDias360(convert(date, @fechaingreso), @fin_mes)
+									else dbo.f_getDias360(convert(date, convert(char(4), @anio_periodo - 1) + '1101'), @fin_mes)
 								end
 						end
 					else
@@ -292,12 +318,7 @@ begin
 	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
 	and ProcessType = @processtype and PRPeriod = @period ),0)
 
-	set @total_ingreso = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'TOTALINGRESO'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'TOTALINGRESO'),0) else @total_ingreso end
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALINGRESO', @total_ingreso, 'F'
-	if isnull(@total_ingreso,0) > 0 
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALINGRESO', @total_ingreso, 'Y'
-	end
+	
 
 
 
@@ -344,11 +365,7 @@ begin
 	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
 	and ProcessType = @processtype and PRPeriod = @period ),0)
 
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALEGRESOS', @total_egreso, 'F'
-	if isnull(@total_egreso,0) > 0 
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALEGRESOS', @total_egreso, 'Y'
-	end
+	
 
 	/*BUCLE FORMULAS APORTES*/
 	
@@ -393,11 +410,7 @@ begin
 	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
 	and ProcessType = @processtype and PRPeriod = @period ),0)
 
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALPATRONAL', @total_aportes, 'F'
-	if isnull(@total_aportes,0) > 0 
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALPATRONAL', @total_aportes, 'Y'
-	end
+	
 
 	declare @rem_basica_mes numeric(19,4)
 	set @rem_basica_mes = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person

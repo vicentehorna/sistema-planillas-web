@@ -2473,6 +2473,83 @@ def declaracion_afp_page():
     return render_template('declaracion_afp.html')
 
 
+@app.route('/afp/control-pagos')
+@login_required
+def control_pagos_afp_page():
+    return render_template('reporte_control_pagos_afp.html')
+
+
+@app.route('/reporte_control_pagos_afp', methods=['POST'])
+@login_required
+def reporte_control_pagos_afp_post():
+    """sp_pr_control_pagos_afp_web: resumen de pagos AFP por planilla y AFP."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    period_raw = str(body.get('period') or '').strip().replace('-', '').replace('/', '')
+    period = period_raw[:6] if len(period_raw) >= 6 else period_raw
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payroll_type:
+        return jsonify({"error": "Debe indicar tipo de planilla."}), 400
+    if not period or len(period) != 6 or not period.isdigit():
+        return jsonify({"error": "Debe indicar un periodo válido (YYYYMM)."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_control_pagos_afp_web @company=?, @payrolltype=?, @period=?",
+            (cia, payroll_type, period),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            fixed = _float_sp_cell(r.get('fixedamountlo'))
+            variable = _float_sp_cell(r.get('variableamountlo'))
+            insured = _float_sp_cell(r.get('insuredamountlo'))
+            comision = _float_sp_cell(r.get('arcomisionamountlo'))
+            aporte = round(fixed + variable, 2)
+            retenciones = round(insured + comision, 2)
+            total = round(aporte + retenciones, 2)
+            cantidad_raw = r.get('cantidad')
+            try:
+                cantidad = int(cantidad_raw) if cantidad_raw is not None else 0
+            except Exception:
+                cantidad = 0
+            resultado.append({
+                "tipoplanilla": '' if r.get('tipoplanilla') is None else str(r.get('tipoplanilla')).strip(),
+                "afpname": '' if r.get('afpname') is None else str(r.get('afpname')).strip(),
+                "cantidad": cantidad,
+                "fixedamountlo": fixed,
+                "insuredamountlo": insured,
+                "employercontributionlo": _float_sp_cell(r.get('employercontributionlo')),
+                "variableamountlo": variable,
+                "arcomisionamountlo": comision,
+                "aporte": aporte,
+                "retenciones": retenciones,
+                "total": total,
+            })
+        return jsonify({
+            "rows": resultado,
+            "meta": {
+                "period": period,
+                "period_label": f"{period[:4]}-{period[4:6]}",
+            },
+        })
+    except Exception as e:
+        logging.exception("reporte_control_pagos_afp_post")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/plame/archivo-26')
 @login_required
 def plame_archivo26_page():

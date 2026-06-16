@@ -1,0 +1,557 @@
+{% extends "layout.html" %}
+
+{% block title %}Control de Pagos AFP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-control-pagos-afp {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-control-pagos-afp th,
+    .table-control-pagos-afp td {
+        padding: 0.3rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-control-pagos-afp thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        text-align: center;
+    }
+
+    .table-control-pagos-afp .col-monto {
+        min-width: 6rem;
+        text-align: right;
+    }
+
+    .table-control-pagos-afp .col-cantidad {
+        min-width: 4.5rem;
+        text-align: right;
+    }
+
+    .table-control-pagos-afp tr.fila-subtotal td {
+        font-weight: 700;
+        background-color: #f1f3f5;
+        border-top: 2px solid #adb5bd;
+    }
+
+    .table-control-pagos-afp tr.fila-total-general td {
+        font-weight: 700;
+        background-color: #e9ecef;
+        border-top: 3px double #495057;
+    }
+
+    .meta-reporte-afp {
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmControlPagosAfp" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-2 text-center" id="tituloReporte">PAGOS AFP</h5>
+        <div class="meta-reporte-afp mb-3 d-flex flex-wrap gap-3 justify-content-center">
+            <span><strong>Compañía:</strong> <span id="metaCompania">—</span></span>
+            <span><strong>Tipo planilla:</strong> <span id="metaPlanilla">—</span></span>
+            <span><strong>Periodo:</strong> <span id="metaPeriodo">—</span></span>
+        </div>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-control-pagos-afp align-middle">
+                <thead>
+                    <tr>
+                        <th>Tipo planilla</th>
+                        <th>AFP</th>
+                        <th class="col-cantidad">Nro. afiliados</th>
+                        <th class="col-monto">Aporte</th>
+                        <th class="col-monto">Retenciones y retribuciones</th>
+                        <th class="col-monto">Seguro</th>
+                        <th class="col-monto">Comisión</th>
+                        <th class="col-monto">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyControlPagosAfp"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.controlPagosAfp
+        ? window.FiltrosPlanillasReportes.controlPagosAfp()
+        : null;
+
+    const URL_REPORTE = {{ url_for('reporte_control_pagos_afp_post') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+
+    let lastExport = null;
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function num(v) {
+        const n = Number(v == null ? 0 : v);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    function formatMonto(n) {
+        return num(n).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatEntero(n) {
+        return String(Math.round(num(n)));
+    }
+
+    function periodoYyyymm(val) {
+        const s = String(val || '').trim().replace(/[-/]/g, '');
+        return s.length >= 6 ? s.slice(0, 6) : s;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function acumularSubtotal(acc, row) {
+        acc.cantidad += num(row.cantidad);
+        acc.aporte += num(row.aporte);
+        acc.retenciones += num(row.retenciones);
+        acc.insuredamountlo += num(row.insuredamountlo);
+        acc.arcomisionamountlo += num(row.arcomisionamountlo);
+        acc.total += num(row.total);
+        return acc;
+    }
+
+    function filaSubtotalHtml(tipo, acc, cssClass) {
+        return `
+            <tr class="${cssClass}">
+                <td colspan="2">${escapeHtml(tipo || 'Subtotal')}</td>
+                <td class="col-cantidad">${formatEntero(acc.cantidad)}</td>
+                <td class="col-monto">${formatMonto(acc.aporte)}</td>
+                <td class="col-monto">${formatMonto(acc.retenciones)}</td>
+                <td class="col-monto">${formatMonto(acc.insuredamountlo)}</td>
+                <td class="col-monto">${formatMonto(acc.arcomisionamountlo)}</td>
+                <td class="col-monto">${formatMonto(acc.total)}</td>
+            </tr>`;
+    }
+
+    function filaDetalleHtml(row) {
+        return `
+            <tr>
+                <td>${escapeHtml(row.tipoplanilla)}</td>
+                <td>${escapeHtml(row.afpname)}</td>
+                <td class="col-cantidad">${formatEntero(row.cantidad)}</td>
+                <td class="col-monto">${formatMonto(row.aporte)}</td>
+                <td class="col-monto">${formatMonto(row.retenciones)}</td>
+                <td class="col-monto">${formatMonto(row.insuredamountlo)}</td>
+                <td class="col-monto">${formatMonto(row.arcomisionamountlo)}</td>
+                <td class="col-monto">${formatMonto(row.total)}</td>
+            </tr>`;
+    }
+
+    function renderTabla(rows) {
+        const tbody = document.getElementById('tbodyControlPagosAfp');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros para los filtros seleccionados.</td></tr>';
+            return;
+        }
+
+        let html = '';
+        let grupoActual = null;
+        let subtotal = null;
+        const totalGeneral = {
+            cantidad: 0, aporte: 0, retenciones: 0,
+            insuredamountlo: 0, arcomisionamountlo: 0, total: 0
+        };
+
+        rows.forEach((row) => {
+            const tipo = String(row.tipoplanilla || '').trim();
+            if (grupoActual !== null && tipo !== grupoActual) {
+                html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal');
+                subtotal = null;
+            }
+            if (grupoActual === null || tipo !== grupoActual) {
+                grupoActual = tipo;
+                subtotal = {
+                    cantidad: 0, aporte: 0, retenciones: 0,
+                    insuredamountlo: 0, arcomisionamountlo: 0, total: 0
+                };
+            }
+            html += filaDetalleHtml(row);
+            acumularSubtotal(subtotal, row);
+            acumularSubtotal(totalGeneral, row);
+        });
+
+        if (subtotal) {
+            html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal');
+        }
+        html += filaSubtotalHtml('TOTALES', totalGeneral, 'fila-total-general');
+        tbody.innerHTML = html;
+    }
+
+    async function poblarSelect(url, selectElement, placeholder) {
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = placeholder || 'Seleccione...';
+            selectElement.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarPeriodos(cia, payrolltype, periodoPreferido) {
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        cboPeriodo.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia || !payrolltype) return;
+
+        try {
+            const res = await fetch(
+                `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json();
+            const vistos = new Set();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const yyyymm = periodoYyyymm(item.id);
+                if (!/^\d{6}$/.test(yyyymm) || vistos.has(yyyymm)) return;
+                vistos.add(yyyymm);
+                const opt = document.createElement('option');
+                opt.value = yyyymm;
+                opt.textContent = item.text != null ? String(item.text) : yyyymm;
+                cboPeriodo.appendChild(opt);
+            });
+            cboPeriodo.disabled = false;
+
+            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+            if (!preferido || !optionExists(cboPeriodo, preferido)) {
+                const primera = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
+                preferido = primera ? String(primera.value).trim() : '';
+            }
+            if (preferido && optionExists(cboPeriodo, preferido)) {
+                cboPeriodo.value = preferido;
+            }
+        } catch (e) {
+            console.error(e);
+            cboPeriodo.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function actualizarMeta(periodLabel) {
+        document.getElementById('metaCompania').textContent = selectedText('cboCompania') || '—';
+        document.getElementById('metaPlanilla').textContent = selectedText('cboTipoPlanilla') || '—';
+        document.getElementById('metaPeriodo').textContent = periodLabel || selectedText('cboPeriodo') || '—';
+        const titulo = document.getElementById('tituloReporte');
+        if (periodLabel) {
+            titulo.textContent = `PAGOS AFP — ${periodLabel}`;
+        } else {
+            titulo.textContent = 'PAGOS AFP';
+        }
+    }
+
+    async function ejecutarConsulta() {
+        lastExport = null;
+        document.getElementById('btnExportExcel').disabled = true;
+
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim();
+
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type, period })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultado').classList.add('d-none');
+                alert(payload.error || 'Error al generar el reporte.');
+                return;
+            }
+
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            document.getElementById('cardResultado').classList.remove('d-none');
+            const periodLabel = payload.meta && payload.meta.period_label
+                ? payload.meta.period_label
+                : (period.length === 6 ? `${period.slice(0, 4)}-${period.slice(4, 6)}` : period);
+            actualizarMeta(periodLabel);
+            renderTabla(rows);
+
+            lastExport = {
+                rows,
+                meta: {
+                    compania: selectedText('cboCompania'),
+                    tipoPlanilla: selectedText('cboTipoPlanilla'),
+                    period: periodLabel
+                }
+            };
+            document.getElementById('btnExportExcel').disabled = rows.length === 0;
+        } catch (e) {
+            console.error(e);
+            document.getElementById('cardResultado').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function exportExcel() {
+        if (!lastExport || !lastExport.rows || !lastExport.rows.length) {
+            alert('Ejecute primero una búsqueda con resultados.');
+            return;
+        }
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar ExcelJS. Recargue la página.');
+            return;
+        }
+
+        const headers = [
+            'Tipo planilla', 'AFP', 'Nro. afiliados', 'Aporte',
+            'Retenciones y retribuciones', 'Seguro', 'Comisión', 'Total'
+        ];
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Pagos AFP');
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+
+        let rowIdx = 1;
+        ws.mergeCells(rowIdx, 1, rowIdx, headers.length);
+        ws.getCell(rowIdx, 1).value = `PAGOS AFP — ${lastExport.meta.period || ''}`;
+        ws.getCell(rowIdx, 1).font = { bold: true, size: 14 };
+        ws.getCell(rowIdx, 1).alignment = { horizontal: 'center' };
+        rowIdx++;
+
+        ws.addRow(['Compañía', lastExport.meta.compania, 'Tipo planilla', lastExport.meta.tipoPlanilla, 'Periodo', lastExport.meta.period]);
+        rowIdx += 2;
+
+        const hRow = ws.addRow(headers);
+        hRow.font = { bold: true };
+        hRow.eachCell((cell) => {
+            cell.fill = fill('FFF8F9FA');
+            cell.border = allBorders;
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        rowIdx++;
+
+        let grupoActual = null;
+        let subtotal = null;
+        const totalGeneral = {
+            cantidad: 0, aporte: 0, retenciones: 0,
+            insuredamountlo: 0, arcomisionamountlo: 0, total: 0
+        };
+
+        const addDataRow = (vals, bold) => {
+            const r = ws.addRow(vals);
+            r.eachCell({ includeEmpty: true }, (cell, col) => {
+                cell.border = allBorders;
+                if (col >= 3) {
+                    cell.alignment = { horizontal: 'right' };
+                    if (typeof cell.value === 'number') {
+                        cell.numFmt = col === 3 ? '0' : '#,##0.00';
+                    }
+                }
+                if (bold) cell.font = { bold: true };
+            });
+        };
+
+        lastExport.rows.forEach((row) => {
+            const tipo = String(row.tipoplanilla || '').trim();
+            if (grupoActual !== null && tipo !== grupoActual) {
+                addDataRow([
+                    'Subtotal ' + grupoActual, '', subtotal.cantidad, subtotal.aporte,
+                    subtotal.retenciones, subtotal.insuredamountlo, subtotal.arcomisionamountlo, subtotal.total
+                ], true);
+                subtotal = null;
+            }
+            if (grupoActual === null || tipo !== grupoActual) {
+                grupoActual = tipo;
+                subtotal = {
+                    cantidad: 0, aporte: 0, retenciones: 0,
+                    insuredamountlo: 0, arcomisionamountlo: 0, total: 0
+                };
+            }
+            addDataRow([
+                row.tipoplanilla, row.afpname, num(row.cantidad), num(row.aporte),
+                num(row.retenciones), num(row.insuredamountlo), num(row.arcomisionamountlo), num(row.total)
+            ], false);
+            acumularSubtotal(subtotal, row);
+            acumularSubtotal(totalGeneral, row);
+        });
+
+        if (subtotal) {
+            addDataRow([
+                'Subtotal ' + grupoActual, '', subtotal.cantidad, subtotal.aporte,
+                subtotal.retenciones, subtotal.insuredamountlo, subtotal.arcomisionamountlo, subtotal.total
+            ], true);
+        }
+        addDataRow([
+            'TOTALES', '', totalGeneral.cantidad, totalGeneral.aporte,
+            totalGeneral.retenciones, totalGeneral.insuredamountlo, totalGeneral.arcomisionamountlo, totalGeneral.total
+        ], true);
+
+        ws.getColumn(1).width = 28;
+        ws.getColumn(2).width = 24;
+        for (let c = 3; c <= headers.length; c++) ws.getColumn(c).width = 16;
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 40);
+        a.download = `control_pagos_afp_${safe(lastExport.meta.period)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
+    if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {
+        cboCia.value = guardado.cia;
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(guardado.cia)}`, cboPlanilla);
+        if (guardado.payroll && optionExists(cboPlanilla, guardado.payroll)) {
+            cboPlanilla.value = guardado.payroll;
+            await cargarPeriodos(guardado.cia, guardado.payroll, guardado.period);
+        }
+    } else if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value)}`, cboPlanilla);
+    }
+
+    if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value.trim();
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        if (cia) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        } else {
+            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            cboPlanilla.disabled = true;
+        }
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+    });
+
+    cboPlanilla.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const pt = this.value.trim();
+        if (cia && pt) {
+            await cargarPeriodos(cia, pt, null);
+        } else {
+            const cboPeriodo = document.getElementById('cboPeriodo');
+            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            cboPeriodo.disabled = true;
+        }
+    });
+
+    document.getElementById('frmControlPagosAfp').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarConsulta();
+    });
+
+    document.getElementById('btnExportExcel').addEventListener('click', exportExcel);
+
+    {
+        const cia = cboCia.value.trim();
+        const pt = cboPlanilla.value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim();
+        if (cia && pt && period) {
+            await ejecutarConsulta();
+        }
+    }
+});
+</script>
+{% endblock %}

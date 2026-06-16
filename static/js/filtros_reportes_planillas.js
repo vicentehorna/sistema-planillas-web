@@ -878,6 +878,50 @@
         };
     }
 
+    function crearPersistenciaControlPagosAfp() {
+        const STORAGE_KEY = 'filtros_control_pagos_afp';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    period: val('cboPeriodo'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros control pagos afp: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaPlameArchivo18() {
         const STORAGE_KEY = 'filtros_plame_archivo18';
 
@@ -1537,6 +1581,9 @@
         },
         declaracionAfp: function () {
             return crearPersistenciaDeclaracionAfp();
+        },
+        controlPagosAfp: function () {
+            return crearPersistenciaControlPagosAfp();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

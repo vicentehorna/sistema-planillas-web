@@ -45,32 +45,36 @@
         <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-file-earmark-pdf"></i> Generación de boletas de pago</h5>
     </div>
     <div class="card-body">
-        <form id="frmGenerarBoletas" class="row g-3">
-            <div class="col-md-3">
-                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+        <form id="frmGenerarBoletas" class="row g-2 align-items-end">
+            <div class="col-12 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+            <div class="col-6 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+            <div class="col-6 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
                 <select id="cboProceso" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+            <div class="col-6 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
                 <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 d-flex justify-content-between align-items-center gap-2 border-top pt-3 mt-3">
+            <div class="col-6 col-lg-3">
+                <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Buscar trabajador</label>
+                <input type="search" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Nombre del trabajador..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top pt-3 mt-2">
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarBoletas"><i class="bi bi-search"></i> Consultar</button>
                     <button type="button" class="btn btn-success btn-sm px-4" id="btnDescargarTodoZip"><i class="bi bi-file-earmark-zip"></i> Descargar Todo en ZIP</button>
@@ -119,8 +123,13 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.generarBoletas
+        ? window.FiltrosPlanillasReportes.generarBoletas()
+        : null;
+
     const URL_LISTA = {{ url_for('get_lista_boletas') | tojson }};
     const URL_PREVIEW = {{ url_for('preview_boleta') | tojson }};
     const URL_MASIVO = {{ url_for('procesar_boletas_masivo') | tojson }};
@@ -225,6 +234,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Seleccione compañía, tipo de planilla, proceso y periodo.');
             return;
         }
+        if (filtrosPersist) filtrosPersist.guardar();
         btn.disabled = true;
         tbody.innerHTML = '';
         document.getElementById('checkAllBoletas').checked = false;
@@ -238,7 +248,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     payroll_type: payroll_type,
                     process: process,
                     period: period,
-                    person: '0'
+                    person: '0',
+                    nombre: document.getElementById('txtBuscarTrabajador').value.trim()
                 })
             });
             const data = await res.json();
@@ -544,15 +555,35 @@ document.addEventListener('DOMContentLoaded', async function () {
     syncModoProcesoUI();
 
     await poblarSelect('/api/selectores/companias', cboCia);
-    limpiarValorComboSiObsoleto(cboCia);
-    if (!String(cboCia.value || '').trim()) {
-        seleccionarCompaniaInsensitive(cboCia, 'BGT');
+
+    let filtrosRestaurados = false;
+    if (filtrosPersist) {
+        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
     }
-    if (cboCia.value.trim()) {
-        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
+    if (!filtrosRestaurados) {
+        limpiarValorComboSiObsoleto(cboCia);
+        if (!String(cboCia.value || '').trim()) {
+            seleccionarCompaniaInsensitive(cboCia, 'BGT');
+        }
+        if (cboCia.value.trim()) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
+        }
+        limpiarValorComboSiObsoleto(cboCia);
+        limpiarValorComboSiObsoleto(cboPt);
     }
-    limpiarValorComboSiObsoleto(cboCia);
-    limpiarValorComboSiObsoleto(cboPt);
+
+    if (filtrosPersist) {
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    if (
+        cboCia.value.trim()
+        && cboPt.value.trim()
+        && cboProc.value.trim()
+        && cboPer.value.trim()
+    ) {
+        await cargarListaBoletas();
+    }
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         const cia = this.value.trim();

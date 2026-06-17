@@ -4667,6 +4667,7 @@ def get_lista_boletas():
     processtype = str(body.get('process') or body.get('processtype') or '').strip()
     period = _normalize_pr_period(body.get('period'))
     person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
 
     if not cia or not payroll_type or not processtype or not period:
         return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
@@ -4676,8 +4677,8 @@ def get_lista_boletas():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?',
-            (cia, payroll_type, processtype, period, person),
+            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, processtype, period, person, nombre),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = []

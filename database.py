@@ -920,7 +920,7 @@ def get_selector_periodos(company, payrolltype, processtype):
         return []
 
 
-def get_listado_generar_boletas(company, payrolltype, processtype, period, person=None):
+def get_listado_generar_boletas(company, payrolltype, processtype, period, person=None, nombre=None):
     """Obtiene listado para generar boletas. SP sp_pr_listadogenerarboletas_web (@person opcional)."""
     try:
         conn = DatabaseConfig.get_connection()
@@ -928,9 +928,11 @@ def get_listado_generar_boletas(company, payrolltype, processtype, period, perso
         person_val = (person or '').strip() if person is not None else ''
         if not person_val:
             person_val = '0'
+        nombre_val = (nombre or '').strip() if nombre is not None else ''
+        nombre_val = nombre_val or None
         cursor.execute(
-            "EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?",
-            (company, payrolltype, processtype, period, person_val)
+            "EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?",
+            (company, payrolltype, processtype, period, person_val, nombre_val)
         )
         columns = [column[0] for column in cursor.description]
         results = [dict(zip(columns, row)) for row in cursor.fetchall()]

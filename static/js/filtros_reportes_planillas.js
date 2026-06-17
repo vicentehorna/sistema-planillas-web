@@ -20,6 +20,7 @@
     const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
     const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
+    const STORAGE_KEY_GENERAR_BOLETAS = 'filtros_generar_boletas';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -1535,6 +1536,119 @@
         };
     }
 
+    function crearPersistenciaGenerarBoletas() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    proceso: val('cboProceso'),
+                    periodo: val('cboPeriodo'),
+                    nombre: val('txtBuscarTrabajador'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_GENERAR_BOLETAS, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros generar boletas: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_GENERAR_BOLETAS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (!cboCia || !cboPt || !cboProc || !cboPer) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                if (txtNombre && filtros.nombre != null) {
+                    txtNombre.value = String(filtros.nombre);
+                }
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            await poblarSelect(
+                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                cboProc
+            );
+
+            const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '';
+            if (!proceso || !optionExists(cboProc, proceso)) {
+                if (txtNombre && filtros.nombre != null) {
+                    txtNombre.value = String(filtros.nombre);
+                }
+                guardar();
+                return true;
+            }
+            cboProc.value = proceso;
+
+            await poblarSelect(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
+                cboPer
+            );
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (txtNombre) {
+                txtNombre.addEventListener('change', guardar);
+                txtNombre.addEventListener('input', guardar);
+            }
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_GENERAR_BOLETAS,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
@@ -1552,6 +1666,7 @@
         STORAGE_KEY_LISTADO_PAGOS,
         STORAGE_KEY_REGISTRO_VACACIONES,
         STORAGE_KEY_APERTURAR_PERIODOS,
+        STORAGE_KEY_GENERAR_BOLETAS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         obtenerPeriodoActivo,
@@ -1632,6 +1747,9 @@
         },
         conceptos: function () {
             return crearPersistenciaConceptos();
+        },
+        generarBoletas: function () {
+            return crearPersistenciaGenerarBoletas();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

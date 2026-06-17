@@ -9,16 +9,20 @@
       @processtype  — proceso
       @period       — periodo PRPeriod
       @person       — código persona; '0' = todos
+      @nombre       — búsqueda parcial en SY_Person.Name (opcional)
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listadogenerarboletas_web]
     @cia         VARCHAR(4),
     @payrolltype VARCHAR(20),
     @processtype VARCHAR(20),
     @period      VARCHAR(20),
-    @person      VARCHAR(20)
+    @person      VARCHAR(20),
+    @nombre      VARCHAR(80) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    SET @nombre = NULLIF(LTRIM(RTRIM(ISNULL(@nombre, ''))), '');
 
     SELECT
         PR_EmployeePayRoll.Person AS person,
@@ -34,6 +38,10 @@ BEGIN
       AND ProcessType = @processtype
       AND PRPeriod = @period
       AND (@person = '0' OR PR_EmployeePayRoll.Person = @person)
+      AND (
+            @nombre IS NULL
+         OR SY_Person.Name LIKE '%' + @nombre + '%'
+      )
     ORDER BY 2;
 END
 GO

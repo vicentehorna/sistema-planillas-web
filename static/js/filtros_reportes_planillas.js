@@ -922,6 +922,51 @@
         };
     }
 
+    function crearPersistenciaConceptos() {
+        const STORAGE_KEY = 'filtros_maestro_conceptos';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    busqueda: val('txtBuscarConcepto'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros conceptos: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'txtBuscarConcepto'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txt = document.getElementById('txtBuscarConcepto');
+            if (txt) txt.addEventListener('input', guardar);
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaPlameArchivo18() {
         const STORAGE_KEY = 'filtros_plame_archivo18';
 
@@ -1584,6 +1629,9 @@
         },
         controlPagosAfp: function () {
             return crearPersistenciaControlPagosAfp();
+        },
+        conceptos: function () {
+            return crearPersistenciaConceptos();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

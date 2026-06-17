@@ -86,6 +86,36 @@ login_manager.login_view = 'login'
 login_manager.login_message_category = 'info'
 
 
+def _cache_session_user(user):
+    if not user:
+        return
+    session['_user_login'] = {
+        'id': user.id,
+        'username': user.username,
+        'email': getattr(user, 'email', None),
+        'nombre': getattr(user, 'nombre', None),
+    }
+
+
+def _user_from_session_cache(user_id):
+    cached = session.get('_user_login') or {}
+    if not cached or str(cached.get('id')) != str(user_id):
+        return None
+    return User(
+        cached['id'],
+        cached.get('username'),
+        cached.get('email'),
+        cached.get('nombre'),
+    )
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Sesión expirada o no autorizado. Vuelva a iniciar sesión.'}), 401
+    return redirect(url_for('login', next=request.url))
+
+
 def ensure_user_session():
     """Asegura que company y person estén en sesión."""
     if not session.get('company') or not session.get('person'):
@@ -2109,7 +2139,11 @@ def generar_pdf_en_memoria(params):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.get_user_by_id(user_id)
+    user = User.get_user_by_id(user_id)
+    if user:
+        _cache_session_user(user)
+        return user
+    return _user_from_session_cache(user_id)
 
 
 @app.route('/')
@@ -2124,6 +2158,7 @@ def login_post():
     user = User.validate_user(request.form.get('username'), request.form.get('password'))
     if user:
         login_user(user)
+        _cache_session_user(user)
         ensure_user_session()
         return redirect(url_for('dashboard'))
     flash('Usuario o contraseña incorrectos.', 'error')
@@ -2447,6 +2482,299 @@ def asignacion_conceptos_page():
 @login_required
 def registro_vacaciones_page():
     return render_template('registro_vacaciones.html')
+
+
+@app.route('/conceptos')
+@login_required
+def conceptos_page():
+    return render_template('maestro_conceptos.html')
+
+
+def _concepto_lista_dict(r):
+    return {
+        'concept': _jsonable_value(r.get('concept')),
+        'description': _jsonable_value(r.get('description')),
+        'pdt': _jsonable_value(r.get('pdt')),
+        'tiposhortname': _jsonable_value(r.get('tiposhortname')),
+        'tipodescription': _jsonable_value(r.get('tipodescription')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'reporden': _jsonable_value(r.get('reporden')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+        'puede_eliminar': _jsonable_value(r.get('puede_eliminar')) or 'N',
+    }
+
+
+def _concepto_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'concept': _jsonable_value(r.get('concept')),
+        'company': _jsonable_value(r.get('company')),
+        'description': _jsonable_value(r.get('description')),
+        'printtext': _jsonable_value(r.get('printtext')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'concepttype': _jsonable_value(r.get('concepttype')),
+        'concepttypename': _jsonable_value(r.get('concepttypename')),
+        'conceptcurrency': _jsonable_value(r.get('conceptcurrency')) or 'LO',
+        'flagismonetary': _jsonable_value(r.get('flagismonetary')) or 'N',
+        'flagassign': _jsonable_value(r.get('flagassign')) or 'N',
+        'conceptorder': _jsonable_value(r.get('conceptorder')),
+        'flagpayrollticket': _jsonable_value(r.get('flagpayrollticket')) or 'N',
+        'reporden': _jsonable_value(r.get('reporden')),
+        'flagconceptdeclare': _jsonable_value(r.get('flagconceptdeclare')) or 'N',
+        'pdt': _jsonable_value(r.get('pdt')),
+        'flagcontract': _jsonable_value(r.get('flagcontract')) or 'N',
+        'status': _jsonable_value(r.get('status')) or 'A',
+        'flaginsertar': _jsonable_value(r.get('flaginsertar')) or 'N',
+        'flagafecto5ta': _jsonable_value(r.get('flagafecto5ta')) or 'N',
+        'flagafectoafp': _jsonable_value(r.get('flagafectoafp')) or 'N',
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _normalize_flag_yn(value, default='N'):
+    s = str(value or default).strip().upper()
+    return s if s in ('Y', 'N') else default
+
+
+@app.route('/api/conceptos/listado', methods=['POST'])
+@login_required
+def api_conceptos_listado():
+    """sp_pr_listarconceptos_web: listado maestro de conceptos."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    descripcion = str(body.get('descripcion') or body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarconceptos_web @company=?, @descripcion=?",
+            (cia, descripcion or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_concepto_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_conceptos_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/obtener', methods=['POST'])
+@login_required
+def api_conceptos_obtener():
+    """sp_pr_obtenerconcepto_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    concept = str(body.get('concept') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not concept:
+        return jsonify({"error": "Seleccione un concepto."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerconcepto_web @company=?, @concept=?",
+            (cia, concept),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _concepto_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Concepto no encontrado."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_conceptos_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/guardar', methods=['POST'])
+@login_required
+def api_conceptos_guardar():
+    """sp_pr_guardarconcepto_web: alta / edición de concepto."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    concept = str(body.get('concept') or '').strip()
+    modo = str(body.get('modo') or ('U' if concept else 'I')).strip().upper()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    description = str(body.get('description') or '').strip()
+    formulacode = str(body.get('formulacode') or '').strip()
+    concepttype = str(body.get('concepttype') or '').strip()
+    if not description or not formulacode or not concepttype:
+        return jsonify({"error": "Complete concepto, nemónico y tipo."}), 400
+
+    conceptorder = body.get('conceptorder')
+    reporden = body.get('reporden')
+    try:
+        conceptorder = int(conceptorder) if conceptorder not in (None, '') else None
+    except Exception:
+        conceptorder = None
+    try:
+        reporden = int(reporden) if reporden not in (None, '') else None
+    except Exception:
+        reporden = None
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarconcepto_web "
+            "@modo=?, @company=?, @concept=?, @description=?, @formulacode=?, @concepttype=?, "
+            "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
+            "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
+            "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                concept or None,
+                description,
+                formulacode,
+                concepttype,
+                str(body.get('conceptcurrency') or 'LO').strip().upper()[:2],
+                _normalize_flag_yn(body.get('flagismonetary'), 'Y'),
+                str(body.get('printtext') or description).strip(),
+                conceptorder,
+                str(body.get('status') or 'A').strip().upper()[:1],
+                _normalize_flag_yn(body.get('flagassign')),
+                _normalize_flag_yn(body.get('flagpayrollticket')),
+                _normalize_flag_yn(body.get('flagcontract')),
+                str(body.get('pdt') or '').strip() or None,
+                _normalize_flag_yn(body.get('flagconceptdeclare')),
+                reporden,
+                str(body.get('flaginsertar') or 'N').strip().upper()[:1] or 'N',
+                _normalize_flag_yn(body.get('flagafectoafp')),
+                _normalize_flag_yn(body.get('flagafecto5ta')),
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        concept_id = str(row.get('concept') or concept or '').strip()
+        return jsonify({
+            "ok": True,
+            "concept": concept_id,
+            "modo": _jsonable_value(row.get('modo')) or modo,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/eliminar', methods=['POST'])
+@login_required
+def api_conceptos_eliminar():
+    """sp_pr_eliminarconcepto_web: elimina concepto si no está en uso."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    concept = str(body.get('concept') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not concept:
+        return jsonify({"error": "Seleccione un concepto."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarconcepto_web @company=?, @concept=?",
+            (cia, concept),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "concept": _jsonable_value(row.get('concept')) or concept,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Concepto eliminado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_eliminar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/concept-types')
+@login_required
+def api_concept_types():
+    """sp_pr_selectorconcepttype_web: tipos de concepto."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip() or None
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorconcepttype_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify([
+            {
+                "id": _jsonable_value(r.get('id')),
+                "text": _jsonable_value(r.get('text')),
+                "shortname": _jsonable_value(r.get('shortname')),
+            }
+            for r in rows
+        ])
+    except Exception as e:
+        logging.exception("api_concept_types")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/plame/archivo-14')

@@ -381,8 +381,8 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                <li>
-                    <a href="#" class="sidebar-link-disabled" title="Conceptos (próximamente)" aria-disabled="true" tabindex="-1">
+                <li class="{{ 'active' if request.endpoint == 'conceptos_page' else '' }}">
+                    <a href="{{ url_for('conceptos_page') }}" title="Conceptos">
                         <i class="bi bi-box-seam"></i><span class="sidebar-link-text">Conceptos</span>
                     </a>
                 </li>

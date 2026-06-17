@@ -3,10 +3,11 @@
     Devuelve nombre, person, fechas de ingreso/reingreso, cese y última fecha de cálculo.
 
     @cia, @payrolltype, @processtype, @period: obligatorios para fecha de cálculo.
-    @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @cesados: T = activos + cesados del mes del periodo, Y = solo cesados del mes, N = sin fecha de cese.
     @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
 
     Solo incluye trabajadores con fecha de ingreso/reingreso <= ultimo dia del mes del periodo.
+    Los cesados de meses anteriores al periodo no se listan (p. ej. cese en mayo no aparece en junio).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcularplanillas_web]
     @cia          VARCHAR(10),
@@ -27,12 +28,16 @@ BEGIN
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
+    DECLARE @fecha_inicio_mes DATE;
     DECLARE @fecha_fin_mes DATE;
     DECLARE @period_ym CHAR(6);
 
     SET @period_ym = LEFT(@period, 6);
     IF LEN(@period_ym) = 6 AND @period_ym NOT LIKE '%[^0-9]%'
-        SET @fecha_fin_mes = EOMONTH(CONVERT(DATE, @period_ym + '01', 112));
+    BEGIN
+        SET @fecha_inicio_mes = CONVERT(DATE, @period_ym + '01', 112);
+        SET @fecha_fin_mes = EOMONTH(@fecha_inicio_mes);
+    END;
 
     SELECT
         LTRIM(RTRIM(
@@ -60,9 +65,26 @@ BEGIN
       AND PR_EMPLOYEE.PAYROLLTYPE = @payrolltype
       AND PR_EMPLOYEE.STATUS = 'N'
       AND (
-            @cesados = 'T'
-         OR (@cesados = 'Y' AND PR_EMPLOYEE.CEASEDATE IS NOT NULL)
-         OR (@cesados = 'N' AND PR_EMPLOYEE.CEASEDATE IS NULL)
+            (
+                @cesados = 'T'
+                AND (
+                    PR_EMPLOYEE.CEASEDATE IS NULL
+                    OR @fecha_inicio_mes IS NULL
+                    OR CONVERT(DATE, PR_EMPLOYEE.CEASEDATE) >= @fecha_inicio_mes
+                )
+            )
+            OR (
+                @cesados = 'Y'
+                AND @fecha_inicio_mes IS NOT NULL
+                AND @fecha_fin_mes IS NOT NULL
+                AND PR_EMPLOYEE.CEASEDATE IS NOT NULL
+                AND CONVERT(DATE, PR_EMPLOYEE.CEASEDATE) >= @fecha_inicio_mes
+                AND CONVERT(DATE, PR_EMPLOYEE.CEASEDATE) <= @fecha_fin_mes
+            )
+            OR (
+                @cesados = 'N'
+                AND PR_EMPLOYEE.CEASEDATE IS NULL
+            )
       )
       AND (@repunit = '0' OR SY_PERSON.REPLICATIONUNIT = @repunit)
       AND (

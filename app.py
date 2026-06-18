@@ -39,7 +39,7 @@ except Exception as _weasy_err:
     WEASYPRINT_AVAILABLE = False
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
-from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas
+from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
 
 load_dotenv()
@@ -2147,6 +2147,48 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
         return True, "Enviado"
     except Exception as e:
         logging.error("Error en Resend: %s", str(e))
+        return False, str(e)
+
+
+def enviar_correo_certificado_quinta(destinatario, nombre_empleado, anio, sexo, pdf_io, person=None):
+    """Envía certificado de quinta por Resend API con PDF adjunto."""
+    if not destinatario or '@' not in str(destinatario):
+        return False, 'Sin correo'
+
+    resend.api_key = _resend_api_key()
+    if not resend.api_key:
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
+
+    try:
+        sexo_val = int(sexo)
+    except Exception:
+        sexo_val = 0
+    trato = 'Estimada' if sexo_val == 2 else 'Estimado'
+    anio_txt = str(anio or '').strip() or 'N/D'
+    pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+
+    try:
+        params = {
+            'from': f'Recursos Humanos <{remitente}>',
+            'to': destinatario,
+            'subject': f'Certificado de Quinta Categoría - Ejercicio {anio_txt} - {nombre_empleado}',
+            'html': f"""
+                <p>{trato} {nombre_empleado},</p>
+                <p>Le hacemos entrega de su certificado de remuneraciones y retenciones sobre rentas de quinta categoría correspondiente al ejercicio gravable <b>{anio_txt}</b>.</p>
+                <p>Saludos,<br>Recursos Humanos</p>
+            """,
+            'attachments': [
+                {
+                    'content': pdf_base64,
+                    'filename': _certificado_quinta_pdf_filename(person or nombre_empleado, anio_txt),
+                }
+            ],
+        }
+        resend.Emails.send(params)
+        return True, 'Enviado'
+    except Exception as e:
+        logging.error('Error en Resend certificado quinta: %s', str(e))
         return False, str(e)
 
 
@@ -4929,6 +4971,224 @@ def preview_certificado_quinta():
         mimetype='application/pdf',
         as_attachment=False,
         download_name=_certificado_quinta_pdf_filename(person, anio),
+    )
+
+
+@app.route('/procesar_certificados_quinta_masivo', methods=['POST'])
+@login_required
+def procesar_certificados_quinta_masivo():
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    anio = str(body.get('anio') or body.get('year') or '').strip()
+    fecha_emision = str(body.get('fecha_emision') or '').strip()
+    modo = str(body.get('modo') or '').strip().lower()
+    seleccionados = body.get('trabajadores') or []
+    if modo not in ('zip', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+    if not cia or not payroll_type or not anio:
+        return jsonify({'error': 'Faltan filtros para procesar certificados de quinta.'}), 400
+    if len(anio) != 4 or not anio.isdigit():
+        return jsonify({'error': 'Año inválido. Use cuatro dígitos (ej. 2026).'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
+
+    if modo == 'zip':
+        company_name = str(body.get('company_name') or cia).strip()
+        safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
+        safe_anio = re.sub(r'[^0-9]+', '', anio) or 'anio'
+        nombre_zip = f'certificados_quinta_{safe_company.lower()}_{safe_anio}.zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pid in ids:
+                pdf_data = generar_pdf_certificado_quinta(
+                    {
+                        'person': pid,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'anio': anio,
+                        'fecha_emision': fecha_emision,
+                    }
+                )
+                zf.writestr(_certificado_quinta_pdf_filename(pid, anio), pdf_data.getvalue())
+        memory_file.seek(0)
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=nombre_zip,
+            as_attachment=True,
+        )
+
+    return jsonify(
+        {
+            'status': 'pending',
+            'message': 'Modo envío por Email pendiente de integración.',
+            'total': len(ids),
+        }
+    ), 202
+
+
+@app.route('/descargar_zip_certificados_quinta')
+@login_required
+def descargar_zip_certificados_quinta():
+    ensure_user_session()
+    cia = str(request.args.get('cia') or session.get('company') or '').strip()
+    payroll_type = (request.args.get('payroll_type') or '').strip()
+    anio = str(request.args.get('anio') or request.args.get('year') or '').strip()
+    fecha_emision = str(request.args.get('fecha_emision') or '').strip()
+    company_name = (request.args.get('company_name') or '').strip()
+    trabajadores_raw = (request.args.get('trabajadores') or '').strip()
+    seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+
+    if not (cia and payroll_type and anio):
+        flash('Faltan filtros para generar el ZIP de certificados de quinta.', 'warning')
+        return redirect(url_for('certificado_quinta_page'))
+    if len(anio) != 4 or not anio.isdigit():
+        flash('Año inválido para generar el ZIP.', 'warning')
+        return redirect(url_for('certificado_quinta_page'))
+
+    empleados = get_listado_certificado_quinta(cia, payroll_type, anio, '0')
+    if not empleados:
+        flash('No hay certificados para procesar en este año.', 'warning')
+        return redirect(url_for('certificado_quinta_page'))
+
+    if seleccionados:
+        wanted = set(seleccionados)
+        empleados = [e for e in empleados if str(e.get('person') or '').strip() in wanted]
+        if not empleados:
+            flash('La selección no contiene trabajadores válidos para el año indicado.', 'warning')
+            return redirect(url_for('certificado_quinta_page'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for emp in empleados:
+            person_id = str(emp.get('person') or '').strip()
+            if not person_id:
+                continue
+            try:
+                params = {
+                    'cia': cia,
+                    'payroll_type': payroll_type,
+                    'anio': anio,
+                    'person': person_id,
+                    'fecha_emision': fecha_emision,
+                }
+                pdf_io = generar_pdf_certificado_quinta(params)
+                nombre_pdf = _certificado_quinta_pdf_filename(person_id, anio)
+                zip_file.writestr(nombre_pdf, pdf_io.getvalue())
+            except Exception:
+                logging.exception('descargar_zip_certificados_quinta persona=%s', person_id)
+                continue
+
+    zip_buffer.seek(0)
+    safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name or cia).strip('_') or 'COMPANIA'
+    safe_anio = re.sub(r'[^0-9]+', '', anio) or 'ANIO'
+    safe_payroll = re.sub(r'[^A-Za-z0-9_\\-]+', '_', payroll_type).strip('_') or 'PLANILLA'
+    nombre_zip = f'CertificadosQuinta_{safe_company}_{safe_anio}_{safe_payroll}.zip'
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
+
+
+@app.route('/enviar_certificados_quinta_masivo', methods=['POST'])
+@login_required
+def enviar_certificados_quinta_masivo():
+    data = request.get_json(silent=True) or {}
+    ensure_user_session()
+    cia = str(data.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    anio = str(data.get('anio') or data.get('year') or '').strip()
+    fecha_emision = str(data.get('fecha_emision') or '').strip()
+    seleccionados = data.get('empleados', data.get('trabajadores', []))
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
+    if not (cia and payroll_type and anio):
+        return jsonify({'error': 'Faltan filtros para envío de certificados de quinta.'}), 400
+    if len(anio) != 4 or not anio.isdigit():
+        return jsonify({'error': 'Año inválido. Use cuatro dígitos (ej. 2026).'}), 400
+
+    empleados_periodo = get_listado_certificado_quinta(cia, payroll_type, anio, '0')
+    by_person = {}
+    for e in empleados_periodo:
+        pid = str(e.get('person') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(ids)
+    if total == 0:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    def generar_progreso_envio():
+        enviados = 0
+        errores = 0
+        for idx, emp_code in enumerate(ids, start=1):
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp_code).strip()
+            emp_email = str(emp.get('email') or '').strip()
+
+            if not emp_email:
+                errores += 1
+                motivo = 'Sin email'
+                yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+                continue
+
+            try:
+                pdf_buffer = generar_pdf_certificado_quinta(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'anio': anio,
+                        'person': emp_code,
+                        'fecha_emision': fecha_emision,
+                    }
+                )
+                exito, msg = enviar_correo_certificado_quinta(
+                    destinatario=emp_email,
+                    nombre_empleado=emp_nombre,
+                    anio=anio,
+                    sexo=emp.get('sex', emp.get('sexo', 0)),
+                    pdf_io=pdf_buffer,
+                    person=emp_code,
+                )
+                if exito:
+                    enviados += 1
+                    status = 'Enviado'
+                    detalle = msg
+                    motivo = ''
+                else:
+                    errores += 1
+                    status = 'Error'
+                    detalle = msg or 'No se pudo enviar el correo.'
+                    motivo = detalle
+            except Exception as e:
+                logging.exception('enviar_certificados_quinta_masivo persona=%s', emp_code)
+                errores += 1
+                status = 'Error'
+                detalle = str(e)
+                motivo = detalle
+
+            yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'email': emp_email, 'status': status, 'detalle': detalle, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'enviados': enviados, 'errores': errores, 'total': total})}\n\n"
+
+    return Response(
+        stream_with_context(generar_progreso_envio()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
     )
 
 

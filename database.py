@@ -943,3 +943,25 @@ def get_listado_generar_boletas(company, payrolltype, processtype, period, perso
         print(f"Error get_listado_generar_boletas: {e}")
         return []
 
+
+def get_listado_certificado_quinta(company, payrolltype, anio, person=None):
+    """Obtiene listado para certificado de quinta. SP sp_pr_listadocertificadoquinta_web."""
+    try:
+        conn = DatabaseConfig.get_connection()
+        cursor = conn.cursor()
+        person_val = (person or '').strip() if person is not None else ''
+        if not person_val:
+            person_val = '0'
+        cursor.execute(
+            'EXEC sp_pr_listadocertificadoquinta_web @cia=?, @payrolltype=?, @anio=?, @person=?',
+            (company, payrolltype, anio, person_val),
+        )
+        columns = [column[0] for column in cursor.description]
+        results = [dict(zip(columns, row)) for row in cursor.fetchall()]
+        cursor.close()
+        conn.close()
+        return results
+    except Exception as e:
+        print(f'Error get_listado_certificado_quinta: {e}')
+        return []
+

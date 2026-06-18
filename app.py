@@ -4953,6 +4953,79 @@ def get_lista_certificado_quinta():
                 pass
 
 
+@app.route('/get_detalle_calculo_certificado_quinta', methods=['POST'])
+@login_required
+def get_detalle_calculo_certificado_quinta():
+    """
+    sp_pr_detallecalculocertificadoquinta_web: detalle sueldos/asignaciones + utilidades.
+    """
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    anio = str(body.get('anio') or body.get('year') or '').strip()
+    person = str(body.get('person') or '').strip()
+    nombre = str(body.get('nombre') or '').strip()
+
+    if not cia or not payroll_type or not anio or not person:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, año o trabajador.'}), 400
+    if len(anio) != 4 or not anio.isdigit():
+        return jsonify({'error': 'Año inválido. Use cuatro dígitos (ej. 2026).'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_detallecalculocertificadoquinta_web @cia=?, @payrolltype=?, @anio=?, @person=?',
+            (cia, payroll_type, anio, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = []
+        total_sueldos = 0.0
+        total_utilidades = 0.0
+        for r in rows:
+            try:
+                importe = float(r.get('importe') or 0)
+            except (TypeError, ValueError):
+                importe = 0.0
+            tipo_linea = str(r.get('tipo_linea') or '').strip().upper()
+            if tipo_linea == 'UTILIDADES':
+                total_utilidades += importe
+            else:
+                total_sueldos += importe
+            detalle.append(
+                {
+                    'proceso': str(r.get('proceso') or '').strip(),
+                    'proceso_descripcion': str(r.get('proceso_descripcion') or '').strip(),
+                    'periodo': _jsonable_value(r.get('periodo')) or '',
+                    'concepto': str(r.get('concepto') or '').strip(),
+                    'formulacode': str(r.get('formulacode') or '').strip(),
+                    'importe': importe,
+                    'tipo_linea': tipo_linea or 'SUELDOS',
+                }
+            )
+        return jsonify(
+            {
+                'person': person,
+                'nombre': nombre,
+                'anio': anio,
+                'rows': detalle,
+                'total_sueldos_asignaciones': total_sueldos,
+                'total_utilidades': total_utilidades,
+            }
+        )
+    except Exception as e:
+        logging.exception('get_detalle_calculo_certificado_quinta')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/preview_certificado_quinta')
 @login_required
 def preview_certificado_quinta():

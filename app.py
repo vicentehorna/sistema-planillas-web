@@ -242,6 +242,107 @@ def _boleta_pdf_filename(person, period_raw):
     return f'boleta_{person_safe}_{period_safe}.pdf'
 
 
+def _certificado_quinta_pdf_filename(person, anio):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    anio_safe = re.sub(r'[^0-9]+', '', str(anio or '')) or 'anio'
+    return f'certificado_quinta_{person_safe}_{anio_safe}.pdf'
+
+
+_MESES_ES = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
+    7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+}
+
+
+def _mes_nombre_es(month_num):
+    try:
+        return _MESES_ES.get(int(month_num), 'Mes')
+    except Exception:
+        return 'Mes'
+
+
+def _parse_fecha_flexible(value):
+    if not value:
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    s = str(value).strip()
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d'):
+        try:
+            return datetime.strptime(s[:10] if fmt != '%Y%m%d' else s[:8], fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _fecha_emision_certificado_quinta(fecha_emision=None):
+    ref = _parse_fecha_flexible(fecha_emision) or date.today()
+    return f'Lima {ref.day} de {_mes_nombre_es(ref.month)} del {ref.year}'
+
+
+def _sexo_tratamiento_certificado(sexo):
+    try:
+        return 'Doña ' if int(sexo) == 2 else 'Don '
+    except Exception:
+        return 'Don '
+
+
+def _calcular_impuesto_renta_quinta(c_renta_imponible, uit):
+    """
+    Tramos x1..x5 del certificado de quinta (PowerBuilder dw_pr_r073).
+    uit = PRREP_UIT; c_renta_imponible = renta neta (total bruta - 7 UIT).
+    """
+    try:
+        uit_val = float(uit or 0)
+        c = float(c_renta_imponible or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+    minuit = uit_val * 5
+    mediauit = uit_val * 20
+    media1uit = uit_val * 35
+    maxuit = uit_val * 45
+
+    if c <= minuit:
+        x1 = c * 0.08
+    else:
+        x1 = minuit * 0.08
+
+    if c <= mediauit:
+        x2 = (c - minuit) * 0.14
+    else:
+        x2 = (mediauit - minuit) * 0.14
+    if x2 < 0:
+        x2 = 0.0
+
+    if c <= media1uit:
+        x3 = (c - mediauit) * 0.17
+    else:
+        x3 = (media1uit - mediauit) * 0.17
+    if x3 < 0:
+        x3 = 0.0
+
+    if c <= maxuit:
+        x4 = (c - media1uit) * 0.20
+    else:
+        x4 = (maxuit - media1uit) * 0.20
+    if x4 < 0:
+        x4 = 0.0
+
+    if c > maxuit:
+        x5 = (c - maxuit) * 0.30
+    else:
+        x5 = 0.0
+    if x5 < 0:
+        x5 = 0.0
+
+    return x1 + x2 + x3 + x4 + x5
+
+
 def _asignacion_concepto_pk_from_json(body):
     """Clave PR_EmployeeConcept desde JSON del cliente."""
     body = body or {}
@@ -2135,6 +2236,102 @@ def generar_pdf_en_memoria(params):
     fallback_meta['process'] = processtype
     fallback_meta['period'] = period
     return _generar_pdf_fallback_basico(fallback_meta)
+
+
+def generar_pdf_certificado_quinta(params):
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or '').strip()
+    anio = str(params.get('anio') or params.get('year') or '').strip()
+    person = str(params.get('person') or '').strip()
+    if not (cia and payroll_type and anio and person):
+        raise ValueError('Faltan parámetros para generar certificado de quinta.')
+    if len(anio) != 4 or not anio.isdigit():
+        raise ValueError('Año inválido para certificado de quinta.')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_certificadoquinta_web @cia=?, @payrolltype=?, @payrolltype_all=?, @anio=?, @person=?, @employee_all=?, @activo=?',
+            (cia, payroll_type, 'N', anio, person, 'N', 'N'),
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    cert = rows[0] if rows else {}
+    if not cert:
+        raise ValueError('No se encontraron datos para el certificado de quinta.')
+
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
+
+    try:
+        cert['importe_remuneracion_bruta_total'] = (
+            float(cert.get('importe_sueldos_asignaciones') or 0)
+            + float(cert.get('importe_participacion_utilidades') or 0)
+            + float(cert.get('importe_remuneracion_otras_empresas') or 0)
+        )
+    except (TypeError, ValueError):
+        cert['importe_remuneracion_bruta_total'] = 0.0
+
+    try:
+        deduccion_7uit = float(cert.get('importe_deduccion_7uit') or 0)
+        renta_neta = cert['importe_remuneracion_bruta_total'] - deduccion_7uit
+        cert['importe_renta_neta'] = renta_neta if renta_neta > 0 else 0.0
+    except (TypeError, ValueError):
+        cert['importe_renta_neta'] = 0.0
+
+    cert['importe_impuesto_renta'] = _calcular_impuesto_renta_quinta(
+        cert.get('importe_renta_neta'),
+        cert.get('uit'),
+    )
+
+    try:
+        cert['importe_impuesto_retenido_exceso'] = (
+            float(cert.get('importe_impuesto_renta') or 0)
+            - float(cert.get('importe_impuesto_total_retenido') or 0)
+        )
+    except (TypeError, ValueError):
+        cert['importe_impuesto_retenido_exceso'] = 0.0
+
+    monto_sueldos = float(cert.get('importe_sueldos_asignaciones') or 0)
+    texto_remuneracion = f'S/. {format_importe(monto_sueldos)}'
+    monto_retenido = float(cert.get('importe_impuesto_total_retenido') or 0)
+    texto_retenido = f'S/. {format_importe(monto_retenido)}'
+
+    html_renderizado = render_template(
+        'certificado_quinta_pdf.html',
+        cert=cert,
+        anio=anio,
+        logo_src=logo_src,
+        firma_src=firma_src,
+        tratamiento=_sexo_tratamiento_certificado(cert.get('sexo')),
+        texto_retenido=texto_retenido,
+        texto_remuneracion=texto_remuneracion,
+        fecha_emision_texto=_fecha_emision_certificado_quinta(params.get('fecha_emision')),
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el certificado de quinta. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
 
 
 @login_manager.user_loader
@@ -4648,6 +4845,91 @@ def api_pago_haberes_banbif_generar_txt():
 @login_required
 def generar_boletas_page():
     return render_template('generar_boletas.html')
+
+
+@app.route('/impuesto_renta/certificado_quinta')
+@login_required
+def certificado_quinta_page():
+    return render_template(
+        'certificado_quinta.html',
+        anio_actual=date.today().year,
+        fecha_hoy=date.today().strftime('%Y-%m-%d'),
+    )
+
+
+@app.route('/get_lista_certificado_quinta', methods=['POST'])
+@login_required
+def get_lista_certificado_quinta():
+    """
+    sp_pr_listadocertificadoquinta_web @cia, @payrolltype, @anio, @person.
+
+    Lista trabajadores con al menos una planilla en cualquier proceso del año indicado.
+    """
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    anio = str(body.get('anio') or body.get('year') or '').strip()
+    person = str(body.get('person') or '0').strip() or '0'
+
+    if not cia or not payroll_type or not anio:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla o año.'}), 400
+    if len(anio) != 4 or not anio.isdigit():
+        return jsonify({'error': 'Año inválido. Use cuatro dígitos (ej. 2026).'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadocertificadoquinta_web @cia=?, @payrolltype=?, @anio=?, @person=?',
+            (cia, payroll_type, anio, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        trabajadores = []
+        for r in rows:
+            fi = _jsonable_value(r.get('fechaingreso'))
+            fc = _jsonable_value(r.get('fechacese'))
+            trabajadores.append(
+                {
+                    'person': str(r.get('person') or '').strip(),
+                    'nombre': str(r.get('nombre') or '').strip(),
+                    'email': str(r.get('email') or '').strip(),
+                    'ingreso': fi if fi is not None else '',
+                    'cese': fc if fc is not None else '',
+                }
+            )
+        return jsonify(trabajadores)
+    except Exception as e:
+        logging.exception('get_lista_certificado_quinta')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/preview_certificado_quinta')
+@login_required
+def preview_certificado_quinta():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    anio = str(params.get('anio') or params.get('year') or '').strip()
+    try:
+        pdf_buffer = generar_pdf_certificado_quinta(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_certificado_quinta')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_certificado_quinta_pdf_filename(person, anio),
+    )
 
 
 @app.route('/get_lista_boletas', methods=['POST'])

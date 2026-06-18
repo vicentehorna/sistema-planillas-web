@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Certificado de Quinta Categoría</title>
+    <style>
+        @page { size: A4; margin: 10mm 12mm; }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 12px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.45;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .documento {
+            border: 1px solid #1a4b84;
+            padding: 18px 20px 22px;
+        }
+        table { width: 100%; border-collapse: collapse; }
+        td { vertical-align: top; }
+
+        .header-table { margin-bottom: 10px; }
+        .header-table td { padding: 0; }
+        .logo-cell { text-align: right; width: 35%; }
+        .logo-img {
+            max-height: 62px;
+            max-width: 200px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: right top;
+            display: inline-block;
+        }
+
+        .titulo-principal {
+            text-align: center;
+            font-size: 15px;
+            font-weight: bold;
+            color: #1a4b84;
+            margin: 0 0 4px;
+            line-height: 1.25;
+        }
+        .titulo-secundario {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            color: #1a4b84;
+            margin: 0 0 10px;
+        }
+        .ejercicio {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            margin: 0 0 4px;
+        }
+        .norma {
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            margin: 0 0 12px;
+        }
+        .empresa-linea {
+            text-align: center;
+            margin: 0 0 14px;
+            font-size: 12px;
+            line-height: 1.45;
+        }
+        .certifica {
+            text-align: center;
+            font-size: 13px;
+            font-weight: bold;
+            margin: 10px 0 12px;
+            color: #1a4b84;
+        }
+        .parrafo-certifica {
+            text-align: justify;
+            margin: 0 0 16px;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        .detalle-table { margin: 0 0 14px; table-layout: fixed; }
+        .detalle-table td { padding: 4px 0; font-size: 12px; }
+        .detalle-table .seccion {
+            font-weight: bold;
+            color: #1a4b84;
+            padding-top: 10px;
+            padding-bottom: 4px;
+        }
+        .detalle-table .subitem {
+            padding-left: 14px;
+        }
+        .detalle-table .subitem-multiline {
+            padding-left: 14px;
+            line-height: 1.4;
+        }
+        .detalle-table .total-label {
+            padding-left: 14px;
+            font-weight: bold;
+            border-top: 1px solid #333;
+            padding-top: 6px;
+        }
+        .detalle-table .monto {
+            text-align: right;
+            width: 22%;
+            white-space: nowrap;
+            padding-left: 8px;
+        }
+        .detalle-table .monto-vacio {
+            color: transparent;
+        }
+
+        .firmas-table { margin-top: 22px; }
+        .firmas-table td {
+            width: 50%;
+            text-align: center;
+            padding: 0 10px;
+        }
+        .firma-img {
+            max-height: 85px;
+            max-width: 220px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: center bottom;
+            margin: 0 auto 6px;
+            display: block;
+        }
+        .firma-spacer { height: 85px; }
+        .linea-firma {
+            border-top: 1px solid #000;
+            width: 85%;
+            margin: 0 auto;
+            padding-top: 6px;
+            font-weight: bold;
+            font-size: 11px;
+        }
+        .firma-detalle {
+            font-size: 11px;
+            color: #555;
+            margin-top: 5px;
+            font-weight: bold;
+        }
+
+        .legal {
+            text-align: justify;
+            margin: 18px 0 10px;
+            font-size: 11px;
+            line-height: 1.5;
+        }
+        .fecha-emision {
+            margin: 0;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="documento">
+            <table class="header-table">
+                <tr>
+                    <td width="65%">&nbsp;</td>
+                    <td class="logo-cell">
+                        {% if logo_src %}
+                        <img src="{{ logo_src }}" class="logo-img" alt="Logo empresa">
+                        {% endif %}
+                    </td>
+                </tr>
+            </table>
+
+            <p class="titulo-principal">CERTIFICADO DE REMUNERACIONES Y DE RETENCIONES</p>
+            <p class="titulo-secundario">SOBRE RENTAS DE QUINTA CATEGORÍA</p>
+            <p class="ejercicio">EJERCICIO GRAVABLE {{ anio }}</p>
+            <p class="norma">(D.S N°. 054999 Y D.S. N°. 122-94-EF)</p>
+
+            <p class="empresa-linea">
+                El {{ cert.compania_nombre or '' }}, con RUC N° {{ cert.compania_ruc or '' }}.
+            </p>
+
+            <p class="certifica">CERTIFICA</p>
+
+            <p class="parrafo-certifica">
+                Que, a {{ tratamiento }}{{ cert.nombre_persona or '' }} identificado con
+                {{ cert.tipodocumento or 'DNI' }} N° {{ cert.docno_persona or '' }} trabajador de la empresa
+                en el puesto de {{ cert.ocupacion or '' }} se le ha retenido la suma de
+                <strong>{{ texto_retenido }}</strong>, por concepto de RENTAS DE QUINTA CATEGORÍA, sobre un total de
+                <strong>{{ texto_remuneracion }}</strong> pagadas durante el ejercicio gravable {{ anio }},
+                conforme al detalle siguiente:
+            </p>
+
+            <table class="detalle-table">
+                <tr>
+                    <td colspan="2" class="seccion">1) RENTAS BRUTAS</td>
+                </tr>
+                <tr>
+                    <td class="subitem-multiline">
+                        - Sueldo o Salarios, Asignaciones, Primas, Gratificaciones, Bonificaciones,
+                        Aguinaldos, Comisiones, etc.
+                    </td>
+                    <td class="monto">{{ cert.importe_sueldos_asignaciones|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="subitem">- Participación en las Utilidades</td>
+                    <td class="monto">{{ cert.importe_participacion_utilidades|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="subitem">- Remuneración Otras Empresas</td>
+                    <td class="monto">{{ cert.importe_remuneracion_otras_empresas|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="total-label">REMUNERACION BRUTA TOTAL</td>
+                    <td class="monto">{{ cert.importe_remuneracion_bruta_total|importe }}</td>
+                </tr>
+
+                <tr>
+                    <td colspan="2" class="seccion">2) DEDUCCIONES DE LA RENTA DE QUINTA CATEGORIA</td>
+                </tr>
+                <tr>
+                    <td class="subitem">
+                        7 UIT (S/. {{ cert.uit_valor|importe }}) para el {{ anio }}
+                    </td>
+                    <td class="monto">{{ cert.importe_deduccion_7uit|importe }}</td>
+                </tr>
+
+                <tr>
+                    <td class="seccion">3) RENTA NETA</td>
+                    <td class="monto">{{ cert.importe_renta_neta|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="seccion">4) IMPUESTO A LA RENTA</td>
+                    <td class="monto">{{ cert.importe_impuesto_renta|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="seccion">5) IMPUESTO TOTAL RETENIDO</td>
+                    <td class="monto">{{ cert.importe_impuesto_total_retenido|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="seccion">6) IMPUESTO RETENIDO EN EXCESO</td>
+                    <td class="monto">{{ cert.importe_impuesto_retenido_exceso|importe }}</td>
+                </tr>
+            </table>
+
+            <table class="firmas-table">
+                <tr>
+                    <td>
+                        {% if firma_src %}
+                        <img src="{{ firma_src }}" class="firma-img" alt="Firma representante">
+                        {% else %}
+                        <div class="firma-spacer"></div>
+                        {% endif %}
+                        <div class="linea-firma">{{ cert.representante or '' }}</div>
+                        <div class="firma-detalle">{{ cert.rep_cargo or '' }}</div>
+                    </td>
+                    <td>
+                        <div class="firma-spacer"></div>
+                        <div class="linea-firma">{{ cert.nombre_persona or '' }}</div>
+                        <div class="firma-detalle">{{ cert.tipodocumento or 'DNI' }}: {{ cert.docno_persona or '' }}</div>
+                    </td>
+                </tr>
+            </table>
+
+            <p class="legal">
+                Se emite el presente Certificado al amparo del artículo 45° del Decreto Supremo N° 122-94-EF,
+                Reglamento de la Ley del Impuesto a la Renta y de la Resolución de Superintendencia N° 010-2006/SUNAT.
+            </p>
+
+            <p class="fecha-emision">{{ fecha_emision_texto }}</p>
+        </div>
+    </div>
+</body>
+</html>

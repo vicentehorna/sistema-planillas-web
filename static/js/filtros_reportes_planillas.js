@@ -21,6 +21,7 @@
     const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
     const STORAGE_KEY_GENERAR_BOLETAS = 'filtros_generar_boletas';
+    const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -1649,6 +1650,98 @@
         };
     }
 
+    function crearPersistenciaCertificadoQuinta() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    anio: val('cboAnio'),
+                    fecha_emision: val('txtFechaEmision'),
+                    nombre: val('txtBuscarTrabajador'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_CERTIFICADO_QUINTA, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros certificado quinta: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_CERTIFICADO_QUINTA);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, poblarAnios } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboAnio = document.getElementById('cboAnio');
+            const txtFechaEmision = document.getElementById('txtFechaEmision');
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (!cboCia || !cboPt || !cboAnio) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (payroll && optionExists(cboPt, payroll)) {
+                cboPt.value = payroll;
+            }
+
+            if (typeof poblarAnios === 'function') {
+                poblarAnios(filtros.anio);
+            } else if (filtros.anio != null && optionExists(cboAnio, String(filtros.anio).trim())) {
+                cboAnio.value = String(filtros.anio).trim();
+            }
+
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+            if (txtFechaEmision && filtros.fecha_emision) {
+                txtFechaEmision.value = String(filtros.fecha_emision).trim();
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboAnio', 'txtFechaEmision'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (txtNombre) {
+                txtNombre.addEventListener('change', guardar);
+                txtNombre.addEventListener('input', guardar);
+            }
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_CERTIFICADO_QUINTA,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
@@ -1750,6 +1843,9 @@
         },
         generarBoletas: function () {
             return crearPersistenciaGenerarBoletas();
+        },
+        certificadoQuinta: function () {
+            return crearPersistenciaCertificadoQuinta();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

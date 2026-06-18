@@ -102,7 +102,7 @@ BEGIN
 
     IF @flagismonetary NOT IN ('Y', 'N')
     BEGIN
-        RAISERROR('Valor monetario inválido. Use Y o N.', 16, 1);
+        RAISERROR('Es importe inválido. Use Y o N.', 16, 1);
         RETURN;
     END;
 

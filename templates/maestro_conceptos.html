@@ -181,20 +181,75 @@
         min-width: 0;
     }
 
-    .conceptos-fila-estado {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: 0.75rem 1.25rem;
-    }
-
-    .conceptos-campo-flaginsertar .form-select {
+    .conceptos-campo-verde .form-select,
+    .conceptos-campo-verde.conceptos-check-campo {
         background-color: #e8f5e9;
         border-color: #a3cfbb;
         min-height: 31px;
         height: 31px;
         padding-top: 0.2rem;
         padding-bottom: 0.2rem;
+    }
+
+    .conceptos-campo-verde.conceptos-check-campo,
+    .conceptos-campo-verde.d-flex {
+        height: auto;
+        min-height: 31px;
+        padding: 0 0.5rem;
+        border-radius: 0.25rem;
+    }
+
+    .conceptos-campo-verde.d-flex .form-select {
+        min-height: 27px;
+        height: 27px;
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .conceptos-stack-verde {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .conceptos-campo-orden {
+        max-width: 5.5rem;
+    }
+
+    .conceptos-campo-moneda {
+        max-width: 6rem;
+    }
+
+    .conceptos-campo-moneda .form-select {
+        max-width: 6rem;
+    }
+
+    .conceptos-pdt-inline {
+        display: flex;
+        align-items: center;
+        gap: 0.45rem;
+        flex-wrap: nowrap;
+    }
+
+    .conceptos-campo-pdt {
+        max-width: 5.25rem;
+        min-width: 4.5rem;
+    }
+
+    .conceptos-fila-par {
+        align-items: center;
+    }
+
+    .conceptos-fila-par > [class*="col-"] {
+        display: flex;
+        align-items: center;
+        min-height: 31px;
+    }
+
+    .conceptos-fila-par .conceptos-check-campo,
+    .conceptos-fila-par .conceptos-campo-verde .form-select,
+    .conceptos-fila-par .conceptos-campo-verde.conceptos-check-campo {
+        width: 100%;
     }
 
     .conceptos-fila-declarar-insertar {
@@ -326,13 +381,9 @@
                         <input type="text" id="txtDescription" class="form-control form-control-sm campo-obligatorio" maxlength="50" required>
                     </div>
 
-                    <div class="col-12 col-md-8">
+                    <div class="col-12">
                         <label for="txtPrintText" class="form-label fw-semibold text-muted">Impresión</label>
                         <input type="text" id="txtPrintText" class="form-control form-control-sm campo-obligatorio" maxlength="50" required>
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label for="txtPdt" class="form-label fw-semibold text-muted">PDT</label>
-                        <input type="text" id="txtPdt" class="form-control form-control-sm campo-obligatorio" maxlength="20" required>
                     </div>
 
                     <div class="col-12 col-md-6">
@@ -346,95 +397,110 @@
                         </select>
                     </div>
 
-                    <div class="col-12 col-md-4">
-                        <label for="cboConceptCurrency" class="form-label fw-semibold text-muted">Moneda</label>
-                        <select id="cboConceptCurrency" class="form-select form-select-sm">
-                            <option value="LO">Local</option>
-                            <option value="EX">Extranjera</option>
-                        </select>
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label for="txtConceptOrder" class="form-label fw-semibold text-muted">Orden boleta</label>
-                        <input type="number" id="txtConceptOrder" class="form-control form-control-sm" min="0" step="1">
-                    </div>
-                    <div class="col-12 col-md-4">
-                        <label for="txtRepOrden" class="form-label fw-semibold text-muted">Orden planilla</label>
-                        <input type="number" id="txtRepOrden" class="form-control form-control-sm campo-obligatorio" min="0" step="1" required>
-                    </div>
-
-                    <div class="col-12 col-md-6">
-                        <label class="form-label fw-semibold text-muted d-block">&nbsp;</label>
-                        <div class="conceptos-check-obligatorio conceptos-check-campo">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="chkFlagAssign">
-                                <label class="form-check-label" for="chkFlagAssign">Disponible para asignación</label>
+                    <div class="col-12">
+                        <div class="row g-2 align-items-end conceptos-fila-par">
+                            <div class="col-12 col-md-7">
+                                <div class="row g-2 align-items-end flex-nowrap">
+                                    <div class="col-auto conceptos-campo-moneda">
+                                        <label for="cboConceptCurrency" class="form-label fw-semibold text-muted">Moneda</label>
+                                        <select id="cboConceptCurrency" class="form-select form-select-sm">
+                                            <option value="LO">Local</option>
+                                            <option value="EX">Extranjera</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="txtConceptOrder" class="form-label fw-semibold text-muted">Orden boleta</label>
+                                        <input type="number" id="txtConceptOrder" class="form-control form-control-sm conceptos-campo-orden" min="0" step="1">
+                                    </div>
+                                    <div class="col-auto">
+                                        <label for="txtRepOrden" class="form-label fw-semibold text-muted">Orden planilla</label>
+                                        <input type="number" id="txtRepOrden" class="form-control form-control-sm conceptos-campo-orden campo-obligatorio" min="0" step="1" required>
+                                    </div>
+                                    <div class="col-auto">
+                                        <label class="form-label fw-semibold text-muted d-block">&nbsp;</label>
+                                        <div class="conceptos-check-opcional conceptos-check-campo conceptos-check-compact">
+                                            <div class="form-check">
+                                                <input class="form-check-input" type="checkbox" id="chkFlagIsMonetary">
+                                                <label class="form-check-label" for="chkFlagIsMonetary">Es importe</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
-                    </div>
-                    <div class="col-12 col-md-6">
-                        <label class="form-label fw-semibold text-muted d-block">&nbsp;</label>
-                        <div class="conceptos-check-obligatorio conceptos-check-campo">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="chkFlagPayrollTicket">
-                                <label class="form-check-label" for="chkFlagPayrollTicket">Disponible para visualización en boleta</label>
-                            </div>
+                            <div class="col-12 col-md-5 d-none d-md-block" aria-hidden="true"></div>
                         </div>
                     </div>
 
                     <div class="col-12">
-                        <div class="row g-2 conceptos-fila-declarar-insertar">
-                            <div class="col-12 col-md-6">
-                                <label class="form-label fw-semibold text-muted conceptos-label-alineado" aria-hidden="true">
-                                    <span class="invisible">Insertar en</span>
-                                </label>
+                        <div class="row g-2 conceptos-fila-par">
+                            <div class="col-12 col-md-7">
                                 <div class="conceptos-check-obligatorio conceptos-check-campo">
                                     <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="chkFlagConceptDeclare">
-                                        <label class="form-check-label" for="chkFlagConceptDeclare">Concepto a declarar</label>
+                                        <input class="form-check-input" type="checkbox" id="chkFlagAssign">
+                                        <label class="form-check-label" for="chkFlagAssign">Disponible para asignación</label>
                                     </div>
                                 </div>
                             </div>
-                            <div class="col-12 col-md-6 conceptos-campo-flaginsertar">
-                                <label for="cboFlagInsertar" class="form-label fw-semibold text-muted conceptos-label-alineado">Insertar en</label>
-                                <select id="cboFlagInsertar" class="form-select form-select-sm">
-                                    <option value="N">Ninguno</option>
-                                    <option value="M">Mensual</option>
-                                    <option value="L">Liquidación</option>
-                                    <option value="G">Gratificación</option>
-                                    <option value="S">Semanal</option>
-                                    <option value="V">Vacaciones</option>
-                                </select>
+                            <div class="col-12 col-md-5">
+                                <div class="conceptos-campo-verde w-100 d-flex align-items-center gap-2 px-2">
+                                    <span class="form-label fw-semibold text-muted mb-0 text-nowrap small">Insertar en</span>
+                                    <select id="cboFlagInsertar" class="form-select form-select-sm flex-grow-1">
+                                        <option value="N">Ninguno</option>
+                                        <option value="M">Mensual</option>
+                                        <option value="L">Liquidación</option>
+                                        <option value="G">Gratificación</option>
+                                        <option value="S">Semanal</option>
+                                        <option value="V">Vacaciones</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-2 conceptos-fila-par mt-2">
+                            <div class="col-12 col-md-7">
+                                <div class="conceptos-check-obligatorio conceptos-check-campo">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkFlagPayrollTicket">
+                                        <label class="form-check-label" for="chkFlagPayrollTicket">Disponible para visualización en boleta</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkFlagAfecto5ta">
+                                        <label class="form-check-label" for="chkFlagAfecto5ta">Afecto 5ta</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row g-2 conceptos-fila-par mt-2">
+                            <div class="col-12 col-md-7">
+                                <div class="d-flex align-items-center gap-2 flex-wrap flex-md-nowrap w-100">
+                                    <div class="conceptos-check-obligatorio conceptos-check-campo flex-grow-1">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" id="chkFlagConceptDeclare">
+                                            <label class="form-check-label" for="chkFlagConceptDeclare">Concepto a declarar</label>
+                                        </div>
+                                    </div>
+                                    <div class="conceptos-pdt-inline flex-shrink-0">
+                                        <label for="txtPdt" class="form-label fw-semibold text-muted mb-0">PDT</label>
+                                        <input type="text" id="txtPdt" class="form-control form-control-sm conceptos-campo-pdt campo-obligatorio" maxlength="20" required>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-12 col-md-5">
+                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkFlagAfectoAfp">
+                                        <label class="form-check-label" for="chkFlagAfectoAfp">Afecto AFP</label>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="col-12 conceptos-fila-estado">
-                        <div class="conceptos-check-opcional conceptos-check-campo conceptos-check-compact">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="chkFlagIsMonetary">
-                                <label class="form-check-label" for="chkFlagIsMonetary">Valor monetario</label>
-                            </div>
-                        </div>
-                        <div class="conceptos-check-opcional conceptos-check-campo conceptos-check-compact">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" id="chkFlagContract">
-                                <label class="form-check-label" for="chkFlagContract">No remunerativo</label>
-                            </div>
-                        </div>
-                        <div>
-                            <label class="form-label fw-semibold text-muted d-block">Estado</label>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <input type="radio" class="btn-check" name="statusConcepto" id="statusActivo" value="A" checked>
-                                <label class="btn btn-outline-success" for="statusActivo">Activo</label>
-                                <input type="radio" class="btn-check" name="statusConcepto" id="statusInactivo" value="I">
-                                <label class="btn btn-outline-secondary" for="statusInactivo">Inactivo</label>
-                            </div>
-                        </div>
-                    </div>
-
-                    {# Afecto 5ta / AFP: se persisten pero no se muestran #}
-                    <input type="checkbox" id="chkFlagAfecto5ta" class="d-none" aria-hidden="true" tabindex="-1">
-                    <input type="checkbox" id="chkFlagAfectoAfp" class="d-none" aria-hidden="true" tabindex="-1">
+                    <input type="hidden" id="hidStatus" value="A">
+                    <input type="hidden" id="hidFlagContract" value="N">
                 </form>
                 <div id="msgGuardadoConcepto" class="conceptos-msg-guardado d-none" role="status" aria-live="polite"></div>
             </div>
@@ -567,7 +633,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidConcept').value = '';
         document.getElementById('hidModo').value = 'I';
         document.getElementById('frmConcepto').reset();
-        document.getElementById('statusActivo').checked = true;
+        document.getElementById('hidStatus').value = 'A';
+        document.getElementById('hidFlagContract').value = 'N';
         document.getElementById('cboFlagInsertar').value = 'N';
         setCheck(document.getElementById('chkFlagAfecto5ta'), 'N');
         setCheck(document.getElementById('chkFlagAfectoAfp'), 'N');
@@ -590,12 +657,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('txtRepOrden').value = data.reporden != null ? data.reporden : '';
         setCheck(document.getElementById('chkFlagConceptDeclare'), data.flagconceptdeclare);
         document.getElementById('txtPdt').value = data.pdt || '';
-        setCheck(document.getElementById('chkFlagContract'), data.flagcontract);
-        if (String(data.status || 'A').toUpperCase() === 'I') {
-            document.getElementById('statusInactivo').checked = true;
-        } else {
-            document.getElementById('statusActivo').checked = true;
-        }
+        document.getElementById('hidStatus').value = String(data.status || 'A').toUpperCase() === 'I' ? 'I' : 'A';
+        document.getElementById('hidFlagContract').value = String(data.flagcontract || 'N').toUpperCase() === 'Y' ? 'Y' : 'N';
         document.getElementById('cboFlagInsertar').value = data.flaginsertar || 'N';
         setCheck(document.getElementById('chkFlagAfecto5ta'), data.flagafecto5ta);
         setCheck(document.getElementById('chkFlagAfectoAfp'), data.flagafectoafp);
@@ -604,7 +667,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function payloadFormulario() {
-        const statusEl = document.querySelector('input[name="statusConcepto"]:checked');
         return {
             cia: cboCia.value.trim(),
             concept: document.getElementById('hidConcept').value.trim(),
@@ -621,8 +683,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             reporden: document.getElementById('txtRepOrden').value.trim(),
             flagconceptdeclare: flagFromCheck(document.getElementById('chkFlagConceptDeclare')),
             pdt: document.getElementById('txtPdt').value.trim(),
-            flagcontract: flagFromCheck(document.getElementById('chkFlagContract')),
-            status: statusEl ? statusEl.value : 'A',
+            flagcontract: document.getElementById('hidFlagContract').value.trim() || 'N',
+            status: document.getElementById('hidStatus').value.trim() || 'A',
             flaginsertar: document.getElementById('cboFlagInsertar').value.trim() || 'N',
             flagafecto5ta: flagFromCheck(document.getElementById('chkFlagAfecto5ta')),
             flagafectoafp: flagFromCheck(document.getElementById('chkFlagAfectoAfp')),

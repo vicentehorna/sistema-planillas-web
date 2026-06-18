@@ -30,6 +30,39 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
+    .table-boletas tbody tr.boleta-row-located {
+        background-color: #0d6efd !important;
+        color: #fff;
+    }
+
+    .table-boletas.table-hover > tbody > tr.boleta-row-located > td {
+        background-color: transparent;
+        color: inherit;
+    }
+
+    .table-boletas.table-hover > tbody > tr.boleta-row-located:hover > td {
+        background-color: transparent;
+        color: inherit;
+    }
+
+    .table-boletas tbody tr.boleta-row-located:hover {
+        background-color: #0b5ed7 !important;
+        color: #fff;
+    }
+
+    .table-boletas tbody tr.boleta-row-located .btn-outline-secondary {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.85);
+        background-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .table-boletas tbody tr.boleta-row-located .btn-outline-secondary:hover,
+    .table-boletas tbody tr.boleta-row-located .btn-outline-secondary:focus {
+        color: #0d6efd;
+        background-color: #fff;
+        border-color: #fff;
+    }
+
     .table-boletas .form-check-input {
         width: 0.75rem;
         height: 0.75rem;
@@ -71,8 +104,8 @@
                 </select>
             </div>
             <div class="col-6 col-lg-3">
-                <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Buscar trabajador</label>
-                <input type="search" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Nombre del trabajador..." autocomplete="off">
+                <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Localizar trabajador</label>
+                <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
             <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top pt-3 mt-2">
                 <div class="d-flex gap-2">
@@ -140,6 +173,164 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPt = document.getElementById('cboTipoPlanilla');
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
+    const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
+
+    let boletasCache = [];
+    let filtrosListaActuales = null;
+
+    function terminoLocalizador() {
+        return String(txtBuscarTrabajador?.value || '').trim().toLowerCase();
+    }
+
+    function actualizarConteoBoletas(total) {
+        const lbl = document.getElementById('lblBoletasCount');
+        if (!lbl) return;
+        if (!total) {
+            lbl.textContent = '0 registros';
+            return;
+        }
+        lbl.textContent = total === 1 ? '1 registro' : `${total} registros`;
+    }
+
+    function apellidoLocalizador(nombre) {
+        const n = String(nombre || '').trim().toLowerCase();
+        if (!n) return '';
+        const coma = n.indexOf(',');
+        if (coma >= 0) return n.slice(0, coma).trim();
+        return n.split(/\s+/)[0] || '';
+    }
+
+    function filaCoincideLocalizador(tr, q) {
+        if (!q) return false;
+        const apellido = tr.dataset.apellido || '';
+        const nombre = tr.dataset.nombre || '';
+        const person = tr.dataset.person || '';
+        return apellido.startsWith(q) || nombre.startsWith(q) || person.startsWith(q);
+    }
+
+    function scrollFilaEnContenedor(scroll, row) {
+        if (!scroll || !row) return;
+        const scrollRect = scroll.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        if (rowRect.top < scrollRect.top) {
+            scroll.scrollTop -= scrollRect.top - rowRect.top + 4;
+        } else if (rowRect.bottom > scrollRect.bottom) {
+            scroll.scrollTop += rowRect.bottom - scrollRect.bottom + 4;
+        }
+    }
+
+    function moverCursorLocalizador() {
+        const tbody = document.getElementById('tbodyBoletas');
+        const scroll = document.querySelector('.table-scroll-boletas');
+        const rows = tbody ? tbody.querySelectorAll('tr.boleta-row') : [];
+        rows.forEach((tr) => tr.classList.remove('boleta-row-located'));
+
+        if (!rows.length) return;
+
+        const q = terminoLocalizador();
+        let target = rows[0];
+
+        if (q) {
+            for (const tr of rows) {
+                if (filaCoincideLocalizador(tr, q)) {
+                    target = tr;
+                    break;
+                }
+            }
+        } else if (scroll) {
+            scroll.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        target.classList.add('boleta-row-located');
+        scrollFilaEnContenedor(scroll, target);
+    }
+
+    function renderListaBoletas(data) {
+        const tbody = document.getElementById('tbodyBoletas');
+        const cia = filtrosListaActuales?.cia || cboCia.value.trim();
+        const payroll_type = filtrosListaActuales?.payroll_type || cboPt.value.trim();
+        const process = filtrosListaActuales?.process || cboProc.value.trim();
+        const period = filtrosListaActuales?.period || cboPer.value.trim();
+
+        tbody.innerHTML = '';
+        document.getElementById('checkAllBoletas').checked = false;
+        document.getElementById('checkAllBoletas').indeterminate = false;
+
+        data.forEach((t) => {
+            const tr = document.createElement('tr');
+            tr.className = 'boleta-row';
+            const nombreRaw = String(t.nombre || '').trim();
+            const pid = String(t.person || '').trim();
+            tr.dataset.nombre = nombreRaw.toLowerCase();
+            tr.dataset.apellido = apellidoLocalizador(nombreRaw);
+            tr.dataset.person = pid.toLowerCase();
+            const td0 = document.createElement('td');
+            td0.className = 'text-center';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'check-persona form-check-input';
+            cb.value = pid;
+            cb.addEventListener('change', function () {
+                sincronizarCheckAllBoletas();
+                validarBotonGenerar();
+            });
+            td0.appendChild(cb);
+            const td1 = document.createElement('td');
+            td1.className = 'font-monospace';
+            td1.textContent = pid;
+            const td2 = document.createElement('td');
+            td2.textContent = nombreRaw;
+            const td3 = document.createElement('td');
+            td3.textContent = String(t.email || '').trim();
+            const td4 = document.createElement('td');
+            td4.textContent = String(t.ingreso || '').trim();
+            const td5 = document.createElement('td');
+            td5.textContent = String(t.cese || '').trim();
+            const btnPreview = document.createElement('button');
+            btnPreview.type = 'button';
+            btnPreview.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
+            btnPreview.title = 'Ver boleta';
+            btnPreview.innerHTML = '<i class="bi bi-eye"></i>';
+            btnPreview.addEventListener('click', function () {
+                verBoleta({
+                    person: pid,
+                    nombre: nombreRaw,
+                    cia: cia,
+                    payroll_type: payroll_type,
+                    process: process,
+                    period: period
+                });
+            });
+            const td6 = document.createElement('td');
+            td6.className = 'text-center';
+            td6.appendChild(btnPreview);
+            tr.appendChild(td0);
+            tr.appendChild(td1);
+            tr.appendChild(td2);
+            tr.appendChild(td3);
+            tr.appendChild(td4);
+            tr.appendChild(td5);
+            tr.appendChild(td6);
+            tbody.appendChild(tr);
+        });
+
+        actualizarConteoBoletas(boletasCache.length);
+        sincronizarCheckAllBoletas();
+        validarBotonGenerar();
+        moverCursorLocalizador();
+    }
+
+    function aplicarLocalizadorBoletas() {
+        if (!boletasCache.length) {
+            actualizarConteoBoletas(0);
+            return;
+        }
+        if (!document.querySelector('#tbodyBoletas tr.boleta-row')) {
+            renderListaBoletas(boletasCache);
+            return;
+        }
+        moverCursorLocalizador();
+    }
 
     function limpiarValorComboSiObsoleto(select) {
         if (!select) return;
@@ -225,7 +416,6 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function cargarListaBoletas() {
         const btn = document.getElementById('btnConsultarBoletas');
-        const tbody = document.getElementById('tbodyBoletas');
         const cia = cboCia.value.trim();
         const payroll_type = cboPt.value.trim();
         const process = cboProc.value.trim();
@@ -236,9 +426,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (filtrosPersist) filtrosPersist.guardar();
         btn.disabled = true;
-        tbody.innerHTML = '';
-        document.getElementById('checkAllBoletas').checked = false;
-        document.getElementById('checkAllBoletas').indeterminate = false;
+        boletasCache = [];
+        filtrosListaActuales = { cia, payroll_type, process, period };
+        document.getElementById('tbodyBoletas').innerHTML = '';
+        actualizarConteoBoletas(0);
         try {
             const res = await fetch(URL_LISTA, {
                 method: 'POST',
@@ -248,81 +439,23 @@ document.addEventListener('DOMContentLoaded', async function () {
                     payroll_type: payroll_type,
                     process: process,
                     period: period,
-                    person: '0',
-                    nombre: document.getElementById('txtBuscarTrabajador').value.trim()
+                    person: '0'
                 })
             });
             const data = await res.json();
             if (!res.ok) {
                 alert(data.error || 'Error al cargar la lista.');
-                document.getElementById('lblBoletasCount').textContent = '0 registros';
                 return;
             }
             if (!Array.isArray(data)) {
                 alert('Respuesta inválida del servidor.');
-                document.getElementById('lblBoletasCount').textContent = '0 registros';
                 return;
             }
-            data.forEach((t) => {
-                const tr = document.createElement('tr');
-                const td0 = document.createElement('td');
-                td0.className = 'text-center';
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.className = 'check-persona form-check-input';
-                const pid = String(t.person || '').trim();
-                cb.value = pid;
-                cb.addEventListener('change', function () {
-                    sincronizarCheckAllBoletas();
-                    validarBotonGenerar();
-                });
-                td0.appendChild(cb);
-                const td1 = document.createElement('td');
-                td1.className = 'font-monospace';
-                td1.textContent = pid;
-                const td2 = document.createElement('td');
-                td2.textContent = String(t.nombre || '').trim();
-                const td3 = document.createElement('td');
-                td3.textContent = String(t.email || '').trim();
-                const td4 = document.createElement('td');
-                td4.textContent = String(t.ingreso || '').trim();
-                const td5 = document.createElement('td');
-                td5.textContent = String(t.cese || '').trim();
-                const btnPreview = document.createElement('button');
-                btnPreview.type = 'button';
-                btnPreview.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
-                btnPreview.title = 'Ver boleta';
-                btnPreview.innerHTML = '<i class="bi bi-eye"></i>';
-                btnPreview.addEventListener('click', function () {
-                    verBoleta({
-                        person: pid,
-                        nombre: String(t.nombre || '').trim(),
-                        cia: cia,
-                        payroll_type: payroll_type,
-                        process: process,
-                        period: period
-                    });
-                });
-                const td6 = document.createElement('td');
-                td6.className = 'text-center';
-                td6.appendChild(btnPreview);
-                tr.appendChild(td0);
-                tr.appendChild(td1);
-                tr.appendChild(td2);
-                tr.appendChild(td3);
-                tr.appendChild(td4);
-                tr.appendChild(td5);
-                tr.appendChild(td6);
-                tbody.appendChild(tr);
-            });
-            document.getElementById('lblBoletasCount').textContent =
-                data.length === 1 ? '1 registro' : `${data.length} registros`;
-            sincronizarCheckAllBoletas();
-            validarBotonGenerar();
+            boletasCache = data;
+            renderListaBoletas(boletasCache);
         } catch (e) {
             console.error(e);
             alert('Error de red o del servidor.');
-            document.getElementById('lblBoletasCount').textContent = '0 registros';
         } finally {
             btn.disabled = false;
         }
@@ -547,6 +680,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         e.preventDefault();
         await cargarListaBoletas();
     });
+    if (txtBuscarTrabajador) {
+        txtBuscarTrabajador.addEventListener('input', function () {
+            if (filtrosPersist) filtrosPersist.guardar();
+            aplicarLocalizadorBoletas();
+        });
+    }
     document.querySelectorAll('input[name="modoProceso"]').forEach((r) => {
         r.addEventListener('change', syncModoProcesoUI);
     });

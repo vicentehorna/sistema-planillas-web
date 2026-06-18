@@ -1,0 +1,471 @@
+{% extends "layout.html" %}
+
+{% block title %}Cálculo de 5ta por Trabajador{% endblock %}
+
+{% block extra_css %}
+<style>
+    .reporte-5ta-wrap {
+        font-size: 11px;
+    }
+
+    .reporte-5ta-header {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        background: #fff;
+        margin-bottom: 1rem;
+    }
+
+    .reporte-5ta-header .titulo-principal {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #1a4b84;
+        text-align: center;
+        margin: 0.35rem 0;
+    }
+
+    .reporte-5ta-header .titulo-periodo {
+        font-size: 0.95rem;
+        font-weight: 700;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+
+    .reporte-5ta-header .meta-linea {
+        font-size: 0.82rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .reporte-5ta-panel {
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+        height: 100%;
+    }
+
+    .reporte-5ta-panel .panel-title {
+        background: #f8f9fa;
+        border-bottom: 1px solid #dee2e6;
+        padding: 0.35rem 0.6rem;
+        font-weight: 700;
+        font-size: 0.82rem;
+    }
+
+    .table-reporte-5ta {
+        font-size: 11px;
+        margin-bottom: 0;
+    }
+
+    .table-reporte-5ta th,
+    .table-reporte-5ta td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+
+    .table-reporte-5ta thead th {
+        background: #f8f9fa;
+        text-align: center;
+        font-weight: 700;
+    }
+
+    .table-reporte-5ta .col-monto {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        min-width: 5.5rem;
+    }
+
+    .table-reporte-5ta tr.fila-total td {
+        font-weight: 700;
+        border-top: 2px solid #adb5bd;
+        background: #f8f9fa;
+    }
+
+    .kv-reporte-5ta {
+        width: 100%;
+        font-size: 11px;
+        margin-bottom: 0;
+    }
+
+    .kv-reporte-5ta td {
+        padding: 0.22rem 0.45rem;
+        border-bottom: 1px solid #eee;
+    }
+
+    .kv-reporte-5ta td.label {
+        width: 62%;
+    }
+
+    .kv-reporte-5ta td.valor {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        min-width: 5.5rem;
+    }
+
+    .kv-reporte-5ta tr.destacado td {
+        font-weight: 700;
+    }
+
+    .kv-reporte-5ta tr.bg-gris td { background: #e9ecef; }
+    .kv-reporte-5ta tr.bg-celeste td { background: #d9edf7; }
+    .kv-reporte-5ta tr.bg-amarillo td { background: #fff3cd; }
+    .kv-reporte-5ta tr.bg-verde td { background: #d1e7dd; }
+
+    @media print {
+        .no-print { display: none !important; }
+        .reporte-5ta-wrap { font-size: 10px; }
+        .card { border: none !important; box-shadow: none !important; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4 no-print">
+    <div class="card-body pt-3">
+        <form id="frmCalculoQuintaTrab" class="row g-2 align-items-end">
+            <div class="col-12 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" id="btnImprimir" disabled>
+                    <i class="bi bi-printer"></i> Imprimir
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div id="cardReporte" class="card shadow-sm border-0 d-none">
+    <div class="card-body reporte-5ta-wrap" id="contenedorReporte"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.calculoQuintaTrabajador
+        ? window.FiltrosPlanillasReportes.calculoQuintaTrabajador()
+        : null;
+    const URL_REPORTE = {{ url_for('get_calculo_quinta_trabajador') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboProc = document.getElementById('cboProceso');
+    const cboPer = document.getElementById('cboPeriodo');
+    const cboTrab = document.getElementById('cboTrabajador');
+    const cardReporte = document.getElementById('cardReporte');
+    const contenedor = document.getElementById('contenedorReporte');
+    const btnImprimir = document.getElementById('btnImprimir');
+
+    function fmt(n) {
+        const v = Number(n) || 0;
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function esc(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    async function poblarSelect(url, selectElement, placeholder) {
+        if (!selectElement) return;
+        selectElement.innerHTML = `<option value="">${placeholder || 'Cargando...'}</option>`;
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function renderReporte(data) {
+        const rep = data.reporte || {};
+        const proy = rep.proyeccion || {};
+        const res = rep.resumen || {};
+        const meses = Array.isArray(rep.meses) ? rep.meses : [];
+        const escala = Array.isArray(rep.escala) ? rep.escala : [];
+        const tot = rep.totales_meses || {};
+
+        const filasMeses = meses.map((m) => `
+            <tr>
+                <td>${esc(m.mes)}</td>
+                <td class="col-monto">${fmt(m.ingresos)}</td>
+                <td class="col-monto">${fmt(m.liquidacion)}</td>
+                <td class="col-monto">${fmt(m.utilidades)}</td>
+                <td class="col-monto">${fmt(m.retenciones)}</td>
+            </tr>
+        `).join('');
+
+        const filasEscala = escala.map((t) => `
+            <tr>
+                <td>${esc(t.label)}</td>
+                <td class="col-monto">${fmt(t.tope)}</td>
+                <td class="col-monto">${fmt(t.base)}</td>
+                <td class="text-center">${Number(t.pct)}%</td>
+                <td class="col-monto">${fmt(t.retencion)}</td>
+            </tr>
+        `).join('');
+
+        contenedor.innerHTML = `
+            <div class="reporte-5ta-header">
+                <div class="titulo-principal">SEGUIMIENTO DE CALCULO DE 5TA CATEGORIA</div>
+                <div class="titulo-periodo">${esc(rep.periodo_titulo || '')}</div>
+                <div class="row g-2 meta-linea">
+                    <div class="col-md-8"><strong>Trabajador:</strong> ${esc(rep.nombre)}</div>
+                    <div class="col-md-4"><strong>${esc(rep.documenttype)}</strong> ${esc(rep.documentnumber)}</div>
+                    <div class="col-12"><strong>Cargo:</strong> ${esc(rep.cargo)}</div>
+                </div>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-lg-7">
+                    <div class="reporte-5ta-panel">
+                        <div class="panel-title">Detalle mensual</div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm table-reporte-5ta">
+                                <thead>
+                                    <tr>
+                                        <th>Mes</th>
+                                        <th class="col-monto">Ingresos</th>
+                                        <th class="col-monto">Liquidación</th>
+                                        <th class="col-monto">Utilidades</th>
+                                        <th class="col-monto">Retenciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${filasMeses}
+                                    <tr class="fila-total">
+                                        <td>Total</td>
+                                        <td class="col-monto">${fmt(tot.ingresos)}</td>
+                                        <td class="col-monto">${fmt(tot.liquidacion)}</td>
+                                        <td class="col-monto">${fmt(tot.utilidades)}</td>
+                                        <td class="col-monto">${fmt(tot.retenciones)}</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-lg-5 d-flex flex-column gap-3">
+                    <div class="reporte-5ta-panel">
+                        <div class="panel-title">Proyección e ingresos</div>
+                        <table class="kv-reporte-5ta">
+                            <tr><td class="label">Meses pendientes a diciembre</td><td class="valor">${esc(proy.meses_pendientes)}</td></tr>
+                            <tr><td class="label">Proyección de ingresos</td><td class="valor">${fmt(proy.proy_ingresos)}</td></tr>
+                            <tr><td class="label">Remuneración otras empresas</td><td class="valor">${fmt(proy.rem_otra_empresa)}</td></tr>
+                            <tr><td class="label">Gratificación julio</td><td class="valor">${fmt(proy.grati_julio)}</td></tr>
+                            <tr><td class="label">Gratificación diciembre</td><td class="valor">${fmt(proy.grati_dic)}</td></tr>
+                            <tr><td class="label">Ingresos meses anteriores</td><td class="valor">${fmt(proy.rem_acumulada)}</td></tr>
+                            <tr><td class="label">Ingresos a 5ta del mes</td><td class="valor">${fmt(proy.ingresos_5ta)}</td></tr>
+                            <tr><td class="label">Otros ingresos del mes</td><td class="valor">${fmt(proy.otros_ingresos_5ta)}</td></tr>
+                            <tr class="destacado bg-gris"><td class="label">Renta neta</td><td class="valor">${fmt(proy.renta_neta)}</td></tr>
+                            <tr><td class="label">UIT</td><td class="valor">${fmt(proy.uit_valor)}</td></tr>
+                            <tr class="destacado bg-celeste"><td class="label">Deducible (7 UIT)</td><td class="valor">${fmt(proy.deducible)}</td></tr>
+                        </table>
+                    </div>
+
+                    <div class="reporte-5ta-panel">
+                        <div class="panel-title">Escala del impuesto</div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm table-reporte-5ta mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Tramo</th>
+                                        <th class="col-monto">Tope</th>
+                                        <th class="col-monto">Base</th>
+                                        <th>%</th>
+                                        <th class="col-monto">Retención</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${filasEscala}</tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="reporte-5ta-panel">
+                        <div class="panel-title">Resumen final</div>
+                        <table class="kv-reporte-5ta">
+                            <tr class="destacado bg-verde"><td class="label">Total renta anual</td><td class="valor">${fmt(res.total_renta_anual)}</td></tr>
+                            <tr><td class="label">Devolución de 5ta</td><td class="valor">${fmt(res.devolucion_quinta)}</td></tr>
+                            <tr class="bg-amarillo"><td class="label">Retenciones anteriores</td><td class="valor">${fmt(res.ret_anteriores)}</td></tr>
+                            <tr><td class="label">Retenciones otra empresa</td><td class="valor">${fmt(res.ret_otra_empresa)}</td></tr>
+                            <tr class="destacado bg-celeste"><td class="label">Impuesto anual</td><td class="valor">${fmt(res.impuesto_anual)}</td></tr>
+                            <tr><td class="label">Meses a dividir</td><td class="valor">${fmt(res.num_meses).replace('.00', '')}</td></tr>
+                            <tr class="destacado bg-gris"><td class="label">Renta del mes</td><td class="valor">${fmt(res.renta_mes)}</td></tr>
+                            <tr><td class="label">Retención semana anterior</td><td class="valor">${fmt(res.ret_renta_acum)}</td></tr>
+                            <tr><td class="label">Diferencia</td><td class="valor">${fmt(res.diferenciasemana)}</td></tr>
+                            <tr><td class="label">Número de semanas</td><td class="valor">${fmt(res.numerosemana).replace('.00', '')}</td></tr>
+                            <tr><td class="label">Retención semanal</td><td class="valor">${fmt(res.retencion_semanal)}</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+        cardReporte.classList.remove('d-none');
+        btnImprimir.disabled = false;
+    }
+
+    async function cargarTrabajadores() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            cboTrab.innerHTML = '<option value="">Seleccione compañía</option>';
+            cboTrab.disabled = true;
+            return;
+        }
+        await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrab, 'Seleccione...');
+    }
+
+    document.getElementById('frmCalculoQuintaTrab').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (filtrosPersist) filtrosPersist.guardar();
+        const payload = {
+            cia: cboCia.value.trim(),
+            payroll_type: cboPt.value.trim(),
+            process: cboProc.value.trim(),
+            period: cboPer.value.trim(),
+            person: cboTrab.value.trim(),
+        };
+        if (!payload.cia || !payload.payroll_type || !payload.process || !payload.period || !payload.person) {
+            alert('Complete todos los filtros.');
+            return;
+        }
+        contenedor.innerHTML = '<div class="text-center text-muted py-4">Cargando reporte...</div>';
+        cardReporte.classList.remove('d-none');
+        btnImprimir.disabled = true;
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al consultar.');
+            renderReporte(data);
+        } catch (err) {
+            console.error(err);
+            contenedor.innerHTML = `<div class="text-center text-danger py-4">${esc(err.message)}</div>`;
+        }
+    });
+
+    btnImprimir.addEventListener('click', function () {
+        window.print();
+    });
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value.trim();
+        cardReporte.classList.add('d-none');
+        btnImprimir.disabled = true;
+        if (cia) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt, 'Seleccione...');
+            await cargarTrabajadores();
+        } else {
+            cboPt.innerHTML = '<option value="">Seleccione...</option>';
+            cboPt.disabled = true;
+            cboProc.innerHTML = '<option value="">Seleccione...</option>';
+            cboProc.disabled = true;
+            cboPer.innerHTML = '<option value="">Seleccione...</option>';
+            cboPer.disabled = true;
+            cboTrab.innerHTML = '<option value="">Seleccione...</option>';
+            cboTrab.disabled = true;
+        }
+    });
+
+    cboPt.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const pt = this.value.trim();
+        cardReporte.classList.add('d-none');
+        if (cia && pt) {
+            await poblarSelect(`/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`, cboProc, 'Seleccione...');
+        } else {
+            cboProc.innerHTML = '<option value="">Seleccione...</option>';
+            cboProc.disabled = true;
+        }
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+    });
+
+    cboProc.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const pt = cboPt.value.trim();
+        const proc = this.value.trim();
+        cardReporte.classList.add('d-none');
+        if (cia && pt && proc) {
+            await poblarSelect(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
+                cboPer,
+                'Seleccione...'
+            );
+        } else {
+            cboPer.innerHTML = '<option value="">Seleccione...</option>';
+            cboPer.disabled = true;
+        }
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
+
+    let restaurado = false;
+    if (filtrosPersist) {
+        restaurado = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarTrabajadores });
+    }
+    if (!restaurado) {
+        if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt, 'Seleccione...');
+            await cargarTrabajadores();
+        }
+    }
+
+    if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
+});
+</script>
+{% endblock %}

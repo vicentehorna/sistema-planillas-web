@@ -543,7 +543,7 @@
                     </ul>
                 </li>
 
-                {% set impuesto_renta_active = request.endpoint == 'certificado_quinta_page' %}
+                {% set impuesto_renta_active = request.endpoint in ('certificado_quinta_page', 'calculo_quinta_trabajador_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if impuesto_renta_active else '' }}">
                     <a href="#submenuImpuestoRenta"
                        class="sidebar-parent-link"
@@ -558,6 +558,11 @@
                         <li class="{{ 'active' if request.endpoint == 'certificado_quinta_page' else '' }}">
                             <a href="{{ url_for('certificado_quinta_page') }}" title="Certificado de Quinta">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Certificado de Quinta</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'calculo_quinta_trabajador_page' else '' }}">
+                            <a href="{{ url_for('calculo_quinta_trabajador_page') }}" title="Cálculo de 5ta por Trabajador">
+                                <i class="bi bi-calculator"></i><span class="sidebar-link-text">Cálculo de 5ta por Trabajador</span>
                             </a>
                         </li>
                     </ul>

@@ -22,6 +22,7 @@
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
     const STORAGE_KEY_GENERAR_BOLETAS = 'filtros_generar_boletas';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
+    const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -1742,6 +1743,115 @@
         };
     }
 
+    function crearPersistenciaCalculoQuintaTrabajador() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    proceso: val('cboProceso'),
+                    periodo: val('cboPeriodo'),
+                    trabajador: val('cboTrabajador'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_CALCULO_QUINTA_TRAB, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros calculo quinta trabajador: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_CALCULO_QUINTA_TRAB);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, cargarTrabajadores } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const cboTrab = document.getElementById('cboTrabajador');
+            if (!cboCia || !cboPt || !cboProc || !cboPer || !cboTrab) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                if (typeof cargarTrabajadores === 'function') await cargarTrabajadores();
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            await poblarSelect(
+                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                cboProc
+            );
+
+            const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '';
+            if (!proceso || !optionExists(cboProc, proceso)) {
+                if (typeof cargarTrabajadores === 'function') await cargarTrabajadores();
+                guardar();
+                return true;
+            }
+            cboProc.value = proceso;
+
+            await poblarSelect(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
+                cboPer
+            );
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (typeof cargarTrabajadores === 'function') {
+                await cargarTrabajadores();
+            }
+
+            const trabajador = filtros.trabajador != null ? String(filtros.trabajador).trim() : '';
+            if (trabajador && optionExists(cboTrab, trabajador)) {
+                cboTrab.value = trabajador;
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo', 'cboTrabajador'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_CALCULO_QUINTA_TRAB,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
@@ -1846,6 +1956,9 @@
         },
         certificadoQuinta: function () {
             return crearPersistenciaCertificadoQuinta();
+        },
+        calculoQuintaTrabajador: function () {
+            return crearPersistenciaCalculoQuintaTrabajador();
         }
     };
 })(typeof window !== 'undefined' ? window : this);

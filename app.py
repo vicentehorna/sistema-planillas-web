@@ -343,6 +343,200 @@ def _calcular_impuesto_renta_quinta(c_renta_imponible, uit):
     return x1 + x2 + x3 + x4 + x5
 
 
+_MESES_5TA_TRAB = [
+    'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+    'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre',
+]
+
+
+def _float_quinta(value, default=0.0):
+    try:
+        return float(value if value is not None else default)
+    except (TypeError, ValueError):
+        return default
+
+
+def _periodo_titulo_quinta_trab(period):
+    period_val = re.sub(r'[^0-9]', '', str(period or ''))
+    if len(period_val) < 6:
+        return str(period or '')
+    try:
+        mes_num = int(period_val[4:6])
+        anio = period_val[:4]
+        mes_nombre = _MESES_5TA_TRAB[mes_num - 1].upper() if 1 <= mes_num <= 12 else 'MES'
+        return f'{mes_nombre} - {anio}'
+    except Exception:
+        return period_val
+
+
+def _calcular_escala_seguimiento_5ta(deducible, par_uit):
+    par = _float_quinta(par_uit)
+    d = _float_quinta(deducible)
+    tope5 = par * 5
+    tope20 = par * 20
+    tope35 = par * 35
+    tope45 = par * 45
+
+    imp1 = d if tope5 > d else tope5
+    imp2 = (d - tope5) if tope20 > d else (tope20 - tope5)
+    if imp2 < 0:
+        imp2 = 0.0
+    imp3 = (d - tope20) if tope35 > d else (tope35 - tope20)
+    if imp3 < 0:
+        imp3 = 0.0
+    imp4 = (d - tope35) if tope45 > d else (tope45 - tope35)
+    if imp4 < 0:
+        imp4 = 0.0
+    imp5 = (d - tope45) if d > tope45 else 0.0
+    if imp5 < 0:
+        imp5 = 0.0
+
+    tramos = [
+        {'label': 'Hasta 5 UIT', 'tope': tope5, 'base': imp1, 'pct': 8, 'retencion': imp1 * 0.08},
+        {'label': 'Hasta 20 UIT', 'tope': tope20, 'base': imp2, 'pct': 14, 'retencion': imp2 * 0.14},
+        {'label': 'Hasta 35 UIT', 'tope': tope35, 'base': imp3, 'pct': 17, 'retencion': imp3 * 0.17},
+        {'label': 'Hasta 45 UIT', 'tope': tope45, 'base': imp4, 'pct': 20, 'retencion': imp4 * 0.20},
+        {'label': 'Mas 45 UIT', 'tope': 0.0, 'base': imp5, 'pct': 30, 'retencion': imp5 * 0.30},
+    ]
+    total_retencion = sum(t['retencion'] for t in tramos)
+    return tramos, total_retencion
+
+
+def _armar_reporte_quinta_trabajador(row, period):
+    row = row or {}
+
+    meses = []
+    for idx in range(1, 13):
+        sfx = f'{idx:02d}'
+        meses.append(
+            {
+                'mes': _MESES_5TA_TRAB[idx - 1],
+                'ingresos': _float_quinta(row.get(f'ingreso{sfx}')),
+                'liquidacion': _float_quinta(row.get(f'descuento{sfx}')),
+                'utilidades': _float_quinta(row.get(f'utilidad{sfx}')),
+                'retenciones': _float_quinta(row.get(f'salida{sfx}')),
+            }
+        )
+
+    totales_meses = {
+        'ingresos': sum(m['ingresos'] for m in meses),
+        'liquidacion': sum(m['liquidacion'] for m in meses),
+        'utilidades': sum(m['utilidades'] for m in meses),
+        'retenciones': sum(m['retenciones'] for m in meses),
+    }
+
+    proy_ingresos = _float_quinta(row.get('proy_ingresos'))
+    rem_otra_empresa = _float_quinta(row.get('rem_otra_empresa'))
+    grati_julio = _float_quinta(row.get('grati_julio'))
+    grati_dic = _float_quinta(row.get('grati_dic'))
+    rem_acumulada = _float_quinta(row.get('rem_acumulada'))
+    ingresos_5ta = _float_quinta(row.get('ingresos_5ta'))
+    otros_ingresos_5ta = _float_quinta(row.get('otros_ingresos_5ta'))
+    renta_neta = (
+        proy_ingresos + rem_otra_empresa + grati_julio + grati_dic
+        + rem_acumulada + ingresos_5ta + otros_ingresos_5ta
+    )
+
+    uit_deduccion = _float_quinta(row.get('uit'))
+    par_uit = _float_quinta(row.get('par_uit'))
+    deducible = renta_neta - uit_deduccion
+
+    escala, total_renta_anual = _calcular_escala_seguimiento_5ta(deducible, par_uit)
+
+    ret_anteriores = _float_quinta(row.get('ret_anteriores'))
+    ret_otra_empresa = _float_quinta(row.get('ret_otra_empresa'))
+    devolucion_quinta = _float_quinta(row.get('devolucion_quinta'))
+    impuesto_anual = total_renta_anual - (ret_anteriores - devolucion_quinta) - ret_otra_empresa
+
+    num_meses = _float_quinta(row.get('meses'))
+    if num_meses <= 0:
+        num_meses = 1.0
+    renta_mes = impuesto_anual / num_meses
+
+    diferenciasemana = _float_quinta(row.get('diferenciasemana'))
+    numerosemana = _float_quinta(row.get('numerosemana'))
+    retencion_semanal = round(diferenciasemana / numerosemana, 2) if numerosemana else 0.0
+
+    doc_tipo = str(row.get('documenttype') or 'DNI:').strip()
+    if doc_tipo and not doc_tipo.endswith(':'):
+        doc_tipo = f'{doc_tipo}:'
+
+    return {
+        'nombre': str(row.get('name') or '').strip(),
+        'documenttype': doc_tipo,
+        'documentnumber': str(row.get('documentnumber') or row.get('docno_persona') or '').strip(),
+        'cargo': str(row.get('cargo') or row.get('pr_position_cargo') or '').strip(),
+        'meses_pendientes': int(_float_quinta(row.get('meses_pendientes'))),
+        'meses': meses,
+        'totales_meses': totales_meses,
+        'proyeccion': {
+            'meses_pendientes': int(_float_quinta(row.get('meses_pendientes'))),
+            'proy_ingresos': proy_ingresos,
+            'rem_otra_empresa': rem_otra_empresa,
+            'grati_julio': grati_julio,
+            'grati_dic': grati_dic,
+            'rem_acumulada': rem_acumulada,
+            'ingresos_5ta': ingresos_5ta,
+            'otros_ingresos_5ta': otros_ingresos_5ta,
+            'renta_neta': renta_neta,
+            'uit_valor': par_uit,
+            'uit_deduccion': uit_deduccion,
+            'deducible': deducible,
+        },
+        'escala': escala,
+        'par_uit': par_uit,
+        'resumen': {
+            'total_renta_anual': total_renta_anual,
+            'devolucion_quinta': devolucion_quinta,
+            'ret_anteriores': ret_anteriores,
+            'ret_otra_empresa': ret_otra_empresa,
+            'impuesto_anual': impuesto_anual,
+            'num_meses': num_meses,
+            'renta_mes': renta_mes,
+            'ret_renta_acum': _float_quinta(row.get('ret_renta_acum')),
+            'diferenciasemana': diferenciasemana,
+            'numerosemana': numerosemana,
+            'retencion_semanal': retencion_semanal,
+        },
+        'periodo_titulo': _periodo_titulo_quinta_trab(period),
+    }
+
+
+def _get_company_header_quinta(cia):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                LTRIM(RTRIM(ISNULL(Description, ''))) AS descripcion,
+                LTRIM(RTRIM(ISNULL(TaxID, ''))) AS ruc
+            FROM SY_Company (NOLOCK)
+            WHERE Company = ?
+            """,
+            (cia,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return {'nombre': cia, 'ruc': ''}
+        cols = [c[0] for c in cursor.description]
+        data = dict(zip(cols, row))
+        return {
+            'nombre': str(data.get('descripcion') or cia).strip(),
+            'ruc': str(data.get('ruc') or '').strip(),
+        }
+    except Exception:
+        logging.exception('_get_company_header_quinta')
+        return {'nombre': cia, 'ruc': ''}
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _asignacion_concepto_pk_from_json(body):
     """Clave PR_EmployeeConcept desde JSON del cliente."""
     body = body or {}
@@ -4896,6 +5090,69 @@ def certificado_quinta_page():
         'certificado_quinta.html',
         anio_actual=date.today().year,
         fecha_hoy=date.today().strftime('%Y-%m-%d'),
+    )
+
+
+@app.route('/impuesto_renta/calculo_quinta_trabajador')
+@login_required
+def calculo_quinta_trabajador_page():
+    return render_template('calculo_quinta_trabajador.html')
+
+
+@app.route('/get_calculo_quinta_trabajador', methods=['POST'])
+@login_required
+def get_calculo_quinta_trabajador():
+    """sp_pr_5ta_trabajador_web: seguimiento de cálculo de 5ta por trabajador."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    process = str(body.get('process') or body.get('processtype') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or body.get('employee') or '').strip()
+
+    if not cia or not payroll_type or not process or not period or not person:
+        return jsonify({'error': 'Faltan compañía, planilla, proceso, periodo o trabajador.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        cursor.execute(
+            'EXEC sp_pr_5ta_trabajador_web @company=?, @payrolltype=?, @process=?, @period=?, @person=?',
+            (cia, payroll_type, process, period, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+    except Exception as e:
+        logging.exception('get_calculo_quinta_trabajador')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    if not rows:
+        return jsonify({'error': 'No se encontraron datos para los filtros indicados.'}), 404
+
+    raw = rows[0]
+    reporte = _armar_reporte_quinta_trabajador(raw, period)
+    empresa = _get_company_header_quinta(cia)
+    return jsonify(
+        {
+            'empresa': empresa,
+            'reporte': reporte,
+            'filtros': {
+                'cia': cia,
+                'payroll_type': payroll_type,
+                'process': process,
+                'period': period,
+                'person': person,
+            },
+            'fecha_emision': datetime.now().strftime('%d-%m-%Y %H:%M:%S'),
+        }
     )
 
 

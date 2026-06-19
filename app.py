@@ -248,6 +248,103 @@ def _certificado_quinta_pdf_filename(person, anio):
     return f'certificado_quinta_{person_safe}_{anio_safe}.pdf'
 
 
+def _certificado_trabajo_pdf_filename(person, period_raw):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
+    return f'certificado_trabajo_{person_safe}_{period_safe}.pdf'
+
+
+def _tratamiento_certificado_trabajo(sex):
+    """PowerBuilder dw r058: sex = '1' → el Sr., caso contrario la Srta."""
+    return 'el Sr. ' if str(sex or '').strip() == '1' else 'la Srta '
+
+
+def _fecha_emision_certificado_trabajo(cert):
+    """Línea de fecha del certificado: Lima, día de mes del año (fecha de cese)."""
+    cert = cert or {}
+    try:
+        dia = int(cert.get('ceasedate_day') or 0)
+    except (TypeError, ValueError):
+        dia = 0
+    mes = str(cert.get('ceasedate_month') or '').strip() or 'Mes'
+    try:
+        anio = int(cert.get('ceasedate_year') or 0)
+    except (TypeError, ValueError):
+        anio = 0
+    if dia and anio:
+        return f'Lima, {dia} de {mes} del {anio}'
+    return 'Lima'
+
+
+def _certificado_retiro_cts_pdf_filename(person, period_raw):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
+    return f'certificado_retiro_cts_{person_safe}_{period_safe}.pdf'
+
+
+def _tratamiento_retiro_cts(sex):
+    """PowerBuilder dw r063: sex = '1' → al Sr., caso contrario a la Sra."""
+    return 'al Sr. ' if str(sex or '').strip() == '1' else 'a la Sra '
+
+
+def _tipo_doc_retiro_cts(type_pdt):
+    return ' CE' if str(type_pdt or '').strip() == '04' else ' DNI'
+
+
+def _texto_autorizacion_retiro_cts(cert):
+    cert = cert or {}
+    tratamiento = _tratamiento_retiro_cts(cert.get('sex'))
+    tipo_doc = _tipo_doc_retiro_cts(cert.get('type_pdt'))
+    try:
+        dia = int(cert.get('fecha_cese_day') or 0)
+    except (TypeError, ValueError):
+        dia = 0
+    mes = str(cert.get('fecha_cese_month') or '').strip()
+    fecha_cese = f'desde el {dia} de {mes}' if dia and mes else ''
+    return (
+        f"{str(cert.get('company_name') or '').strip()} con RUC N° "
+        f"{str(cert.get('company_ruc') or '').strip()}, por medio de la presente autorizamos "
+        f"{tratamiento}{str(cert.get('person_name') or '').strip()}, con{tipo_doc} Nº "
+        f"{str(cert.get('person_document') or '').strip()} retirar el íntegro de su depósito "
+        f"de Compensación de Tiempo de Servicio (CTS), de la cuenta "
+        f"{str(cert.get('cts_account') or '').strip()}, ya que ha dejado de laborar en nuestra "
+        f"empresa {fecha_cese}.".replace('  ', ' ').strip()
+    )
+
+
+def _listar_trabajadores_liquidacion(cia, payroll_type, period, person='0', nombre=None):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadocertificadotrabajo_web @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, period, person, nombre),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        trabajadores = []
+        for r in rows:
+            fi = _jsonable_value(r.get('fechaingreso'))
+            fc = _jsonable_value(r.get('fechacese'))
+            trabajadores.append(
+                {
+                    'person': str(r.get('person') or '').strip(),
+                    'nombre': str(r.get('nombre') or '').strip(),
+                    'email': str(r.get('email') or '').strip(),
+                    'ingreso': fi if fi is not None else '',
+                    'cese': fc if fc is not None else '',
+                    'sex': r.get('sex', 0),
+                }
+            )
+        return trabajadores
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 _MESES_ES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
@@ -2568,6 +2665,203 @@ def generar_pdf_certificado_quinta(params):
         'WeasyPrint no está disponible para generar el certificado de quinta. '
         + str(_WEASYPRINT_IMPORT_ERROR or '')
     )
+
+
+def generar_pdf_certificado_trabajo(params):
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    person = str(params.get('person') or '').strip()
+    if not (cia and payroll_type and period and person):
+        raise ValueError('Faltan parámetros para generar certificado de trabajo.')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_certificadotrabajo_web @cia=?, @payrolltype=?, @period=?, @person=?',
+            (cia, payroll_type, period, person),
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    cert = rows[0] if rows else {}
+    if not cert:
+        raise ValueError('No se encontraron datos para el certificado de trabajo.')
+
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
+
+    html_renderizado = render_template(
+        'certificado_trabajo_pdf.html',
+        cert=cert,
+        logo_src=logo_src,
+        firma_src=firma_src,
+        tratamiento=_tratamiento_certificado_trabajo(cert.get('sex')),
+        fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el certificado de trabajo. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
+
+
+def enviar_correo_certificado_trabajo(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
+    """Envía certificado de trabajo por Resend API con PDF adjunto."""
+    if not destinatario or '@' not in str(destinatario):
+        return False, 'Sin correo'
+
+    resend.api_key = _resend_api_key()
+    if not resend.api_key:
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
+
+    try:
+        sexo_val = int(sexo)
+    except Exception:
+        sexo_val = 0
+    trato = 'Estimada' if sexo_val == 2 else 'Estimado'
+    periodo_legible = formatear_periodo_texto(periodo)
+    pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+
+    try:
+        params = {
+            'from': f'Recursos Humanos <{remitente}>',
+            'to': destinatario,
+            'subject': f'Certificado de Trabajo - {periodo_legible} - {nombre_empleado}',
+            'html': f"""
+                <p>{trato} {nombre_empleado},</p>
+                <p>Le hacemos entrega de su certificado de trabajo correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                <p>Saludos,<br>Recursos Humanos</p>
+            """,
+            'attachments': [
+                {
+                    'content': pdf_base64,
+                    'filename': _certificado_trabajo_pdf_filename(person or nombre_empleado, periodo),
+                }
+            ],
+        }
+        resend.Emails.send(params)
+        return True, 'Enviado'
+    except Exception as e:
+        logging.error('Error en Resend certificado trabajo: %s', str(e))
+        return False, str(e)
+
+
+def generar_pdf_certificado_retiro_cts(params):
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    person = str(params.get('person') or '').strip()
+    if not (cia and payroll_type and period and person):
+        raise ValueError('Faltan parámetros para generar certificado retiro CTS.')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_certificadoretirocts_web @cia=?, @payrolltype=?, @period=?, @person=?',
+            (cia, payroll_type, period, person),
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    cert = rows[0] if rows else {}
+    if not cert:
+        raise ValueError('No se encontraron datos para el certificado retiro CTS.')
+
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
+
+    html_renderizado = render_template(
+        'certificado_retiro_cts_pdf.html',
+        cert=cert,
+        logo_src=logo_src,
+        firma_src=firma_src,
+        texto_autorizacion=_texto_autorizacion_retiro_cts(cert),
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el certificado retiro CTS. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
+
+
+def enviar_correo_certificado_retiro_cts(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
+    """Envía certificado retiro CTS por Resend API con PDF adjunto."""
+    if not destinatario or '@' not in str(destinatario):
+        return False, 'Sin correo'
+
+    resend.api_key = _resend_api_key()
+    if not resend.api_key:
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
+
+    try:
+        sexo_val = int(sexo)
+    except Exception:
+        sexo_val = 0
+    trato = 'Estimada' if sexo_val == 2 else 'Estimado'
+    periodo_legible = formatear_periodo_texto(periodo)
+    pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+
+    try:
+        params = {
+            'from': f'Recursos Humanos <{remitente}>',
+            'to': destinatario,
+            'subject': f'Certificado Retiro CTS - {periodo_legible} - {nombre_empleado}',
+            'html': f"""
+                <p>{trato} {nombre_empleado},</p>
+                <p>Le hacemos entrega de su certificado de retiro CTS correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                <p>Saludos,<br>Recursos Humanos</p>
+            """,
+            'attachments': [
+                {
+                    'content': pdf_base64,
+                    'filename': _certificado_retiro_cts_pdf_filename(person or nombre_empleado, periodo),
+                }
+            ],
+        }
+        resend.Emails.send(params)
+        return True, 'Enviado'
+    except Exception as e:
+        logging.error('Error en Resend certificado retiro CTS: %s', str(e))
+        return False, str(e)
 
 
 @login_manager.user_loader
@@ -5081,6 +5375,563 @@ def api_pago_haberes_banbif_generar_txt():
 @login_required
 def generar_boletas_page():
     return render_template('generar_boletas.html')
+
+
+@app.route('/liquidaciones/certificado_trabajo')
+@login_required
+def certificado_trabajo_page():
+    return render_template('certificado_trabajo.html')
+
+
+@app.route('/get_lista_certificado_trabajo', methods=['POST'])
+@login_required
+def get_lista_certificado_trabajo():
+    """sp_pr_listadocertificadotrabajo_web — listado liquidación del periodo."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla o periodo.'}), 400
+
+    try:
+        return jsonify(_listar_trabajadores_liquidacion(cia, payroll_type, period, person, nombre))
+    except Exception as e:
+        logging.exception('get_lista_certificado_trabajo')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/liquidaciones/certificado_retiro_cts')
+@login_required
+def certificado_retiro_cts_page():
+    return render_template('certificado_retiro_cts.html')
+
+
+@app.route('/get_lista_certificado_retiro_cts', methods=['POST'])
+@login_required
+def get_lista_certificado_retiro_cts():
+    """sp_pr_listadocertificadotrabajo_web — mismo listado liquidación del periodo."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla o periodo.'}), 400
+
+    try:
+        return jsonify(_listar_trabajadores_liquidacion(cia, payroll_type, period, person, nombre))
+    except Exception as e:
+        logging.exception('get_lista_certificado_retiro_cts')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/preview_certificado_retiro_cts')
+@login_required
+def preview_certificado_retiro_cts():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    try:
+        pdf_buffer = generar_pdf_certificado_retiro_cts(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_certificado_retiro_cts')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_certificado_retiro_cts_pdf_filename(person, period),
+    )
+
+
+@app.route('/procesar_certificados_retiro_cts_masivo', methods=['POST'])
+@login_required
+def procesar_certificados_retiro_cts_masivo():
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    modo = str(body.get('modo') or '').strip().lower()
+    seleccionados = body.get('trabajadores') or []
+    if modo not in ('zip', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan filtros para procesar certificados.'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
+
+    if modo == 'zip':
+        company_name = str(body.get('company_name') or cia).strip()
+        safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
+        period_yyyymm = period[:6] if len(period) >= 6 else period
+        safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
+        nombre_zip = f'certificados_retiro_cts_{safe_company.lower()}_{safe_period}.zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pid in ids:
+                pdf_data = generar_pdf_certificado_retiro_cts(
+                    {
+                        'person': pid,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                    }
+                )
+                zf.writestr(_certificado_retiro_cts_pdf_filename(pid, period), pdf_data.getvalue())
+        memory_file.seek(0)
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=nombre_zip,
+            as_attachment=True,
+        )
+
+    return jsonify(
+        {
+            'status': 'pending',
+            'message': 'Use el modo Enviar por Email desde la pantalla.',
+            'total': len(ids),
+        }
+    ), 202
+
+
+@app.route('/descargar_zip_certificados_retiro_cts')
+@login_required
+def descargar_zip_certificados_retiro_cts():
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = (request.args.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    company_name = (request.args.get('company_name') or '').strip()
+    trabajadores_raw = (request.args.get('trabajadores') or '').strip()
+    seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+
+    if not (cia and payroll_type and period):
+        flash('Faltan filtros para generar el ZIP de certificados.', 'warning')
+        return redirect(url_for('certificado_retiro_cts_page'))
+
+    try:
+        empleados = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
+    except Exception:
+        logging.exception('descargar_zip_certificados_retiro_cts listado')
+        empleados = []
+
+    if not empleados:
+        flash('No hay certificados para procesar en este periodo.', 'warning')
+        return redirect(url_for('certificado_retiro_cts_page'))
+
+    if seleccionados:
+        wanted = set(seleccionados)
+        empleados = [e for e in empleados if str(e.get('person') or '').strip() in wanted]
+        if not empleados:
+            flash('La selección no contiene trabajadores válidos para el periodo indicado.', 'warning')
+            return redirect(url_for('certificado_retiro_cts_page'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for emp in empleados:
+            person_id = str(emp.get('person') or '').strip()
+            if not person_id:
+                continue
+            try:
+                pdf_io = generar_pdf_certificado_retiro_cts(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': person_id,
+                    }
+                )
+                zip_file.writestr(_certificado_retiro_cts_pdf_filename(person_id, period), pdf_io.getvalue())
+            except Exception:
+                logging.exception('descargar_zip_certificados_retiro_cts persona=%s', person_id)
+                continue
+
+    zip_buffer.seek(0)
+    safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name or cia).strip('_') or 'COMPANIA'
+    safe_period = re.sub(r'[^0-9]+', '', period) or 'PERIODO'
+    safe_payroll = re.sub(r'[^A-Za-z0-9_\\-]+', '_', payroll_type).strip('_') or 'PLANILLA'
+    nombre_zip = f'Certificados_Retiro_CTS_{safe_company}_{safe_period}_{safe_payroll}.zip'
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
+
+
+@app.route('/enviar_certificados_retiro_cts_masivo', methods=['POST'])
+@login_required
+def enviar_certificados_retiro_cts_masivo():
+    data = request.get_json(silent=True) or {}
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(data.get('period'))
+    seleccionados = data.get('empleados', data.get('trabajadores', []))
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
+    if not (cia and payroll_type and period):
+        return jsonify({'error': 'Faltan filtros para envío de certificados.'}), 400
+
+    try:
+        empleados_periodo = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
+    except Exception:
+        logging.exception('enviar_certificados_retiro_cts_masivo listado')
+        empleados_periodo = []
+
+    by_person = {}
+    for e in empleados_periodo:
+        pid = str(e.get('person') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(ids)
+    if total == 0:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    def generar_progreso_envio():
+        enviados = 0
+        errores = 0
+        for idx, emp_code in enumerate(ids, start=1):
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp_code).strip()
+            emp_email = str(emp.get('email') or '').strip()
+
+            if not emp_email:
+                errores += 1
+                motivo = 'Sin email'
+                yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+                continue
+
+            try:
+                pdf_buffer = generar_pdf_certificado_retiro_cts(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': emp_code,
+                    }
+                )
+                exito, msg = enviar_correo_certificado_retiro_cts(
+                    destinatario=emp_email,
+                    nombre_empleado=emp_nombre,
+                    periodo=period,
+                    sexo=emp.get('sex', 0),
+                    pdf_io=pdf_buffer,
+                    person=emp_code,
+                )
+                if exito:
+                    enviados += 1
+                    status = 'Enviado'
+                    detalle = msg
+                    motivo = ''
+                else:
+                    errores += 1
+                    status = 'Error'
+                    detalle = msg or 'No se pudo enviar el correo.'
+                    motivo = detalle
+            except Exception as e:
+                logging.exception('enviar_certificados_retiro_cts_masivo persona=%s', emp_code)
+                errores += 1
+                status = 'Error'
+                detalle = str(e)
+                motivo = detalle
+
+            yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'email': emp_email, 'status': status, 'detalle': detalle, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'enviados': enviados, 'errores': errores, 'total': total})}\n\n"
+
+    return Response(
+        stream_with_context(generar_progreso_envio()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route('/preview_certificado_trabajo')
+@login_required
+def preview_certificado_trabajo():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    try:
+        pdf_buffer = generar_pdf_certificado_trabajo(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_certificado_trabajo')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_certificado_trabajo_pdf_filename(person, period),
+    )
+
+
+@app.route('/procesar_certificados_trabajo_masivo', methods=['POST'])
+@login_required
+def procesar_certificados_trabajo_masivo():
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    modo = str(body.get('modo') or '').strip().lower()
+    seleccionados = body.get('trabajadores') or []
+    if modo not in ('zip', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan filtros para procesar certificados.'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
+
+    if modo == 'zip':
+        company_name = str(body.get('company_name') or cia).strip()
+        safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
+        period_yyyymm = period[:6] if len(period) >= 6 else period
+        safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
+        nombre_zip = f'certificados_trabajo_{safe_company.lower()}_{safe_period}.zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pid in ids:
+                pdf_data = generar_pdf_certificado_trabajo(
+                    {
+                        'person': pid,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                    }
+                )
+                zf.writestr(_certificado_trabajo_pdf_filename(pid, period), pdf_data.getvalue())
+        memory_file.seek(0)
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=nombre_zip,
+            as_attachment=True,
+        )
+
+    return jsonify(
+        {
+            'status': 'pending',
+            'message': 'Use el modo Enviar por Email desde la pantalla.',
+            'total': len(ids),
+        }
+    ), 202
+
+
+@app.route('/descargar_zip_certificados_trabajo')
+@login_required
+def descargar_zip_certificados_trabajo():
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = (request.args.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    company_name = (request.args.get('company_name') or '').strip()
+    trabajadores_raw = (request.args.get('trabajadores') or '').strip()
+    seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+
+    if not (cia and payroll_type and period):
+        flash('Faltan filtros para generar el ZIP de certificados.', 'warning')
+        return redirect(url_for('certificado_trabajo_page'))
+
+    conn = None
+    empleados = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadocertificadotrabajo_web @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, period, '0', None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        empleados = rows or []
+    except Exception:
+        logging.exception('descargar_zip_certificados_trabajo listado')
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    if not empleados:
+        flash('No hay certificados para procesar en este periodo.', 'warning')
+        return redirect(url_for('certificado_trabajo_page'))
+
+    if seleccionados:
+        wanted = set(seleccionados)
+        empleados = [e for e in empleados if str(e.get('person') or '').strip() in wanted]
+        if not empleados:
+            flash('La selección no contiene trabajadores válidos para el periodo indicado.', 'warning')
+            return redirect(url_for('certificado_trabajo_page'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for emp in empleados:
+            person_id = str(emp.get('person') or '').strip()
+            if not person_id:
+                continue
+            try:
+                pdf_io = generar_pdf_certificado_trabajo(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': person_id,
+                    }
+                )
+                zip_file.writestr(_certificado_trabajo_pdf_filename(person_id, period), pdf_io.getvalue())
+            except Exception:
+                logging.exception('descargar_zip_certificados_trabajo persona=%s', person_id)
+                continue
+
+    zip_buffer.seek(0)
+    safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name or cia).strip('_') or 'COMPANIA'
+    safe_period = re.sub(r'[^0-9]+', '', period) or 'PERIODO'
+    safe_payroll = re.sub(r'[^A-Za-z0-9_\\-]+', '_', payroll_type).strip('_') or 'PLANILLA'
+    nombre_zip = f'Certificados_Trabajo_{safe_company}_{safe_period}_{safe_payroll}.zip'
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
+
+
+@app.route('/enviar_certificados_trabajo_masivo', methods=['POST'])
+@login_required
+def enviar_certificados_trabajo_masivo():
+    data = request.get_json(silent=True) or {}
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(data.get('period'))
+    seleccionados = data.get('empleados', data.get('trabajadores', []))
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
+    if not (cia and payroll_type and period):
+        return jsonify({'error': 'Faltan filtros para envío de certificados.'}), 400
+
+    conn = None
+    empleados_periodo = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadocertificadotrabajo_web @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, period, '0', None),
+        )
+        empleados_periodo = _dicts_first_nonempty_resultset(cursor) or []
+    except Exception:
+        logging.exception('enviar_certificados_trabajo_masivo listado')
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    by_person = {}
+    for e in empleados_periodo:
+        pid = str(e.get('person') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(ids)
+    if total == 0:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    def generar_progreso_envio():
+        enviados = 0
+        errores = 0
+        for idx, emp_code in enumerate(ids, start=1):
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp_code).strip()
+            emp_email = str(emp.get('email') or '').strip()
+
+            if not emp_email:
+                errores += 1
+                motivo = 'Sin email'
+                yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+                continue
+
+            try:
+                pdf_buffer = generar_pdf_certificado_trabajo(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': emp_code,
+                    }
+                )
+                exito, msg = enviar_correo_certificado_trabajo(
+                    destinatario=emp_email,
+                    nombre_empleado=emp_nombre,
+                    periodo=period,
+                    sexo=emp.get('sex', 0),
+                    pdf_io=pdf_buffer,
+                    person=emp_code,
+                )
+                if exito:
+                    enviados += 1
+                    status = 'Enviado'
+                    detalle = msg
+                    motivo = ''
+                else:
+                    errores += 1
+                    status = 'Error'
+                    detalle = msg or 'No se pudo enviar el correo.'
+                    motivo = detalle
+            except Exception as e:
+                logging.exception('enviar_certificados_trabajo_masivo persona=%s', emp_code)
+                errores += 1
+                status = 'Error'
+                detalle = str(e)
+                motivo = detalle
+
+            yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'email': emp_email, 'status': status, 'detalle': detalle, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'enviados': enviados, 'errores': errores, 'total': total})}\n\n"
+
+    return Response(
+        stream_with_context(generar_progreso_envio()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
 
 
 @app.route('/impuesto_renta/certificado_quinta')

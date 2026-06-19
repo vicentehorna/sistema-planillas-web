@@ -21,6 +21,8 @@
     const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
     const STORAGE_KEY_GENERAR_BOLETAS = 'filtros_generar_boletas';
+    const STORAGE_KEY_CERTIFICADO_TRABAJO = 'filtros_certificado_trabajo';
+    const STORAGE_KEY_CERTIFICADO_RETIRO_CTS = 'filtros_certificado_retiro_cts';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
     const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
 
@@ -1651,6 +1653,198 @@
         };
     }
 
+    function crearPersistenciaCertificadoTrabajo() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    periodo: val('cboPeriodo'),
+                    nombre: val('txtBuscarTrabajador'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_CERTIFICADO_TRABAJO, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros certificado trabajo: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_CERTIFICADO_TRABAJO);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, cargarPeriodosLiquidacion } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (!cboCia || !cboPt || !cboProc || !cboPer) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                if (txtNombre && filtros.nombre != null) {
+                    txtNombre.value = String(filtros.nombre);
+                }
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            if (typeof cargarPeriodosLiquidacion === 'function') {
+                await cargarPeriodosLiquidacion();
+            }
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (txtNombre) {
+                txtNombre.addEventListener('change', guardar);
+                txtNombre.addEventListener('input', guardar);
+            }
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_CERTIFICADO_TRABAJO,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    function crearPersistenciaCertificadoRetiroCts() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    periodo: val('cboPeriodo'),
+                    nombre: val('txtBuscarTrabajador'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_CERTIFICADO_RETIRO_CTS, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros certificado retiro cts: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_CERTIFICADO_RETIRO_CTS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, cargarPeriodosLiquidacion } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (!cboCia || !cboPt || !cboProc || !cboPer) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                if (txtNombre && filtros.nombre != null) {
+                    txtNombre.value = String(filtros.nombre);
+                }
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            if (typeof cargarPeriodosLiquidacion === 'function') {
+                await cargarPeriodosLiquidacion();
+            }
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (txtNombre && filtros.nombre != null) {
+                txtNombre.value = String(filtros.nombre);
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            const txtNombre = document.getElementById('txtBuscarTrabajador');
+            if (txtNombre) {
+                txtNombre.addEventListener('change', guardar);
+                txtNombre.addEventListener('input', guardar);
+            }
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_CERTIFICADO_RETIRO_CTS,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaCertificadoQuinta() {
         function guardar() {
             try {
@@ -1870,6 +2064,8 @@
         STORAGE_KEY_REGISTRO_VACACIONES,
         STORAGE_KEY_APERTURAR_PERIODOS,
         STORAGE_KEY_GENERAR_BOLETAS,
+        STORAGE_KEY_CERTIFICADO_TRABAJO,
+        STORAGE_KEY_CERTIFICADO_RETIRO_CTS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         obtenerPeriodoActivo,
@@ -1953,6 +2149,12 @@
         },
         generarBoletas: function () {
             return crearPersistenciaGenerarBoletas();
+        },
+        certificadoTrabajo: function () {
+            return crearPersistenciaCertificadoTrabajo();
+        },
+        certificadoRetiroCts: function () {
+            return crearPersistenciaCertificadoRetiroCts();
         },
         certificadoQuinta: function () {
             return crearPersistenciaCertificadoQuinta();

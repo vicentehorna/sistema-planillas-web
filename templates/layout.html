@@ -568,6 +568,31 @@
                     </ul>
                 </li>
 
+                {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if liquidaciones_active else '' }}">
+                    <a href="#submenuLiquidaciones"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if liquidaciones_active else 'false' }}"
+                       aria-controls="submenuLiquidaciones"
+                       title="Liquidaciones">
+                        <i class="bi bi-person-x"></i><span class="sidebar-link-text">Liquidaciones</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if liquidaciones_active else '' }}" id="submenuLiquidaciones">
+                        <li class="{{ 'active' if request.endpoint == 'certificado_trabajo_page' else '' }}">
+                            <a href="{{ url_for('certificado_trabajo_page') }}" title="Certificado de Trabajo">
+                                <i class="bi bi-person-vcard"></i><span class="sidebar-link-text">Certificado de Trabajo</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'certificado_retiro_cts_page' else '' }}">
+                            <a href="{{ url_for('certificado_retiro_cts_page') }}" title="Certificado Retiro CTS">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Certificado Retiro CTS</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>

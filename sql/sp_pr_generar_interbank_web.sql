@@ -76,14 +76,8 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
-            LEFT(
-                CASE
-                    WHEN LEFT(LTRIM(RTRIM(ISNULL(e.salaryaccount, ''))), 2) = '09'
-                        THEN LTRIM(RTRIM(e.salaryaccount))
-                    ELSE '09' + LTRIM(RTRIM(ISNULL(e.salaryaccount, '')))
-                END + REPLICATE(' ', 20),
-                20
-            ) AS cuenta,
+            LTRIM(RTRIM(ISNULL(e.salaryaccount, ''))) AS cuenta_raw,
+            ISNULL(tat.abrev, 'A') AS tipocuenta_abrev,
             CASE
                 WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '01'
                 WHEN ISNULL(pdt.PDT, '') IN ('04', '4', '03', '3') THEN '04'
@@ -115,6 +109,8 @@ BEGIN
             INNER JOIN PersonasSel ps ON ps.person = e.person
             LEFT JOIN SY_PersonDocumentType pdt
                 ON pdt.PersonDocumentType = sp.EmployeeDocumentType
+            LEFT JOIN te_accounttype tat
+                ON tat.accounttype = e.salaryaccounttype
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(e.salaryaccount, '') <> ''
@@ -130,10 +126,51 @@ BEGIN
                 END = 'N'
              OR e.ineffectivedate >= GETDATE()
           )
+    ),
+    DetalleCuenta AS (
+        SELECT
+            db.*,
+            CASE
+                WHEN LEFT(db.cuenta_raw, 2) = '09' AND LEN(db.cuenta_raw) > 13
+                    THEN SUBSTRING(db.cuenta_raw, 3, LEN(db.cuenta_raw))
+                ELSE db.cuenta_raw
+            END AS cuenta_limpia,
+            CASE WHEN db.tipocuenta_abrev = 'B' THEN '99' ELSE '09' END AS tipo_abono
+        FROM DetalleBase db
     )
     SELECT
         person,
-        cuenta,
+        LEFT(
+            dc.tipo_abono +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 3)
+                ELSE
+                    CASE dc.tipocuenta_abrev
+                        WHEN 'C' THEN '001'
+                        WHEN 'A' THEN '002'
+                        ELSE '002'
+                    END
+            END +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 2)
+                WHEN @par_currency = 'EX' THEN '10'
+                ELSE '01'
+            END +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 3)
+                WHEN LEN(dc.cuenta_limpia) >= 3 THEN LEFT(dc.cuenta_limpia, 3)
+                ELSE REPLICATE(' ', 3)
+            END +
+            LEFT(
+                CASE
+                    WHEN dc.tipo_abono = '99' THEN dc.cuenta_limpia
+                    WHEN LEN(dc.cuenta_limpia) >= 4 THEN SUBSTRING(dc.cuenta_limpia, 4, 10)
+                    ELSE dc.cuenta_limpia
+                END + REPLICATE(' ', 20),
+                20
+            ),
+            30
+        ) AS bloque_abono,
         tipodocumento,
         numerodocumento,
         apellido1,
@@ -153,7 +190,7 @@ BEGIN
         LEFT(REPLICATE(' ', 6) + apellido2 + REPLICATE(' ', 14), 20) AS apellido2_fmt,
         LEFT(REPLICATE(' ', 6) + nombres + REPLICATE(' ', 22), 28) AS nombres_fmt
     INTO #Detalle
-    FROM DetalleBase;
+    FROM DetalleCuenta dc;
 
     SELECT @total_reg = COUNT(*) FROM #Detalle;
 
@@ -192,8 +229,9 @@ BEGIN
 
     /*
         Detalle tipo 02 (380 chars):
-        02 + secuencial(10) + esp(39) + tipodoc(2) + importe(15) + esp(1) + cuenta(20)
-        + esp(10) + P+doc(11) + esp(1) + apellido1(20) + apellido2(20) + nombres(28)
+        02 + secuencial(10) + esp(39) + tipodoc(2) + importe(15) + esp(1)
+        + abono(30): tipo09/99(2) + tipocuenta(3) + moneda(2) + oficina(3) + cuenta(20)
+        + P+doc(11) + esp(1) + apellido1(20) + apellido2(20) + nombres(28)
         + importe_cta(15 ceros haberes) + filler(186)
     */
     ;WITH DetalleSeq AS (
@@ -215,8 +253,7 @@ BEGIN
                 tipodocumento +
                 importe15 +
                 ' ' +
-                cuenta +
-                REPLICATE(' ', 10) +
+                bloque_abono +
                 referencia +
                 ' ' +
                 apellido1_fmt +

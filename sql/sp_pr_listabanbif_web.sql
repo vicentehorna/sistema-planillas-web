@@ -2,6 +2,7 @@
     Listado de trabajadores elegibles para archivo BANBIF (BXIE).
     Usa pr_mapping.banbifbank.
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @todos_bancos: N = solo cuenta propia BANBIF; Y = cuenta propia BANBIF + interbancarios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listabanbif_web]
     @par_company     VARCHAR(10),
@@ -100,12 +101,23 @@ BEGIN
             )
          OR (
                 @todos_bancos = 'Y'
-                AND e.salarybank <> m.banbifbank
                 AND (
-                    ISNULL(tat.abrev, '') = 'B'
-                 OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                    (
+                        e.salarybank = m.banbifbank
+                        AND (
+                            (@par_currency = 'LO' AND ISNULL(e.salaryaccount, '') <> '')
+                         OR (@par_currency = 'EX' AND ISNULL(e.socialassistancecenter, '') <> '')
+                        )
+                    )
+                 OR (
+                        e.salarybank <> m.banbifbank
+                        AND (
+                            ISNULL(tat.abrev, '') = 'B'
+                         OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                        )
+                        AND ISNULL(e.socialassistancenumber, '') <> ''
+                    )
                 )
-                AND ISNULL(e.socialassistancenumber, '') <> ''
             )
       )
       AND sp.status = 'A'

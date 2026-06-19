@@ -3,6 +3,7 @@
     No incluye cabecera (igual que el sistema PowerBuilder anterior).
     Requiere #BanbifPersonas (person) cargada por la app web.
     Banco destino: pr_mapping.banbifbank.
+    @todos_bancos: N = solo cuenta propia BANBIF; Y = cuenta propia BANBIF + interbancarios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_banbif_web]
     @par_company     VARCHAR(10),
@@ -112,9 +113,12 @@ BEGIN
             LEFT(
                 LTRIM(RTRIM(
                     CASE
-                        WHEN @todos_bancos = 'Y' THEN ISNULL(e.socialassistancenumber, '')
-                        WHEN @par_currency = 'EX' THEN ISNULL(e.socialassistancecenter, '')
-                        ELSE ISNULL(e.salaryaccount, '')
+                        WHEN e.salarybank = m.banbifbank THEN
+                            CASE
+                                WHEN @par_currency = 'EX' THEN ISNULL(e.socialassistancecenter, '')
+                                ELSE ISNULL(e.salaryaccount, '')
+                            END
+                        ELSE ISNULL(e.socialassistancenumber, '')
                     END
                 )) + REPLICATE(' ', 20),
                 20
@@ -144,12 +148,23 @@ BEGIN
                 (@todos_bancos = 'N' AND e.salarybank = m.banbifbank)
              OR (
                     @todos_bancos = 'Y'
-                    AND e.salarybank <> m.banbifbank
                     AND (
-                        ISNULL(tat.abrev, '') = 'B'
-                     OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                        (
+                            e.salarybank = m.banbifbank
+                            AND (
+                                (@par_currency = 'LO' AND ISNULL(e.salaryaccount, '') <> '')
+                             OR (@par_currency = 'EX' AND ISNULL(e.socialassistancecenter, '') <> '')
+                            )
+                        )
+                     OR (
+                            e.salarybank <> m.banbifbank
+                            AND (
+                                ISNULL(tat.abrev, '') = 'B'
+                             OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                            )
+                            AND ISNULL(e.socialassistancenumber, '') <> ''
+                        )
                     )
-                    AND ISNULL(e.socialassistancenumber, '') <> ''
                 )
           )
           AND sp.status = 'A'

@@ -80,9 +80,9 @@ BEGIN
             ISNULL(tat.abrev, 'A') AS tipocuenta_abrev,
             CASE
                 WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '01'
-                WHEN ISNULL(pdt.PDT, '') IN ('04', '4', '03', '3') THEN '04'
+                WHEN ISNULL(pdt.PDT, '') IN ('04', '4', '03', '3') THEN '03'
+                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '04'
                 WHEN ISNULL(pdt.PDT, '') IN ('06', '6') THEN '06'
-                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '07'
                 ELSE '01'
             END AS tipodocumento,
             LTRIM(RTRIM(
@@ -171,6 +171,7 @@ BEGIN
             ),
             30
         ) AS bloque_abono,
+        CASE WHEN @par_currency = 'EX' THEN '10' ELSE '01' END AS moneda_abono,
         tipodocumento,
         numerodocumento,
         apellido1,
@@ -182,13 +183,16 @@ BEGIN
             CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
             15
         ) AS importe15,
+        RIGHT(REPLICATE('0', 20) + numerodocumento, 20) AS codigo_beneficiario,
+        LEFT(numerodocumento + REPLICATE(' ', 15), 15) AS numdoc_fmt,
         LEFT(
-            'P' + RIGHT(REPLICATE('0', 10) + numerodocumento, 10),
-            11
-        ) AS referencia,
-        LEFT(REPLICATE(' ', 6) + apellido1 + REPLICATE(' ', 14), 20) AS apellido1_fmt,
-        LEFT(REPLICATE(' ', 6) + apellido2 + REPLICATE(' ', 14), 20) AS apellido2_fmt,
-        LEFT(REPLICATE(' ', 6) + nombres + REPLICATE(' ', 22), 28) AS nombres_fmt
+            LTRIM(RTRIM(
+                LTRIM(RTRIM(apellido1)) +
+                CASE WHEN LTRIM(RTRIM(apellido2)) <> '' THEN ' ' + LTRIM(RTRIM(apellido2)) ELSE '' END +
+                CASE WHEN LTRIM(RTRIM(nombres)) <> '' THEN ' ' + LTRIM(RTRIM(nombres)) ELSE '' END
+            )) + REPLICATE(' ', 60),
+            60
+        ) AS nombre_fmt
     INTO #Detalle
     FROM DetalleCuenta dc;
 
@@ -228,11 +232,11 @@ BEGIN
         LEFT(@codigo_empresa + REPLICATE(' ', 5), 5);
 
     /*
-        Detalle tipo 02 (380 chars):
-        02 + secuencial(10) + esp(39) + tipodoc(2) + importe(15) + esp(1)
-        + abono(30): tipo09/99(2) + tipocuenta(3) + moneda(2) + oficina(3) + cuenta(20)
-        + P+doc(11) + esp(1) + apellido1(20) + apellido2(20) + nombres(28)
-        + importe_cta(15 ceros haberes) + filler(186)
+        Detalle tipo 02 (380 chars, spec Interbank Pago Haberes):
+        02(2) + cod.beneficiario(20) + doc.pago(21) + fecha(8) + moneda abono(2)
+        + monto(15) + filler(1) + abono cuenta(30) + tipo persona(1) + tipo doc(2)
+        + num doc(15) + nombre(60) + moneda CTS(2) + monto CTS(15) + filler(6)
+        + celular(40) + email(140)
     */
     ;WITH DetalleSeq AS (
         SELECT
@@ -248,19 +252,23 @@ BEGIN
             seq AS orden,
             LEFT(
                 '02' +
-                LEFT(CAST(seq AS VARCHAR(10)) + REPLICATE(' ', 10), 10) +
-                REPLICATE(' ', 39) +
-                tipodocumento +
+                codigo_beneficiario +
+                ' ' +
+                REPLICATE(' ', 20) +
+                REPLICATE(' ', 8) +
+                moneda_abono +
                 importe15 +
                 ' ' +
                 bloque_abono +
-                referencia +
-                ' ' +
-                apellido1_fmt +
-                apellido2_fmt +
-                nombres_fmt +
+                'P' +
+                tipodocumento +
+                numdoc_fmt +
+                nombre_fmt +
+                REPLICATE(' ', 2) +
                 '000000000000000' +
-                REPLICATE(' ', 186),
+                REPLICATE(' ', 6) +
+                REPLICATE(' ', 40) +
+                REPLICATE(' ', 140),
                 380
             ) AS linea_txt
         FROM DetalleSeq

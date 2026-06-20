@@ -8,32 +8,98 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _use_db_router():
+    """Activa enrutamiento por USUARIOS_ROUTER (hm_planillas). Desactivar en local con SQL_USE_DB_ROUTER=N."""
+    val = (os.getenv('SQL_USE_DB_ROUTER') or 'Y').strip().upper()
+    return val not in ('N', '0', 'NO', 'FALSE')
+
+
+def get_router_database():
+    return (os.getenv('SQL_ROUTER_DATABASE') or 'hm_planillas').strip()
+
+
+def get_client_database_from_session():
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            db = (session.get('client_database') or '').strip()
+            if db:
+                return db
+    except Exception:
+        pass
+    return None
+
+
+def persist_client_database(database):
+    try:
+        from flask import has_request_context, session
+        if has_request_context() and database:
+            session['client_database'] = str(database).strip()
+    except Exception:
+        pass
+
+
+def get_active_database():
+    """BD activa: sesión del cliente logueado, o SQL_DATABASE como respaldo local."""
+    db = get_client_database_from_session()
+    if db:
+        return db
+    return (os.getenv('SQL_DATABASE') or '').strip()
+
+
+def resolve_client_database(username):
+    """
+    Paso 1 del login: resuelve la BD del cliente desde hm_planillas.USUARIOS_ROUTER.
+    Retorna None si el usuario no está registrado en el enrutador.
+    """
+    username = (username or '').strip()
+    if not username:
+        return None
+
+    if not _use_db_router():
+        return get_active_database() or None
+
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection(database=get_router_database())
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT base_datos_name FROM USUARIOS_ROUTER WHERE usuario = ?",
+            (username,),
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+        return None
+    except Exception as e:
+        print(f"Error en resolve_client_database: {e}")
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 class DatabaseConfig:
     """Configuración de conexión a SQL Server"""
-    
-    @staticmethod
-    def get_connection_string(driver_override=None):
-        """Construye la cadena de conexión a SQL Server"""
-        # server = '179.61.14.224,1433'
-        # database = 'hm_ultra2'
-        # username = 'sa'
-        # password = 'HMplanillas2020'
 
+    @staticmethod
+    def get_connection_string(database=None, driver_override=None):
+        """Construye la cadena de conexión a SQL Server"""
         server = os.getenv('SQL_SERVER')
-        database = os.getenv('SQL_DATABASE')
+        database = (database or os.getenv('SQL_DATABASE') or '').strip()
         username = os.getenv('SQL_USER')
         password = os.getenv('SQL_PASSWORD')
 
-
         print(f"DEBUG: Intentando conectar a SERVER: {server} | DB: {database}")
-        
 
         if driver_override:
             driver = driver_override
         elif platform.system() == 'Windows':
             driver = '{SQL Server}'
         else:
-            # En contenedores Linux modernos (Render/Debian 12) suele estar msodbcsql18.
             driver = 'ODBC Driver 18 for SQL Server'
 
         print(f"DEBUG: Intentando conectar a [{server}] usando el driver: {driver}")
@@ -45,25 +111,26 @@ class DatabaseConfig:
             f'UID={username};'
             f'PWD={password};'
             'Encrypt=no;'
-            'TrustServerCertificate=yes;' # <--- ESTO EVITA EL ERROR 53 EN MUCHOS CASOS
+            'TrustServerCertificate=yes;'
             'Connection Timeout=10;'
         )
 
-           
-        
         return connection_string
-    
+
     @staticmethod
-    def get_connection():
+    def get_connection(database=None):
         """Crea y retorna una conexión a SQL Server"""
+        database = (database or get_active_database() or '').strip()
+        if not database:
+            raise ValueError('No hay base de datos configurada (SQL_DATABASE o sesión client_database).')
+
         if platform.system() == 'Windows':
             try:
-                return pyodbc.connect(DatabaseConfig.get_connection_string())
+                return pyodbc.connect(DatabaseConfig.get_connection_string(database=database))
             except Exception as e:
                 print(f"Error al conectar con SQL Server: {e}")
                 raise
 
-        # Linux: probar 18 primero y luego 17 para mayor compatibilidad.
         candidate_drivers = [
             os.getenv('SQL_ODBC_DRIVER', '').strip(),
             'ODBC Driver 18 for SQL Server',
@@ -76,7 +143,9 @@ class DatabaseConfig:
                 continue
             seen.add(drv)
             try:
-                return pyodbc.connect(DatabaseConfig.get_connection_string(driver_override=drv))
+                return pyodbc.connect(
+                    DatabaseConfig.get_connection_string(database=database, driver_override=drv)
+                )
             except Exception as e:
                 last_error = e
                 print(f"DEBUG: Falló conexión con driver '{drv}': {e}")
@@ -85,9 +154,11 @@ class DatabaseConfig:
         raise last_error
 
 
-def get_db_connection():
-    """Conexión pyodbc reutilizable (APIs, reportes)."""
-    return DatabaseConfig.get_connection()
+def get_db_connection(database=None):
+    """Conexión pyodbc reutilizable (APIs, reportes). Usa la BD del cliente en sesión."""
+    if database is None:
+        database = get_active_database()
+    return DatabaseConfig.get_connection(database=database)
 
 
 def get_config_empresa(company_id):
@@ -134,53 +205,62 @@ class User(UserMixin):
     @staticmethod
     def validate_user(username, password):
         """
-        Valida las credenciales del usuario contra la base de datos
-        
-        Args:
-            username: Nombre de usuario
-            password: Contraseña del usuario
-            
-        Returns:
-            User object si las credenciales son válidas, None en caso contrario
+        Valida credenciales en dos pasos:
+        1) Resuelve la BD del cliente en hm_planillas.USUARIOS_ROUTER.
+        2) Valida UserID/PasswordWeb en la BD del cliente (SY_User).
         """
+        username = (username or '').strip()
+        password = password or ''
+        if not username:
+            return None
+
+        target_db = resolve_client_database(username)
+        if not target_db:
+            print(f"DEBUG: Usuario '{username}' no encontrado en USUARIOS_ROUTER")
+            return None
+
+        conn = None
         try:
-            conn = DatabaseConfig.get_connection()
+            conn = DatabaseConfig.get_connection(database=target_db)
             cursor = conn.cursor()
-            
-            # Query para validar usuario y contraseña
-            # Ajusta el nombre de la tabla y columnas según tu esquema
+
             query = """
-                SELECT 
+                SELECT
                 u.UserID,
                 p.Name,
                 p.email,
                 p.Name
             FROM SY_User u
-            INNER JOIN SY_Person p ON p.UserID = u.UserID 
+            INNER JOIN SY_Person p ON p.UserID = u.UserID
             INNER JOIN PR_Employee E on (p.Person = e.Person and e.Status = 'N')
             INNER JOIN SY_Company c ON (E.Company = c.Company)
             INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
             INNER JOIN PR_mapping2 M on (c.Company = M.company)
             WHERE u.UserID = ? AND u.PasswordWeb = ?
             """
-            
+
             cursor.execute(query, (username, password))
             row = cursor.fetchone()
-            
             cursor.close()
-            conn.close()
 
-            print(f"DEBUG: Intentando login con usuario: '{username}'")
-            
+            print(f"DEBUG: Login usuario='{username}' BD='{target_db}'")
+
             if row:
                 user_id, username_db, email, nombre = row
+                persist_client_database(target_db)
                 return User(user_id, username_db, email, nombre)
-            
+
             return None
-            
+
         except Exception as e:
             print(f"Error al validar usuario: {e}")
             return None
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
     
     @staticmethod
     def get_user_by_id(user_id):
@@ -194,7 +274,7 @@ class User(UserMixin):
             User object si existe, None en caso contrario
         """
         try:
-            conn = DatabaseConfig.get_connection()
+            conn = get_db_connection()
             cursor = conn.cursor()
             
             query = """

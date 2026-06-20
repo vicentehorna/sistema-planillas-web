@@ -94,6 +94,7 @@ def _cache_session_user(user):
         'username': user.username,
         'email': getattr(user, 'email', None),
         'nombre': getattr(user, 'nombre', None),
+        'client_database': session.get('client_database'),
     }
 
 
@@ -101,6 +102,8 @@ def _user_from_session_cache(user_id):
     cached = session.get('_user_login') or {}
     if not cached or str(cached.get('id')) != str(user_id):
         return None
+    if cached.get('client_database') and not session.get('client_database'):
+        session['client_database'] = cached['client_database']
     return User(
         cached['id'],
         cached.get('username'),
@@ -174,9 +177,11 @@ def format_dias(value):
 
 @app.context_processor
 def inject_now():
+    from database import get_client_database_from_session
+    active_db = get_client_database_from_session() or (os.getenv('SQL_DATABASE') or '').strip()
     return {
         'now': datetime.now(),
-        'sql_database': (os.getenv('SQL_DATABASE') or '').strip(),
+        'sql_database': active_db,
     }
 
 
@@ -2882,7 +2887,9 @@ def login():
 
 @app.route('/login', methods=['POST'])
 def login_post():
-    user = User.validate_user(request.form.get('username'), request.form.get('password'))
+    username = (request.form.get('username') or '').strip()
+    password = request.form.get('password') or ''
+    user = User.validate_user(username, password)
     if user:
         login_user(user)
         _cache_session_user(user)

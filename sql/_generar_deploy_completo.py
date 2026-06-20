@@ -5,6 +5,13 @@ from pathlib import Path
 SQL_DIR = Path(__file__).resolve().parent
 OUT = SQL_DIR / "deploy_planillas_web_completo.sql"
 
+# No incluir en deploy de bases cliente (hm_aci, hm_ultra, ...)
+EXCLUDE_FROM_DEPLOY = {
+    OUT.name,
+    "deploy_hm_planillas_enrutador.sql",
+    "tables_usuarios_router.sql",
+}
+
 ALTER_FIRST = [
     "alter_pr_mapping_add_banbifbank.sql",
     "alter_pr_processtype_add_procedurename.sql",
@@ -22,7 +29,7 @@ NOTA_ERP = """\
 def main():
     all_files = sorted(
         p.name for p in SQL_DIR.glob("*.sql")
-        if p.name not in (OUT.name, Path(__file__).name)
+        if p.name not in EXCLUDE_FROM_DEPLOY
     )
     ordered = []
     seen = set()
@@ -40,6 +47,10 @@ def main():
         "",
         "  Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.",
         "  Requisitos: SQL Server 2016 SP1+ (CREATE OR ALTER PROCEDURE).",
+        "",
+        "  Bases de datos cliente (hm_aci, hm_ultra, ...): ejecutar este archivo completo.",
+        "  Base enrutadora hm_planillas: ejecutar deploy_hm_planillas_enrutador.sql",
+        "    y cargar USUARIOS_ROUTER (usuario -> base_datos_name).",
         "",
         "  Orden:",
         "    1. Scripts ALTER (columnas/tablas)",

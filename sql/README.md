@@ -78,3 +78,15 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 
 - **`sp_pr_reporteplamevertical_web`**: requiere tablas de trabajo `xx_plamevertical2` y `xx_reporteplanilla` en la base de datos.
 - Los scripts usan `CREATE OR ALTER PROCEDURE` (SQL Server 2016 SP1+).
+
+## Deploy en SQL Server
+
+| Script | Base de datos | Descripción |
+|--------|---------------|-------------|
+| `deploy_planillas_web_completo.sql` | Cada cliente (`hm_aci`, `hm_ultra`, …) | ALTER + todos los SP web (97 archivos). Regenerar con `python sql/_generar_deploy_completo.py`. |
+| `deploy_hm_planillas_enrutador.sql` | Solo `hm_planillas` | Tabla `USUARIOS_ROUTER` (usuario → base de datos). |
+
+Pasos típicos para una base cliente nueva:
+
+1. Ejecutar `deploy_planillas_web_completo.sql` en SSMS sobre la BD del cliente.
+2. En `hm_planillas`, registrar el usuario: `INSERT INTO USUARIOS_ROUTER …`.

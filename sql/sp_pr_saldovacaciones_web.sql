@@ -184,66 +184,28 @@ BEGIN
         IF @actualyear = @year - 1
             UPDATE xx_saldovacaciones SET saldo5 = @consumo WHERE person = @documentnumber;
 
-        SET @faltas = 0;
-        SET @inicio = @fecha;
-        WHILE @inicio < @date
-        BEGIN
-            SET @faltas = @faltas + CASE
-                WHEN ISNULL((
-                    SELECT COUNT(*)
-                    FROM PR_EmployeeMedicalRest
-                        INNER JOIN PR_MedicalRestType
-                            ON PR_EmployeeMedicalRest.MedicalRestType = PR_MedicalRestType.MedicalRestType
-                           AND PR_MedicalRestType.PDT = '07'
-                    WHERE PR_EmployeeMedicalRest.Person = @documentnumber
-                      AND PR_EmployeeMedicalRest.Company = @company
-                      AND @inicio BETWEEN PR_EmployeeMedicalRest.DateBegin AND PR_EmployeeMedicalRest.DateEnd
-                ), 0) > 0 THEN 1
-                ELSE 0
-            END;
-            SET @inicio = DATEADD(DD, 1, @inicio);
-        END;
-        UPDATE xx_saldovacaciones SET faltas = @faltas WHERE person = @documentnumber;
-
-        SET @licencias = 0;
-        SET @inicio = @fecha;
-        WHILE @inicio <= @date
-        BEGIN
-            SET @licencias = @licencias + CASE
-                WHEN ISNULL((
-                    SELECT COUNT(*)
-                    FROM PR_EmployeeMedicalRest
-                        INNER JOIN PR_MedicalRestType
-                            ON PR_EmployeeMedicalRest.MedicalRestType = PR_MedicalRestType.MedicalRestType
-                           AND PR_MedicalRestType.PDT = '05'
-                    WHERE PR_EmployeeMedicalRest.Person = @documentnumber
-                      AND PR_EmployeeMedicalRest.Company = @company
-                      AND @inicio BETWEEN PR_EmployeeMedicalRest.DateBegin AND PR_EmployeeMedicalRest.DateEnd
-                ), 0) > 0 THEN 1
-                ELSE 0
-            END;
-            SET @inicio = DATEADD(DD, 1, @inicio);
-        END;
-        UPDATE xx_saldovacaciones SET licencias = @licencias WHERE person = @documentnumber;
-
+        /* Descansos (PDT 20): acumula por periodo de provisión de cada año de control. */
         SET @descansos = 0;
-        SET @inicio = @inicioProvision;
-        WHILE @inicio < @finProvision
+        IF @inicioProvision IS NOT NULL AND @finProvision IS NOT NULL AND @inicioProvision < @finProvision
         BEGIN
-            SET @descansos = @descansos + CASE
-                WHEN ISNULL((
-                    SELECT COUNT(*)
-                    FROM PR_EmployeeMedicalRest
-                        INNER JOIN PR_MedicalRestType
-                            ON PR_EmployeeMedicalRest.MedicalRestType = PR_MedicalRestType.MedicalRestType
-                           AND PR_MedicalRestType.PDT = '20'
-                    WHERE PR_EmployeeMedicalRest.Person = @documentnumber
-                      AND PR_EmployeeMedicalRest.Company = @company
-                      AND @inicio BETWEEN PR_EmployeeMedicalRest.DateBegin AND PR_EmployeeMedicalRest.DateEnd
-                ), 0) > 0 THEN 1
-                ELSE 0
-            END;
-            SET @inicio = DATEADD(DD, 1, @inicio);
+            SELECT @descansos = COUNT(*)
+            FROM (
+                SELECT TOP (DATEDIFF(DAY, @inicioProvision, @finProvision))
+                    ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
+                FROM sys.all_objects a
+                    CROSS JOIN sys.all_objects b
+            ) tally
+            CROSS APPLY (SELECT DATEADD(DAY, tally.n, @inicioProvision) AS d) cal
+            WHERE EXISTS (
+                SELECT 1
+                FROM PR_EmployeeMedicalRest emr
+                    INNER JOIN PR_MedicalRestType mrt
+                        ON emr.MedicalRestType = mrt.MedicalRestType
+                       AND mrt.PDT = '20'
+                WHERE emr.Person = @documentnumber
+                  AND emr.Company = @company
+                  AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
+            );
         END;
         UPDATE xx_saldovacaciones
         SET descansos = ISNULL(descansos, 0) + @descansos
@@ -255,6 +217,71 @@ BEGIN
 
     CLOSE Vacaciones;
     DEALLOCATE Vacaciones;
+
+    /* Faltas y licencias: una sola vez por trabajador (no por año de control). */
+    UPDATE sv
+    SET
+        faltas = calc.faltas,
+        licencias = calc.licencias
+    FROM xx_saldovacaciones sv
+    CROSS APPLY (
+        SELECT CONVERT(DATETIME, sv.entrydate, 112) AS inicio_emp
+    ) ing
+    CROSS APPLY (
+        SELECT
+            (
+                SELECT COUNT(*)
+                FROM (
+                    SELECT TOP (
+                        CASE
+                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) > 0
+                                THEN DATEDIFF(DAY, ing.inicio_emp, @date)
+                            ELSE 0
+                        END
+                    )
+                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
+                    FROM sys.all_objects a
+                        CROSS JOIN sys.all_objects b
+                ) tally
+                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeMedicalRest emr
+                        INNER JOIN PR_MedicalRestType mrt
+                            ON emr.MedicalRestType = mrt.MedicalRestType
+                           AND mrt.PDT = '07'
+                    WHERE emr.Person = sv.person
+                      AND emr.Company = sv.company
+                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
+                )
+            ) AS faltas,
+            (
+                SELECT COUNT(*)
+                FROM (
+                    SELECT TOP (
+                        CASE
+                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) >= 0
+                                THEN DATEDIFF(DAY, ing.inicio_emp, @date) + 1
+                            ELSE 0
+                        END
+                    )
+                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
+                    FROM sys.all_objects a
+                        CROSS JOIN sys.all_objects b
+                ) tally
+                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeMedicalRest emr
+                        INNER JOIN PR_MedicalRestType mrt
+                            ON emr.MedicalRestType = mrt.MedicalRestType
+                           AND mrt.PDT = '05'
+                    WHERE emr.Person = sv.person
+                      AND emr.Company = sv.company
+                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
+                )
+            ) AS licencias
+    ) calc;
 
     SELECT
         PR_PayRollType.ShortName AS tipoplanillas,

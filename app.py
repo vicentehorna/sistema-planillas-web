@@ -2224,6 +2224,16 @@ def _sql_call_timeout_payroll_seconds():
     return max(30, min(n, 600))
 
 
+def _sql_call_timeout_report_seconds():
+    """Timeout para reportes pesados (saldo vacaciones, planilla vertical, etc.)."""
+    raw = str(os.getenv("SQL_CALL_TIMEOUT_REPORT_SEC", "100")).strip()
+    try:
+        n = int(raw)
+    except Exception:
+        n = 100
+    return max(30, min(n, 300))
+
+
 def _set_cursor_timeout(cursor):
     """Timeout por ejecución de SP (segundos) para evitar cuelgues largos."""
     try:
@@ -2238,6 +2248,23 @@ def _set_cursor_timeout_payroll(cursor):
         cursor.timeout = _sql_call_timeout_payroll_seconds()
     except Exception:
         logging.debug("No se pudo fijar timeout payroll en cursor", exc_info=True)
+
+
+def _set_cursor_timeout_report(cursor):
+    """Timeout ampliado para reportes que ejecutan SP lentos en SQL Server."""
+    try:
+        cursor.timeout = _sql_call_timeout_report_seconds()
+    except Exception:
+        logging.debug("No se pudo fijar timeout reporte en cursor", exc_info=True)
+
+
+def _reporte_sql_error_message(err):
+    if isinstance(err, SystemError) or _is_transient_sql_error(err):
+        return (
+            'El reporte tardó demasiado o se interrumpió la consulta. '
+            'Intente filtrar por un trabajador específico o una fecha más reciente.'
+        )
+    return str(err)
 
 
 def _rows_to_dual_dicts(columns, rows):
@@ -7591,6 +7618,7 @@ def reporte_vacaciones_detalle_post():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
         cursor.execute(
             "EXEC sp_pr_r019_vacationdetail_web @cia=?, @payrolltype=?, @period=?, @person=?",
             (cia, payroll_type, period, person),
@@ -7612,7 +7640,7 @@ def reporte_vacaciones_detalle_post():
         return jsonify({"headers": headers_es, "data": resultado})
     except Exception as e:
         logging.exception("reporte_vacaciones_detalle_post")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
     finally:
         if conn:
             try:
@@ -7669,6 +7697,7 @@ def reporte_saldo_vacaciones_post():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
         cursor.execute(
             "EXEC sp_pr_saldovacaciones_web @company=?, @payrolltype=?, @date=?, @person=?, @cesados=?",
             (cia, payroll_type, fecha_dt, person, cesados),
@@ -7697,7 +7726,7 @@ def reporte_saldo_vacaciones_post():
         })
     except Exception as e:
         logging.exception("reporte_saldo_vacaciones_post")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
     finally:
         if conn:
             try:

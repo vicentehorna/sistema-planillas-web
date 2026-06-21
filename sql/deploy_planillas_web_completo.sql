@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-06-20 18:45
+  Generado: 2026-06-20 19:02
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -22,13 +22,14 @@
   Tablas de trabajo requeridas por algunos reportes:
     xx_plamevertical2, xx_reporteplanilla (reporte planilla vertical)
 
-  Archivos incluidos (97):
+  Archivos incluidos (98):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_processtype_add_procedurename.sql
     - alter_sy_company_add_logoname_signaturename.sql
     - tables_pr_plame_sunat_web.sql
     - SP_PR_EjecutarFormula.sql
     - SP_PR_ReportePromedioLiquidacion.sql
+    - f_count_medical_rest_days_web.sql
     - f_getSuma5ta_web.sql
     - sp_pr_5ta_trabajador_web.sql
     - sp_pr_actualizar_bancario_trabajador_web.sql
@@ -127,7 +128,7 @@ GO
 
 
 -- ============================================================================
--- [01/97] alter_pr_mapping_add_banbifbank.sql
+-- [01/98] alter_pr_mapping_add_banbifbank.sql
 -- ============================================================================
 
 /*
@@ -161,7 +162,7 @@ GO
 
 
 -- ============================================================================
--- [02/97] alter_pr_processtype_add_procedurename.sql
+-- [02/98] alter_pr_processtype_add_procedurename.sql
 -- ============================================================================
 
 /*
@@ -253,7 +254,7 @@ GO
 
 
 -- ============================================================================
--- [03/97] alter_sy_company_add_logoname_signaturename.sql
+-- [03/98] alter_sy_company_add_logoname_signaturename.sql
 -- ============================================================================
 
 /*
@@ -293,7 +294,7 @@ GO
 
 
 -- ============================================================================
--- [04/97] tables_pr_plame_sunat_web.sql
+-- [04/98] tables_pr_plame_sunat_web.sql
 -- ============================================================================
 
 /*
@@ -368,7 +369,7 @@ GO
 
 
 -- ============================================================================
--- [05/97] SP_PR_EjecutarFormula.sql
+-- [05/98] SP_PR_EjecutarFormula.sql
 -- ============================================================================
 
 /*
@@ -893,7 +894,7 @@ GO
 
 
 -- ============================================================================
--- [06/97] SP_PR_ReportePromedioLiquidacion.sql
+-- [06/98] SP_PR_ReportePromedioLiquidacion.sql
 -- ============================================================================
 
 /*
@@ -1404,7 +1405,77 @@ GO
 
 
 -- ============================================================================
--- [07/97] f_getSuma5ta_web.sql
+-- [07/98] f_count_medical_rest_days_web.sql
+-- ============================================================================
+
+/*
+    Cuenta días con descanso médico (PDT) en un rango sumando tramos recortados.
+    Si hay tramos superpuestos el mismo día puede contarse más de una vez (caso raro).
+    Usado por sp_pr_saldovacaciones_web.
+*/
+CREATE OR ALTER FUNCTION [dbo].[f_count_medical_rest_days_web]
+(
+    @company       CHAR(4),
+    @person        VARCHAR(20),
+    @pdt           VARCHAR(2),
+    @range_start   DATETIME,
+    @range_end     DATETIME,
+    @inclusive_end BIT
+)
+RETURNS INT
+AS
+BEGIN
+    DECLARE @eff_end DATETIME;
+    DECLARE @result INT = 0;
+
+    IF @range_start IS NULL OR @range_end IS NULL
+        RETURN 0;
+
+    SET @range_start = CAST(@range_start AS DATE);
+    SET @range_end = CAST(@range_end AS DATE);
+
+    IF @inclusive_end = 0
+        SET @eff_end = DATEADD(DAY, -1, @range_end);
+    ELSE
+        SET @eff_end = @range_end;
+
+    IF @eff_end < @range_start
+        RETURN 0;
+
+    SELECT @result = ISNULL(SUM(
+        CASE
+            WHEN bounds.rs <= bounds.re THEN DATEDIFF(DAY, bounds.rs, bounds.re) + 1
+            ELSE 0
+        END
+    ), 0)
+    FROM PR_EmployeeMedicalRest emr
+        INNER JOIN PR_MedicalRestType mrt
+            ON emr.MedicalRestType = mrt.MedicalRestType
+           AND mrt.PDT = @pdt
+        CROSS APPLY (
+            SELECT
+                CASE
+                    WHEN CAST(emr.DateBegin AS DATE) > @range_start THEN CAST(emr.DateBegin AS DATE)
+                    ELSE @range_start
+                END AS rs,
+                CASE
+                    WHEN CAST(emr.DateEnd AS DATE) < @eff_end THEN CAST(emr.DateEnd AS DATE)
+                    ELSE @eff_end
+                END AS re
+        ) bounds
+    WHERE emr.Person = @person
+      AND emr.Company = @company
+      AND CAST(emr.DateBegin AS DATE) <= @eff_end
+      AND CAST(emr.DateEnd AS DATE) >= @range_start;
+
+    RETURN ISNULL(@result, 0);
+END
+GO
+
+
+
+-- ============================================================================
+-- [08/98] f_getSuma5ta_web.sql
 -- ============================================================================
 
 /*
@@ -1450,7 +1521,7 @@ GO
 
 
 -- ============================================================================
--- [08/97] sp_pr_5ta_trabajador_web.sql
+-- [09/98] sp_pr_5ta_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -1775,7 +1846,7 @@ GO
 
 
 -- ============================================================================
--- [09/97] sp_pr_actualizar_bancario_trabajador_web.sql
+-- [10/98] sp_pr_actualizar_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -1831,7 +1902,7 @@ GO
 
 
 -- ============================================================================
--- [10/97] sp_pr_actualizar_datos_afp_web.sql
+-- [11/98] sp_pr_actualizar_datos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -2179,7 +2250,7 @@ GO
 
 
 -- ============================================================================
--- [11/97] sp_pr_actualizar_pensiones_trabajador_web.sql
+-- [12/98] sp_pr_actualizar_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -2235,7 +2306,7 @@ GO
 
 
 -- ============================================================================
--- [12/97] sp_pr_aperturarperiodo_proceso_web.sql
+-- [13/98] sp_pr_aperturarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -2382,7 +2453,7 @@ GO
 
 
 -- ============================================================================
--- [13/97] sp_pr_calcular_provcts_persona.sql
+-- [14/98] sp_pr_calcular_provcts_persona.sql
 -- ============================================================================
 
 -- Exportado desde hm_aci2
@@ -2854,7 +2925,7 @@ GO
 
 
 -- ============================================================================
--- [14/97] sp_pr_calcularplanillas_web.sql
+-- [15/98] sp_pr_calcularplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -2957,7 +3028,7 @@ GO
 
 
 -- ============================================================================
--- [15/97] sp_pr_cerrarperiodo_proceso_web.sql
+-- [16/98] sp_pr_cerrarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -2998,7 +3069,7 @@ GO
 
 
 -- ============================================================================
--- [16/97] sp_pr_certificadoquinta_web.sql
+-- [17/98] sp_pr_certificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -3783,7 +3854,7 @@ GO
 
 
 -- ============================================================================
--- [17/97] sp_pr_certificadoretirocts_web.sql
+-- [18/98] sp_pr_certificadoretirocts_web.sql
 -- ============================================================================
 
 /*
@@ -3894,7 +3965,7 @@ GO
 
 
 -- ============================================================================
--- [18/97] sp_pr_certificadotrabajo_web.sql
+-- [19/98] sp_pr_certificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -3999,7 +4070,7 @@ GO
 
 
 -- ============================================================================
--- [19/97] sp_pr_control_pagos_afp_web.sql
+-- [20/98] sp_pr_control_pagos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -4064,7 +4135,7 @@ GO
 
 
 -- ============================================================================
--- [20/97] sp_pr_datosusuario_web.sql
+-- [21/98] sp_pr_datosusuario_web.sql
 -- ============================================================================
 
 /*
@@ -4153,7 +4224,7 @@ GO
 
 
 -- ============================================================================
--- [21/97] sp_pr_detalleboletaaportes_web.sql
+-- [22/98] sp_pr_detalleboletaaportes_web.sql
 -- ============================================================================
 
 /*
@@ -4199,7 +4270,7 @@ GO
 
 
 -- ============================================================================
--- [22/97] sp_pr_detalleboletadescuentos_web.sql
+-- [23/98] sp_pr_detalleboletadescuentos_web.sql
 -- ============================================================================
 
 /*
@@ -4245,7 +4316,7 @@ GO
 
 
 -- ============================================================================
--- [23/97] sp_pr_detalleboletaingresos_web.sql
+-- [24/98] sp_pr_detalleboletaingresos_web.sql
 -- ============================================================================
 
 /*
@@ -4291,7 +4362,7 @@ GO
 
 
 -- ============================================================================
--- [24/97] sp_pr_detallecalculocertificadoquinta_web.sql
+-- [25/98] sp_pr_detallecalculocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -4347,7 +4418,7 @@ GO
 
 
 -- ============================================================================
--- [25/97] sp_pr_eliminar_calculo_planilla_web.sql
+-- [26/98] sp_pr_eliminar_calculo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -4442,7 +4513,7 @@ GO
 
 
 -- ============================================================================
--- [26/97] sp_pr_eliminarasignacionconcepto_web.sql
+-- [27/98] sp_pr_eliminarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -4493,7 +4564,7 @@ GO
 
 
 -- ============================================================================
--- [27/97] sp_pr_eliminarconcepto_web.sql
+-- [28/98] sp_pr_eliminarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -4591,7 +4662,7 @@ GO
 
 
 -- ============================================================================
--- [28/97] sp_pr_genera_correlativo_web.sql
+-- [29/98] sp_pr_genera_correlativo_web.sql
 -- ============================================================================
 
 /*
@@ -4689,7 +4760,7 @@ GO
 
 
 -- ============================================================================
--- [29/97] sp_pr_generar_banbif_web.sql
+-- [30/98] sp_pr_generar_banbif_web.sql
 -- ============================================================================
 
 /*
@@ -4912,7 +4983,7 @@ GO
 
 
 -- ============================================================================
--- [30/97] sp_pr_generar_continental_web.sql
+-- [31/98] sp_pr_generar_continental_web.sql
 -- ============================================================================
 
 /*
@@ -5191,7 +5262,7 @@ GO
 
 
 -- ============================================================================
--- [31/97] sp_pr_generar_interbank_web.sql
+-- [32/98] sp_pr_generar_interbank_web.sql
 -- ============================================================================
 
 /*
@@ -5476,7 +5547,7 @@ GO
 
 
 -- ============================================================================
--- [32/97] sp_pr_generar_telecredito_web.sql
+-- [33/98] sp_pr_generar_telecredito_web.sql
 -- ============================================================================
 
 /*
@@ -5760,7 +5831,7 @@ GO
 
 
 -- ============================================================================
--- [33/97] sp_pr_generarboleta_web.sql
+-- [34/98] sp_pr_generarboleta_web.sql
 -- ============================================================================
 
 /*
@@ -6339,7 +6410,7 @@ GO
 
 
 -- ============================================================================
--- [34/97] sp_pr_guardarasignacionconcepto_web.sql
+-- [35/98] sp_pr_guardarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -6598,7 +6669,7 @@ GO
 
 
 -- ============================================================================
--- [35/97] sp_pr_guardarconcepto_web.sql
+-- [36/98] sp_pr_guardarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -6926,7 +6997,7 @@ GO
 
 
 -- ============================================================================
--- [36/97] sp_pr_listaasignacionconceptos_web.sql
+-- [37/98] sp_pr_listaasignacionconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -7122,7 +7193,7 @@ GO
 
 
 -- ============================================================================
--- [37/97] sp_pr_listabanbif_web.sql
+-- [38/98] sp_pr_listabanbif_web.sql
 -- ============================================================================
 
 /*
@@ -7264,7 +7335,7 @@ GO
 
 
 -- ============================================================================
--- [38/97] sp_pr_listacontinental_web.sql
+-- [39/98] sp_pr_listacontinental_web.sql
 -- ============================================================================
 
 /*
@@ -7363,7 +7434,7 @@ GO
 
 
 -- ============================================================================
--- [39/97] sp_pr_listado_declaracion_afp_web.sql
+-- [40/98] sp_pr_listado_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -7799,7 +7870,7 @@ GO
 
 
 -- ============================================================================
--- [40/97] sp_pr_listado_plame14_web.sql
+-- [41/98] sp_pr_listado_plame14_web.sql
 -- ============================================================================
 
 /*
@@ -7910,7 +7981,7 @@ GO
 
 
 -- ============================================================================
--- [41/97] sp_pr_listado_plame15_web.sql
+-- [42/98] sp_pr_listado_plame15_web.sql
 -- ============================================================================
 
 /*
@@ -8029,7 +8100,7 @@ GO
 
 
 -- ============================================================================
--- [42/97] sp_pr_listado_plame18_web.sql
+-- [43/98] sp_pr_listado_plame18_web.sql
 -- ============================================================================
 
 /*
@@ -8329,7 +8400,7 @@ GO
 
 
 -- ============================================================================
--- [43/97] sp_pr_listado_plame26_web.sql
+-- [44/98] sp_pr_listado_plame26_web.sql
 -- ============================================================================
 
 /*
@@ -8422,7 +8493,7 @@ GO
 
 
 -- ============================================================================
--- [44/97] sp_pr_listadocertificadoquinta_web.sql
+-- [45/98] sp_pr_listadocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -8481,7 +8552,7 @@ GO
 
 
 -- ============================================================================
--- [45/97] sp_pr_listadocertificadotrabajo_web.sql
+-- [46/98] sp_pr_listadocertificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -8538,7 +8609,7 @@ GO
 
 
 -- ============================================================================
--- [46/97] sp_pr_listadogenerarboletas_web.sql
+-- [47/98] sp_pr_listadogenerarboletas_web.sql
 -- ============================================================================
 
 /*
@@ -8592,7 +8663,7 @@ GO
 
 
 -- ============================================================================
--- [47/97] sp_pr_listainterbank_web.sql
+-- [48/98] sp_pr_listainterbank_web.sql
 -- ============================================================================
 
 /*
@@ -8693,7 +8764,7 @@ GO
 
 
 -- ============================================================================
--- [48/97] sp_pr_listaprocesscontrol_apertura_web.sql
+-- [49/98] sp_pr_listaprocesscontrol_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -8773,7 +8844,7 @@ GO
 
 
 -- ============================================================================
--- [49/97] sp_pr_listarconceptos_web.sql
+-- [50/98] sp_pr_listarconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -8847,7 +8918,7 @@ GO
 
 
 -- ============================================================================
--- [50/97] sp_pr_listatelecredito_web.sql
+-- [51/98] sp_pr_listatelecredito_web.sql
 -- ============================================================================
 
 /*
@@ -8957,7 +9028,7 @@ GO
 
 
 -- ============================================================================
--- [51/97] sp_pr_listatrabajadores_web.sql
+-- [52/98] sp_pr_listatrabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -9087,7 +9158,7 @@ GO
 
 
 -- ============================================================================
--- [52/97] sp_pr_obtener_bancario_trabajador_web.sql
+-- [53/98] sp_pr_obtener_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -9148,7 +9219,7 @@ GO
 
 
 -- ============================================================================
--- [53/97] sp_pr_obtener_pensiones_trabajador_web.sql
+-- [54/98] sp_pr_obtener_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -9204,7 +9275,7 @@ GO
 
 
 -- ============================================================================
--- [54/97] sp_pr_obtenerasignacionconcepto_web.sql
+-- [55/98] sp_pr_obtenerasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -9267,7 +9338,7 @@ GO
 
 
 -- ============================================================================
--- [55/97] sp_pr_obtenerconcepto_web.sql
+-- [56/98] sp_pr_obtenerconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -9318,7 +9389,7 @@ GO
 
 
 -- ============================================================================
--- [56/97] sp_pr_plame_sunat_eliminar_carga_web.sql
+-- [57/98] sp_pr_plame_sunat_eliminar_carga_web.sql
 -- ============================================================================
 
 /*
@@ -9344,7 +9415,7 @@ GO
 
 
 -- ============================================================================
--- [57/97] sp_pr_plame_sunat_obtener_carga_web.sql
+-- [58/98] sp_pr_plame_sunat_obtener_carga_web.sql
 -- ============================================================================
 
 /*
@@ -9385,7 +9456,7 @@ GO
 
 
 -- ============================================================================
--- [58/97] sp_pr_plame_validar_archivo14_web.sql
+-- [59/98] sp_pr_plame_validar_archivo14_web.sql
 -- ============================================================================
 
 /*
@@ -9532,7 +9603,7 @@ GO
 
 
 -- ============================================================================
--- [59/97] sp_pr_plame_validar_archivo18_web.sql
+-- [60/98] sp_pr_plame_validar_archivo18_web.sql
 -- ============================================================================
 
 /*
@@ -9924,7 +9995,7 @@ GO
 
 
 -- ============================================================================
--- [60/97] sp_pr_plame_validar_neto_r01_web.sql
+-- [61/98] sp_pr_plame_validar_neto_r01_web.sql
 -- ============================================================================
 
 /*
@@ -10347,7 +10418,7 @@ GO
 
 
 -- ============================================================================
--- [61/97] sp_pr_plame_validar_r04_web.sql
+-- [62/98] sp_pr_plame_validar_r04_web.sql
 -- ============================================================================
 
 /*
@@ -10799,7 +10870,7 @@ GO
 
 
 -- ============================================================================
--- [62/97] sp_pr_plame_validar_r05_web.sql
+-- [63/98] sp_pr_plame_validar_r05_web.sql
 -- ============================================================================
 
 /*
@@ -11180,7 +11251,7 @@ GO
 
 
 -- ============================================================================
--- [63/97] sp_pr_r019_vacationdetail_web.sql
+-- [64/98] sp_pr_r019_vacationdetail_web.sql
 -- ============================================================================
 
 /*
@@ -11247,7 +11318,7 @@ GO
 
 
 -- ============================================================================
--- [64/97] sp_pr_reportelistadopagos_web.sql
+-- [65/98] sp_pr_reportelistadopagos_web.sql
 -- ============================================================================
 
 /*
@@ -11383,7 +11454,7 @@ GO
 
 
 -- ============================================================================
--- [65/97] sp_pr_reportelog_calculo_web.sql
+-- [66/98] sp_pr_reportelog_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -11474,7 +11545,7 @@ GO
 
 
 -- ============================================================================
--- [66/97] sp_pr_reporteplame_total_web.sql
+-- [67/98] sp_pr_reporteplame_total_web.sql
 -- ============================================================================
 
 /*
@@ -11942,7 +12013,7 @@ GO
 
 
 -- ============================================================================
--- [67/97] sp_pr_reporteplamevertical_web.sql
+-- [68/98] sp_pr_reporteplamevertical_web.sql
 -- ============================================================================
 
 /*
@@ -12286,7 +12357,7 @@ GO
 
 
 -- ============================================================================
--- [68/97] sp_pr_reportesdescansos_medicos_web.sql
+-- [69/98] sp_pr_reportesdescansos_medicos_web.sql
 -- ============================================================================
 
 /*
@@ -12349,7 +12420,7 @@ GO
 
 
 -- ============================================================================
--- [69/97] sp_pr_resumen_declaracion_afp_web.sql
+-- [70/98] sp_pr_resumen_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -12581,23 +12652,15 @@ GO
 
 
 -- ============================================================================
--- [70/97] sp_pr_saldovacaciones_web.sql
+-- [71/98] sp_pr_saldovacaciones_web.sql
 -- ============================================================================
 
 /*
     Saldo de vacaciones por trabajador y año de control.
     Usado por: POST /reporte_saldo_vacaciones (reporte_saldo_vacaciones.html).
 
-    Calcula saldos pendientes (saldo1..saldo5), faltas, licencias y descansos
-    a una fecha de corte. Usa tabla de trabajo xx_saldovacaciones y función f_getDias360.
-
-    Parámetros:
-      @company, @payrolltype — obligatorios.
-      @date — fecha de corte del saldo.
-      @person — '0' = todos; otro valor filtra por código person.
-      @cesados — T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
-
-    Nota: actualiza PR_Vacation.consumeddays2 al inicio (lógica heredada del ERP).
+    Requiere: dbo.f_count_medical_rest_days_web, xx_saldovacaciones, f_getDias360.
+    Nota: consumeddays2 se calcula en consulta (no actualiza PR_Vacation).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_saldovacaciones_web]
     @company      CHAR(4),
@@ -12609,265 +12672,151 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @year           NUMERIC(9, 0);
-    DECLARE @actualyear     NUMERIC(9, 0);
-    DECLARE @consumo        NUMERIC(9, 4);
-    DECLARE @faltas         INT;
-    DECLARE @licencias      INT;
-    DECLARE @descansos      INT;
-    DECLARE @documentnumber VARCHAR(20);
-    DECLARE @name           VARCHAR(255);
-    DECLARE @fecha          VARCHAR(20);
-    DECLARE @inicio         DATETIME;
-    DECLARE @inicioProvision DATETIME;
-    DECLARE @finProvision   DATETIME;
+    DECLARE @year NUMERIC(9, 0);
 
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
 
-    /* Ajuste de días consumidos considerando vacaciones con inicio posterior a la fecha de corte. */
-    UPDATE PR_Vacation
-    SET consumeddays2 = consumeddays;
-
-    UPDATE PR_Vacation
-    SET consumeddays2 = consumeddays2 - (
-            SELECT SUM(Days)
-            FROM PR_VacationDetail
-            WHERE Person = PR_Vacation.Person
-              AND Line = PR_Vacation.Line
-              AND Company = PR_Vacation.Company
-              AND DateBegin > @date
-        )
-    WHERE EXISTS (
-            SELECT 1
-            FROM PR_VacationDetail
-            WHERE Person = PR_Vacation.Person
-              AND Line = PR_Vacation.Line
-              AND Company = PR_Vacation.Company
-              AND DateBegin > @date
-        );
-
-    SET @descansos = 0;
-    DELETE FROM xx_saldovacaciones;
-
+    SET @date = CAST(@date AS DATE);
     SET @year = YEAR(@date) + 1;
+
+    IF OBJECT_ID('tempdb..#VacSaldo') IS NOT NULL DROP TABLE #VacSaldo;
+
+    SELECT
+        e.Person AS documentnumber,
+        sp.Name AS empname,
+        e.PayRollType AS payrolltype,
+        CONVERT(VARCHAR(8), ISNULL(e.ReEntryDate, e.EntryDate), 112) AS entrydate,
+        v.ControlYear AS controlyear,
+        CASE
+            WHEN CONVERT(VARCHAR(8), v.DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
+                CASE
+                    WHEN CONVERT(VARCHAR(8), v.DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
+                        ABS(
+                            v.consumeddays
+                                - ISNULL((
+                                    SELECT SUM(vd.Days)
+                                    FROM PR_VacationDetail vd
+                                    WHERE vd.Person = v.Person
+                                      AND vd.Line = v.Line
+                                      AND vd.Company = v.Company
+                                      AND vd.DateBegin > @date
+                                ), 0)
+                            - v.acquireddays
+                        )
+                    ELSE
+                        ROUND((dbo.f_getDias360(v.DateBeginProvision, @date) * 2.5) / 30, 2)
+                        - (
+                            v.consumeddays
+                            - ISNULL((
+                                SELECT SUM(vd.Days)
+                                FROM PR_VacationDetail vd
+                                WHERE vd.Person = v.Person
+                                  AND vd.Line = v.Line
+                                  AND vd.Company = v.Company
+                                  AND vd.DateBegin > @date
+                            ), 0)
+                        )
+                END
+            ELSE 0
+        END AS porconsumir,
+        v.DateBeginProvision AS inicioProvision,
+        v.DateBeginRights AS finProvision
+    INTO #VacSaldo
+    FROM PR_Vacation v
+        INNER JOIN PR_Employee e
+            ON v.Person = e.Person
+           AND e.Status = 'N'
+        INNER JOIN SY_Person sp
+            ON e.Person = sp.Person
+    WHERE v.Company = @company
+      AND (@person = '0' OR v.Person = @person)
+      AND v.ControlYear < @year
+      AND v.ControlYear >= YEAR(ISNULL(e.ReEntryDate, e.EntryDate))
+      AND e.PayRollType = @payrolltype
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND e.CeaseDate IS NULL)
+      )
+      AND ABS(
+            v.consumeddays
+                - ISNULL((
+                    SELECT SUM(vd.Days)
+                    FROM PR_VacationDetail vd
+                    WHERE vd.Person = v.Person
+                      AND vd.Line = v.Line
+                      AND vd.Company = v.Company
+                      AND vd.DateBegin > @date
+                ), 0)
+            - v.acquireddays
+        ) > 0;
+
+    DELETE FROM xx_saldovacaciones;
 
     INSERT INTO xx_saldovacaciones (company, person, name, entrydate, payrolltype)
     SELECT DISTINCT
-        compania,
-        DocumentNumber,
-        Name,
-        CONVERT(VARCHAR(8), entrydate, 112) AS fechaingreso,
-        PayRollType
-    FROM (
+        @company,
+        documentnumber,
+        empname,
+        entrydate,
+        payrolltype
+    FROM #VacSaldo;
+
+    ;WITH Agg AS (
         SELECT
-            @company AS compania,
-            SY_Person.Person AS DocumentNumber,
-            SY_Person.Name,
-            ISNULL(PR_Employee.ReEntryDate, PR_Employee.EntryDate) AS entrydate,
-            ControlYear,
-            CASE
-                WHEN CONVERT(VARCHAR(8), DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                    CASE
-                        WHEN CONVERT(VARCHAR(8), DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                            ABS(consumeddays2 - acquireddays)
-                        ELSE
-                            ROUND((dbo.f_getDias360(DateBeginProvision, @date) * 2.5) / 30, 2) - consumeddays2
-                    END
-                ELSE 0
-            END AS porconsumir,
-            PR_Employee.PayRollType AS PayRollType
-        FROM PR_Vacation
-            INNER JOIN PR_Employee
-                ON PR_Vacation.Person = PR_Employee.Person
-               AND PR_Employee.Status = 'N'
-            INNER JOIN SY_Person
-                ON PR_Employee.Person = SY_Person.Person
-            INNER JOIN SY_Company
-                ON PR_Vacation.Company = SY_Company.Company
-        WHERE ControlYear < YEAR(@date) + 1
-          AND ControlYear >= YEAR(ISNULL(ReEntryDate, EntryDate))
-          AND PR_Employee.PayRollType = @payrolltype
-          AND (@person = '0' OR PR_Vacation.Person = @person)
-          AND (
-                @cesados = 'T'
-             OR (@cesados = 'Y' AND PR_Employee.CeaseDate IS NOT NULL)
-             OR (@cesados = 'N' AND PR_Employee.CeaseDate IS NULL)
-          )
-          AND PR_Vacation.Company = @company
-          AND ABS(consumeddays2 - acquireddays) > 0
-    ) X
-    ORDER BY 1, 3;
-
-    DECLARE Vacaciones CURSOR FOR
-    SELECT
-        DocumentNumber,
-        Name,
-        CONVERT(VARCHAR(8), entrydate, 112) AS fechaingreso,
-        controlyear,
-        porconsumir,
-        X.inicioProvision,
-        X.finProvision
-    FROM (
-        SELECT
-            SY_Company.Description AS compania,
-            SY_Person.Person AS DocumentNumber,
-            SY_Person.Name,
-            ISNULL(PR_Employee.ReEntryDate, PR_Employee.EntryDate) AS entrydate,
-            ControlYear,
-            CASE
-                WHEN CONVERT(VARCHAR(8), DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                    CASE
-                        WHEN CONVERT(VARCHAR(8), DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                            ABS(consumeddays2 - acquireddays)
-                        ELSE
-                            ROUND((dbo.f_getDias360(DateBeginProvision, @date) * 2.5) / 30, 2) - consumeddays2
-                    END
-                ELSE 0
-            END AS porconsumir,
-            PR_Vacation.DateBeginProvision AS inicioProvision,
-            PR_Vacation.DateBeginRights AS finProvision
-        FROM PR_Vacation
-            INNER JOIN PR_Employee
-                ON PR_Vacation.Person = PR_Employee.Person
-               AND PR_Employee.Status = 'N'
-            INNER JOIN SY_Person
-                ON PR_Employee.Person = SY_Person.Person
-            INNER JOIN SY_Company
-                ON PR_Vacation.Company = SY_Company.Company
-        WHERE ControlYear < YEAR(@date) + 1
-          AND ControlYear >= YEAR(ISNULL(ReEntryDate, EntryDate))
-          AND PR_Employee.PayRollType = @payrolltype
-          AND PR_Vacation.Company = @company
-          AND (@person = '0' OR PR_Vacation.Person = @person)
-          AND (
-                @cesados = 'T'
-             OR (@cesados = 'Y' AND PR_Employee.CeaseDate IS NOT NULL)
-             OR (@cesados = 'N' AND PR_Employee.CeaseDate IS NULL)
-          )
-          AND ABS(consumeddays2 - acquireddays) > 0
-    ) X
-    ORDER BY 2;
-
-    OPEN Vacaciones;
-    FETCH NEXT FROM Vacaciones
-        INTO @documentnumber, @name, @fecha, @actualyear, @consumo, @inicioProvision, @finProvision;
-
-    WHILE @@FETCH_STATUS = 0
-    BEGIN
-        IF @actualyear = @year - 5
-            UPDATE xx_saldovacaciones SET saldo1 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 4
-            UPDATE xx_saldovacaciones SET saldo2 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 3
-            UPDATE xx_saldovacaciones SET saldo3 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 2
-            UPDATE xx_saldovacaciones SET saldo4 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 1
-            UPDATE xx_saldovacaciones SET saldo5 = @consumo WHERE person = @documentnumber;
-
-        /* Descansos (PDT 20): acumula por periodo de provisión de cada año de control. */
-        SET @descansos = 0;
-        IF @inicioProvision IS NOT NULL AND @finProvision IS NOT NULL AND @inicioProvision < @finProvision
-        BEGIN
-            SELECT @descansos = COUNT(*)
-            FROM (
-                SELECT TOP (DATEDIFF(DAY, @inicioProvision, @finProvision))
-                    ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                FROM sys.all_objects a
-                    CROSS JOIN sys.all_objects b
-            ) tally
-            CROSS APPLY (SELECT DATEADD(DAY, tally.n, @inicioProvision) AS d) cal
-            WHERE EXISTS (
-                SELECT 1
-                FROM PR_EmployeeMedicalRest emr
-                    INNER JOIN PR_MedicalRestType mrt
-                        ON emr.MedicalRestType = mrt.MedicalRestType
-                       AND mrt.PDT = '20'
-                WHERE emr.Person = @documentnumber
-                  AND emr.Company = @company
-                  AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-            );
-        END;
-        UPDATE xx_saldovacaciones
-        SET descansos = ISNULL(descansos, 0) + @descansos
-        WHERE person = @documentnumber;
-
-        FETCH NEXT FROM Vacaciones
-            INTO @documentnumber, @name, @fecha, @actualyear, @consumo, @inicioProvision, @finProvision;
-    END;
-
-    CLOSE Vacaciones;
-    DEALLOCATE Vacaciones;
-
-    /* Faltas y licencias: una sola vez por trabajador (no por año de control). */
+            documentnumber,
+            MAX(CASE WHEN controlyear = @year - 5 THEN porconsumir END) AS saldo1,
+            MAX(CASE WHEN controlyear = @year - 4 THEN porconsumir END) AS saldo2,
+            MAX(CASE WHEN controlyear = @year - 3 THEN porconsumir END) AS saldo3,
+            MAX(CASE WHEN controlyear = @year - 2 THEN porconsumir END) AS saldo4,
+            MAX(CASE WHEN controlyear = @year - 1 THEN porconsumir END) AS saldo5,
+            SUM(
+                CASE
+                    WHEN inicioProvision IS NOT NULL
+                     AND finProvision IS NOT NULL
+                     AND inicioProvision < finProvision
+                        THEN dbo.f_count_medical_rest_days_web(
+                            @company,
+                            documentnumber,
+                            '20',
+                            inicioProvision,
+                            finProvision,
+                            0
+                        )
+                    ELSE 0
+                END
+            ) AS descansos
+        FROM #VacSaldo
+        GROUP BY documentnumber
+    )
     UPDATE sv
     SET
-        faltas = calc.faltas,
-        licencias = calc.licencias
+        saldo1 = ISNULL(a.saldo1, 0),
+        saldo2 = ISNULL(a.saldo2, 0),
+        saldo3 = ISNULL(a.saldo3, 0),
+        saldo4 = ISNULL(a.saldo4, 0),
+        saldo5 = ISNULL(a.saldo5, 0),
+        descansos = ISNULL(a.descansos, 0),
+        faltas = dbo.f_count_medical_rest_days_web(
+            sv.company,
+            sv.person,
+            '07',
+            CONVERT(DATETIME, sv.entrydate, 112),
+            @date,
+            0
+        ),
+        licencias = dbo.f_count_medical_rest_days_web(
+            sv.company,
+            sv.person,
+            '05',
+            CONVERT(DATETIME, sv.entrydate, 112),
+            @date,
+            1
+        )
     FROM xx_saldovacaciones sv
-    CROSS APPLY (
-        SELECT CONVERT(DATETIME, sv.entrydate, 112) AS inicio_emp
-    ) ing
-    CROSS APPLY (
-        SELECT
-            (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT TOP (
-                        CASE
-                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) > 0
-                                THEN DATEDIFF(DAY, ing.inicio_emp, @date)
-                            ELSE 0
-                        END
-                    )
-                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                    FROM sys.all_objects a
-                        CROSS JOIN sys.all_objects b
-                ) tally
-                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM PR_EmployeeMedicalRest emr
-                        INNER JOIN PR_MedicalRestType mrt
-                            ON emr.MedicalRestType = mrt.MedicalRestType
-                           AND mrt.PDT = '07'
-                    WHERE emr.Person = sv.person
-                      AND emr.Company = sv.company
-                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-                )
-            ) AS faltas,
-            (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT TOP (
-                        CASE
-                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) >= 0
-                                THEN DATEDIFF(DAY, ing.inicio_emp, @date) + 1
-                            ELSE 0
-                        END
-                    )
-                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                    FROM sys.all_objects a
-                        CROSS JOIN sys.all_objects b
-                ) tally
-                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM PR_EmployeeMedicalRest emr
-                        INNER JOIN PR_MedicalRestType mrt
-                            ON emr.MedicalRestType = mrt.MedicalRestType
-                           AND mrt.PDT = '05'
-                    WHERE emr.Person = sv.person
-                      AND emr.Company = sv.company
-                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-                )
-            ) AS licencias
-    ) calc;
+        INNER JOIN Agg a
+            ON a.documentnumber = sv.person;
 
     SELECT
         PR_PayRollType.ShortName AS tipoplanillas,
@@ -12906,13 +12855,15 @@ BEGIN
         LEFT JOIN SY_ReplicationUnit
             ON SY_Person.ReplicationUnit = SY_ReplicationUnit.ReplicationUnit
     ORDER BY xx_saldovacaciones.name;
+
+    DROP TABLE #VacSaldo;
 END
 GO
 
 
 
 -- ============================================================================
--- [71/97] sp_pr_selectorafp_web.sql
+-- [72/98] sp_pr_selectorafp_web.sql
 -- ============================================================================
 
 /*
@@ -12943,7 +12894,7 @@ GO
 
 
 -- ============================================================================
--- [72/97] sp_pr_selectorbancos_web.sql
+-- [73/98] sp_pr_selectorbancos_web.sql
 -- ============================================================================
 
 /*
@@ -12968,7 +12919,7 @@ GO
 
 
 -- ============================================================================
--- [73/97] sp_pr_selectorcompanias_web.sql
+-- [74/98] sp_pr_selectorcompanias_web.sql
 -- ============================================================================
 
 /*
@@ -12995,7 +12946,7 @@ GO
 
 
 -- ============================================================================
--- [74/97] sp_pr_selectorconceptoneto_web.sql
+-- [75/98] sp_pr_selectorconceptoneto_web.sql
 -- ============================================================================
 
 /*
@@ -13027,7 +12978,7 @@ GO
 
 
 -- ============================================================================
--- [75/97] sp_pr_selectorconceptos_web.sql
+-- [76/98] sp_pr_selectorconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -13053,7 +13004,7 @@ GO
 
 
 -- ============================================================================
--- [76/97] sp_pr_selectorconcepttype_web.sql
+-- [77/98] sp_pr_selectorconcepttype_web.sql
 -- ============================================================================
 
 /*
@@ -13092,7 +13043,7 @@ GO
 
 
 -- ============================================================================
--- [77/97] sp_pr_selectorformapago_web.sql
+-- [78/98] sp_pr_selectorformapago_web.sql
 -- ============================================================================
 
 /*
@@ -13117,7 +13068,7 @@ GO
 
 
 -- ============================================================================
--- [78/97] sp_pr_selectorpensiontype_web.sql
+-- [79/98] sp_pr_selectorpensiontype_web.sql
 -- ============================================================================
 
 /*
@@ -13146,7 +13097,7 @@ GO
 
 
 -- ============================================================================
--- [79/97] sp_pr_selectorperiodoactivo_planilla_web.sql
+-- [80/98] sp_pr_selectorperiodoactivo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -13173,7 +13124,7 @@ GO
 
 
 -- ============================================================================
--- [80/97] sp_pr_selectorperiodoactivo_web.sql
+-- [81/98] sp_pr_selectorperiodoactivo_web.sql
 -- ============================================================================
 
 /*
@@ -13207,7 +13158,7 @@ GO
 
 
 -- ============================================================================
--- [81/97] sp_pr_selectorperiodocalculo_web.sql
+-- [82/98] sp_pr_selectorperiodocalculo_web.sql
 -- ============================================================================
 
 /*
@@ -13245,7 +13196,7 @@ GO
 
 
 -- ============================================================================
--- [82/97] sp_pr_selectorperiodos_apertura_web.sql
+-- [83/98] sp_pr_selectorperiodos_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -13281,7 +13232,7 @@ GO
 
 
 -- ============================================================================
--- [83/97] sp_pr_selectorperiodos_plame_web.sql
+-- [84/98] sp_pr_selectorperiodos_plame_web.sql
 -- ============================================================================
 
 /*
@@ -13311,7 +13262,7 @@ GO
 
 
 -- ============================================================================
--- [84/97] sp_pr_selectorperiodos_web.sql
+-- [85/98] sp_pr_selectorperiodos_web.sql
 -- ============================================================================
 
 /*
@@ -13353,7 +13304,7 @@ GO
 
 
 -- ============================================================================
--- [85/97] sp_pr_selectorplanillas_web.sql
+-- [86/98] sp_pr_selectorplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -13383,7 +13334,7 @@ GO
 
 
 -- ============================================================================
--- [86/97] sp_pr_selectorprocesos_web.sql
+-- [87/98] sp_pr_selectorprocesos_web.sql
 -- ============================================================================
 
 /*
@@ -13421,7 +13372,7 @@ GO
 
 
 -- ============================================================================
--- [87/97] sp_pr_selectorprocesoscalculo_web.sql
+-- [88/98] sp_pr_selectorprocesoscalculo_web.sql
 -- ============================================================================
 
 /*
@@ -13471,7 +13422,7 @@ GO
 
 
 -- ============================================================================
--- [88/97] sp_pr_selectorregimehealth_web.sql
+-- [89/98] sp_pr_selectorregimehealth_web.sql
 -- ============================================================================
 
 /*
@@ -13500,7 +13451,7 @@ GO
 
 
 -- ============================================================================
--- [89/97] sp_pr_selectorsctrpension_web.sql
+-- [90/98] sp_pr_selectorsctrpension_web.sql
 -- ============================================================================
 
 /*
@@ -13531,7 +13482,7 @@ GO
 
 
 -- ============================================================================
--- [90/97] sp_pr_selectortipocuenta_web.sql
+-- [91/98] sp_pr_selectortipocuenta_web.sql
 -- ============================================================================
 
 /*
@@ -13555,7 +13506,7 @@ GO
 
 
 -- ============================================================================
--- [91/97] sp_pr_selectorunidades_web.sql
+-- [92/98] sp_pr_selectorunidades_web.sql
 -- ============================================================================
 
 /*
@@ -13580,7 +13531,7 @@ GO
 
 
 -- ============================================================================
--- [92/97] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
+-- [93/98] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
 -- ============================================================================
 
 /*
@@ -13647,7 +13598,7 @@ GO
 
 
 -- ============================================================================
--- [93/97] sp_pr_vacaciones_eliminar_detalle_web.sql
+-- [94/98] sp_pr_vacaciones_eliminar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -13711,7 +13662,7 @@ GO
 
 
 -- ============================================================================
--- [94/97] sp_pr_vacaciones_guardar_detalle_web.sql
+-- [95/98] sp_pr_vacaciones_guardar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -13891,7 +13842,7 @@ GO
 
 
 -- ============================================================================
--- [95/97] sp_pr_vacaciones_listar_trabajadores_web.sql
+-- [96/98] sp_pr_vacaciones_listar_trabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -13954,7 +13905,7 @@ GO
 
 
 -- ============================================================================
--- [96/97] sp_pr_vacaciones_obtener_trabajador_web.sql
+-- [97/98] sp_pr_vacaciones_obtener_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -14067,7 +14018,7 @@ GO
 
 
 -- ============================================================================
--- [97/97] sp_pr_validar_calculo_web.sql
+-- [98/98] sp_pr_validar_calculo_web.sql
 -- ============================================================================
 
 /*

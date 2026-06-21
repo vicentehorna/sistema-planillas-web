@@ -2,16 +2,8 @@
     Saldo de vacaciones por trabajador y año de control.
     Usado por: POST /reporte_saldo_vacaciones (reporte_saldo_vacaciones.html).
 
-    Calcula saldos pendientes (saldo1..saldo5), faltas, licencias y descansos
-    a una fecha de corte. Usa tabla de trabajo xx_saldovacaciones y función f_getDias360.
-
-    Parámetros:
-      @company, @payrolltype — obligatorios.
-      @date — fecha de corte del saldo.
-      @person — '0' = todos; otro valor filtra por código person.
-      @cesados — T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
-
-    Nota: actualiza PR_Vacation.consumeddays2 al inicio (lógica heredada del ERP).
+    Requiere: dbo.f_count_medical_rest_days_web, xx_saldovacaciones, f_getDias360.
+    Nota: consumeddays2 se calcula en consulta (no actualiza PR_Vacation).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_saldovacaciones_web]
     @company      CHAR(4),
@@ -23,265 +15,151 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @year           NUMERIC(9, 0);
-    DECLARE @actualyear     NUMERIC(9, 0);
-    DECLARE @consumo        NUMERIC(9, 4);
-    DECLARE @faltas         INT;
-    DECLARE @licencias      INT;
-    DECLARE @descansos      INT;
-    DECLARE @documentnumber VARCHAR(20);
-    DECLARE @name           VARCHAR(255);
-    DECLARE @fecha          VARCHAR(20);
-    DECLARE @inicio         DATETIME;
-    DECLARE @inicioProvision DATETIME;
-    DECLARE @finProvision   DATETIME;
+    DECLARE @year NUMERIC(9, 0);
 
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
 
-    /* Ajuste de días consumidos considerando vacaciones con inicio posterior a la fecha de corte. */
-    UPDATE PR_Vacation
-    SET consumeddays2 = consumeddays;
-
-    UPDATE PR_Vacation
-    SET consumeddays2 = consumeddays2 - (
-            SELECT SUM(Days)
-            FROM PR_VacationDetail
-            WHERE Person = PR_Vacation.Person
-              AND Line = PR_Vacation.Line
-              AND Company = PR_Vacation.Company
-              AND DateBegin > @date
-        )
-    WHERE EXISTS (
-            SELECT 1
-            FROM PR_VacationDetail
-            WHERE Person = PR_Vacation.Person
-              AND Line = PR_Vacation.Line
-              AND Company = PR_Vacation.Company
-              AND DateBegin > @date
-        );
-
-    SET @descansos = 0;
-    DELETE FROM xx_saldovacaciones;
-
+    SET @date = CAST(@date AS DATE);
     SET @year = YEAR(@date) + 1;
+
+    IF OBJECT_ID('tempdb..#VacSaldo') IS NOT NULL DROP TABLE #VacSaldo;
+
+    SELECT
+        e.Person AS documentnumber,
+        sp.Name AS empname,
+        e.PayRollType AS payrolltype,
+        CONVERT(VARCHAR(8), ISNULL(e.ReEntryDate, e.EntryDate), 112) AS entrydate,
+        v.ControlYear AS controlyear,
+        CASE
+            WHEN CONVERT(VARCHAR(8), v.DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
+                CASE
+                    WHEN CONVERT(VARCHAR(8), v.DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
+                        ABS(
+                            v.consumeddays
+                                - ISNULL((
+                                    SELECT SUM(vd.Days)
+                                    FROM PR_VacationDetail vd
+                                    WHERE vd.Person = v.Person
+                                      AND vd.Line = v.Line
+                                      AND vd.Company = v.Company
+                                      AND vd.DateBegin > @date
+                                ), 0)
+                            - v.acquireddays
+                        )
+                    ELSE
+                        ROUND((dbo.f_getDias360(v.DateBeginProvision, @date) * 2.5) / 30, 2)
+                        - (
+                            v.consumeddays
+                            - ISNULL((
+                                SELECT SUM(vd.Days)
+                                FROM PR_VacationDetail vd
+                                WHERE vd.Person = v.Person
+                                  AND vd.Line = v.Line
+                                  AND vd.Company = v.Company
+                                  AND vd.DateBegin > @date
+                            ), 0)
+                        )
+                END
+            ELSE 0
+        END AS porconsumir,
+        v.DateBeginProvision AS inicioProvision,
+        v.DateBeginRights AS finProvision
+    INTO #VacSaldo
+    FROM PR_Vacation v
+        INNER JOIN PR_Employee e
+            ON v.Person = e.Person
+           AND e.Status = 'N'
+        INNER JOIN SY_Person sp
+            ON e.Person = sp.Person
+    WHERE v.Company = @company
+      AND (@person = '0' OR v.Person = @person)
+      AND v.ControlYear < @year
+      AND v.ControlYear >= YEAR(ISNULL(e.ReEntryDate, e.EntryDate))
+      AND e.PayRollType = @payrolltype
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND e.CeaseDate IS NULL)
+      )
+      AND ABS(
+            v.consumeddays
+                - ISNULL((
+                    SELECT SUM(vd.Days)
+                    FROM PR_VacationDetail vd
+                    WHERE vd.Person = v.Person
+                      AND vd.Line = v.Line
+                      AND vd.Company = v.Company
+                      AND vd.DateBegin > @date
+                ), 0)
+            - v.acquireddays
+        ) > 0;
+
+    DELETE FROM xx_saldovacaciones;
 
     INSERT INTO xx_saldovacaciones (company, person, name, entrydate, payrolltype)
     SELECT DISTINCT
-        compania,
-        DocumentNumber,
-        Name,
-        CONVERT(VARCHAR(8), entrydate, 112) AS fechaingreso,
-        PayRollType
-    FROM (
+        @company,
+        documentnumber,
+        empname,
+        entrydate,
+        payrolltype
+    FROM #VacSaldo;
+
+    ;WITH Agg AS (
         SELECT
-            @company AS compania,
-            SY_Person.Person AS DocumentNumber,
-            SY_Person.Name,
-            ISNULL(PR_Employee.ReEntryDate, PR_Employee.EntryDate) AS entrydate,
-            ControlYear,
-            CASE
-                WHEN CONVERT(VARCHAR(8), DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                    CASE
-                        WHEN CONVERT(VARCHAR(8), DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                            ABS(consumeddays2 - acquireddays)
-                        ELSE
-                            ROUND((dbo.f_getDias360(DateBeginProvision, @date) * 2.5) / 30, 2) - consumeddays2
-                    END
-                ELSE 0
-            END AS porconsumir,
-            PR_Employee.PayRollType AS PayRollType
-        FROM PR_Vacation
-            INNER JOIN PR_Employee
-                ON PR_Vacation.Person = PR_Employee.Person
-               AND PR_Employee.Status = 'N'
-            INNER JOIN SY_Person
-                ON PR_Employee.Person = SY_Person.Person
-            INNER JOIN SY_Company
-                ON PR_Vacation.Company = SY_Company.Company
-        WHERE ControlYear < YEAR(@date) + 1
-          AND ControlYear >= YEAR(ISNULL(ReEntryDate, EntryDate))
-          AND PR_Employee.PayRollType = @payrolltype
-          AND (@person = '0' OR PR_Vacation.Person = @person)
-          AND (
-                @cesados = 'T'
-             OR (@cesados = 'Y' AND PR_Employee.CeaseDate IS NOT NULL)
-             OR (@cesados = 'N' AND PR_Employee.CeaseDate IS NULL)
-          )
-          AND PR_Vacation.Company = @company
-          AND ABS(consumeddays2 - acquireddays) > 0
-    ) X
-    ORDER BY 1, 3;
-
-    DECLARE Vacaciones CURSOR FOR
-    SELECT
-        DocumentNumber,
-        Name,
-        CONVERT(VARCHAR(8), entrydate, 112) AS fechaingreso,
-        controlyear,
-        porconsumir,
-        X.inicioProvision,
-        X.finProvision
-    FROM (
-        SELECT
-            SY_Company.Description AS compania,
-            SY_Person.Person AS DocumentNumber,
-            SY_Person.Name,
-            ISNULL(PR_Employee.ReEntryDate, PR_Employee.EntryDate) AS entrydate,
-            ControlYear,
-            CASE
-                WHEN CONVERT(VARCHAR(8), DateBeginProvision, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                    CASE
-                        WHEN CONVERT(VARCHAR(8), DateBeginRights, 112) <= CONVERT(VARCHAR(8), @date, 112) THEN
-                            ABS(consumeddays2 - acquireddays)
-                        ELSE
-                            ROUND((dbo.f_getDias360(DateBeginProvision, @date) * 2.5) / 30, 2) - consumeddays2
-                    END
-                ELSE 0
-            END AS porconsumir,
-            PR_Vacation.DateBeginProvision AS inicioProvision,
-            PR_Vacation.DateBeginRights AS finProvision
-        FROM PR_Vacation
-            INNER JOIN PR_Employee
-                ON PR_Vacation.Person = PR_Employee.Person
-               AND PR_Employee.Status = 'N'
-            INNER JOIN SY_Person
-                ON PR_Employee.Person = SY_Person.Person
-            INNER JOIN SY_Company
-                ON PR_Vacation.Company = SY_Company.Company
-        WHERE ControlYear < YEAR(@date) + 1
-          AND ControlYear >= YEAR(ISNULL(ReEntryDate, EntryDate))
-          AND PR_Employee.PayRollType = @payrolltype
-          AND PR_Vacation.Company = @company
-          AND (@person = '0' OR PR_Vacation.Person = @person)
-          AND (
-                @cesados = 'T'
-             OR (@cesados = 'Y' AND PR_Employee.CeaseDate IS NOT NULL)
-             OR (@cesados = 'N' AND PR_Employee.CeaseDate IS NULL)
-          )
-          AND ABS(consumeddays2 - acquireddays) > 0
-    ) X
-    ORDER BY 2;
-
-    OPEN Vacaciones;
-    FETCH NEXT FROM Vacaciones
-        INTO @documentnumber, @name, @fecha, @actualyear, @consumo, @inicioProvision, @finProvision;
-
-    WHILE @@FETCH_STATUS = 0
-    BEGIN
-        IF @actualyear = @year - 5
-            UPDATE xx_saldovacaciones SET saldo1 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 4
-            UPDATE xx_saldovacaciones SET saldo2 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 3
-            UPDATE xx_saldovacaciones SET saldo3 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 2
-            UPDATE xx_saldovacaciones SET saldo4 = @consumo WHERE person = @documentnumber;
-
-        IF @actualyear = @year - 1
-            UPDATE xx_saldovacaciones SET saldo5 = @consumo WHERE person = @documentnumber;
-
-        /* Descansos (PDT 20): acumula por periodo de provisión de cada año de control. */
-        SET @descansos = 0;
-        IF @inicioProvision IS NOT NULL AND @finProvision IS NOT NULL AND @inicioProvision < @finProvision
-        BEGIN
-            SELECT @descansos = COUNT(*)
-            FROM (
-                SELECT TOP (DATEDIFF(DAY, @inicioProvision, @finProvision))
-                    ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                FROM sys.all_objects a
-                    CROSS JOIN sys.all_objects b
-            ) tally
-            CROSS APPLY (SELECT DATEADD(DAY, tally.n, @inicioProvision) AS d) cal
-            WHERE EXISTS (
-                SELECT 1
-                FROM PR_EmployeeMedicalRest emr
-                    INNER JOIN PR_MedicalRestType mrt
-                        ON emr.MedicalRestType = mrt.MedicalRestType
-                       AND mrt.PDT = '20'
-                WHERE emr.Person = @documentnumber
-                  AND emr.Company = @company
-                  AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-            );
-        END;
-        UPDATE xx_saldovacaciones
-        SET descansos = ISNULL(descansos, 0) + @descansos
-        WHERE person = @documentnumber;
-
-        FETCH NEXT FROM Vacaciones
-            INTO @documentnumber, @name, @fecha, @actualyear, @consumo, @inicioProvision, @finProvision;
-    END;
-
-    CLOSE Vacaciones;
-    DEALLOCATE Vacaciones;
-
-    /* Faltas y licencias: una sola vez por trabajador (no por año de control). */
+            documentnumber,
+            MAX(CASE WHEN controlyear = @year - 5 THEN porconsumir END) AS saldo1,
+            MAX(CASE WHEN controlyear = @year - 4 THEN porconsumir END) AS saldo2,
+            MAX(CASE WHEN controlyear = @year - 3 THEN porconsumir END) AS saldo3,
+            MAX(CASE WHEN controlyear = @year - 2 THEN porconsumir END) AS saldo4,
+            MAX(CASE WHEN controlyear = @year - 1 THEN porconsumir END) AS saldo5,
+            SUM(
+                CASE
+                    WHEN inicioProvision IS NOT NULL
+                     AND finProvision IS NOT NULL
+                     AND inicioProvision < finProvision
+                        THEN dbo.f_count_medical_rest_days_web(
+                            @company,
+                            documentnumber,
+                            '20',
+                            inicioProvision,
+                            finProvision,
+                            0
+                        )
+                    ELSE 0
+                END
+            ) AS descansos
+        FROM #VacSaldo
+        GROUP BY documentnumber
+    )
     UPDATE sv
     SET
-        faltas = calc.faltas,
-        licencias = calc.licencias
+        saldo1 = ISNULL(a.saldo1, 0),
+        saldo2 = ISNULL(a.saldo2, 0),
+        saldo3 = ISNULL(a.saldo3, 0),
+        saldo4 = ISNULL(a.saldo4, 0),
+        saldo5 = ISNULL(a.saldo5, 0),
+        descansos = ISNULL(a.descansos, 0),
+        faltas = dbo.f_count_medical_rest_days_web(
+            sv.company,
+            sv.person,
+            '07',
+            CONVERT(DATETIME, sv.entrydate, 112),
+            @date,
+            0
+        ),
+        licencias = dbo.f_count_medical_rest_days_web(
+            sv.company,
+            sv.person,
+            '05',
+            CONVERT(DATETIME, sv.entrydate, 112),
+            @date,
+            1
+        )
     FROM xx_saldovacaciones sv
-    CROSS APPLY (
-        SELECT CONVERT(DATETIME, sv.entrydate, 112) AS inicio_emp
-    ) ing
-    CROSS APPLY (
-        SELECT
-            (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT TOP (
-                        CASE
-                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) > 0
-                                THEN DATEDIFF(DAY, ing.inicio_emp, @date)
-                            ELSE 0
-                        END
-                    )
-                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                    FROM sys.all_objects a
-                        CROSS JOIN sys.all_objects b
-                ) tally
-                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM PR_EmployeeMedicalRest emr
-                        INNER JOIN PR_MedicalRestType mrt
-                            ON emr.MedicalRestType = mrt.MedicalRestType
-                           AND mrt.PDT = '07'
-                    WHERE emr.Person = sv.person
-                      AND emr.Company = sv.company
-                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-                )
-            ) AS faltas,
-            (
-                SELECT COUNT(*)
-                FROM (
-                    SELECT TOP (
-                        CASE
-                            WHEN DATEDIFF(DAY, ing.inicio_emp, @date) >= 0
-                                THEN DATEDIFF(DAY, ing.inicio_emp, @date) + 1
-                            ELSE 0
-                        END
-                    )
-                        ROW_NUMBER() OVER (ORDER BY (SELECT NULL)) - 1 AS n
-                    FROM sys.all_objects a
-                        CROSS JOIN sys.all_objects b
-                ) tally
-                CROSS APPLY (SELECT DATEADD(DAY, tally.n, ing.inicio_emp) AS d) cal
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM PR_EmployeeMedicalRest emr
-                        INNER JOIN PR_MedicalRestType mrt
-                            ON emr.MedicalRestType = mrt.MedicalRestType
-                           AND mrt.PDT = '05'
-                    WHERE emr.Person = sv.person
-                      AND emr.Company = sv.company
-                      AND cal.d BETWEEN emr.DateBegin AND emr.DateEnd
-                )
-            ) AS licencias
-    ) calc;
+        INNER JOIN Agg a
+            ON a.documentnumber = sv.person;
 
     SELECT
         PR_PayRollType.ShortName AS tipoplanillas,
@@ -320,5 +198,7 @@ BEGIN
         LEFT JOIN SY_ReplicationUnit
             ON SY_Person.ReplicationUnit = SY_ReplicationUnit.ReplicationUnit
     ORDER BY xx_saldovacaciones.name;
+
+    DROP TABLE #VacSaldo;
 END
 GO

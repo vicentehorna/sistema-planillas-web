@@ -110,19 +110,16 @@ BEGIN
                 END,
                 3
             ) AS codbank,
-            LEFT(
-                LTRIM(RTRIM(
-                    CASE
-                        WHEN e.salarybank = m.banbifbank THEN
-                            CASE
-                                WHEN @par_currency = 'EX' THEN ISNULL(e.socialassistancecenter, '')
-                                ELSE ISNULL(e.salaryaccount, '')
-                            END
-                        ELSE ISNULL(e.socialassistancenumber, '')
-                    END
-                )) + REPLICATE(' ', 20),
-                20
-            ) AS cuenta_empleado,
+            LTRIM(RTRIM(
+                CASE
+                    WHEN e.salarybank = m.banbifbank THEN
+                        CASE
+                            WHEN @par_currency = 'EX' THEN ISNULL(e.socialassistancecenter, '')
+                            ELSE ISNULL(e.salaryaccount, '')
+                        END
+                    ELSE ISNULL(e.socialassistancenumber, '')
+                END
+            )) AS cuenta_raw,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
@@ -181,11 +178,12 @@ BEGIN
     Numerado AS (
         SELECT
             *,
+            RIGHT(REPLICATE('0', 20) + cuenta_raw, 20) AS cuenta_empleado,
             ROW_NUMBER() OVER (
                 ORDER BY lastname1, lastname2, nombres, person
             ) AS orden
         FROM DetalleBase
-        WHERE LTRIM(RTRIM(cuenta_empleado)) <> ''
+        WHERE cuenta_raw <> ''
     )
     SELECT
         orden,

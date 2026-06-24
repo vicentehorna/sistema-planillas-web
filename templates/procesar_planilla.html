@@ -230,6 +230,26 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
 
+    function esProcesoLiquidacionSeleccionado() {
+        if (!cboProc) return false;
+        const procId = String(cboProc.value || '').trim().toUpperCase();
+        if (procId === 'LIQUIDACION') return true;
+        const opt = cboProc.options[cboProc.selectedIndex];
+        if (!opt) return false;
+        const text = String(opt.textContent || '').trim().toUpperCase();
+        return text === 'LIQUIDACION';
+    }
+
+    function aplicarReglaCesadosPorProceso() {
+        if (!cboCesados) return;
+        if (esProcesoLiquidacionSeleccionado()) {
+            cboCesados.value = 'Y';
+            cboCesados.disabled = true;
+        } else {
+            cboCesados.disabled = false;
+        }
+    }
+
     function limpiarValorComboSiObsoleto(select) {
         if (!select) return;
         const v = String(select.value || '').trim();
@@ -505,6 +525,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.querySelectorAll('.check-trabajador').forEach((cb) => {
             cb.disabled = enCurso;
         });
+        if (!enCurso) {
+            aplicarReglaCesadosPorProceso();
+        }
     }
 
     function escapeHtml(s) {
@@ -868,6 +891,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (ces && ['T', 'Y', 'N'].includes(ces) && cboCesados) {
                     cboCesados.value = ces;
                 }
+                aplicarReglaCesadosPorProceso();
                 const ru = guardado.repunit != null ? String(guardado.repunit).trim() : '';
                 if (ru !== '' && cboUnidad && optEx && optEx(cboUnidad, ru)) {
                     cboUnidad.value = ru;
@@ -907,6 +931,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             cboPt.innerHTML = '<option value="">Seleccione...</option>';
             cboPt.disabled = true;
         }
+        aplicarReglaCesadosPorProceso();
         if (filtrosPersist) filtrosPersist.guardar();
     });
 
@@ -917,6 +942,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtTP.title = '';
         limpiarTablaTrabajadores();
         await cargarProcesos();
+        aplicarReglaCesadosPorProceso();
         if (filtrosPersist) filtrosPersist.guardar();
     });
 
@@ -926,6 +952,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtPR.value = '';
         txtPR.title = '';
         limpiarTablaTrabajadores();
+        aplicarReglaCesadosPorProceso();
         await cargarPeriodo();
         if (filtrosPersist) filtrosPersist.guardar();
     });

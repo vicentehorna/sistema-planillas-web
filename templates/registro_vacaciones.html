@@ -7,6 +7,7 @@
     .vac-layout {
         display: flex;
         gap: 1rem;
+        align-items: stretch;
         min-height: 72vh;
     }
 
@@ -16,6 +17,7 @@
         min-width: 220px;
         display: flex;
         flex-direction: column;
+        align-self: stretch;
     }
 
     .vac-panel-der {
@@ -24,16 +26,37 @@
         display: flex;
         flex-direction: column;
         gap: 1rem;
+        align-self: stretch;
     }
 
     .vac-grilla-trabajadores {
-        flex: 1;
-        min-height: 0;
-        max-height: calc(72vh - 4.5rem);
-        overflow: auto;
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 12rem;
+        overflow: hidden;
         border: 1px solid #dee2e6;
         border-radius: 0.375rem;
         background: #fff;
+    }
+
+    .vac-grilla-trabajadores.altura-sincronizada {
+        flex: 0 0 auto;
+    }
+
+    .vac-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .vac-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #dee2e6;
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        color: #6c757d;
     }
 
     .table-trabajadores-vac {
@@ -88,34 +111,6 @@
 
     .table-trabajadores-vac tbody tr.trabajador-row.active td {
         font-weight: 600;
-    }
-
-    .vac-resumen-cards {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: 0.75rem;
-    }
-
-    .vac-resumen-card {
-        border: 1px solid #e9ecef;
-        border-radius: 0.5rem;
-        padding: 0.85rem 1rem;
-        background: #fff;
-    }
-
-    .vac-resumen-card .valor {
-        font-size: 1.65rem;
-        font-weight: 700;
-        line-height: 1.1;
-    }
-
-    .vac-resumen-card.pendientes {
-        border-color: #ffc107;
-        background: linear-gradient(135deg, #fff9e6 0%, #fff3cd 100%);
-    }
-
-    .vac-resumen-card.pendientes .valor {
-        color: #b45309;
     }
 
     .table-vacaciones {
@@ -203,6 +198,106 @@
         color: #0d6efd;
     }
 
+    .vac-dw-panel {
+        border: 1px solid #7f90a3;
+        border-radius: 0.4rem 0.4rem 0.2rem 0.2rem;
+        background: #e9eef3;
+        box-shadow:
+            inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+            inset -1px -1px 0 rgba(108, 124, 145, 0.35),
+            0 1px 2px rgba(31, 45, 61, 0.08);
+        overflow: hidden;
+    }
+
+    .vac-dw-titlebar {
+        background: linear-gradient(180deg, #f3f6fa 0%, #d7e0ea 48%, #c2cedc 100%);
+        border-bottom: 1px solid #8a9aab;
+        padding: 0.4rem 0.7rem;
+        min-height: 1.9rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #3a4a5c;
+    }
+
+    .vac-dw-titlebar .vac-dw-title-text {
+        color: #4a5868;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        font-size: 0.72rem;
+    }
+
+    .vac-dw-body {
+        background: #e3e9f0;
+        padding: 0.4rem;
+        border-top: 1px solid #a8b6c6;
+    }
+
+    .vac-dw-body .table-scroll-sm,
+    .vac-dw-body .table-scroll-md {
+        border: 1px solid #95a5b5;
+        background: #fff;
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .vac-dw-body .vac-form-utilizacion {
+        background: #fff;
+        border: 1px solid #95a5b5;
+        padding: 0.75rem;
+        border-radius: 0.15rem;
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .vac-form-utilizacion .vac-col-fecha {
+        width: 9.85rem;
+        min-width: 9.85rem;
+        max-width: 9.85rem;
+    }
+
+    .vac-form-utilizacion .vac-col-fecha input[type="date"] {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .vac-form-utilizacion .vac-col-fecha input[type="date"].is-invalid {
+        border-color: #dc3545;
+        box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.15);
+    }
+
+    .vac-form-utilizacion .vac-col-dias {
+        min-width: 3.25rem;
+    }
+
+    .vac-form-utilizacion .vac-col-tipo {
+        min-width: 7.25rem;
+    }
+
+    .vac-form-utilizacion .vac-col-tipo select {
+        min-width: 7.25rem;
+    }
+
+    .vac-form-utilizacion .vac-col-consumo {
+        min-width: 8rem;
+        flex: 1 1 8.5rem;
+        max-width: 10rem;
+    }
+
+    .vac-form-utilizacion .vac-form-fila-principal {
+        flex-wrap: nowrap;
+        overflow-x: hidden;
+    }
+
+    .vac-form-utilizacion .vac-form-fila-principal > [class*="col"] {
+        flex-shrink: 0;
+    }
+
+    .vac-form-utilizacion .vac-btn-guardar {
+        white-space: nowrap;
+    }
+
     @media (max-width: 991.98px) {
         .vac-layout {
             flex-direction: column;
@@ -215,10 +310,6 @@
 
         .vac-grilla-trabajadores {
             max-height: 240px;
-        }
-
-        .vac-resumen-cards {
-            grid-template-columns: 1fr;
         }
     }
 </style>
@@ -256,23 +347,25 @@
             <span class="input-group-text"><i class="bi bi-search"></i></span>
             <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
         </div>
-        <div class="vac-grilla-trabajadores">
-            <table class="table table-bordered table-sm table-hover table-trabajadores-vac align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="col-dni">DNI</th>
-                        <th class="col-nombre">Nombre</th>
-                        <th class="col-ingreso">F. ingreso</th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyTrabajadoresVac">
-                    <tr>
-                        <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="vac-grilla-trabajadores" id="grillaTrabajadoresVac">
+            <div class="vac-grilla-scroll">
+                <table class="table table-bordered table-sm table-hover table-trabajadores-vac align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-dni">DNI</th>
+                            <th class="col-nombre">Nombre</th>
+                            <th class="col-ingreso">F. ingreso</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTrabajadoresVac">
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoTrabajadores" class="vac-grilla-footer">0 trabajadores</div>
         </div>
-        <div id="lblConteoTrabajadores" class="small text-muted mt-2">0 trabajadores</div>
     </aside>
 
     <section class="vac-panel-der" id="panelDetalle">
@@ -294,29 +387,15 @@
                             <span>Ingreso: <span id="lblIngresoTrabajador"></span></span>
                         </div>
                     </div>
-                    <div class="vac-resumen-cards mt-3">
-                        <div class="vac-resumen-card">
-                            <div class="small text-muted text-uppercase fw-semibold">Días acumulados</div>
-                            <div class="valor" id="valDiasAcumulados">0</div>
-                        </div>
-                        <div class="vac-resumen-card">
-                            <div class="small text-muted text-uppercase fw-semibold">Días gozados</div>
-                            <div class="valor" id="valDiasGozados">0</div>
-                        </div>
-                        <div class="vac-resumen-card pendientes">
-                            <div class="small text-uppercase fw-semibold">Días pendientes</div>
-                            <div class="valor" id="valDiasPendientes">0</div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-                    <span class="fw-semibold small text-uppercase text-muted">Periodos vacacionales</span>
+            <div class="vac-dw-panel">
+                <div class="vac-dw-titlebar">
+                    <span class="vac-dw-title-text">Periodos vacacionales</span>
                     <span class="badge bg-secondary" id="badgePeriodoSeleccionado">Sin periodo</span>
                 </div>
-                <div class="card-body p-0">
+                <div class="vac-dw-body">
                     <div class="table-scroll-sm">
                         <table class="table table-sm table-hover table-vacaciones mb-0" id="tblPeriodos">
                             <thead>
@@ -337,11 +416,11 @@
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-2">
-                    <span class="fw-semibold small text-uppercase text-muted">Detalle de utilización</span>
+            <div class="vac-dw-panel">
+                <div class="vac-dw-titlebar">
+                    <span class="vac-dw-title-text">Detalle de utilización</span>
                 </div>
-                <div class="card-body p-0">
+                <div class="vac-dw-body">
                     <div class="table-scroll-md">
                         <table class="table table-sm table-hover table-vacaciones mb-0" id="tblDetalle">
                             <thead>
@@ -361,48 +440,52 @@
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-2">
-                    <span class="fw-semibold small text-uppercase text-muted">Registrar utilización</span>
+            <div class="vac-dw-panel" id="panelRegistrarUtilizacion">
+                <div class="vac-dw-titlebar">
+                    <span class="vac-dw-title-text">Registrar utilización</span>
                 </div>
-                <div class="card-body">
-                    <form id="frmNuevaVacacion" class="row g-3 align-items-end">
-                        <div class="col-12 col-md-6 col-lg-3">
-                            <label for="cboConsumoEfectivo" class="form-label small fw-bold text-muted">Consumo efectivo</label>
-                            <select id="cboConsumoEfectivo" class="form-select form-select-sm" required disabled>
-                                <option value="">Seleccione...</option>
-                            </select>
+                <div class="vac-dw-body">
+                    <form id="frmNuevaVacacion" class="vac-form-utilizacion">
+                        <div class="row g-2 g-md-3 align-items-end vac-form-fila-principal mb-2 mb-md-3">
+                            <div class="col-auto vac-col-consumo">
+                                <label for="cboConsumoEfectivo" class="form-label small fw-bold text-muted">Consumo efectivo</label>
+                                <select id="cboConsumoEfectivo" class="form-select form-select-sm" required disabled>
+                                    <option value="">Seleccione...</option>
+                                </select>
+                            </div>
+                            <div class="col-auto vac-col-fecha">
+                                <label for="txtFechaInicio" class="form-label small fw-bold text-muted">Fecha inicio</label>
+                                <input type="date" id="txtFechaInicio" class="form-control form-control-sm" required disabled>
+                            </div>
+                            <div class="col-auto vac-col-fecha">
+                                <label for="txtFechaFin" class="form-label small fw-bold text-muted">Fecha fin</label>
+                                <input type="date" id="txtFechaFin" class="form-control form-control-sm" required disabled>
+                            </div>
+                            <div class="col-auto vac-col-dias">
+                                <label class="form-label small fw-bold text-muted">Nro. Días</label>
+                                <div class="vac-dias-calculados" id="lblDiasCalculados">—</div>
+                            </div>
+                            <div class="col-auto vac-col-tipo">
+                                <label for="cboTipoVacacion" class="form-label small fw-bold text-muted">Tipo</label>
+                                <select id="cboTipoVacacion" class="form-select form-select-sm" disabled>
+                                    <option value="D" selected>Descanso</option>
+                                    <option value="V">Venta</option>
+                                </select>
+                            </div>
                         </div>
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label for="txtFechaInicio" class="form-label small fw-bold text-muted">Fecha inicio</label>
-                            <input type="date" id="txtFechaInicio" class="form-control form-control-sm" required disabled>
-                        </div>
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label for="txtFechaFin" class="form-label small fw-bold text-muted">Fecha fin</label>
-                            <input type="date" id="txtFechaFin" class="form-control form-control-sm" required disabled>
-                        </div>
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label class="form-label small fw-bold text-muted">Días calendario</label>
-                            <div class="vac-dias-calculados" id="lblDiasCalculados">—</div>
-                        </div>
-                        <div class="col-6 col-md-3 col-lg-2">
-                            <label for="cboTipoVacacion" class="form-label small fw-bold text-muted">Tipo</label>
-                            <select id="cboTipoVacacion" class="form-select form-select-sm" disabled>
-                                <option value="D" selected>Descanso</option>
-                                <option value="V">Venta</option>
-                            </select>
-                        </div>
-                        <div class="col-12 col-lg-3">
-                            <button type="submit" id="btnGuardarVacaciones" class="btn btn-success btn-sm w-100" disabled>
-                                <i class="bi bi-check2-circle me-1"></i>Guardar vacaciones
-                            </button>
-                        </div>
+                        <div class="row g-3 align-items-end">
+                            <div class="col-auto">
+                                <button type="submit" id="btnGuardarVacaciones" class="btn btn-success btn-sm vac-btn-guardar" disabled>
+                                    <i class="bi bi-check2-circle me-1"></i>Guardar vacaciones
+                                </button>
+                            </div>
                         <div class="col-12">
                             <div class="alert alert-warning py-2 mb-0 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
                                 <i class="bi bi-exclamation-triangle me-1"></i>
                                 Los días calculados superan el saldo pendiente del periodo seleccionado
                                 (<strong id="lblPendientesPeriodo">0</strong> día(s)).
                             </div>
+                        </div>
                         </div>
                     </form>
                 </div>
@@ -491,6 +574,54 @@ document.addEventListener('DOMContentLoaded', async function () {
     const lblConteo = document.getElementById('lblConteoTrabajadores');
     const placeholderDetalle = document.getElementById('placeholderDetalle');
     const contenidoDetalle = document.getElementById('contenidoDetalle');
+    const grillaTrabajadores = document.getElementById('grillaTrabajadoresVac');
+    const panelRegistrarUtilizacion = document.getElementById('panelRegistrarUtilizacion');
+
+    let resizeObsGrilla = null;
+
+    function ajustarAlturaGrillaTrabajadores() {
+        if (!grillaTrabajadores) return;
+
+        const detalleVisible = contenidoDetalle
+            && !contenidoDetalle.classList.contains('d-none')
+            && panelRegistrarUtilizacion;
+
+        if (!detalleVisible) {
+            grillaTrabajadores.classList.remove('altura-sincronizada');
+            grillaTrabajadores.style.height = '';
+            grillaTrabajadores.style.minHeight = '';
+            return;
+        }
+
+        const grillaTop = grillaTrabajadores.getBoundingClientRect().top;
+        const targetBottom = panelRegistrarUtilizacion.getBoundingClientRect().bottom;
+        const altura = Math.round(targetBottom - grillaTop);
+
+        if (altura > 120) {
+            grillaTrabajadores.classList.add('altura-sincronizada');
+            grillaTrabajadores.style.height = altura + 'px';
+            grillaTrabajadores.style.minHeight = altura + 'px';
+        }
+    }
+
+    function programarAjusteAlturaGrilla() {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(ajustarAlturaGrillaTrabajadores);
+        });
+    }
+
+    function registrarObservadorAlturaGrilla() {
+        if (resizeObsGrilla || !contenidoDetalle) return;
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', ajustarAlturaGrillaTrabajadores);
+            return;
+        }
+        resizeObsGrilla = new ResizeObserver(programarAjusteAlturaGrilla);
+        resizeObsGrilla.observe(contenidoDetalle);
+        if (panelRegistrarUtilizacion) {
+            resizeObsGrilla.observe(panelRegistrarUtilizacion);
+        }
+    }
 
     let trabajadoresCache = [];
     let trabajadorActivo = null;
@@ -540,14 +671,33 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function limpiarValidacionFechas() {
+        document.getElementById('txtFechaInicio').classList.remove('is-invalid');
+        document.getElementById('txtFechaFin').classList.remove('is-invalid');
+    }
+
     function validarDiasFormulario() {
         const btn = document.getElementById('btnGuardarVacaciones');
         const alerta = document.getElementById('alertaDiasExcedidos');
         const lblDias = document.getElementById('lblDiasCalculados');
         const lblPend = document.getElementById('lblPendientesPeriodo');
-        const inicio = document.getElementById('txtFechaInicio').value;
-        const fin = document.getElementById('txtFechaFin').value;
+        const inicioEl = document.getElementById('txtFechaInicio');
+        const finEl = document.getElementById('txtFechaFin');
+        const inicio = inicioEl.value;
+        const fin = finEl.value;
         const consumo = document.getElementById('cboConsumoEfectivo').value;
+
+        const fechasInvertidas = !!(inicio && fin && fin < inicio);
+        inicioEl.classList.toggle('is-invalid', fechasInvertidas);
+        finEl.classList.toggle('is-invalid', fechasInvertidas);
+
+        if (fechasInvertidas) {
+            lblDias.textContent = '—';
+            btn.disabled = true;
+            alerta.classList.remove('visible');
+            return;
+        }
+
         const dias = calcularDiasCalendario(inicio, fin);
 
         if (dias == null) {
@@ -567,6 +717,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         alerta.classList.toggle('visible', excede);
         btn.disabled = excede || incompleto || dias <= 0;
+        programarAjusteAlturaGrilla();
     }
 
     function formatearFechaIngreso(valor) {
@@ -648,8 +799,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         contenidoDetalle.classList.toggle('d-none', !visible);
         if (visible) {
             contenidoDetalle.style.display = 'flex';
+            programarAjusteAlturaGrilla();
         } else {
             contenidoDetalle.style.display = 'none';
+            ajustarAlturaGrillaTrabajadores();
         }
     }
 
@@ -754,13 +907,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         renderDetalle(datosVacaciones.detalle || []);
         actualizarFormularioHabilitado(true);
         validarDiasFormulario();
-    }
-
-    function pintarResumen(resumen) {
-        const r = resumen || {};
-        document.getElementById('valDiasAcumulados').textContent = String(r.dias_acumulados || 0);
-        document.getElementById('valDiasGozados').textContent = String(r.dias_gozados || 0);
-        document.getElementById('valDiasPendientes').textContent = String(r.dias_pendientes || 0);
+        programarAjusteAlturaGrilla();
     }
 
     function pintarEmpleado(emp) {
@@ -779,6 +926,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('badgePeriodoSeleccionado').textContent = 'Sin periodo';
         actualizarFormularioHabilitado(false);
         document.getElementById('frmNuevaVacacion').reset();
+        limpiarValidacionFechas();
         document.getElementById('lblDiasCalculados').textContent = '—';
         document.getElementById('alertaDiasExcedidos').classList.remove('visible');
 
@@ -790,7 +938,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             datosVacaciones = await leerJson(res);
             pintarEmpleado(datosVacaciones.empleado || {});
-            pintarResumen(datosVacaciones.resumen || {});
             renderPeriodos(datosVacaciones.periodos || []);
             renderDetalle(datosVacaciones.detalle || []);
             await poblarConsumoEfectivo();
@@ -803,6 +950,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch (err) {
             console.error(err);
             mostrarError(err.message);
+        } finally {
+            programarAjusteAlturaGrilla();
         }
     }
 
@@ -943,6 +1092,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();
     }
+
+    registrarObservadorAlturaGrilla();
+    programarAjusteAlturaGrilla();
 });
 </script>
 {% endblock %}

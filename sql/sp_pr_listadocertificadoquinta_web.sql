@@ -38,10 +38,16 @@ BEGIN
         ISNULL(p.Sex, 0) AS sex
     FROM PR_EmployeePayRoll epr
         INNER JOIN SY_Person p ON epr.Person = p.Person
+       
     WHERE epr.Company = @cia
       AND epr.PayRollType = @payrolltype
       AND LEFT(LTRIM(RTRIM(epr.PRPeriod)), 4) = @anio
       AND (@person = '0' OR epr.Person = @person)
+      and ISNULL((select COUNT(*) from PR_EmployeePayRollConcept epc inner join PR_Concept c on (epc.Concept = c.Concept) 
+        inner join PR_ConceptType ct on (c.ConceptType = ct.ConceptType and ct.ShortName in ('I', 'D')) 
+        where  (epr.Company = epc.Company and epr.PRPeriod = epc.PRPeriod and
+        epr.PayRollType = epc.PayRollType and epr.ProcessType = epc.ProcessType and epr.Person = epc.Person)
+        ),0) > 0
     GROUP BY
         epr.Person,
         p.Name,
@@ -50,3 +56,5 @@ BEGIN
     ORDER BY p.Name;
 END
 GO
+
+

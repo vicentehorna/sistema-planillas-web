@@ -2,6 +2,7 @@
     Listado de trabajadores elegibles para archivo Continental (BBVA).
     Usa pr_mapping.continentalbank.
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @todos_bancos: N = solo cuenta propia Continental; Y = cuenta propia Continental + interbancarios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listacontinental_web]
     @par_company     VARCHAR(10),
@@ -11,7 +12,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listacontinental_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
-    @cesados         CHAR(1)
+    @cesados         CHAR(1),
+    @todos_bancos    CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -19,6 +21,9 @@ BEGIN
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
+    IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
+    SET @todos_bancos = UPPER(@todos_bancos);
+    IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
 
     ;WITH Pagos AS (
         SELECT
@@ -58,13 +63,19 @@ BEGIN
             ISNULL(sp.name2, '')
         )) AS nombre,
         p.importe,
-        pdt.PDT AS tipodoc
+        pdt.PDT AS tipodoc,
+        LTRIM(RTRIM(ISNULL(eb.Name, ISNULL(e.salarybank, '')))) AS banco
     FROM PR_Employee e
         INNER JOIN SY_Person sp ON sp.person = e.person
         INNER JOIN pr_mapping m ON m.company = e.company
         INNER JOIN Pagos p ON p.person = e.person
         LEFT JOIN SY_PersonDocumentType pdt
             ON pdt.PersonDocumentType = sp.EmployeeDocumentType
+        LEFT JOIN te_accounttype tat
+            ON tat.accounttype = e.salaryaccounttype
+        LEFT JOIN ERP_Bank eb
+            ON eb.bank = e.salarybank
+           AND eb.company = e.company
     WHERE e.company = @par_company
       AND e.payrolltype = @par_payrolltype
       AND e.salarycurrency = @par_currency
@@ -76,7 +87,29 @@ BEGIN
       AND ISNULL(m.continentalbank, '') <> ''
       AND ISNULL(m.collectionform, '') <> ''
       AND e.collectionform = m.collectionform
-      AND e.salarybank = m.continentalbank
+      AND (
+            (
+                @todos_bancos = 'N'
+                AND e.salarybank = m.continentalbank
+            )
+         OR (
+                @todos_bancos = 'Y'
+                AND (
+                    (
+                        e.salarybank = m.continentalbank
+                        AND ISNULL(e.salaryaccount, '') <> ''
+                    )
+                 OR (
+                        e.salarybank <> m.continentalbank
+                        AND (
+                            ISNULL(tat.abrev, '') = 'B'
+                         OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                        )
+                        AND ISNULL(e.socialassistancenumber, '') <> ''
+                    )
+                )
+            )
+      )
       AND sp.status = 'A'
       AND (
             CASE

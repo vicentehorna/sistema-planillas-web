@@ -3,6 +3,7 @@
     Requiere #ContinentalPersonas (person) cargada por la app web.
     Banco destino: pr_mapping.continentalbank.
     Cuenta origen: TE_BankAccount vía continentalbank y moneda.
+    @todos_bancos: N = solo cuenta propia Continental; Y = cuenta propia Continental + interbancarios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_continental_web]
     @par_company     VARCHAR(10),
@@ -11,13 +12,17 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_continental_web]
     @par_payrolltype VARCHAR(20),
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
-    @par_paydate     DATETIME = NULL
+    @par_paydate     DATETIME = NULL,
+    @todos_bancos    CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
+    IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
+    SET @todos_bancos = UPPER(@todos_bancos);
+    IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
 
     IF OBJECT_ID('tempdb..#ContinentalPersonas') IS NULL
     BEGIN
@@ -192,7 +197,26 @@ BEGIN
           AND e.salarycurrency = @par_currency
           AND ISNULL(m.continentalbank, '') <> ''
           AND e.collectionform = @collectionform
-          AND e.salarybank = m.continentalbank
+          AND (
+                (@todos_bancos = 'N' AND e.salarybank = m.continentalbank)
+             OR (
+                    @todos_bancos = 'Y'
+                    AND (
+                        (
+                            e.salarybank = m.continentalbank
+                            AND ISNULL(e.salaryaccount, '') <> ''
+                        )
+                     OR (
+                            e.salarybank <> m.continentalbank
+                            AND (
+                                ISNULL(tat.abrev, '') = 'B'
+                             OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                            )
+                            AND ISNULL(e.socialassistancenumber, '') <> ''
+                        )
+                    )
+                )
+          )
           AND sp.status = 'A'
           AND (
                 CASE

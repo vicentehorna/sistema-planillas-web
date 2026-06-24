@@ -32,12 +32,13 @@ BEGIN
     SELECT
         epr.Person AS person,
         p.Name AS nombre,
-        MAX(epr.entrydate) AS fechaingreso,
-        MAX(epr.ceasedate) AS fechacese,
+        MAX(ISNULL(PR.REENTRYDATE,PR.ENTRYDATE)) AS fechaingreso,
+        MAX(PR.ceasedate) AS fechacese,
         p.EMail AS email,
         ISNULL(p.Sex, 0) AS sex
     FROM PR_EmployeePayRoll epr
         INNER JOIN SY_Person p ON epr.Person = p.Person
+        INNER JOIN PR_EMPLOYEE PR ON (EPR.Person = PR.Person AND EPR.Company = PR.Company)
        
     WHERE epr.Company = @cia
       AND epr.PayRollType = @payrolltype
@@ -56,5 +57,4 @@ BEGIN
     ORDER BY p.Name;
 END
 GO
-
 

@@ -45,6 +45,11 @@
         padding-right: 0.2rem;
     }
 
+    .table-continental .col-banco {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
     .table-continental .col-importe {
         min-width: 5.5rem;
         text-align: right;
@@ -105,6 +110,14 @@
                     <option value="N">No</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3 d-flex align-items-end pb-1">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkTodosBancos">
+                    <label class="form-check-label small fw-bold text-muted" for="chkTodosBancos">
+                        Todos los Bancos
+                    </label>
+                </div>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -124,17 +137,7 @@
     <div class="card-body pt-3">
         <div class="table-scroll-container">
             <table class="table table-bordered table-sm table-hover table-continental align-middle">
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 2.5rem;">
-                            <input type="checkbox" id="checkAllCont" class="form-check-input" title="Marcar / desmarcar todos">
-                        </th>
-                        <th>DNI</th>
-                        <th class="col-tipodoc">Tipo</th>
-                        <th>Nombre</th>
-                        <th class="col-importe">Importe</th>
-                    </tr>
-                </thead>
+                <thead id="thead-continental"></thead>
                 <tbody id="tbody-continental"></tbody>
             </table>
         </div>
@@ -242,7 +245,57 @@ document.addEventListener('DOMContentLoaded', async function () {
         chk.indeterminate = marcados > 0 && marcados < all.length;
     }
 
-    function renderizarTabla(rows) {
+    function renderizarEncabezadoTabla(mostrarBanco) {
+        const thead = document.getElementById('thead-continental');
+        if (!thead) return;
+
+        const tr = document.createElement('tr');
+
+        const thChk = document.createElement('th');
+        thChk.className = 'text-center';
+        thChk.style.width = '2.5rem';
+        const chkAll = document.createElement('input');
+        chkAll.type = 'checkbox';
+        chkAll.id = 'checkAllCont';
+        chkAll.className = 'form-check-input';
+        chkAll.title = 'Marcar / desmarcar todos';
+        thChk.appendChild(chkAll);
+        tr.appendChild(thChk);
+
+        ['DNI', 'Tipo', 'Nombre'].forEach((texto, idx) => {
+            const th = document.createElement('th');
+            th.textContent = texto;
+            if (idx === 1) th.className = 'col-tipodoc';
+            tr.appendChild(th);
+        });
+
+        if (mostrarBanco) {
+            const thBanco = document.createElement('th');
+            thBanco.textContent = 'Banco';
+            thBanco.className = 'col-banco';
+            tr.appendChild(thBanco);
+        }
+
+        const thImporte = document.createElement('th');
+        thImporte.textContent = 'Importe';
+        thImporte.className = 'col-importe';
+        tr.appendChild(thImporte);
+
+        thead.innerHTML = '';
+        thead.appendChild(tr);
+
+        chkAll.addEventListener('change', function () {
+            document.querySelectorAll('.check-continental').forEach((cb) => {
+                cb.checked = this.checked;
+            });
+            sincronizarCheckAllCont();
+            actualizarContadoresContinental();
+        });
+    }
+
+    function renderizarTabla(rows, mostrarBanco) {
+        renderizarEncabezadoTabla(!!mostrarBanco);
+
         const tbody = document.getElementById('tbody-continental');
         tbody.innerHTML = '';
         const filas = Array.isArray(rows) ? rows : [];
@@ -253,6 +306,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const dni = String(row.dni || '').trim();
             const tipodoc = String(row.tipodoc || '').trim();
             const nombre = String(row.nombre || '').trim();
+            const banco = String(row.banco || '').trim();
             const importe = row.importe;
 
             const tdChk = document.createElement('td');
@@ -274,15 +328,23 @@ document.addEventListener('DOMContentLoaded', async function () {
             const tdNombre = document.createElement('td');
             tdNombre.textContent = nombre;
 
-            const tdImporte = document.createElement('td');
-            tdImporte.className = 'col-importe';
-            tdImporte.textContent = formatearImporte(importe);
-
             tr.appendChild(tdChk);
             tr.appendChild(tdDni);
             tr.appendChild(tdTipoDoc);
             tr.appendChild(tdNombre);
+
+            if (mostrarBanco) {
+                const tdBanco = document.createElement('td');
+                tdBanco.className = 'col-banco';
+                tdBanco.textContent = banco;
+                tr.appendChild(tdBanco);
+            }
+
+            const tdImporte = document.createElement('td');
+            tdImporte.className = 'col-importe';
+            tdImporte.textContent = formatearImporte(importe);
             tr.appendChild(tdImporte);
+
             tbody.appendChild(tr);
         });
 
@@ -291,10 +353,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function ejecutarListado() {
+        if (filtrosPersist) filtrosPersist.guardar();
+
         lastRowsContinental = [];
         document.getElementById('tbody-continental').innerHTML = '';
-        document.getElementById('checkAllCont').checked = false;
-        document.getElementById('checkAllCont').indeterminate = false;
+        const chkAllInicio = document.getElementById('checkAllCont');
+        if (chkAllInicio) {
+            chkAllInicio.checked = false;
+            chkAllInicio.indeterminate = false;
+        }
         document.getElementById('lblRowCountCont').textContent = '0';
         document.getElementById('lblSeleccionadosCont').textContent = '0';
         document.getElementById('lblImporteTotalCont').textContent = '0.00';
@@ -308,6 +375,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const todosBancos = document.getElementById('chkTodosBancos').checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -319,7 +387,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados
+                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
+                    todos_bancos: todosBancos
                 })
             });
             const payload = await res.json();
@@ -337,7 +406,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             lastRowsContinental = Array.isArray(payload.rows) ? payload.rows : [];
             document.getElementById('cardResultadoContinental').classList.remove('d-none');
-            renderizarTabla(lastRowsContinental);
+            const mostrarBanco = !!(payload.meta && payload.meta.todos_bancos);
+            renderizarTabla(lastRowsContinental, mostrarBanco);
         } catch (e) {
             console.error(e);
             document.getElementById('cardResultadoContinental').classList.add('d-none');
@@ -486,14 +556,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    document.getElementById('checkAllCont').addEventListener('change', function () {
-        document.querySelectorAll('.check-continental').forEach((cb) => {
-            cb.checked = this.checked;
-        });
-        sincronizarCheckAllCont();
-        actualizarContadoresContinental();
-    });
-
     document.getElementById('tbody-continental').addEventListener('change', function (e) {
         if (e.target && e.target.classList && e.target.classList.contains('check-continental')) {
             sincronizarCheckAllCont();
@@ -526,6 +588,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const currency = document.getElementById('cboMoneda').value.trim();
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
+        const todosBancos = document.getElementById('chkTodosBancos').checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -540,6 +603,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate,
+                    todos_bancos: todosBancos,
                     persons: seleccionados.map((r) => r.person)
                 })
             });

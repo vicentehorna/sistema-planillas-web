@@ -16,20 +16,42 @@ from flask import Flask, render_template, request, redirect, url_for, flash, ses
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from dotenv import load_dotenv
 
-# --- CONFIGURACIÓN FORZADA DE GTK3 ---
-# Verifica que esta sea la ruta real tras la instalación
-gtk_path = r'C:\Program Files\GTK3-Runtime Win64\bin'
+load_dotenv()
 
-if os.path.exists(gtk_path):
-    # Agregamos al PATH de Windows
-    os.environ['PATH'] = gtk_path + os.pathsep + os.environ.get('PATH', '')
-    # Necesario para Python 3.8+ en Windows
-    if hasattr(os, 'add_dll_directory'):
-        try:
-            os.add_dll_directory(gtk_path)
-        except Exception:
-            pass
-# -------------------------------------
+
+def _configure_weasyprint_dll_paths():
+    """Registra rutas de Pango/GTK para WeasyPrint en Windows (antes del import)."""
+    candidates = []
+    env_val = str(os.environ.get('WEASYPRINT_DLL_DIRECTORIES', '') or '').strip()
+    if env_val:
+        candidates.extend(p.strip() for p in re.split(r'[;]', env_val) if p.strip())
+
+    for default_path in (
+        r'C:\msys64\mingw64\bin',
+        r'C:\Program Files\GTK3-Runtime Win64\bin',
+    ):
+        if default_path not in candidates:
+            candidates.append(default_path)
+
+    valid = [p for p in candidates if os.path.isdir(p)]
+    if not valid:
+        return []
+
+    os.environ['WEASYPRINT_DLL_DIRECTORIES'] = os.pathsep.join(valid)
+    path_parts = [p for p in os.environ.get('PATH', '').split(os.pathsep) if p]
+    for dll_dir in valid:
+        if dll_dir not in path_parts:
+            path_parts.insert(0, dll_dir)
+        if hasattr(os, 'add_dll_directory'):
+            try:
+                os.add_dll_directory(dll_dir)
+            except OSError:
+                pass
+    os.environ['PATH'] = os.pathsep.join(path_parts)
+    return valid
+
+
+_WEASYPRINT_DLL_DIRS = _configure_weasyprint_dll_paths()
 
 try:
     from weasyprint import HTML
@@ -41,8 +63,6 @@ except Exception as _weasy_err:
 
 from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
-
-load_dotenv()
 
 
 def _env_var(*names, default=''):
@@ -2854,6 +2874,233 @@ def generar_pdf_certificado_retiro_cts(params):
     )
 
 
+def _formato_liquidacion_pdf_filename(person, period_raw):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
+    return f'formato_liquidacion_{person_safe}_{period_safe}.pdf'
+
+
+def _formato_liquidacion_fecha(val):
+    ref = _parse_fecha_flexible(val)
+    return ref.strftime('%d/%m/%Y') if ref else ''
+
+
+def _formato_liquidacion_moneda(val):
+    try:
+        n = float(val or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    return f'S/ {n:,.2f}'
+
+
+def _formato_liquidacion_porcentaje(val):
+    try:
+        n = float(val or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    if n <= 0:
+        return ''
+    text = f'{n:.2f}'.rstrip('0').rstrip('.')
+    return f'{text}%'
+
+
+def _regimen_pensionario_formato_liquidacion(liq):
+    liq = liq or {}
+    tipo_pension = str(liq.get('type_pension') or '').strip()
+    tipo_comision = str(liq.get('tipo_comision') or '').strip()
+    if tipo_pension and tipo_comision:
+        return f'{tipo_pension} - {tipo_comision}'
+    return tipo_pension or tipo_comision
+
+
+_FORMATO_LIQ_REMUNERACION_DEF = (
+    {'label': 'Básico', 'cts': 'BASICO_CTS', 'grati': 'BASICO_GRATI', 'vaca': 'BASICO_VACA'},
+    {'label': 'Asig. fam.', 'cts': 'ASIG_FAM_CTS', 'grati': 'ASIG_FAM_GRATI', 'vaca': 'ASIG_FAM_VACA'},
+    {'label': 'Sexto grati.', 'cts': 'PROMEDIO_GRATI', 'grati': None, 'vaca': None},
+    {'label': 'Promedio noche', 'cts': 'BONO_PROD_CTS', 'grati': 'BONO_PROD_GRATI', 'vaca': 'BONO_PROD_VAC'},
+    {'label': 'Promedio HE', 'cts': 'HRS_EXTRAS_25_CTS', 'grati': 'HRS_EXTRAS_25_GRA', 'vaca': 'HRS_EXTRAS_25_VAC'},
+    {'label': 'Promedio feriado', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
+)
+
+
+def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, person):
+    codes = sorted({
+        code
+        for row in _FORMATO_LIQ_REMUNERACION_DEF
+        for code in (row.get('cts'), row.get('grati'), row.get('vaca'))
+        if code
+    })
+    if not codes:
+        return {}
+
+    placeholders = ','.join('?' for _ in codes)
+    sql = f"""
+        SELECT
+            C.FormulaCode AS formula_code,
+            SUM(ISNULL(EC.ConceptValueLo, EC.ConceptValue)) AS valor
+        FROM PR_EmployeePayRollConcept EC (NOLOCK)
+            INNER JOIN PR_Concept C (NOLOCK) ON EC.Concept = C.Concept
+        WHERE EC.Company = ?
+          AND EC.Person = ?
+          AND EC.PayRollType = ?
+          AND EC.PRPeriod = ?
+          AND EXISTS (
+                SELECT 1
+                FROM PR_ProcessType PT (NOLOCK)
+                WHERE PT.ShortName = 'LIQUIDACION'
+                  AND PT.ProcessType = EC.ProcessType
+            )
+          AND C.FormulaCode IN ({placeholders})
+        GROUP BY C.FormulaCode
+    """
+    cursor.execute(sql, (cia, person, payroll_type, period, *codes))
+    rows = _dicts_first_nonempty_resultset(cursor)
+    valores = {}
+    for row in rows:
+        fc = str(row.get('formula_code') or '').strip()
+        if not fc:
+            continue
+        try:
+            valores[fc] = float(row.get('valor') or 0)
+        except (TypeError, ValueError):
+            valores[fc] = 0.0
+    return valores
+
+
+def _build_formato_liquidacion_remuneracion(formula_values):
+    formula_values = formula_values or {}
+    filas = []
+    totales = {'cts': 0.0, 'grati': 0.0, 'vaca': 0.0}
+    for defn in _FORMATO_LIQ_REMUNERACION_DEF:
+        fila = {'label': defn['label']}
+        for col in ('cts', 'grati', 'vaca'):
+            fc = defn.get(col)
+            valor = float(formula_values.get(fc, 0) or 0) if fc else 0.0
+            totales[col] += valor
+            fila[f'{col}_fmt'] = _formato_liquidacion_moneda(valor)
+        filas.append(fila)
+    totales_fmt = {
+        col: _formato_liquidacion_moneda(totales[col])
+        for col in ('cts', 'grati', 'vaca')
+    }
+    return filas, totales_fmt
+
+
+def generar_pdf_formato_liquidacion(params):
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    person = str(params.get('person') or '').strip()
+    if not (cia and payroll_type and period and person):
+        raise ValueError('Faltan parámetros para generar el formato de liquidación.')
+
+    conn = None
+    formula_values = {}
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_formatoliquidacion_web @cia=?, @payrolltype=?, @period=?, @person=?',
+            (cia, payroll_type, period, person),
+        )
+        formula_values = _fetch_formato_liquidacion_formulacodes(
+            cursor, cia, payroll_type, period, person
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    liq = rows[0] if rows else {}
+    if not liq:
+        raise ValueError('No se encontraron datos para el formato de liquidación.')
+
+    ruta_logo, _ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    cero = _formato_liquidacion_moneda(0)
+    cero_pct = '0.00%'
+    porc_onp_val = float(liq.get('porc_onp') or 0)
+    remuneracion_rows, remuneracion_totales = _build_formato_liquidacion_remuneracion(formula_values)
+
+    html_renderizado = render_template(
+        'formato_liquidacion_pdf.html',
+        liq=liq,
+        logo_src=logo_src,
+        regimen_pensionario=_regimen_pensionario_formato_liquidacion(liq),
+        basico_fmt=_formato_liquidacion_moneda(liq.get('basico')),
+        entry_date_fmt=_formato_liquidacion_fecha(liq.get('entry_date')),
+        cease_date_fmt=_formato_liquidacion_fecha(liq.get('cease_date')),
+        porc_aporte=_formato_liquidacion_porcentaje(liq.get('porc_aporte')),
+        porc_comision_fija=_formato_liquidacion_porcentaje(liq.get('porc_comision_fija')),
+        porc_comision_mixta=_formato_liquidacion_porcentaje(liq.get('porc_comision_mixta')),
+        porc_seguro=_formato_liquidacion_porcentaje(liq.get('porc_seguro')),
+        porc_onp=_formato_liquidacion_porcentaje(porc_onp_val) if porc_onp_val > 0 else '',
+        cero=cero,
+        cero_pct=cero_pct,
+        remuneracion_rows=remuneracion_rows,
+        remuneracion_totales=remuneracion_totales,
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el formato de liquidación. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
+
+
+def enviar_correo_formato_liquidacion(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
+    if not destinatario or '@' not in str(destinatario):
+        return False, 'Sin correo'
+
+    resend.api_key = _resend_api_key()
+    if not resend.api_key:
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
+
+    try:
+        sexo_val = int(sexo)
+    except Exception:
+        sexo_val = 0
+    trato = 'Estimada' if sexo_val == 2 else 'Estimado'
+    periodo_legible = formatear_periodo_texto(periodo)
+    pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+
+    try:
+        params = {
+            'from': f'Recursos Humanos <{remitente}>',
+            'to': destinatario,
+            'subject': f'Formato de Liquidación - {periodo_legible} - {nombre_empleado}',
+            'html': f"""
+                <p>{trato} {nombre_empleado},</p>
+                <p>Le hacemos entrega de su formato de liquidación correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                <p>Saludos,<br>Recursos Humanos</p>
+            """,
+            'attachments': [
+                {
+                    'content': pdf_base64,
+                    'filename': _formato_liquidacion_pdf_filename(person or nombre_empleado, periodo),
+                }
+            ],
+        }
+        resend.Emails.send(params)
+        return True, 'Enviado'
+    except Exception as e:
+        logging.error('Error en Resend formato liquidación: %s', str(e))
+        return False, str(e)
+
+
 def enviar_correo_certificado_retiro_cts(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
     """Envía certificado retiro CTS por Resend API con PDF adjunto."""
     if not destinatario or '@' not in str(destinatario):
@@ -5067,13 +5314,14 @@ def api_pago_haberes_continental_listado():
         return jsonify({"error": err}), 400
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
 
     log_sp = (
         '[continental listado] EXEC sp_pr_listacontinental_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@cesados={cesados!r}'
+        f'@cesados={cesados!r} @todos_bancos={todos_bancos!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -5085,10 +5333,10 @@ def api_pago_haberes_continental_listado():
         cursor.execute(
             "EXEC sp_pr_listacontinental_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?, @todos_bancos=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], p['paydate'], cesados,
+                p['period'], p['processtype'], p['paydate'], cesados, todos_bancos,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -5108,18 +5356,31 @@ def api_pago_haberes_continental_listado():
                 "dni": dni,
                 "tipodoc": tipodoc,
                 "nombre": nombre,
+                "banco": str(r.get('banco') or '').strip(),
                 "importe": importe_num,
             })
-        log_result = f'[continental listado] registros devueltos={len(filas_detalle)}'
+        log_result = f'[continental listado] registros devueltos={len(filas_detalle)} todos_bancos={todos_bancos}'
         logging.info(log_result)
         print(log_result, flush=True)
+        headers = ['DNI', 'Tipo doc.', 'Nombre']
+        if todos_bancos == 'Y':
+            headers.append('Banco')
+        headers.append('Importe')
+        data_rows = []
+        for r in filas_detalle:
+            fila = [r['dni'], r['tipodoc'], r['nombre']]
+            if todos_bancos == 'Y':
+                fila.append(r['banco'])
+            fila.append(r['importe'])
+            data_rows.append(fila)
         return jsonify({
-            "headers": ['DNI', 'Tipo doc.', 'Nombre'],
-            "data": [[r['dni'], r['tipodoc'], r['nombre']] for r in filas_detalle],
+            "headers": headers,
+            "data": data_rows,
             "rows": filas_detalle,
             "meta": {
                 "total": len(filas_detalle),
                 "paydate": p['paydate'].strftime('%d/%m/%Y'),
+                "todos_bancos": todos_bancos == 'Y',
             },
         })
     except Exception as e:
@@ -5147,12 +5408,14 @@ def api_pago_haberes_continental_generar_txt():
     if not persons:
         return jsonify({"error": "Seleccione al menos un trabajador."}), 400
 
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
     log_sp = (
         '[continental generar] EXEC sp_pr_generar_continental_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'trabajadores_seleccionados={len(persons)}'
+        f'@todos_bancos={todos_bancos!r} trabajadores_seleccionados={len(persons)}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -5168,10 +5431,10 @@ def api_pago_haberes_continental_generar_txt():
         cursor.execute(
             "EXEC sp_pr_generar_continental_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @todos_bancos=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], p['paydate'],
+                p['period'], p['processtype'], p['paydate'], todos_bancos,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -5185,7 +5448,7 @@ def api_pago_haberes_continental_generar_txt():
         detalle_count = max(len(lineas) - 1, 0)
         t_done = time.perf_counter()
         log_result = (
-            f'[continental generar] seleccionados={len(persons)} '
+            f'[continental generar] seleccionados={len(persons)} todos_bancos={todos_bancos} '
             f'detalle_txt={detalle_count} '
             f'ms_conexion={int((t_conn - t0) * 1000)} '
             f'ms_temp={int((t_temp - t_conn) * 1000)} '
@@ -5684,6 +5947,271 @@ def enviar_certificados_retiro_cts_masivo():
                     motivo = detalle
             except Exception as e:
                 logging.exception('enviar_certificados_retiro_cts_masivo persona=%s', emp_code)
+                errores += 1
+                status = 'Error'
+                detalle = str(e)
+                motivo = detalle
+
+            yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'email': emp_email, 'status': status, 'detalle': detalle, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'enviados': enviados, 'errores': errores, 'total': total})}\n\n"
+
+    return Response(
+        stream_with_context(generar_progreso_envio()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route('/liquidaciones/formato_liquidacion')
+@login_required
+def formato_liquidacion_page():
+    return render_template('formato_liquidacion.html')
+
+
+@app.route('/get_lista_formato_liquidacion', methods=['POST'])
+@login_required
+def get_lista_formato_liquidacion():
+    """sp_pr_listadocertificadotrabajo_web — listado liquidación del periodo."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla o periodo.'}), 400
+
+    try:
+        return jsonify(_listar_trabajadores_liquidacion(cia, payroll_type, period, person, nombre))
+    except Exception as e:
+        logging.exception('get_lista_formato_liquidacion')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/preview_formato_liquidacion')
+@login_required
+def preview_formato_liquidacion():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    try:
+        pdf_buffer = generar_pdf_formato_liquidacion(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_formato_liquidacion')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_formato_liquidacion_pdf_filename(person, period),
+    )
+
+
+@app.route('/procesar_formatos_liquidacion_masivo', methods=['POST'])
+@login_required
+def procesar_formatos_liquidacion_masivo():
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    modo = str(body.get('modo') or '').strip().lower()
+    seleccionados = body.get('trabajadores') or []
+    if modo not in ('zip', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+    if not cia or not payroll_type or not period:
+        return jsonify({'error': 'Faltan filtros para procesar formatos.'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
+
+    if modo == 'zip':
+        company_name = str(body.get('company_name') or cia).strip()
+        safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
+        period_yyyymm = period[:6] if len(period) >= 6 else period
+        safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
+        nombre_zip = f'formatos_liquidacion_{safe_company.lower()}_{safe_period}.zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pid in ids:
+                pdf_data = generar_pdf_formato_liquidacion(
+                    {
+                        'person': pid,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                    }
+                )
+                zf.writestr(_formato_liquidacion_pdf_filename(pid, period), pdf_data.getvalue())
+        memory_file.seek(0)
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=nombre_zip,
+            as_attachment=True,
+        )
+
+    return jsonify(
+        {
+            'status': 'pending',
+            'message': 'Use el modo Enviar por Email desde la pantalla.',
+            'total': len(ids),
+        }
+    ), 202
+
+
+@app.route('/descargar_zip_formatos_liquidacion')
+@login_required
+def descargar_zip_formatos_liquidacion():
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = (request.args.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    company_name = (request.args.get('company_name') or '').strip()
+    trabajadores_raw = (request.args.get('trabajadores') or '').strip()
+    seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+
+    if not (cia and payroll_type and period):
+        flash('Faltan filtros para generar el ZIP de formatos.', 'warning')
+        return redirect(url_for('formato_liquidacion_page'))
+
+    try:
+        empleados = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
+    except Exception:
+        logging.exception('descargar_zip_formatos_liquidacion listado')
+        empleados = []
+
+    if not empleados:
+        flash('No hay formatos para procesar en este periodo.', 'warning')
+        return redirect(url_for('formato_liquidacion_page'))
+
+    if seleccionados:
+        wanted = set(seleccionados)
+        empleados = [e for e in empleados if str(e.get('person') or '').strip() in wanted]
+        if not empleados:
+            flash('La selección no contiene trabajadores válidos para el periodo indicado.', 'warning')
+            return redirect(url_for('formato_liquidacion_page'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for emp in empleados:
+            person_id = str(emp.get('person') or '').strip()
+            if not person_id:
+                continue
+            try:
+                pdf_io = generar_pdf_formato_liquidacion(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': person_id,
+                    }
+                )
+                zip_file.writestr(_formato_liquidacion_pdf_filename(person_id, period), pdf_io.getvalue())
+            except Exception:
+                logging.exception('descargar_zip_formatos_liquidacion persona=%s', person_id)
+                continue
+
+    zip_buffer.seek(0)
+    safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name or cia).strip('_') or 'COMPANIA'
+    safe_period = re.sub(r'[^0-9]+', '', period) or 'PERIODO'
+    safe_payroll = re.sub(r'[^A-Za-z0-9_\\-]+', '_', payroll_type).strip('_') or 'PLANILLA'
+    nombre_zip = f'Formatos_Liquidacion_{safe_company}_{safe_period}_{safe_payroll}.zip'
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
+
+
+@app.route('/enviar_formatos_liquidacion_masivo', methods=['POST'])
+@login_required
+def enviar_formatos_liquidacion_masivo():
+    data = request.get_json(silent=True) or {}
+    ensure_user_session()
+    cia = session.get('company')
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(data.get('period'))
+    seleccionados = data.get('empleados', data.get('trabajadores', []))
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
+    if not (cia and payroll_type and period):
+        return jsonify({'error': 'Faltan filtros para envío de formatos.'}), 400
+
+    try:
+        empleados_periodo = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
+    except Exception:
+        logging.exception('enviar_formatos_liquidacion_masivo listado')
+        empleados_periodo = []
+
+    by_person = {}
+    for e in empleados_periodo:
+        pid = str(e.get('person') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(ids)
+    if total == 0:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    def generar_progreso_envio():
+        enviados = 0
+        errores = 0
+        for idx, emp_code in enumerate(ids, start=1):
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp_code).strip()
+            emp_email = str(emp.get('email') or '').strip()
+
+            if not emp_email:
+                errores += 1
+                motivo = 'Sin email'
+                yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+                continue
+
+            try:
+                pdf_buffer = generar_pdf_formato_liquidacion(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'period': period,
+                        'person': emp_code,
+                    }
+                )
+                exito, msg = enviar_correo_formato_liquidacion(
+                    destinatario=emp_email,
+                    nombre_empleado=emp_nombre,
+                    periodo=period,
+                    sexo=emp.get('sex', 0),
+                    pdf_io=pdf_buffer,
+                    person=emp_code,
+                )
+                if exito:
+                    enviados += 1
+                    status = 'Enviado'
+                    detalle = msg
+                    motivo = ''
+                else:
+                    errores += 1
+                    status = 'Error'
+                    detalle = msg or 'No se pudo enviar el correo.'
+                    motivo = detalle
+            except Exception as e:
+                logging.exception('enviar_formatos_liquidacion_masivo persona=%s', emp_code)
                 errores += 1
                 status = 'Error'
                 detalle = str(e)

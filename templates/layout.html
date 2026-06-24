@@ -568,7 +568,7 @@
                     </ul>
                 </li>
 
-                {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page') %}
+                {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page', 'formato_liquidacion_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if liquidaciones_active else '' }}">
                     <a href="#submenuLiquidaciones"
                        class="sidebar-parent-link"
@@ -588,6 +588,11 @@
                         <li class="{{ 'active' if request.endpoint == 'certificado_retiro_cts_page' else '' }}">
                             <a href="{{ url_for('certificado_retiro_cts_page') }}" title="Certificado Retiro CTS">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Certificado Retiro CTS</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'formato_liquidacion_page' else '' }}">
+                            <a href="{{ url_for('formato_liquidacion_page') }}" title="Formato de Liquidación">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de Liquidación</span>
                             </a>
                         </li>
                     </ul>

@@ -2933,7 +2933,7 @@ _FORMATO_LIQ_GRATI_FORMULACODES = (
     'NUMERO_DIAS',
     'XFALTASGRATI',
     'GRATI_TRUNCA',
-    'JUBILACION_DSCT',
+    'BONIF_EXTRA_ESSALUD',
 )
 
 _FORMATO_LIQ_VACA_FORMULACODES = (
@@ -3193,9 +3193,10 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
     try:
-        bono_9 = float((formula_values or {}).get('JUBILACION_DSCT') or 0)
+        bono_9 = float((formula_values or {}).get('BONIF_EXTRA_ESSALUD') or 0)
     except (TypeError, ValueError):
         bono_9 = 0.0
+    resultado['bono_9'] = bono_9
     resultado['bono_9_fmt'] = _formato_liquidacion_moneda(bono_9)
     return resultado
 
@@ -3293,8 +3294,9 @@ def generar_pdf_formato_liquidacion(params):
     if not liq:
         raise ValueError('No se encontraron datos para el formato de liquidación.')
 
-    ruta_logo, _ruta_firma = _boleta_imagenes_paths(cia)
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
     logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'
     remuneracion_rows, remuneracion_totales, remuneracion_totales_raw = _build_formato_liquidacion_remuneracion(formula_values)
@@ -3305,6 +3307,7 @@ def generar_pdf_formato_liquidacion(params):
         float(cts_calc.get('total') or 0)
         + float(grati_calc.get('total') or 0)
         + float(vaca_calc.get('total') or 0)
+        + float(grati_calc.get('bono_9') or 0)
     )
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
@@ -3316,6 +3319,7 @@ def generar_pdf_formato_liquidacion(params):
         'formato_liquidacion_pdf.html',
         liq=liq,
         logo_src=logo_src,
+        firma_src=firma_src,
         regimen_pensionario=_regimen_pensionario_formato_liquidacion(liq),
         basico_fmt=_formato_liquidacion_moneda(liq.get('basico')),
         entry_date_fmt=_formato_liquidacion_fecha(liq.get('entry_date')),

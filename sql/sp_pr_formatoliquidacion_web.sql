@@ -23,6 +23,8 @@ BEGIN
         sc.Address AS company_address,
         sc.Telephone AS company_telephone,
         sc.Ruc AS company_ruc,
+        ISNULL(sc.Representative, '') AS nombre_representante,
+        ISNULL(sc.Rep_Position, '') AS cargo_representante,
         pe.Person AS person,
         sp.DocumentNumber AS person_document,
         ISNULL(dt.Description, 'DNI') AS document_type,

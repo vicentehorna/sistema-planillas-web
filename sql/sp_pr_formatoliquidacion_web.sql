@@ -53,25 +53,28 @@ BEGIN
         END AS type_pension,
         CASE
             WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.PensionPercentage, 0)
-            WHEN pt_pens.PDT = '02' THEN 13
             ELSE 0
         END AS porc_aporte,
         CASE
-            WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.VariablePercentage, 0)
+            WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.FixedAmount, 0)
             ELSE 0
-        END AS porc_comision_fija,
-        CASE
-            WHEN pt_pens.PDT IN ('21', '23', '24', '25') THEN ISNULL(afp.FixedAmount, 0)
-            ELSE 0
-        END AS porc_comision_mixta,
+        END AS porc_comision,
         CASE
             WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.InsuredPercentage, 0)
             ELSE 0
         END AS porc_seguro,
-        CASE
-            WHEN pt_pens.PDT = '02' THEN 13
-            ELSE 0
-        END AS porc_onp,
+        ISNULL((
+            SELECT ParameterNumberValue
+            FROM PR_Parameter (NOLOCK)
+            WHERE Company = @cia
+              AND ShortName = 'PORC_ONP'
+        ), 0) AS porc_onp,
+        ISNULL((
+            SELECT TOP 1 ParameterNumberValue
+            FROM PR_Parameter (NOLOCK)
+            WHERE Company = @cia
+              AND ShortName LIKE '%PORC_SEG_SOCIAL%'
+        ), 0) AS porc_seg_social,
         CASE
             WHEN pt_pens.PDT <> '02' THEN
                 CASE
@@ -140,7 +143,9 @@ BEGIN
         LEFT JOIN HR_ContractModality cm (NOLOCK) ON pe.ContractModality = cm.ContractModality
         LEFT JOIN SY_PersonDocumentType dt (NOLOCK) ON sp.EmployeeDocumentType = dt.PersonDocumentType
         LEFT JOIN PR_PensionType pt_pens (NOLOCK) ON pe.PensionType = pt_pens.PensionType
-        LEFT JOIN PR_AFP afp (NOLOCK) ON pe.AFP = afp.AFP
+        LEFT JOIN PR_AFP afp (NOLOCK)
+            ON pe.AFP = afp.AFP
+           AND afp.Company = @cia
         LEFT JOIN ERP_Bank bank (NOLOCK) ON pe.SalaryBank = bank.Bank
         INNER JOIN PR_EmployeePayRoll epc (NOLOCK) ON pe.Person = epc.Person
         LEFT JOIN PR_CeaseReason cr (NOLOCK)

@@ -2893,13 +2893,13 @@ def _formato_liquidacion_moneda(val):
     return f'S/ {n:,.2f}'
 
 
-def _formato_liquidacion_porcentaje(val):
+def _formato_liquidacion_porcentaje(val, mostrar_cero=False):
     try:
         n = float(val or 0)
     except (TypeError, ValueError):
         n = 0.0
     if n <= 0:
-        return ''
+        return '0%' if mostrar_cero else ''
     text = f'{n:.2f}'.rstrip('0').rstrip('.')
     return f'{text}%'
 
@@ -2951,6 +2951,26 @@ _FORMATO_LIQ_VACA_FORMULACODES = (
     'DIASFALTAVACLIQ',
 )
 
+_FORMATO_LIQ_DESCUENTOS_DEF = (
+    {'label': 'AFP Aporte', 'formula_code': 'AFP_APORTE_PORC_8', 'pct_field': 'porc_aporte'},
+    {'label': 'AFP Comisión', 'formula_code': 'AFP_COMISION_VARIABL', 'pct_field': 'porc_comision', 'pct_mostrar_cero': True},
+    {'label': 'AFP Seguro', 'formula_code': 'AFP_SEGUROS', 'pct_field': 'porc_seguro'},
+    {'label': 'ONP', 'formula_code': 'ONP', 'pct_field': 'porc_onp'},
+)
+
+_FORMATO_LIQ_APORTACIONES_DEF = (
+    {'label': 'ESSALUD', 'formula_code': 'ESSALUD'},
+)
+
+_FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
+    'TOTAL_REM_AFP',
+    'AFP_APORTE_PORC_8',
+    'AFP_COMISION_VARIABL',
+    'AFP_SEGUROS',
+    'ONP',
+    'ESSALUD',
+)
+
 
 def _formato_liquidacion_fc_valor(formula_values, *codes, default=0.0):
     formula_values = formula_values or {}
@@ -2985,6 +3005,7 @@ def _formato_liquidacion_formulacodes_requeridos():
     codes.update(_FORMATO_LIQ_CTS_FORMULACODES)
     codes.update(_FORMATO_LIQ_GRATI_FORMULACODES)
     codes.update(_FORMATO_LIQ_VACA_FORMULACODES)
+    codes.update(_FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES)
     return sorted(codes)
 
 
@@ -3089,6 +3110,62 @@ def _build_formato_liquidacion_trunca(total_base, formula_values, meses_code, di
             dias_falta = 0.0
         resultado['dias_falta_txt'] = _formato_liquidacion_cantidad(dias_falta)
     return resultado
+
+
+def _formato_liquidacion_porcentaje_desde_concepto(importe, base):
+    try:
+        importe_val = float(importe or 0)
+        base_val = float(base or 0)
+    except (TypeError, ValueError):
+        return ''
+    if base_val <= 0 or importe_val <= 0:
+        return ''
+    return _formato_liquidacion_porcentaje((importe_val / base_val) * 100.0)
+
+
+def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=None, base_formula_code='TOTAL_REM_AFP'):
+    """Filas % / base / importe desde conceptos del proceso LIQUIDACION."""
+    formula_values = formula_values or {}
+    liq = liq or {}
+    base = _formato_liquidacion_fc_valor(formula_values, base_formula_code)
+    base_fmt = _formato_liquidacion_moneda(base)
+
+    filas = []
+    total = 0.0
+    for defn in defn_rows:
+        importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
+        total += importe
+        pct_field = defn.get('pct_field')
+        if pct_field:
+            pct_fmt = _formato_liquidacion_porcentaje(
+                liq.get(pct_field),
+                mostrar_cero=bool(defn.get('pct_mostrar_cero')),
+            )
+        else:
+            pct_fmt = _formato_liquidacion_porcentaje_desde_concepto(importe, base)
+        filas.append({
+            'label': defn['label'],
+            'pct_fmt': pct_fmt,
+            'base_fmt': base_fmt,
+            'importe_fmt': _formato_liquidacion_moneda(importe),
+            'importe': importe,
+        })
+
+    return {
+        'filas': filas,
+        'total_fmt': _formato_liquidacion_moneda(total),
+        'total': total,
+    }
+
+
+def _build_formato_liquidacion_descuentos(liq, formula_values):
+    return _build_formato_liquidacion_tabla_conceptos(
+        _FORMATO_LIQ_DESCUENTOS_DEF, formula_values, liq=liq
+    )
+
+
+def _build_formato_liquidacion_aportaciones(formula_values):
+    return _build_formato_liquidacion_tabla_conceptos(_FORMATO_LIQ_APORTACIONES_DEF, formula_values)
 
 
 def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
@@ -3220,7 +3297,6 @@ def generar_pdf_formato_liquidacion(params):
     logo_src = _image_data_uri(ruta_logo)
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'
-    porc_onp_val = float(liq.get('porc_onp') or 0)
     remuneracion_rows, remuneracion_totales, remuneracion_totales_raw = _build_formato_liquidacion_remuneracion(formula_values)
     cts_calc = _build_formato_liquidacion_cts(remuneracion_totales_raw.get('cts'), formula_values)
     grati_calc = _build_formato_liquidacion_grati(remuneracion_totales_raw.get('grati'), formula_values)
@@ -3231,6 +3307,10 @@ def generar_pdf_formato_liquidacion(params):
         + float(vaca_calc.get('total') or 0)
     )
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
+    descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
+    aportaciones_calc = _build_formato_liquidacion_aportaciones(formula_values)
+    neto_a_pagar = total_ingresos - float(descuentos_calc.get('total') or 0)
+    neto_a_pagar_fmt = _formato_liquidacion_moneda(neto_a_pagar)
 
     html_renderizado = render_template(
         'formato_liquidacion_pdf.html',
@@ -3240,11 +3320,6 @@ def generar_pdf_formato_liquidacion(params):
         basico_fmt=_formato_liquidacion_moneda(liq.get('basico')),
         entry_date_fmt=_formato_liquidacion_fecha(liq.get('entry_date')),
         cease_date_fmt=_formato_liquidacion_fecha(liq.get('cease_date')),
-        porc_aporte=_formato_liquidacion_porcentaje(liq.get('porc_aporte')),
-        porc_comision_fija=_formato_liquidacion_porcentaje(liq.get('porc_comision_fija')),
-        porc_comision_mixta=_formato_liquidacion_porcentaje(liq.get('porc_comision_mixta')),
-        porc_seguro=_formato_liquidacion_porcentaje(liq.get('porc_seguro')),
-        porc_onp=_formato_liquidacion_porcentaje(porc_onp_val) if porc_onp_val > 0 else '',
         cero=cero,
         cero_pct=cero_pct,
         remuneracion_rows=remuneracion_rows,
@@ -3253,6 +3328,9 @@ def generar_pdf_formato_liquidacion(params):
         grati_calc=grati_calc,
         vaca_calc=vaca_calc,
         total_ingresos_fmt=total_ingresos_fmt,
+        descuentos_calc=descuentos_calc,
+        aportaciones_calc=aportaciones_calc,
+        neto_a_pagar_fmt=neto_a_pagar_fmt,
     )
 
     if WEASYPRINT_AVAILABLE:

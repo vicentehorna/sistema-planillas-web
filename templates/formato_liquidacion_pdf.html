@@ -202,6 +202,8 @@
         }
         table.cts-grid td.cts-res {
             width: 18%;
+            text-align: right;
+            padding-right: 0;
         }
         table.cts-grid tr.cts-titulo-row td.cts-titulo-text {
             font-weight: bold;
@@ -224,7 +226,6 @@
         }
         .neto .monto-neto {
             float: right;
-            border-bottom: 3px double #000;
             min-width: 90px;
             text-align: right;
         }
@@ -254,35 +255,26 @@
                     <td class="col-der nowrap"><span class="lbl">Régimen pensionario:</span> {{ regimen_pensionario }}</td>
                 </tr>
                 <tr>
-                    <td class="wrap"><span class="lbl">Apellidos y nombres:</span> {{ liq.person_name or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Aporte:</span> {{ porc_aporte }}</td>
+                    <td class="wrap" colspan="2"><span class="lbl">Apellidos y nombres:</span> {{ liq.person_name or '' }}</td>
                 </tr>
                 <tr>
                     <td colspan="2" class="fila-completa wrap"><span class="lbl">Cargo:</span> {{ liq.person_position or '' }}</td>
                 </tr>
                 <tr>
-                    <td></td>
-                    <td class="col-der nowrap"><span class="lbl">Comisión fija:</span> {{ porc_comision_fija }}</td>
-                </tr>
-                <tr>
                     <td class="wrap"><span class="lbl">Tipo de contrato:</span> {{ liq.contract_modality or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Comisión mixta:</span> {{ porc_comision_mixta }}</td>
-                </tr>
-                <tr>
-                    <td class="nowrap"><span class="lbl">Sueldo:</span> {{ basico_fmt }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Seguro:</span> {{ porc_seguro }}</td>
-                </tr>
-                <tr>
-                    <td class="nowrap"><span class="lbl">Fecha de ingreso:</span> {{ entry_date_fmt }}</td>
                     <td class="col-der nowrap"><span class="lbl">Nro. de cuenta:</span> {{ liq.salary_account or '' }}</td>
                 </tr>
                 <tr>
-                    <td class="nowrap"><span class="lbl">Fecha de cese:</span> {{ cease_date_fmt }}</td>
+                    <td class="nowrap"><span class="lbl">Sueldo:</span> {{ basico_fmt }}</td>
                     <td class="col-der nowrap"><span class="lbl">Banco:</span> {{ liq.salary_bank or '' }}</td>
                 </tr>
                 <tr>
-                    <td class="wrap"><span class="lbl">Motivo de cese:</span> {{ liq.cease_reason or '' }}</td>
+                    <td class="nowrap"><span class="lbl">Fecha de ingreso:</span> {{ entry_date_fmt }}</td>
                     <td class="col-der nowrap"><span class="lbl">Régimen laboral:</span> {{ liq.regimen_laboral or '' }}</td>
+                </tr>
+                <tr>
+                    <td class="nowrap"><span class="lbl">Fecha de cese:</span> {{ cease_date_fmt }}</td>
+                    <td class="col-der wrap"><span class="lbl">Motivo de cese:</span> {{ liq.cease_reason or '' }}</td>
                 </tr>
             </table>
             <div class="fila-tiempo">
@@ -469,23 +461,19 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {% for row in descuentos_calc.filas %}
                     <tr>
-                        <td class="concepto">AFP fondo pensiones</td>
-                        <td class="monto">{{ cero_pct }}</td>
-                        <td class="monto">{{ cero }}</td>
-                        <td class="monto">{{ cero }}</td>
+                        <td class="concepto">{{ row.label }}</td>
+                        <td class="monto">{{ row.pct_fmt }}</td>
+                        <td class="monto">{{ row.base_fmt }}</td>
+                        <td class="monto">{{ row.importe_fmt }}</td>
                     </tr>
-                    <tr>
-                        <td class="concepto">AFP seguro invalidez</td>
-                        <td class="monto">{{ cero_pct }}</td>
-                        <td class="monto">{{ cero }}</td>
-                        <td class="monto">{{ cero }}</td>
-                    </tr>
+                    {% endfor %}
                     <tr class="fila-total">
                         <td class="concepto">Total descuento</td>
                         <td class="monto"></td>
                         <td class="monto"></td>
-                        <td class="monto">{{ cero }}</td>
+                        <td class="monto">{{ descuentos_calc.total_fmt }}</td>
                     </tr>
                 </tbody>
             </table>
@@ -493,7 +481,7 @@
 
         <div class="neto clearfix">
             <span>Neto a pagar</span>
-            <span class="monto-neto">{{ cero }}</span>
+            <span class="monto-neto">{{ neto_a_pagar_fmt }}</span>
         </div>
 
         <div class="seccion">
@@ -508,12 +496,14 @@
                     </tr>
                 </thead>
                 <tbody>
+                    {% for row in aportaciones_calc.filas %}
                     <tr>
-                        <td class="concepto">ESSALUD</td>
-                        <td class="monto">{{ cero_pct }}</td>
-                        <td class="monto">{{ cero }}</td>
-                        <td class="monto">{{ cero }}</td>
+                        <td class="concepto">{{ row.label }}</td>
+                        <td class="monto">{{ row.pct_fmt }}</td>
+                        <td class="monto">{{ row.base_fmt }}</td>
+                        <td class="monto">{{ row.importe_fmt }}</td>
                     </tr>
+                    {% endfor %}
                 </tbody>
             </table>
         </div>

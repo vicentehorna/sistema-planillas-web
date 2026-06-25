@@ -2922,14 +2922,74 @@ _FORMATO_LIQ_REMUNERACION_DEF = (
     {'label': 'Promedio feriado', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
 )
 
+_FORMATO_LIQ_CTS_FORMULACODES = (
+    'C_CTSMESES',
+    'DIAS_CTS_TRUNCO',
+    'XFALTASCTS',
+)
 
-def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, person):
-    codes = sorted({
+_FORMATO_LIQ_GRATI_FORMULACODES = (
+    'NUMERO_MESES',
+    'NUMERO_DIAS',
+    'XFALTASGRATI',
+    'GRATI_TRUNCA',
+    'JUBILACION_DSCT',
+)
+
+_FORMATO_LIQ_VACA_FORMULACODES = (
+    'ANIO',
+    'ANIOSVACTRUNCA',
+    'MESVAC',
+    'MESES_VAC_TRUN',
+    'XDIASVACA',
+    'DIAS_VAC_TRUN',
+    'VACACIONANIO',
+    'VACXMES',
+    'VACXDIA',
+    'TOTALVACTRUNCAS',
+    'XFALTASVACA',
+    'DIASFALTAVACLIQ',
+)
+
+
+def _formato_liquidacion_fc_valor(formula_values, *codes, default=0.0):
+    formula_values = formula_values or {}
+    for code in codes:
+        if code not in formula_values:
+            continue
+        try:
+            return float(formula_values.get(code) or 0)
+        except (TypeError, ValueError):
+            return default
+    return default
+
+
+def _formato_liquidacion_cantidad(val):
+    try:
+        n = float(val or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    if n == int(n):
+        return str(int(n))
+    text = f'{n:.2f}'.rstrip('0').rstrip('.')
+    return text or '0'
+
+
+def _formato_liquidacion_formulacodes_requeridos():
+    codes = {
         code
         for row in _FORMATO_LIQ_REMUNERACION_DEF
         for code in (row.get('cts'), row.get('grati'), row.get('vaca'))
         if code
-    })
+    }
+    codes.update(_FORMATO_LIQ_CTS_FORMULACODES)
+    codes.update(_FORMATO_LIQ_GRATI_FORMULACODES)
+    codes.update(_FORMATO_LIQ_VACA_FORMULACODES)
+    return sorted(codes)
+
+
+def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, person):
+    codes = _formato_liquidacion_formulacodes_requeridos()
     if not codes:
         return {}
 
@@ -2983,7 +3043,141 @@ def _build_formato_liquidacion_remuneracion(formula_values):
         col: _formato_liquidacion_moneda(totales[col])
         for col in ('cts', 'grati', 'vaca')
     }
-    return filas, totales_fmt
+    return filas, totales_fmt, totales
+
+
+def _build_formato_liquidacion_trunca(total_base, formula_values, meses_code, dias_code, dias_falta_code=None):
+    """Ingreso trunco: (base/12)*meses + (base/360)*días."""
+    formula_values = formula_values or {}
+    try:
+        base = float(total_base or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+    try:
+        meses = float(formula_values.get(meses_code) or 0)
+    except (TypeError, ValueError):
+        meses = 0.0
+    try:
+        dias = float(formula_values.get(dias_code) or 0)
+    except (TypeError, ValueError):
+        dias = 0.0
+
+    x_mes = (base / 12.0) * meses if base else 0.0
+    x_dia = (base / 360.0) * dias if base else 0.0
+    total = x_mes + x_dia
+
+    base_fmt = _formato_liquidacion_moneda(base)
+    meses_txt = _formato_liquidacion_cantidad(meses)
+    dias_txt = _formato_liquidacion_cantidad(dias)
+    resultado = {
+        'base_fmt': base_fmt,
+        'meses_txt': meses_txt,
+        'dias_txt': dias_txt,
+        'meses_label': f'{meses_txt} MESES',
+        'dias_label': f'{dias_txt} DIAS',
+        'formula_meses': f'({base_fmt} / 12)',
+        'formula_dias': f'({base_fmt} / 360)',
+        'x_mes_fmt': _formato_liquidacion_moneda(x_mes),
+        'x_dia_fmt': _formato_liquidacion_moneda(x_dia),
+        'total_fmt': _formato_liquidacion_moneda(total),
+        'total': total,
+    }
+    if dias_falta_code:
+        try:
+            dias_falta = float(formula_values.get(dias_falta_code) or 0)
+        except (TypeError, ValueError):
+            dias_falta = 0.0
+        resultado['dias_falta_txt'] = _formato_liquidacion_cantidad(dias_falta)
+    return resultado
+
+
+def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
+    return _build_formato_liquidacion_trunca(
+        total_remuneracion_cts,
+        formula_values,
+        'C_CTSMESES',
+        'DIAS_CTS_TRUNCO',
+        'XFALTASCTS',
+    )
+
+
+def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
+    resultado = _build_formato_liquidacion_trunca(
+        total_remuneracion_grati,
+        formula_values,
+        'NUMERO_MESES',
+        'NUMERO_DIAS',
+        'XFALTASGRATI',
+    )
+    try:
+        total = float((formula_values or {}).get('GRATI_TRUNCA') or 0)
+    except (TypeError, ValueError):
+        total = 0.0
+    resultado['total'] = total
+    resultado['total_fmt'] = _formato_liquidacion_moneda(total)
+    try:
+        bono_9 = float((formula_values or {}).get('JUBILACION_DSCT') or 0)
+    except (TypeError, ValueError):
+        bono_9 = 0.0
+    resultado['bono_9_fmt'] = _formato_liquidacion_moneda(bono_9)
+    return resultado
+
+
+def _formato_liquidacion_importe_formula(formula_values, code, calc_val):
+    if code in (formula_values or {}):
+        try:
+            return float(formula_values.get(code) or 0)
+        except (TypeError, ValueError):
+            return calc_val
+    return calc_val
+
+
+def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
+    """Vacaciones truncas: años + meses + días (misma lógica extendida que CTS)."""
+    formula_values = formula_values or {}
+    try:
+        base = float(total_remuneracion_vaca or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+
+    anios = _formato_liquidacion_fc_valor(formula_values, 'ANIOSVACTRUNCA', 'ANIO')
+    meses = _formato_liquidacion_fc_valor(formula_values, 'MESVAC', 'MESES_VAC_TRUN')
+    dias = _formato_liquidacion_fc_valor(formula_values, 'XDIASVACA', 'DIAS_VAC_TRUN')
+
+    x_anio_calc = (base / 12.0) * 12.0 * anios if base else 0.0
+    x_mes_calc = (base / 12.0) * meses if base else 0.0
+    x_dia_calc = (base / 360.0) * dias if base else 0.0
+
+    x_anio = _formato_liquidacion_importe_formula(formula_values, 'VACACIONANIO', x_anio_calc)
+    x_mes = _formato_liquidacion_importe_formula(formula_values, 'VACXMES', x_mes_calc)
+    x_dia = _formato_liquidacion_importe_formula(formula_values, 'VACXDIA', x_dia_calc)
+    total = _formato_liquidacion_importe_formula(
+        formula_values,
+        'TOTALVACTRUNCAS',
+        x_anio + x_mes + x_dia,
+    )
+
+    base_fmt = _formato_liquidacion_moneda(base)
+    anios_txt = _formato_liquidacion_cantidad(anios)
+    meses_txt = _formato_liquidacion_cantidad(meses)
+    dias_txt = _formato_liquidacion_cantidad(dias)
+    dias_falta = _formato_liquidacion_fc_valor(formula_values, 'XFALTASVACA', 'DIASFALTAVACLIQ')
+
+    return {
+        'base_fmt': base_fmt,
+        'anios_label': f'{anios_txt} AÑOS',
+        'meses_label': f'{meses_txt} MESES',
+        'dias_label': f'{dias_txt} DIAS',
+        'formula_anios': f'({base_fmt} / 12) x 12',
+        'formula_meses': f'({base_fmt} / 12)',
+        'formula_dias': f'({base_fmt} / 360)',
+        'x_anio_fmt': _formato_liquidacion_moneda(x_anio),
+        'x_mes_fmt': _formato_liquidacion_moneda(x_mes),
+        'x_dia_fmt': _formato_liquidacion_moneda(x_dia),
+        'total_fmt': _formato_liquidacion_moneda(total),
+        'total': total,
+        'dias_falta_txt': _formato_liquidacion_cantidad(dias_falta),
+    }
 
 
 def generar_pdf_formato_liquidacion(params):
@@ -3027,7 +3221,16 @@ def generar_pdf_formato_liquidacion(params):
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'
     porc_onp_val = float(liq.get('porc_onp') or 0)
-    remuneracion_rows, remuneracion_totales = _build_formato_liquidacion_remuneracion(formula_values)
+    remuneracion_rows, remuneracion_totales, remuneracion_totales_raw = _build_formato_liquidacion_remuneracion(formula_values)
+    cts_calc = _build_formato_liquidacion_cts(remuneracion_totales_raw.get('cts'), formula_values)
+    grati_calc = _build_formato_liquidacion_grati(remuneracion_totales_raw.get('grati'), formula_values)
+    vaca_calc = _build_formato_liquidacion_vaca(remuneracion_totales_raw.get('vaca'), formula_values)
+    total_ingresos = (
+        float(cts_calc.get('total') or 0)
+        + float(grati_calc.get('total') or 0)
+        + float(vaca_calc.get('total') or 0)
+    )
+    total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
 
     html_renderizado = render_template(
         'formato_liquidacion_pdf.html',
@@ -3046,6 +3249,10 @@ def generar_pdf_formato_liquidacion(params):
         cero_pct=cero_pct,
         remuneracion_rows=remuneracion_rows,
         remuneracion_totales=remuneracion_totales,
+        cts_calc=cts_calc,
+        grati_calc=grati_calc,
+        vaca_calc=vaca_calc,
+        total_ingresos_fmt=total_ingresos_fmt,
     )
 
     if WEASYPRINT_AVAILABLE:

@@ -151,7 +151,6 @@
         }
         .fila-total .monto {
             border-top: 2px solid #000;
-            border-bottom: 3px double #000;
         }
         .subtitulo-ingreso {
             font-weight: bold;
@@ -165,6 +164,52 @@
         .linea-calculo {
             margin: 1px 0 4px 12px;
             font-size: 8px;
+        }
+        .cts-calculo-bloque {
+            margin: 4px 0 8px;
+            font-size: 8px;
+        }
+        table.cts-grid {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.cts-grid td {
+            padding: 2px 18px 2px 0;
+            vertical-align: middle;
+            text-align: left;
+            white-space: nowrap;
+        }
+        table.cts-grid td.cts-lbl {
+            width: 11%;
+            padding-right: 24px;
+        }
+        table.cts-grid td.cts-formula {
+            width: 30%;
+            padding-right: 28px;
+        }
+        table.cts-grid td.cts-op {
+            width: 5%;
+            padding-right: 28px;
+        }
+        table.cts-grid td.cts-cant {
+            width: 16%;
+            padding-right: 28px;
+        }
+        table.cts-grid td.cts-eq {
+            width: 5%;
+            padding-right: 28px;
+        }
+        table.cts-grid td.cts-res {
+            width: 18%;
+        }
+        table.cts-grid tr.cts-titulo-row td.cts-titulo-text {
+            font-weight: bold;
+            font-size: 8.5px;
+            padding-bottom: 4px;
+        }
+        table.cts-grid tr.cts-total-row td {
+            font-weight: bold;
         }
         .linea-resultado {
             text-align: right;
@@ -281,32 +326,132 @@
         <div class="seccion">
             <div class="seccion-titulo">Ingresos</div>
 
-            <div class="subtitulo-ingreso">Compensación por tiempo de servicios - CTS</div>
-            <div class="linea-detalle">Periodo por liquidar del {{ entry_date_fmt }} al {{ cease_date_fmt }}</div>
-            <div class="linea-calculo">Cálculo: ({{ cero }} / 12) x 0 Meses + ({{ cero }} / 360) x 0 Días</div>
-            <div class="linea-resultado">= {{ cero }}</div>
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="3">Compensación por tiempo de servicios - CTS</td>
+                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-eq"></td>
+                        <td class="cts-res">{{ cts_calc.dias_falta_txt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl">Cálculo:</td>
+                        <td class="cts-formula">{{ cts_calc.formula_meses }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ cts_calc.meses_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ cts_calc.x_mes_fmt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">{{ cts_calc.formula_dias }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ cts_calc.dias_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ cts_calc.x_dia_fmt }}</td>
+                    </tr>
+                    <tr class="cts-total-row">
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">TOTAL CTS TRUNCA</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ cts_calc.total_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
 
-            <div class="subtitulo-ingreso">Gratificación trunca</div>
-            <div class="linea-detalle">Periodo por liquidar del {{ entry_date_fmt }} al {{ cease_date_fmt }}</div>
-            <div class="linea-calculo">Cálculo: ({{ cero }} / 12) x 0 Meses + ({{ cero }} / 360) x 0 Días</div>
-            <div class="linea-resultado">= {{ cero }}</div>
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="3">Gratificación trunca</td>
+                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-eq"></td>
+                        <td class="cts-res">{{ grati_calc.dias_falta_txt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl">Cálculo:</td>
+                        <td class="cts-formula">{{ grati_calc.formula_meses }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ grati_calc.meses_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ grati_calc.x_mes_fmt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">{{ grati_calc.formula_dias }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ grati_calc.dias_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ grati_calc.x_dia_fmt }}</td>
+                    </tr>
+                    <tr class="cts-total-row">
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">TOTAL GRATIFICACION TRUNCA</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ grati_calc.total_fmt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">BONO 9%</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ grati_calc.bono_9_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
 
-            <div class="subtitulo-ingreso">Vacaciones</div>
-            <div class="linea-detalle">Vacaciones truncas</div>
-            <div class="linea-detalle">Periodo por liquidar del {{ entry_date_fmt }} al {{ cease_date_fmt }}</div>
-            <div class="linea-calculo">Cálculo: ({{ cero }} / 12) x 0 Meses + ({{ cero }} / 360) x 0 Días</div>
-            <div class="linea-resultado">= {{ cero }}</div>
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="3">Vacaciones truncas</td>
+                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-eq"></td>
+                        <td class="cts-res">{{ vaca_calc.dias_falta_txt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl">Cálculo:</td>
+                        <td class="cts-formula">{{ vaca_calc.formula_anios }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ vaca_calc.anios_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.x_anio_fmt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">{{ vaca_calc.formula_meses }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ vaca_calc.meses_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.x_mes_fmt }}</td>
+                    </tr>
+                    <tr>
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">{{ vaca_calc.formula_dias }}</td>
+                        <td class="cts-op">X</td>
+                        <td class="cts-cant">{{ vaca_calc.dias_label }}</td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.x_dia_fmt }}</td>
+                    </tr>
+                    <tr class="cts-total-row">
+                        <td class="cts-lbl"></td>
+                        <td class="cts-formula">TOTAL VACACIONES TRUNCAS</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.total_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
 
-            <div class="subtitulo-ingreso">Otros ingresos</div>
             <table class="fmt">
                 <tbody>
-                    <tr>
-                        <td class="concepto">Bonificación extraordinaria ley 30334</td>
-                        <td class="monto">{{ cero }}</td>
-                    </tr>
                     <tr class="fila-total">
                         <td class="concepto">Total ingresos</td>
-                        <td class="monto">{{ cero }}</td>
+                        <td class="monto">{{ total_ingresos_fmt }}</td>
                     </tr>
                 </tbody>
             </table>

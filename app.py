@@ -2937,11 +2937,8 @@ _FORMATO_LIQ_GRATI_FORMULACODES = (
 )
 
 _FORMATO_LIQ_VACA_FORMULACODES = (
-    'ANIO',
     'ANIOSVACTRUNCA',
-    'MESVAC',
     'MESES_VAC_TRUN',
-    'XDIASVACA',
     'DIAS_VAC_TRUN',
     'VACACIONANIO',
     'VACXMES',
@@ -3229,22 +3226,14 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     except (TypeError, ValueError):
         base = 0.0
 
-    anios = _formato_liquidacion_fc_valor(formula_values, 'ANIOSVACTRUNCA', 'ANIO')
-    meses = _formato_liquidacion_fc_valor(formula_values, 'MESVAC', 'MESES_VAC_TRUN')
-    dias = _formato_liquidacion_fc_valor(formula_values, 'XDIASVACA', 'DIAS_VAC_TRUN')
+    anios = _formato_liquidacion_fc_valor(formula_values, 'ANIOSVACTRUNCA')
+    meses = _formato_liquidacion_fc_valor(formula_values, 'MESES_VAC_TRUN')
+    dias = _formato_liquidacion_fc_valor(formula_values, 'DIAS_VAC_TRUN')
 
-    x_anio_calc = (base / 12.0) * 12.0 * anios if base else 0.0
-    x_mes_calc = (base / 12.0) * meses if base else 0.0
-    x_dia_calc = (base / 360.0) * dias if base else 0.0
-
-    x_anio = _formato_liquidacion_importe_formula(formula_values, 'VACACIONANIO', x_anio_calc)
-    x_mes = _formato_liquidacion_importe_formula(formula_values, 'VACXMES', x_mes_calc)
-    x_dia = _formato_liquidacion_importe_formula(formula_values, 'VACXDIA', x_dia_calc)
-    total = _formato_liquidacion_importe_formula(
-        formula_values,
-        'TOTALVACTRUNCAS',
-        x_anio + x_mes + x_dia,
-    )
+    x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
+    x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
+    x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
+    total = _formato_liquidacion_fc_valor(formula_values, 'TOTALVACTRUNCAS')
 
     base_fmt = _formato_liquidacion_moneda(base)
     anios_txt = _formato_liquidacion_cantidad(anios)

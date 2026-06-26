@@ -47,7 +47,7 @@
         }
         .titulo {
             text-align: center;
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             text-transform: uppercase;
             color: #1a4b84;
@@ -514,13 +514,11 @@
                 </table>
             </div>
 
-            <table class="fmt">
-                <tbody>
-                    <tr class="fila-total">
-                        <td class="concepto">Total ingresos</td>
-                        <td class="monto">{{ total_ingresos_fmt }}</td>
-                    </tr>
-                </tbody>
+            <table class="neto-table">
+                <tr>
+                    <td class="neto-label-cell">Total ingresos</td>
+                    <td class="neto-amount-cell">{{ total_ingresos_fmt }}</td>
+                </tr>
             </table>
         </div>
 
@@ -544,13 +542,13 @@
                         <td class="monto">{{ row.importe_fmt }}</td>
                     </tr>
                     {% endfor %}
-                    <tr class="fila-total">
-                        <td class="concepto">Total descuento</td>
-                        <td class="monto"></td>
-                        <td class="monto"></td>
-                        <td class="monto">{{ descuentos_calc.total_fmt }}</td>
-                    </tr>
                 </tbody>
+            </table>
+            <table class="neto-table">
+                <tr>
+                    <td class="neto-label-cell">Total descuentos</td>
+                    <td class="neto-amount-cell">{{ descuentos_calc.total_fmt }}</td>
+                </tr>
             </table>
         </div>
 

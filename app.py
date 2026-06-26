@@ -2914,12 +2914,12 @@ def _regimen_pensionario_formato_liquidacion(liq):
 
 
 _FORMATO_LIQ_REMUNERACION_DEF = (
-    {'label': 'Básico', 'cts': 'BASICO_CTS', 'grati': 'BASICO_GRATI', 'vaca': 'BASICO_VACA'},
-    {'label': 'Asig. fam.', 'cts': 'ASIG_FAM_CTS', 'grati': 'ASIG_FAM_GRATI', 'vaca': 'ASIG_FAM_VACA'},
-    {'label': 'Sexto grati.', 'cts': 'PROMEDIO_GRATI', 'grati': None, 'vaca': None},
-    {'label': 'Promedio noche', 'cts': 'BONO_PROD_CTS', 'grati': 'BONO_PROD_GRATI', 'vaca': 'BONO_PROD_VAC'},
-    {'label': 'Promedio HE', 'cts': 'HRS_EXTRAS_25_CTS', 'grati': 'HRS_EXTRAS_25_GRA', 'vaca': 'HRS_EXTRAS_25_VAC'},
-    {'label': 'Promedio feriado', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
+    {'label': 'Remuneración Básica', 'cts': 'BASICO_CTS', 'grati': 'BASICO_GRATI', 'vaca': 'BASICO_VACA'},
+    {'label': 'Asignación familiar', 'cts': 'ASIG_FAM_CTS', 'grati': 'ASIG_FAM_GRATI', 'vaca': 'ASIG_FAM_VACA'},
+    {'label': 'Sexto de Gratificación', 'cts': 'PROMEDIO_GRATI', 'grati': None, 'vaca': None},
+    {'label': 'Promedios Noche', 'cts': 'BONO_PROD_CTS', 'grati': 'BONO_PROD_GRATI', 'vaca': 'BONO_PROD_VAC'},
+    {'label': 'Promedios Horas Extras', 'cts': 'HRS_EXTRAS_25_CTS', 'grati': 'HRS_EXTRAS_25_GRA', 'vaca': 'HRS_EXTRAS_25_VAC'},
+    {'label': 'Promedio Feriado', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
 )
 
 _FORMATO_LIQ_CTS_FORMULACODES = (
@@ -2957,7 +2957,7 @@ _FORMATO_LIQ_DESCUENTOS_DEF = (
 )
 
 _FORMATO_LIQ_APORTACIONES_DEF = (
-    {'label': 'ESSALUD', 'formula_code': 'ESSALUD'},
+    {'label': 'ESSALUD', 'formula_code': 'ESSALUD', 'pct_formula_code': 'PORCENTAJE_ESSALUD'},
 )
 
 _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
@@ -2967,6 +2967,7 @@ _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
     'AFP_SEGUROS',
     'ONP',
     'ESSALUD',
+    'PORCENTAJE_ESSALUD',
 )
 
 
@@ -3143,8 +3144,14 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
             continue
         importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
         total += importe
+        pct_formula_code = defn.get('pct_formula_code')
         pct_field = defn.get('pct_field')
-        if pct_field:
+        if pct_formula_code:
+            pct_fmt = _formato_liquidacion_porcentaje(
+                _formato_liquidacion_fc_valor(formula_values, pct_formula_code),
+                mostrar_cero=bool(defn.get('pct_mostrar_cero')),
+            )
+        elif pct_field:
             pct_fmt = _formato_liquidacion_porcentaje(
                 liq.get(pct_field),
                 mostrar_cero=bool(defn.get('pct_mostrar_cero')),
@@ -3194,6 +3201,18 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
         'NUMERO_DIAS',
         'XFALTASGRATI',
     )
+    formula_values = formula_values or {}
+    x_mes = _formato_liquidacion_fc_valor(formula_values, 'GRATI_TRUNCA')
+    resultado['formula_meses'] = f"({resultado['base_fmt']} / 6)"
+    resultado['x_mes_fmt'] = _formato_liquidacion_moneda(x_mes)
+    dias = _formato_liquidacion_fc_valor(formula_values, 'NUMERO_DIAS')
+    try:
+        base = float(total_remuneracion_grati or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+    x_dia = (base / 180.0) * dias if base else 0.0
+    resultado['formula_dias'] = f"({resultado['base_fmt']} / 180)"
+    resultado['x_dia_fmt'] = _formato_liquidacion_moneda(x_dia)
     try:
         total = float((formula_values or {}).get('GRATI_TRUNCA') or 0)
     except (TypeError, ValueError):
@@ -3233,7 +3252,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
     x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
-    total = _formato_liquidacion_fc_valor(formula_values, 'TOTALVACTRUNCAS')
+    total = x_anio + x_mes + x_dia
 
     base_fmt = _formato_liquidacion_moneda(base)
     anios_txt = _formato_liquidacion_cantidad(anios)
@@ -3246,9 +3265,9 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'anios_label': f'{anios_txt} AÑOS',
         'meses_label': f'{meses_txt} MESES',
         'dias_label': f'{dias_txt} DIAS',
-        'formula_anios': f'({base_fmt} / 12) x 12',
+        'formula_anios': base_fmt,
         'formula_meses': f'({base_fmt} / 12)',
-        'formula_dias': f'({base_fmt} / 360)',
+        'formula_dias': f'({base_fmt} / 30)',
         'x_anio_fmt': _formato_liquidacion_moneda(x_anio),
         'x_mes_fmt': _formato_liquidacion_moneda(x_mes),
         'x_dia_fmt': _formato_liquidacion_moneda(x_dia),

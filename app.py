@@ -2956,6 +2956,7 @@ _FORMATO_LIQ_DESCUENTOS_DEF = (
     {'label': 'AFP Comisión', 'formula_code': 'AFP_COMISION_VARIABL', 'pct_field': 'porc_comision', 'pct_mostrar_cero': True},
     {'label': 'AFP Seguro', 'formula_code': 'AFP_SEGUROS', 'pct_field': 'porc_seguro'},
     {'label': 'ONP', 'formula_code': 'ONP', 'pct_field': 'porc_onp'},
+    {'label': 'Otros Descuentos', 'placeholder': True},
 )
 
 _FORMATO_LIQ_APORTACIONES_DEF = (
@@ -3132,7 +3133,17 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
 
     filas = []
     total = 0.0
+    cero_fmt = _formato_liquidacion_moneda(0)
     for defn in defn_rows:
+        if defn.get('placeholder'):
+            filas.append({
+                'label': defn['label'],
+                'pct_fmt': '0%',
+                'base_fmt': cero_fmt,
+                'importe_fmt': cero_fmt,
+                'importe': 0.0,
+            })
+            continue
         importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
         total += importe
         pct_field = defn.get('pct_field')

@@ -130,19 +130,19 @@
             </tr>
             <tr>
                 <td class="label">Reg. Pensión:</td>
-                <td class="value" colspan="3">
+                <td class="value">
                     {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
                         NINGUNO
                     {% else %}
                         {{ cabecera.afp_description or cabecera.regimenpension or '' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
                     {% endif %}
                 </td>
-            </tr>
-            <tr>
                 <td class="label">CUSPP:</td>
                 <td class="value">{{ cabecera.cupss or '---' }}</td>
+            </tr>
+            <tr>
                 <td class="label">Cargo:</td>
-                <td class="value">{{ cabecera.cargo_trabajador }}</td>
+                <td class="value" colspan="3">{{ cabecera.cargo_trabajador }}</td>
             </tr>
             <tr>
                 <td class="label">Días Laborables:</td>

@@ -3144,8 +3144,8 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
             total += importe
             filas.append({
                 'label': defn['label'],
-                'pct_fmt': '0.00%',
-                'base_fmt': cero_fmt,
+                'pct_fmt': '',
+                'base_fmt': '',
                 'importe_fmt': _formato_liquidacion_moneda(importe),
                 'importe': importe,
             })

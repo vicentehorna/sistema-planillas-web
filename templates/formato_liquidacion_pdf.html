@@ -250,6 +250,7 @@
             color: #1a4b84;
             padding: 4px 10px 4px 0;
             width: 70%;
+            text-transform: uppercase;
         }
         .neto-amount-cell {
             background-color: #e9ecef;
@@ -601,7 +602,10 @@
                     <td>
                         <div class="firma-spacer"></div>
                         <div class="linea-firma">TRABAJADOR</div>
-                        <div class="firma-detalle">{{ liq.document_type or 'DNI' }}: {{ liq.person_document or '' }}</div>
+                        <div class="firma-detalle">
+                            {{ liq.person_name or '' }}<br>
+                            {{ liq.document_type or 'DNI' }}: {{ liq.person_document or '' }}
+                        </div>
                     </td>
                 </tr>
             </table>

@@ -2953,11 +2953,12 @@ _FORMATO_LIQ_DESCUENTOS_DEF = (
     {'label': 'AFP Comisión', 'formula_code': 'AFP_COMISION_VARIABL', 'pct_field': 'porc_comision', 'pct_mostrar_cero': True},
     {'label': 'AFP Seguro', 'formula_code': 'AFP_SEGUROS', 'pct_field': 'porc_seguro'},
     {'label': 'ONP', 'formula_code': 'ONP', 'pct_field': 'porc_onp'},
-    {'label': 'Otros Descuentos', 'placeholder': True},
+    {'label': 'Otros Descuentos', 'placeholder': True, 'formula_code': 'LIQ_OTROS_DESC'},
 )
 
 _FORMATO_LIQ_APORTACIONES_DEF = (
     {'label': 'ESSALUD', 'formula_code': 'ESSALUD', 'pct_formula_code': 'PORCENTAJE_ESSALUD'},
+    {'label': 'Aporte EPS', 'formula_code': 'APORTE_EPS', 'pct_field': 'porc_eps'},
 )
 
 _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
@@ -2966,8 +2967,10 @@ _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
     'AFP_COMISION_VARIABL',
     'AFP_SEGUROS',
     'ONP',
+    'LIQ_OTROS_DESC',
     'ESSALUD',
     'PORCENTAJE_ESSALUD',
+    'APORTE_EPS',
 )
 
 
@@ -3134,12 +3137,18 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
     cero_fmt = _formato_liquidacion_moneda(0)
     for defn in defn_rows:
         if defn.get('placeholder'):
+            importe = (
+                _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
+                if defn.get('formula_code')
+                else 0.0
+            )
+            total += importe
             filas.append({
                 'label': defn['label'],
                 'pct_fmt': '0%',
                 'base_fmt': cero_fmt,
-                'importe_fmt': cero_fmt,
-                'importe': 0.0,
+                'importe_fmt': _formato_liquidacion_moneda(importe),
+                'importe': importe,
             })
             continue
         importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
@@ -3179,8 +3188,10 @@ def _build_formato_liquidacion_descuentos(liq, formula_values):
     )
 
 
-def _build_formato_liquidacion_aportaciones(formula_values):
-    return _build_formato_liquidacion_tabla_conceptos(_FORMATO_LIQ_APORTACIONES_DEF, formula_values)
+def _build_formato_liquidacion_aportaciones(liq, formula_values):
+    return _build_formato_liquidacion_tabla_conceptos(
+        _FORMATO_LIQ_APORTACIONES_DEF, formula_values, liq=liq
+    )
 
 
 def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
@@ -3330,7 +3341,7 @@ def generar_pdf_formato_liquidacion(params):
     )
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
-    aportaciones_calc = _build_formato_liquidacion_aportaciones(formula_values)
+    aportaciones_calc = _build_formato_liquidacion_aportaciones(liq, formula_values)
     neto_a_pagar = total_ingresos - float(descuentos_calc.get('total') or 0)
     neto_a_pagar_fmt = _formato_liquidacion_moneda(neto_a_pagar)
 

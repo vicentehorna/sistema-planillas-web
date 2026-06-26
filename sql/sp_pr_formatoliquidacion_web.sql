@@ -72,6 +72,12 @@ BEGIN
               AND ShortName = 'PORC_ONP'
         ), 0) AS porc_onp,
         ISNULL((
+            SELECT ParameterNumberValue
+            FROM PR_Parameter (NOLOCK)
+            WHERE Company = @cia
+              AND ShortName = 'PORC_EPS'
+        ), 0) AS porc_eps,
+        ISNULL((
             SELECT TOP 1 ParameterNumberValue
             FROM PR_Parameter (NOLOCK)
             WHERE Company = @cia

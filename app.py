@@ -2898,10 +2898,9 @@ def _formato_liquidacion_porcentaje(val, mostrar_cero=False):
         n = float(val or 0)
     except (TypeError, ValueError):
         n = 0.0
-    if n <= 0:
-        return '0%' if mostrar_cero else ''
-    text = f'{n:.2f}'.rstrip('0').rstrip('.')
-    return f'{text}%'
+    if n <= 0 and not mostrar_cero:
+        return ''
+    return f'{n:.2f}%'
 
 
 def _regimen_pensionario_formato_liquidacion(liq):
@@ -3145,7 +3144,7 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
             total += importe
             filas.append({
                 'label': defn['label'],
-                'pct_fmt': '0%',
+                'pct_fmt': '0.00%',
                 'base_fmt': cero_fmt,
                 'importe_fmt': _formato_liquidacion_moneda(importe),
                 'importe': importe,

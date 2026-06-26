@@ -87,6 +87,27 @@
         table.datos-grid td.col-der {
             padding-left: 2cm;
         }
+        table.datos-grid td.col-izq .datos-lbl,
+        table.datos-grid td.col-der .datos-lbl {
+            display: inline-block;
+            vertical-align: top;
+        }
+        table.datos-grid td.col-izq .datos-lbl {
+            width: 3.1cm;
+        }
+        table.datos-grid td.col-der .datos-lbl {
+            width: 2.8cm;
+        }
+        table.datos-grid .datos-val {
+            display: inline-block;
+            vertical-align: top;
+        }
+        table.datos-grid td.col-izq.wrap .datos-val {
+            max-width: calc(100% - 3.1cm);
+        }
+        table.datos-grid td.col-der.wrap .datos-val {
+            max-width: calc(100% - 2.8cm);
+        }
         table.datos-grid td.nowrap {
             white-space: nowrap;
         }
@@ -225,6 +246,11 @@
             padding-bottom: 2px;
             color: #1a4b84;
         }
+        table.cts-grid tr.cts-titulo-row td.cts-dias-falta-lbl {
+            font-weight: bold;
+            font-size: 8.5px;
+            padding-right: 28px;
+        }
         table.cts-grid tr.cts-total-row td {
             font-weight: bold;
             background-color: #f4f6f9;
@@ -327,31 +353,31 @@
             <h3>Datos personales</h3>
             <table class="datos-grid">
                 <tr>
-                    <td class="nowrap"><span class="lbl">{{ liq.document_type or 'DNI' }}:</span> {{ liq.person_document or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Régimen pensionario:</span> {{ regimen_pensionario }}</td>
+                    <td class="col-izq nowrap"><span class="lbl datos-lbl">{{ liq.document_type or 'DNI' }}:</span><span class="datos-val">{{ liq.person_document or '' }}</span></td>
+                    <td class="col-der nowrap"><span class="lbl datos-lbl">Régimen pensionario:</span><span class="datos-val">{{ regimen_pensionario }}</span></td>
                 </tr>
                 <tr>
-                    <td class="wrap"><span class="lbl">Apellidos y nombres:</span> {{ liq.person_name or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Nro. de cuenta:</span> {{ liq.salary_account or '' }}</td>
+                    <td class="col-izq wrap"><span class="lbl datos-lbl">Apellidos y nombres:</span><span class="datos-val">{{ liq.person_name or '' }}</span></td>
+                    <td class="col-der nowrap"><span class="lbl datos-lbl">Nro. de cuenta:</span><span class="datos-val">{{ liq.salary_account or '' }}</span></td>
                 </tr>
                 <tr>
-                    <td class="wrap"><span class="lbl">Cargo:</span> {{ liq.person_position or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Banco:</span> {{ liq.salary_bank or '' }}</td>
+                    <td class="col-izq wrap"><span class="lbl datos-lbl">Cargo:</span><span class="datos-val">{{ liq.person_position or '' }}</span></td>
+                    <td class="col-der nowrap"><span class="lbl datos-lbl">Banco:</span><span class="datos-val">{{ liq.salary_bank or '' }}</span></td>
                 </tr>
                 <tr>
-                    <td class="wrap"><span class="lbl">Tipo de contrato:</span> {{ liq.contract_modality or '' }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Régimen laboral:</span> {{ liq.regimen_laboral or '' }}</td>
+                    <td class="col-izq wrap"><span class="lbl datos-lbl">Tipo de contrato:</span><span class="datos-val">{{ liq.contract_modality or '' }}</span></td>
+                    <td class="col-der nowrap"><span class="lbl datos-lbl">Régimen laboral:</span><span class="datos-val">{{ liq.regimen_laboral or '' }}</span></td>
                 </tr>
                 <tr>
-                    <td class="nowrap"><span class="lbl">Sueldo:</span> {{ basico_fmt }}</td>
-                    <td class="col-der wrap"><span class="lbl">Motivo de cese:</span> {{ liq.cease_reason or '' }}</td>
+                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Sueldo:</span><span class="datos-val">{{ basico_fmt }}</span></td>
+                    <td class="col-der wrap"><span class="lbl datos-lbl">Motivo de cese:</span><span class="datos-val">{{ liq.cease_reason or '' }}</span></td>
                 </tr>
                 <tr>
-                    <td class="nowrap"><span class="lbl">Fecha de ingreso:</span> {{ entry_date_fmt }}</td>
-                    <td class="col-der nowrap"><span class="lbl">Fecha de cese:</span> {{ cease_date_fmt }}</td>
+                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Fecha de ingreso:</span><span class="datos-val">{{ entry_date_fmt }}</span></td>
+                    <td class="col-der nowrap"><span class="lbl datos-lbl">Fecha de cese:</span><span class="datos-val">{{ cease_date_fmt }}</span></td>
                 </tr>
                 <tr class="fila-tiempo-servicio">
-                    <td class="nowrap"><span class="lbl">Tiempo de servicio:</span></td>
+                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Tiempo de servicio:</span></td>
                     <td class="col-der nowrap">
                         <span class="tiempo-segmento"><span class="lbl">Año:</span> {{ liq.anios_servicio | default(0) | int }}</span>
                         <span class="tiempo-segmento"><span class="lbl">Mes:</span> {{ liq.meses_servicio | default(0) | int }}</span>
@@ -397,10 +423,11 @@
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">
                     <tr class="cts-titulo-row">
-                        <td class="cts-titulo-text" colspan="3">Compensación por tiempo de servicios - CTS</td>
-                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-titulo-text" colspan="2">Compensación por tiempo de servicios - CTS</td>
+                        <td class="cts-op cts-dias-falta-lbl">Días Falta</td>
+                        <td class="cts-cant">{{ cts_calc.dias_falta_txt }}</td>
                         <td class="cts-eq"></td>
-                        <td class="cts-res">{{ cts_calc.dias_falta_txt }}</td>
+                        <td class="cts-res"></td>
                     </tr>
                     <tr>
                         <td class="cts-lbl">Cálculo:</td>
@@ -432,10 +459,11 @@
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">
                     <tr class="cts-titulo-row">
-                        <td class="cts-titulo-text" colspan="3">Gratificación trunca</td>
-                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-titulo-text" colspan="2">Gratificación trunca</td>
+                        <td class="cts-op cts-dias-falta-lbl">Días Falta</td>
+                        <td class="cts-cant">{{ grati_calc.dias_falta_txt }}</td>
                         <td class="cts-eq"></td>
-                        <td class="cts-res">{{ grati_calc.dias_falta_txt }}</td>
+                        <td class="cts-res"></td>
                     </tr>
                     <tr>
                         <td class="cts-lbl">Cálculo:</td>
@@ -475,10 +503,11 @@
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">
                     <tr class="cts-titulo-row">
-                        <td class="cts-titulo-text" colspan="3">Vacaciones truncas</td>
-                        <td class="cts-cant">Días Falta</td>
+                        <td class="cts-titulo-text" colspan="2">Vacaciones truncas</td>
+                        <td class="cts-op cts-dias-falta-lbl">Días Falta</td>
+                        <td class="cts-cant">{{ vaca_calc.dias_falta_txt }}</td>
                         <td class="cts-eq"></td>
-                        <td class="cts-res">{{ vaca_calc.dias_falta_txt }}</td>
+                        <td class="cts-res"></td>
                     </tr>
                     <tr>
                         <td class="cts-lbl">Cálculo:</td>
@@ -531,7 +560,7 @@
                         <th></th>
                         <th class="monto">%</th>
                         <th class="monto">Base afecta</th>
-                        <th class="monto"></th>
+                        <th class="monto">Importe</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -568,7 +597,7 @@
                         <th></th>
                         <th class="monto">%</th>
                         <th class="monto">Base afecta</th>
-                        <th class="monto"></th>
+                        <th class="monto">Importe</th>
                     </tr>
                 </thead>
                 <tbody>

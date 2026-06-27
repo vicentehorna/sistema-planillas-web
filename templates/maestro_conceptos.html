@@ -497,6 +497,17 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="row g-2 conceptos-fila-par mt-2">
+                            <div class="col-12 col-md-7"></div>
+                            <div class="col-12 col-md-5">
+                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="chkFlagAfectoUtilidad">
+                                        <label class="form-check-label" for="chkFlagAfectoUtilidad">Afecto Utilidad</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
                     <input type="hidden" id="hidStatus" value="A">
@@ -638,6 +649,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cboFlagInsertar').value = 'N';
         setCheck(document.getElementById('chkFlagAfecto5ta'), 'N');
         setCheck(document.getElementById('chkFlagAfectoAfp'), 'N');
+        setCheck(document.getElementById('chkFlagAfectoUtilidad'), 'N');
         document.getElementById('tituloEdicionConcepto').textContent = 'Nuevo concepto';
         syncMonedaPorValorMonetario();
     }
@@ -662,6 +674,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cboFlagInsertar').value = data.flaginsertar || 'N';
         setCheck(document.getElementById('chkFlagAfecto5ta'), data.flagafecto5ta);
         setCheck(document.getElementById('chkFlagAfectoAfp'), data.flagafectoafp);
+        setCheck(document.getElementById('chkFlagAfectoUtilidad'), data.flagafectoutilidad);
         document.getElementById('tituloEdicionConcepto').textContent = data.description || 'Editar concepto';
         syncMonedaPorValorMonetario();
     }
@@ -688,6 +701,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             flaginsertar: document.getElementById('cboFlagInsertar').value.trim() || 'N',
             flagafecto5ta: flagFromCheck(document.getElementById('chkFlagAfecto5ta')),
             flagafectoafp: flagFromCheck(document.getElementById('chkFlagAfectoAfp')),
+            flagafectoutilidad: flagFromCheck(document.getElementById('chkFlagAfectoUtilidad')),
         };
     }
 

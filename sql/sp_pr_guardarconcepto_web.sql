@@ -31,6 +31,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarconcepto_web]
     @flaginsertar         CHAR(1) = NULL,
     @flagafectoafp        CHAR(1) = NULL,
     @flagafecto5ta        CHAR(1) = NULL,
+    @flagafectoutilidad   CHAR(1) = NULL,
     @xlastuser            VARCHAR(20) = NULL
 AS
 BEGIN
@@ -59,6 +60,7 @@ BEGIN
     SET @flaginsertar = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flaginsertar, '')))), '');
     SET @flagafectoafp = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoafp, '')))), '');
     SET @flagafecto5ta = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafecto5ta, '')))), '');
+    SET @flagafectoutilidad = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoutilidad, '')))), '');
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @modo NOT IN ('I', 'U')
@@ -135,6 +137,9 @@ BEGIN
 
     IF @flagafecto5ta IS NULL
         SET @flagafecto5ta = 'N';
+
+    IF @flagafectoutilidad IS NULL
+        SET @flagafectoutilidad = 'N';
 
     IF NOT EXISTS (
         SELECT 1 FROM PR_ConceptType (NOLOCK)
@@ -230,7 +235,8 @@ BEGIN
             reporden,
             flaginsertar,
             flagafectoAFP,
-            flagafecto5ta
+            flagafecto5ta,
+            flagafectoUtilidad
         )
         VALUES (
             @concept_nuevo,
@@ -258,7 +264,8 @@ BEGIN
             @reporden,
             @flaginsertar,
             @flagafectoafp,
-            @flagafecto5ta
+            @flagafecto5ta,
+            @flagafectoutilidad
         );
 
         SELECT
@@ -309,7 +316,8 @@ BEGIN
         reporden = @reporden,
         flaginsertar = @flaginsertar,
         flagafectoAFP = @flagafectoafp,
-        flagafecto5ta = @flagafecto5ta
+        flagafecto5ta = @flagafecto5ta,
+        flagafectoUtilidad = @flagafectoutilidad
     WHERE Concept = @concept
       AND Company = @company;
 

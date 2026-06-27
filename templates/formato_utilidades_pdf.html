@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Constancia de Utilidades</title>
+    <style>
+        @page { size: A4; margin: 10mm 12mm 12mm 12mm; }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 9px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.35;
+        }
+        .doc { width: 100%; box-sizing: border-box; }
+        .encabezado {
+            display: table;
+            width: 100%;
+            margin-bottom: 6px;
+            border-bottom: 2px solid #1a4b84;
+            padding-bottom: 6px;
+        }
+        .encabezado .logo-cell,
+        .encabezado .empresa-cell {
+            display: table-cell;
+            vertical-align: top;
+        }
+        .encabezado .logo-cell { width: 34%; }
+        .encabezado .empresa-cell {
+            width: 66%;
+            text-align: right;
+            font-size: 8px;
+            color: #555;
+            padding-top: 2px;
+        }
+        .empresa-nombre {
+            font-size: 10px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+        .logo-img {
+            max-height: 58px;
+            max-width: 180px;
+            object-fit: contain;
+            display: block;
+        }
+        .titulo {
+            text-align: center;
+            font-size: 11px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #1a4b84;
+            background-color: #f4f6f9;
+            padding: 5px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 6px 0 4px;
+        }
+        .subtitulo-legal {
+            text-align: center;
+            font-size: 7.5px;
+            font-weight: bold;
+            color: #555;
+            margin: 0 0 6px;
+        }
+        .bloque-datos {
+            border: 1px solid #ddd;
+            padding: 5px 8px;
+            margin-bottom: 6px;
+            background: #fff;
+        }
+        .bloque-datos h3 {
+            margin: 0 0 4px;
+            font-size: 8.5px;
+            text-transform: uppercase;
+            color: #1a4b84;
+            font-weight: bold;
+        }
+        table.meta-grid {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.meta-grid td {
+            width: 50%;
+            padding: 2px 8px 2px 0;
+            vertical-align: top;
+            font-size: 8.5px;
+        }
+        table.meta-grid td.col-der { padding-left: 1.2cm; }
+        table.meta-grid .lbl {
+            display: inline-block;
+            font-weight: bold;
+            color: #444;
+            min-width: 2.4cm;
+        }
+        .intro {
+            text-align: justify;
+            font-size: 8.5px;
+            margin: 0;
+            line-height: 1.45;
+        }
+        .seccion { margin-top: 4px; }
+        .seccion-titulo {
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0 0 3px;
+            font-size: 8.5px;
+            color: #fff;
+            background-color: #1a4b84;
+            padding: 3px 8px;
+        }
+        .subseccion-titulo {
+            font-weight: bold;
+            font-size: 8px;
+            color: #1a4b84;
+            margin: 5px 0 2px;
+            padding-left: 4px;
+            border-left: 3px solid #1a4b84;
+        }
+        table.fmt {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4px;
+            border: 1px solid #1a4b84;
+        }
+        table.fmt th,
+        table.fmt td {
+            border: 1px solid #ddd;
+            padding: 3px 6px;
+            vertical-align: middle;
+            font-size: 8px;
+        }
+        table.fmt th {
+            background: #1a4b84;
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+            border-color: #1a4b84;
+        }
+        table.fmt td.num {
+            text-align: center;
+            width: 10%;
+            color: #1a4b84;
+            font-weight: bold;
+            background: #f8f9fb;
+        }
+        table.fmt td.concepto { text-align: left; }
+        table.fmt td.monto,
+        table.fmt th.monto {
+            text-align: right;
+            white-space: nowrap;
+            width: 22%;
+        }
+        table.fmt tr.destacado td {
+            font-weight: bold;
+            background-color: #f4f6f9;
+        }
+        table.fmt tr.destacado td.monto {
+            border-top: 2px solid #1a4b84;
+            color: #1a4b84;
+        }
+        .firmas {
+            margin-top: 20px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .firmas td {
+            width: 50%;
+            vertical-align: top;
+            text-align: center;
+            padding: 0 8px;
+        }
+        .firma-img {
+            max-height: 72px;
+            max-width: 220px;
+            object-fit: contain;
+            display: block;
+            margin: 0 auto 4px;
+        }
+        .linea-firma {
+            border-top: 1.5px solid #1a4b84;
+            width: 78%;
+            margin: 40px auto 6px;
+        }
+        .linea-firma.con-imagen {
+            margin: 2px auto 6px;
+        }
+        .firma-etiqueta {
+            font-size: 8px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin: 0 0 4px;
+        }
+        .firma-nombre {
+            font-size: 8px;
+            font-weight: bold;
+            margin: 0;
+            text-transform: uppercase;
+        }
+        .firma-cargo {
+            font-size: 7.5px;
+            color: #555;
+            margin: 2px 0 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="doc">
+        <div class="encabezado">
+            <div class="logo-cell">
+                {% if logo_src %}
+                <img src="{{ logo_src }}" alt="Logo" class="logo-img">
+                {% endif %}
+            </div>
+            <div class="empresa-cell">
+                <div class="empresa-nombre">{{ cab.company_name or '' }}</div>
+                <div>RUC: {{ cab.company_ruc or '' }}</div>
+                <div>{{ cab.company_address or '' }}</div>
+            </div>
+        </div>
+
+        <div class="titulo">Constancia de Liquidación de Participación de Utilidades</div>
+        <div class="subtitulo-legal">D.L. N.° 892 (11/11/1996) — D.S. N.° 009-98-TR (06/08/1998)</div>
+
+        <div class="bloque-datos">
+            <h3>Datos del trabajador</h3>
+            <table class="meta-grid">
+                <tr>
+                    <td class="col-izq"><span class="lbl">Trabajador:</span> {{ cab.person_name or '' }}</td>
+                    <td class="col-der"><span class="lbl">DNI:</span> {{ cab.person_document or '' }}</td>
+                </tr>
+                <tr>
+                    <td class="col-izq"><span class="lbl">Ejercicio:</span> {{ cab.ejercicio or '' }}</td>
+                    <td class="col-der"><span class="lbl">Fecha de pago:</span> {{ fecha_pago_fmt }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque-datos">
+            <h3>Declaración</h3>
+            <p class="intro">{{ texto_intro }}</p>
+        </div>
+
+        <div class="seccion">
+            <div class="seccion-titulo">Cálculo del monto de participación en las utilidades</div>
+
+            <div class="subseccion-titulo">1. Utilidades por distribuir</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>N.°</th>
+                        <th>Concepto</th>
+                        <th class="monto">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in secciones.distribuir %}
+                    <tr class="{% if fila.destacado %}destacado{% endif %}">
+                        <td class="num">{{ fila.indice }}</td>
+                        <td class="concepto">{{ fila.etiqueta }}</td>
+                        <td class="monto">{{ fila.valor }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="subseccion-titulo">2. Cálculo de la participación</div>
+
+            <div class="subseccion-titulo" style="font-weight:normal;color:#444;border-left-color:#ccc;margin-left:8px;">2.1 Según los días laborados</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>N.°</th>
+                        <th>Concepto</th>
+                        <th class="monto">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in secciones.dias %}
+                    <tr class="{% if fila.destacado %}destacado{% endif %}">
+                        <td class="num">{{ fila.indice }}</td>
+                        <td class="concepto">{{ fila.etiqueta }}</td>
+                        <td class="monto">{{ fila.valor }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="subseccion-titulo" style="font-weight:normal;color:#444;border-left-color:#ccc;margin-left:8px;">2.2 Según las remuneraciones percibidas</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>N.°</th>
+                        <th>Concepto</th>
+                        <th class="monto">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in secciones.remuneraciones %}
+                    <tr class="{% if fila.destacado %}destacado{% endif %}">
+                        <td class="num">{{ fila.indice }}</td>
+                        <td class="concepto">{{ fila.etiqueta }}</td>
+                        <td class="monto">{{ fila.valor }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="subseccion-titulo">3. Monto de la participación a percibir</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>N.°</th>
+                        <th>Concepto</th>
+                        <th class="monto">Importe</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for fila in secciones.total %}
+                    <tr class="{% if fila.destacado %}destacado{% endif %}">
+                        <td class="num">{{ fila.indice }}</td>
+                        <td class="concepto">{{ fila.etiqueta }}</td>
+                        <td class="monto">{{ fila.valor }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <table class="firmas">
+            <tr>
+                <td>
+                    {% if firma_src %}
+                    <img src="{{ firma_src }}" alt="Firma" class="firma-img">
+                    {% endif %}
+                    <div class="linea-firma{% if firma_src %} con-imagen{% endif %}"></div>
+                    <p class="firma-nombre">{{ cab.representative or '' }}</p>
+                    <p class="firma-cargo">{{ cab.rep_position or 'Representante legal' }}</p>
+                </td>
+                <td>
+                    <p class="firma-etiqueta">Trabajador</p>
+                    <div class="linea-firma"></div>
+                    <p class="firma-nombre">{{ cab.person_name or '' }}</p>
+                    <p class="firma-cargo">DNI: {{ cab.person_document or '' }}</p>
+                </td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>

@@ -370,6 +370,75 @@ def _listar_trabajadores_liquidacion(cia, payroll_type, period, person='0', nomb
                 pass
 
 
+def _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, person='0', nombre=None):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadoformatoutilidades_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, processtype, period, person, nombre),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        trabajadores = []
+        for r in rows:
+            fi = _jsonable_value(r.get('fechaingreso'))
+            fc = _jsonable_value(r.get('fechacese'))
+            nombre_val = str(r.get('nombre') or '').strip()
+            if not nombre_val:
+                nombre_val = str(r.get('name') or '').strip()
+            trabajadores.append(
+                {
+                    'person': str(r.get('person') or '').strip(),
+                    'nombre': nombre_val,
+                    'email': str(r.get('email') or '').strip(),
+                    'ingreso': fi if fi is not None else '',
+                    'cese': fc if fc is not None else '',
+                    'sex': r.get('sex', 0),
+                }
+            )
+        return trabajadores
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _listar_trabajadores_proceso(cia, payroll_type, processtype, period, person='0', nombre=None):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?',
+            (cia, payroll_type, processtype, period, person, nombre),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        trabajadores = []
+        for r in rows:
+            fi = _jsonable_value(r.get('fechaingreso'))
+            fc = _jsonable_value(r.get('fechacese'))
+            trabajadores.append(
+                {
+                    'person': str(r.get('person') or '').strip(),
+                    'nombre': str(r.get('nombre') or '').strip(),
+                    'email': str(r.get('email') or '').strip(),
+                    'ingreso': fi if fi is not None else '',
+                    'cese': fc if fc is not None else '',
+                    'sex': r.get('sex', 0),
+                }
+            )
+        return trabajadores
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 _MESES_ES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril', 5: 'Mayo', 6: 'Junio',
     7: 'Julio', 8: 'Agosto', 9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
@@ -2922,6 +2991,148 @@ def _formato_liquidacion_pdf_filename(person, period_raw):
     return f'formato_liquidacion_{person_safe}_{period_safe}.pdf'
 
 
+def _formato_utilidades_pdf_filename(person, period_raw):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
+    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
+    return f'formato_utilidades_{person_safe}_{period_safe}.pdf'
+
+
+def _formato_utilidades_concepto_display(row):
+    text = str(row.get('print_text') or '').upper()
+    try:
+        val = float(row.get('concept_value') or 0)
+    except (TypeError, ValueError):
+        val = 0.0
+    if 'PORCENTAJE' in text or '%' in text:
+        return f'{val:.2f} %'
+    if 'DIAS' in text or 'DÍAS' in text:
+        if abs(val - round(val)) < 0.00005:
+            return '{:,.0f}'.format(val)
+        return '{:,.2f}'.format(val)
+    return f'S/. {format_importe(val)}'
+
+
+def _formato_utilidades_filas_rango(conceptos, orden_min, orden_max, seccion=None, subseccion=None):
+    filas = []
+    idx = 1
+    for row in conceptos or []:
+        try:
+            orden = int(row.get('concept_order') or 0)
+        except (TypeError, ValueError):
+            orden = 0
+        if orden < orden_min or orden > orden_max:
+            continue
+        if seccion is not None and subseccion is not None:
+            indice = f'{seccion}.{subseccion}.{idx}'
+        elif seccion is not None:
+            indice = f'{seccion}.{idx}'
+        else:
+            indice = str(idx)
+        etiqueta = str(row.get('print_text') or '').strip()
+        filas.append({
+            'indice': indice,
+            'etiqueta': etiqueta,
+            'valor': _formato_utilidades_concepto_display(row),
+            'destacado': 'MONTO A DISTRIBUIR' in etiqueta.upper()
+            or 'PARTICIPACION UTILIDAD' in etiqueta.upper()
+            or 'TOTAL PARTICIPACION' in etiqueta.upper(),
+        })
+        idx += 1
+    return filas
+
+
+def _build_formato_utilidades_secciones(conceptos):
+    conceptos = sorted(
+        conceptos or [],
+        key=lambda r: (int(r.get('concept_order') or 0), str(r.get('print_text') or '')),
+    )
+    return {
+        'distribuir': _formato_utilidades_filas_rango(conceptos, 1, 4, seccion=1),
+        'dias': _formato_utilidades_filas_rango(conceptos, 5, 6, seccion=2, subseccion=1),
+        'remuneraciones': _formato_utilidades_filas_rango(conceptos, 7, 9, seccion=2, subseccion=2),
+        'total': _formato_utilidades_filas_rango(conceptos, 10, 13, seccion=3),
+    }
+
+
+def _texto_intro_formato_utilidades(cab):
+    cab = cab or {}
+    ejercicio = cab.get('ejercicio') or ''
+    return (
+        f"{cab.get('company_name') or ''} con RUC No {cab.get('company_ruc') or ''} "
+        f"domiciliado en {cab.get('company_address') or ''} debidamente representado por el Sr. "
+        f"{cab.get('representative') or ''}, en su calidad de empleador y en cumplimiento de lo "
+        f"dispuesto por el D. Leg No 892 y el D.S. No 009-98-TR, deja constancia de la determinación, "
+        f"distribución y pago de la participación en las utilidades del trabajador "
+        f"{cab.get('person_name') or ''} con DNI N° {cab.get('person_document') or ''}, "
+        f"correspondiente al ejercicio {ejercicio}."
+    ).replace('  ', ' ').strip()
+
+
+def generar_pdf_formato_utilidades(params):
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or '').strip()
+    processtype = str(params.get('process') or params.get('processtype') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    person = str(params.get('person') or '').strip()
+    if not (cia and payroll_type and processtype and period and person):
+        raise ValueError('Faltan parámetros para generar el formato de utilidades.')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        cursor.execute(
+            'EXEC sp_pr_formatoutilidades_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?',
+            (cia, payroll_type, processtype, period, person),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    cab = sets[0][0] if sets and sets[0] else {}
+    if not cab:
+        raise ValueError('No se encontraron datos para el formato de utilidades.')
+
+    conceptos = sets[1] if len(sets) > 1 else []
+    secciones = _build_formato_utilidades_secciones(conceptos)
+
+    fecha_pago = cab.get('fecha_pago_display') or cab.get('fecha_pago')
+    fecha_pago_fmt = fecha_filter(fecha_pago) if fecha_pago else ''
+
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
+
+    html_renderizado = render_template(
+        'formato_utilidades_pdf.html',
+        cab=cab,
+        secciones=secciones,
+        texto_intro=_texto_intro_formato_utilidades(cab),
+        fecha_pago_fmt=fecha_pago_fmt,
+        logo_src=logo_src,
+        firma_src=firma_src,
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el formato de utilidades. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
+
+
 def _formato_liquidacion_fecha(val):
     ref = _parse_fecha_flexible(val)
     return ref.strftime('%d/%m/%Y') if ref else ''
@@ -3896,6 +4107,7 @@ def _concepto_detalle_dict(r):
         'flaginsertar': _jsonable_value(r.get('flaginsertar')) or 'N',
         'flagafecto5ta': _jsonable_value(r.get('flagafecto5ta')) or 'N',
         'flagafectoafp': _jsonable_value(r.get('flagafectoafp')) or 'N',
+        'flagafectoutilidad': _jsonable_value(r.get('flagafectoutilidad')) or 'N',
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -4014,7 +4226,7 @@ def api_conceptos_guardar():
             "@modo=?, @company=?, @concept=?, @description=?, @formulacode=?, @concepttype=?, "
             "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
             "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
-            "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @xlastuser=?",
+            "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, @xlastuser=?",
             (
                 modo,
                 cia,
@@ -4036,6 +4248,7 @@ def api_conceptos_guardar():
                 str(body.get('flaginsertar') or 'N').strip().upper()[:1] or 'N',
                 _normalize_flag_yn(body.get('flagafectoafp')),
                 _normalize_flag_yn(body.get('flagafecto5ta')),
+                _normalize_flag_yn(body.get('flagafectoutilidad')),
                 _xlastuser_id(),
             ),
         )
@@ -6032,6 +6245,75 @@ def api_pago_haberes_banbif_generar_txt():
 @login_required
 def generar_boletas_page():
     return render_template('generar_boletas.html')
+
+
+@app.route('/documentos/formato_utilidades')
+@login_required
+def formato_utilidades_page():
+    return render_template('formato_utilidades.html')
+
+
+@app.route('/get_lista_formato_utilidades', methods=['POST'])
+@login_required
+def get_lista_formato_utilidades():
+    """sp_pr_listadoformatoutilidades_web — listado utilidades del periodo."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    processtype = str(body.get('process') or body.get('processtype') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+
+    if not cia or not payroll_type or not processtype or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
+
+    try:
+        return jsonify(_listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, person, nombre))
+    except Exception as e:
+        logging.exception('get_lista_formato_utilidades')
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/preview_formato_utilidades')
+@login_required
+def preview_formato_utilidades():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    period = _normalize_pr_period(params.get('period'))
+    try:
+        pdf_buffer = generar_pdf_formato_utilidades(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_formato_utilidades')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_formato_utilidades_pdf_filename(person, period),
+    )
+
+
+@app.route('/procesar_formatos_utilidades_masivo', methods=['POST'])
+@login_required
+def procesar_formatos_utilidades_masivo():
+    return jsonify({'error': 'El formato de utilidades aún no está configurado.'}), 501
+
+
+@app.route('/descargar_zip_formatos_utilidades')
+@login_required
+def descargar_zip_formatos_utilidades():
+    flash('El formato de utilidades aún no está configurado.', 'warning')
+    return redirect(url_for('formato_utilidades_page'))
+
+
+@app.route('/enviar_formatos_utilidades_masivo', methods=['POST'])
+@login_required
+def enviar_formatos_utilidades_masivo():
+    return jsonify({'error': 'El formato de utilidades aún no está configurado.'}), 501
 
 
 @app.route('/liquidaciones/certificado_trabajo')

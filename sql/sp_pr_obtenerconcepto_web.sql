@@ -33,6 +33,7 @@ BEGIN
         C.flaginsertar AS flaginsertar,
         ISNULL(C.flagafecto5ta, 'N') AS flagafecto5ta,
         ISNULL(C.flagafectoAFP, 'N') AS flagafectoafp,
+        ISNULL(C.flagafectoUtilidad, 'N') AS flagafectoutilidad,
         C.XLastUser AS xlastuser,
         C.XLastDate AS xlastdate
     FROM PR_Concept C (NOLOCK)

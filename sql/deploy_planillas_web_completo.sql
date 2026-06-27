@@ -26,6 +26,7 @@
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_processtype_add_procedurename.sql
     - alter_sy_company_add_logoname_signaturename.sql
+    - alter_pr_concept_add_flagafectoutilidad.sql
     - tables_pr_plame_sunat_web.sql
     - SP_PR_EjecutarFormula.sql
     - SP_PR_ReportePromedioLiquidacion.sql
@@ -294,7 +295,33 @@ GO
 
 
 -- ============================================================================
--- [04/98] tables_pr_plame_sunat_web.sql
+-- [04/98] alter_pr_concept_add_flagafectoutilidad.sql
+-- ============================================================================
+
+/*
+    Agrega flag afecto a utilidades en PR_Concept (maestro Conceptos).
+    Usado por: sp_pr_guardarconcepto_web, sp_pr_obtenerconcepto_web.
+*/
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.columns c
+        INNER JOIN sys.tables t ON t.object_id = c.object_id
+        INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = 'dbo'
+      AND t.name = 'PR_Concept'
+      AND c.name = 'flagafectoUtilidad'
+)
+BEGIN
+    ALTER TABLE dbo.PR_Concept
+        ADD flagafectoUtilidad CHAR(1) NOT NULL
+            CONSTRAINT DF_PR_Concept_flagafectoUtilidad DEFAULT ('N');
+END
+GO
+
+
+
+-- ============================================================================
+-- [05/98] tables_pr_plame_sunat_web.sql
 -- ============================================================================
 
 /*
@@ -6703,6 +6730,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarconcepto_web]
     @flaginsertar         CHAR(1) = NULL,
     @flagafectoafp        CHAR(1) = NULL,
     @flagafecto5ta        CHAR(1) = NULL,
+    @flagafectoutilidad   CHAR(1) = NULL,
     @xlastuser            VARCHAR(20) = NULL
 AS
 BEGIN
@@ -6731,6 +6759,7 @@ BEGIN
     SET @flaginsertar = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flaginsertar, '')))), '');
     SET @flagafectoafp = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoafp, '')))), '');
     SET @flagafecto5ta = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafecto5ta, '')))), '');
+    SET @flagafectoutilidad = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoutilidad, '')))), '');
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @modo NOT IN ('I', 'U')
@@ -6807,6 +6836,9 @@ BEGIN
 
     IF @flagafecto5ta IS NULL
         SET @flagafecto5ta = 'N';
+
+    IF @flagafectoutilidad IS NULL
+        SET @flagafectoutilidad = 'N';
 
     IF NOT EXISTS (
         SELECT 1 FROM PR_ConceptType (NOLOCK)
@@ -6902,7 +6934,8 @@ BEGIN
             reporden,
             flaginsertar,
             flagafectoAFP,
-            flagafecto5ta
+            flagafecto5ta,
+            flagafectoUtilidad
         )
         VALUES (
             @concept_nuevo,
@@ -6930,7 +6963,8 @@ BEGIN
             @reporden,
             @flaginsertar,
             @flagafectoafp,
-            @flagafecto5ta
+            @flagafecto5ta,
+            @flagafectoutilidad
         );
 
         SELECT
@@ -6981,7 +7015,8 @@ BEGIN
         reporden = @reporden,
         flaginsertar = @flaginsertar,
         flagafectoAFP = @flagafectoafp,
-        flagafecto5ta = @flagafecto5ta
+        flagafecto5ta = @flagafecto5ta,
+        flagafectoUtilidad = @flagafectoutilidad
     WHERE Concept = @concept
       AND Company = @company;
 
@@ -9374,6 +9409,7 @@ BEGIN
         C.flaginsertar AS flaginsertar,
         ISNULL(C.flagafecto5ta, 'N') AS flagafecto5ta,
         ISNULL(C.flagafectoAFP, 'N') AS flagafectoafp,
+        ISNULL(C.flagafectoUtilidad, 'N') AS flagafectoutilidad,
         C.XLastUser AS xlastuser,
         C.XLastDate AS xlastdate
     FROM PR_Concept C (NOLOCK)

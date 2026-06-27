@@ -676,6 +676,11 @@
                         <i class="bi bi-file-earmark-pdf"></i><span class="sidebar-link-text">Generar Boletas</span>
                     </a>
                 </li>
+                <li class="{{ 'active' if request.endpoint == 'formato_utilidades_page' else '' }}">
+                    <a href="{{ url_for('formato_utilidades_page') }}" title="Constancia de Utilidades">
+                        <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">Constancia de Utilidades</span>
+                    </a>
+                </li>
 
                 <hr class="mx-3 opacity-25 mt-4">
 

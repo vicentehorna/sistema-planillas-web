@@ -31,6 +31,7 @@ BEGIN
       AND PT.ShortName IN (
             'CTS',
             'FIN_DE_MES',
+            'GRATIFICACION',
             'LIQUIDACION',
             'VACACIONES',
             'QUINCENA',

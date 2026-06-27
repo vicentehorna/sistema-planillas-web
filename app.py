@@ -2201,6 +2201,48 @@ def _sanitize_dynamic_procedure_name(name):
     return s
 
 
+_PAYROLL_CALC_PROCEDURE_BY_SHORTNAME = {
+    'GRATIFICACION': 'sp_pr_calcular_gratificacion_persona',
+}
+
+
+def _payroll_calc_procedure_fallback(short_name):
+    return _PAYROLL_CALC_PROCEDURE_BY_SHORTNAME.get(
+        str(short_name or '').strip().upper(), ''
+    )
+
+
+def _cursor_row_field(row, attr_name, index=None):
+    if row is None:
+        return None
+    val = getattr(row, attr_name, None)
+    if val is None and index is not None and len(row) > index:
+        val = row[index]
+    return val
+
+
+def _resolve_payroll_calc_procedure(cursor, cia, processtype):
+    """ProcedureName de PR_ProcessType con respaldo por ShortName conocido."""
+    cursor.execute(
+        """
+        SELECT ProcedureName, Description, ShortName
+        FROM PR_ProcessType
+        WHERE ProcessType = ? AND Company = ?
+        """,
+        (processtype, cia),
+    )
+    row = cursor.fetchone()
+    proc_raw = _cursor_row_field(row, 'ProcedureName', 0)
+    desc_raw = _cursor_row_field(row, 'Description', 1)
+    short_raw = _cursor_row_field(row, 'ShortName', 2)
+    proceso_desc = str(desc_raw or processtype).strip() or processtype
+    proc_raw = str(proc_raw or '').strip()
+    if not proc_raw:
+        proc_raw = _payroll_calc_procedure_fallback(short_raw)
+    sp_name = _sanitize_dynamic_procedure_name(proc_raw)
+    return sp_name, proceso_desc
+
+
 def _drain_pyodbc_cursor(cursor):
     """Consume resultsets pendientes tras EXEC/CALL (evita errores en la siguiente ejecución)."""
     try:
@@ -9588,7 +9630,7 @@ def api_procesar_planilla_procesos():
         try:
             cursor.execute(
                 """
-                SELECT ProcessType, ProcedureName
+                SELECT ProcessType, ProcedureName, ShortName
                 FROM PR_ProcessType
                 WHERE Company = ?
                 """,
@@ -9597,6 +9639,10 @@ def api_procesar_planilla_procesos():
             for pr in _dicts_first_nonempty_resultset(cursor):
                 pt = str(pr.get('ProcessType') or pr.get('processtype') or '').strip()
                 pn = str(pr.get('ProcedureName') or pr.get('procedurename') or '').strip()
+                if not pn:
+                    pn = _payroll_calc_procedure_fallback(
+                        pr.get('ShortName') or pr.get('shortname')
+                    )
                 if pt:
                     proc_names[pt] = pn
         except Exception:
@@ -9881,27 +9927,7 @@ def ejecutar_calculo_planilla():
         conn = get_db_connection()
         cursor = conn.cursor()
         _set_cursor_timeout_payroll(cursor)
-        cursor.execute(
-            """
-            SELECT ProcedureName, Description
-            FROM PR_ProcessType
-            WHERE ProcessType = ? AND Company = ?
-            """,
-            (processtype, cia),
-        )
-        row = cursor.fetchone()
-        proc_raw = None
-        proceso_desc = processtype
-        if row:
-            proc_raw = getattr(row, 'ProcedureName', None)
-            desc_raw = getattr(row, 'Description', None)
-            if proc_raw is None and len(row) > 0:
-                proc_raw = row[0]
-            if desc_raw is None and len(row) > 1:
-                desc_raw = row[1]
-            if desc_raw is not None and str(desc_raw).strip():
-                proceso_desc = str(desc_raw).strip()
-        sp_name = _sanitize_dynamic_procedure_name(proc_raw)
+        sp_name, proceso_desc = _resolve_payroll_calc_procedure(cursor, cia, processtype)
         if not sp_name:
             return jsonify(
                 {
@@ -10043,27 +10069,7 @@ def ejecutar_calculo_streaming():
             conn = get_db_connection()
             cursor = conn.cursor()
             _set_cursor_timeout_payroll(cursor)
-            cursor.execute(
-                """
-                SELECT ProcedureName, Description
-                FROM PR_ProcessType
-                WHERE ProcessType = ? AND Company = ?
-                """,
-                (processtype, cia),
-            )
-            row = cursor.fetchone()
-            proc_raw = None
-            proceso_desc = processtype
-            if row:
-                proc_raw = getattr(row, 'ProcedureName', None)
-                desc_raw = getattr(row, 'Description', None)
-                if proc_raw is None and len(row) > 0:
-                    proc_raw = row[0]
-                if desc_raw is None and len(row) > 1:
-                    desc_raw = row[1]
-                if desc_raw is not None and str(desc_raw).strip():
-                    proceso_desc = str(desc_raw).strip()
-            sp_name = _sanitize_dynamic_procedure_name(proc_raw)
+            sp_name, proceso_desc = _resolve_payroll_calc_procedure(cursor, cia, processtype)
             if not sp_name:
                 yield (
                     'data: '

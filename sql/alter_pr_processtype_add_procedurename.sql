@@ -60,8 +60,9 @@ WHERE RTRIM(LTRIM(Description)) = 'PROVISION GRATIFICACION';
 GO
 
 UPDATE PR_ProcessType
-SET ProcedureName = NULL
-WHERE RTRIM(LTRIM(Description)) = 'GRATIFICACION';
+SET ProcedureName = 'sp_pr_calcular_gratificacion_persona'
+WHERE RTRIM(LTRIM(ShortName)) = 'GRATIFICACION'
+   OR RTRIM(LTRIM(Description)) = 'GRATIFICACION';
 GO
 
 UPDATE PR_ProcessType

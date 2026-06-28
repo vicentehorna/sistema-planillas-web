@@ -3746,6 +3746,47 @@ def enviar_correo_formato_liquidacion(destinatario, nombre_empleado, periodo, se
         return False, str(e)
 
 
+def enviar_correo_formato_utilidades(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
+    if not destinatario or '@' not in str(destinatario):
+        return False, 'Sin correo'
+
+    resend.api_key = _resend_api_key()
+    if not resend.api_key:
+        return False, 'RESEND_API_KEY no configurada.' + _resend_api_key_diagnostico()
+    remitente = _env_var('MAIL_FROM', 'EMAIL_FROM', default='onboarding@resend.dev')
+
+    try:
+        sexo_val = int(sexo)
+    except Exception:
+        sexo_val = 0
+    trato = 'Estimada' if sexo_val == 2 else 'Estimado'
+    periodo_legible = formatear_periodo_texto(periodo)
+    pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+
+    try:
+        params = {
+            'from': f'Recursos Humanos <{remitente}>',
+            'to': destinatario,
+            'subject': f'Constancia de Utilidades - {periodo_legible} - {nombre_empleado}',
+            'html': f"""
+                <p>{trato} {nombre_empleado},</p>
+                <p>Le hacemos entrega de su constancia de participación en utilidades correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                <p>Saludos,<br>Recursos Humanos</p>
+            """,
+            'attachments': [
+                {
+                    'content': pdf_base64,
+                    'filename': _formato_utilidades_pdf_filename(person or nombre_empleado, periodo),
+                }
+            ],
+        }
+        resend.Emails.send(params)
+        return True, 'Enviado'
+    except Exception as e:
+        logging.error('Error en Resend formato utilidades: %s', str(e))
+        return False, str(e)
+
+
 def enviar_correo_certificado_retiro_cts(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
     """Envía certificado retiro CTS por Resend API con PDF adjunto."""
     if not destinatario or '@' not in str(destinatario):
@@ -6454,20 +6495,223 @@ def preview_formato_utilidades():
 @app.route('/procesar_formatos_utilidades_masivo', methods=['POST'])
 @login_required
 def procesar_formatos_utilidades_masivo():
-    return jsonify({'error': 'El formato de utilidades aún no está configurado.'}), 501
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    processtype = str(body.get('process') or body.get('processtype') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    modo = str(body.get('modo') or '').strip().lower()
+    seleccionados = body.get('trabajadores') or []
+    if modo not in ('zip', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+    if not cia or not payroll_type or not processtype or not period:
+        return jsonify({'error': 'Faltan filtros para procesar formatos de utilidades.'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
+
+    if modo == 'zip':
+        company_name = str(body.get('company_name') or cia).strip()
+        safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
+        period_yyyymm = period[:6] if len(period) >= 6 else period
+        safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
+        nombre_zip = f'formatos_utilidades_{safe_company.lower()}_{safe_period}.zip'
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for pid in ids:
+                pdf_data = generar_pdf_formato_utilidades(
+                    {
+                        'person': pid,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'process': processtype,
+                        'period': period,
+                    }
+                )
+                zf.writestr(_formato_utilidades_pdf_filename(pid, period), pdf_data.getvalue())
+        memory_file.seek(0)
+        return send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=nombre_zip,
+            as_attachment=True,
+        )
+
+    return jsonify(
+        {
+            'status': 'pending',
+            'message': 'Use el modo Enviar por Email desde la pantalla.',
+            'total': len(ids),
+        }
+    ), 202
 
 
 @app.route('/descargar_zip_formatos_utilidades')
 @login_required
 def descargar_zip_formatos_utilidades():
-    flash('El formato de utilidades aún no está configurado.', 'warning')
-    return redirect(url_for('formato_utilidades_page'))
+    ensure_user_session()
+    cia = str(request.args.get('cia') or session.get('company') or '').strip()
+    payroll_type = (request.args.get('payroll_type') or '').strip()
+    processtype = (request.args.get('process') or request.args.get('processtype') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    company_name = (request.args.get('company_name') or '').strip()
+    trabajadores_raw = (request.args.get('trabajadores') or '').strip()
+    seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+
+    if not (cia and payroll_type and processtype and period):
+        flash('Faltan filtros para generar el ZIP de formatos de utilidades.', 'warning')
+        return redirect(url_for('formato_utilidades_page'))
+
+    try:
+        empleados = _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, '0', None)
+    except Exception:
+        logging.exception('descargar_zip_formatos_utilidades listado')
+        empleados = []
+
+    if not empleados:
+        flash('No hay formatos de utilidades para procesar en este periodo.', 'warning')
+        return redirect(url_for('formato_utilidades_page'))
+
+    if seleccionados:
+        wanted = set(seleccionados)
+        empleados = [e for e in empleados if str(e.get('person') or '').strip() in wanted]
+        if not empleados:
+            flash('La selección no contiene trabajadores válidos para el periodo indicado.', 'warning')
+            return redirect(url_for('formato_utilidades_page'))
+
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+        for emp in empleados:
+            person_id = str(emp.get('person') or '').strip()
+            if not person_id:
+                continue
+            try:
+                pdf_io = generar_pdf_formato_utilidades(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'process': processtype,
+                        'period': period,
+                        'person': person_id,
+                    }
+                )
+                zip_file.writestr(_formato_utilidades_pdf_filename(person_id, period), pdf_io.getvalue())
+            except Exception:
+                logging.exception('descargar_zip_formatos_utilidades persona=%s', person_id)
+                continue
+
+    zip_buffer.seek(0)
+    safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name or cia).strip('_') or 'COMPANIA'
+    safe_period = re.sub(r'[^0-9]+', '', period) or 'PERIODO'
+    safe_payroll = re.sub(r'[^A-Za-z0-9_\\-]+', '_', payroll_type).strip('_') or 'PLANILLA'
+    nombre_zip = f'Formatos_Utilidades_{safe_company}_{safe_period}_{safe_payroll}.zip'
+    return send_file(
+        zip_buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=nombre_zip,
+    )
 
 
 @app.route('/enviar_formatos_utilidades_masivo', methods=['POST'])
 @login_required
 def enviar_formatos_utilidades_masivo():
-    return jsonify({'error': 'El formato de utilidades aún no está configurado.'}), 501
+    data = request.get_json(silent=True) or {}
+    ensure_user_session()
+    cia = str(data.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    processtype = str(data.get('process') or data.get('processtype') or '').strip()
+    period = _normalize_pr_period(data.get('period'))
+    seleccionados = data.get('empleados', data.get('trabajadores', []))
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
+    if not (cia and payroll_type and processtype and period):
+        return jsonify({'error': 'Faltan filtros para envío de formatos de utilidades.'}), 400
+
+    try:
+        empleados_periodo = _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, '0', None)
+    except Exception:
+        logging.exception('enviar_formatos_utilidades_masivo listado')
+        empleados_periodo = []
+
+    by_person = {}
+    for e in empleados_periodo:
+        pid = str(e.get('person') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(ids)
+    if total == 0:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    def generar_progreso_envio():
+        enviados = 0
+        errores = 0
+        for idx, emp_code in enumerate(ids, start=1):
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp_code).strip()
+            emp_email = str(emp.get('email') or '').strip()
+
+            if not emp_email:
+                errores += 1
+                motivo = 'Sin email'
+                yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+                continue
+
+            try:
+                pdf_buffer = generar_pdf_formato_utilidades(
+                    {
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'process': processtype,
+                        'period': period,
+                        'person': emp_code,
+                    }
+                )
+                exito, msg = enviar_correo_formato_utilidades(
+                    destinatario=emp_email,
+                    nombre_empleado=emp_nombre,
+                    periodo=period,
+                    sexo=emp.get('sex', 0),
+                    pdf_io=pdf_buffer,
+                    person=emp_code,
+                )
+                if exito:
+                    enviados += 1
+                    status = 'Enviado'
+                    detalle = msg
+                    motivo = ''
+                else:
+                    errores += 1
+                    status = 'Error'
+                    detalle = msg or 'No se pudo enviar el correo.'
+                    motivo = detalle
+            except Exception as e:
+                logging.exception('enviar_formatos_utilidades_masivo persona=%s', emp_code)
+                errores += 1
+                status = 'Error'
+                detalle = str(e)
+                motivo = detalle
+
+            yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'email': emp_email, 'status': status, 'detalle': detalle, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
+
+        yield f"data: {json.dumps({'done': True, 'enviados': enviados, 'errores': errores, 'total': total})}\n\n"
+
+    return Response(
+        stream_with_context(generar_progreso_envio()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
 
 
 @app.route('/liquidaciones/certificado_trabajo')

@@ -818,6 +818,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    cia: filtros.cia,
                     empleados: ids,
                     period: filtros.period,
                     payroll_type: filtros.payroll_type,
@@ -941,6 +942,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         const seleccionados = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
         const qs = new URLSearchParams({
+            cia: cboCia.value.trim(),
             payroll_type: pt,
             process: procesoFijo(),
             period: per,

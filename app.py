@@ -260,6 +260,80 @@ def _normalize_pr_period(period_raw):
     return str(period_raw or '').strip()
 
 
+def _ejercicio_utilidades_from_period(period_raw):
+    """
+    Ejercicio de utilidades = año del periodo de pago menos uno.
+    Ej.: utilidad calculada en marzo 2026 (periodo 202603…) → ejercicio 2025.
+    """
+    period = _normalize_pr_period(period_raw)
+    if len(period) >= 4 and period[:4].isdigit():
+        return str(int(period[:4]) - 1)
+    return ''
+
+
+def _parse_fecha_flexible(fecha_raw):
+    """Acepta YYYY-MM-DD, YYYY/MM/DD o YYYYMMDD y devuelve date o None."""
+    s = str(fecha_raw or '').strip()
+    if not s:
+        return None
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y%m%d'):
+        try:
+            return datetime.strptime(s[:10] if fmt != '%Y%m%d' else s[:8], fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _add_months_to_date(base_date, months):
+    from calendar import monthrange
+
+    month_index = base_date.month - 1 + int(months)
+    year = base_date.year + month_index // 12
+    month = month_index % 12 + 1
+    day = min(base_date.day, monthrange(year, month)[1])
+    return date(year, month, day)
+
+
+def _normalize_periodo_yyyymm(period_raw):
+    """Normaliza periodo tributario PLAME (YYYYMM) desde YYYYMM, YYYY-MM o YYYYMMDD."""
+    s = str(period_raw or '').strip().replace('-', '').replace('/', '')
+    if len(s) >= 6 and s[:6].isdigit():
+        mm = int(s[4:6])
+        if 1 <= mm <= 12:
+            return s[:6]
+    norm = _normalize_pr_period(period_raw)
+    if len(norm) >= 6 and norm[:6].isdigit():
+        mm = int(norm[4:6])
+        if 1 <= mm <= 12:
+            return norm[:6]
+    return ''
+
+
+def _validar_rango_periodos_reporte(desde_raw, hasta_raw, max_meses=12):
+    """
+    Normaliza rango de periodos tributarios (YYYYMM) y valida:
+      - periodos válidos
+      - desde <= hasta
+      - rango máximo de max_meses meses
+    Devuelve (periodo_desde, periodo_hasta, error).
+    """
+    desde_yyyymm = _normalize_periodo_yyyymm(desde_raw)
+    hasta_yyyymm = _normalize_periodo_yyyymm(hasta_raw)
+    if len(desde_yyyymm) != 6 or len(hasta_yyyymm) != 6:
+        return None, None, 'Seleccione periodos válidos (desde y hasta).'
+    try:
+        desde_dt = date(int(desde_yyyymm[:4]), int(desde_yyyymm[4:6]), 1)
+        hasta_dt = date(int(hasta_yyyymm[:4]), int(hasta_yyyymm[4:6]), 1)
+    except Exception:
+        return None, None, 'Seleccione periodos válidos (desde y hasta).'
+    if hasta_dt < desde_dt:
+        return None, None, 'El periodo hasta debe ser mayor o igual al periodo desde.'
+    limite = _add_months_to_date(desde_dt, max_meses)
+    if hasta_dt > limite:
+        return None, None, f'El rango de periodos no puede superar {max_meses} meses.'
+    return desde_yyyymm, hasta_yyyymm, None
+
+
 def _boleta_pdf_filename(person, period_raw):
     """Nombre estándar: boleta_{person}_{yyyymmdd}.pdf"""
     person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
@@ -4039,6 +4113,12 @@ def reporte_listado_pagos_page():
     return render_template('reporte_listado_pagos.html')
 
 
+@app.route('/reporte-planilla-por-conceptos')
+@login_required
+def reporte_planilla_por_conceptos_page():
+    return render_template('reporte_planilla_por_conceptos.html')
+
+
 @app.route('/procesar_planilla')
 @login_required
 def procesar_planilla_page():
@@ -4116,6 +4196,11 @@ def _concepto_detalle_dict(r):
 def _normalize_flag_yn(value, default='N'):
     s = str(value or default).strip().upper()
     return s if s in ('Y', 'N') else default
+
+
+def _filtro_afecto_reporte(value):
+    """'Y' = solo afectos; cualquier otro valor = todos."""
+    return 'Y' if str(value or '').strip().upper() in ('Y', 'TRUE', '1', 'ON', 'S', 'SI') else 'T'
 
 
 @app.route('/api/conceptos/listado', methods=['POST'])
@@ -6276,6 +6361,75 @@ def get_lista_formato_utilidades():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/get_detalle_calculo_formato_utilidades', methods=['POST'])
+@login_required
+def get_detalle_calculo_formato_utilidades():
+    """
+    sp_pr_detallecalculoutilidades_web: detalle de conceptos afectos a utilidad del ejercicio.
+    """
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '').strip()
+    nombre = str(body.get('nombre') or '').strip()
+
+    if not cia or not payroll_type or not period or not person:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, periodo o trabajador.'}), 400
+
+    ejercicio = _ejercicio_utilidades_from_period(period)
+    if not ejercicio:
+        return jsonify({'error': 'Periodo inválido para determinar el ejercicio de utilidades.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_detallecalculoutilidades_web @cia=?, @payrolltype=?, @ejercicio=?, @person=?',
+            (cia, payroll_type, ejercicio, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = []
+        total = 0.0
+        for r in rows:
+            try:
+                importe = float(r.get('importe') or 0)
+            except (TypeError, ValueError):
+                importe = 0.0
+            total += importe
+            detalle.append(
+                {
+                    'proceso': str(r.get('proceso') or '').strip(),
+                    'proceso_descripcion': str(r.get('proceso_descripcion') or '').strip(),
+                    'periodo': _jsonable_value(r.get('periodo')) or '',
+                    'concepto': str(r.get('concepto') or '').strip(),
+                    'formulacode': str(r.get('formulacode') or '').strip(),
+                    'importe': importe,
+                }
+            )
+        return jsonify(
+            {
+                'person': person,
+                'nombre': nombre,
+                'period': period,
+                'ejercicio': ejercicio,
+                'rows': detalle,
+                'total': total,
+            }
+        )
+    except Exception as e:
+        logging.exception('get_detalle_calculo_formato_utilidades')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/preview_formato_utilidades')
 @login_required
 def preview_formato_utilidades():
@@ -8081,6 +8235,35 @@ def api_periodos():
                 pass
 
 
+@app.route('/api/selectores/periodos-cia')
+@login_required
+def api_periodos_cia():
+    """sp_pr_selectorperiodos_cia_web @cia → period (YYYYMMDD), periodo (YYYY-MM-DD)."""
+    cia = request.args.get('cia', '').strip()
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodos_cia_web @cia=?",
+            (cia,),
+        )
+        rows = cursor.fetchall()
+        data = [{"id": r.period, "text": r.periodo} for r in rows]
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_periodos_cia")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/concepto-neto')
 @login_required
 def api_concepto_neto():
@@ -9468,6 +9651,80 @@ def api_reporte_listado_pagos():
     except Exception as e:
         logging.exception("api_reporte_listado_pagos")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/planilla-por-conceptos', methods=['POST'])
+@login_required
+def api_reporte_planilla_por_conceptos():
+    """sp_pr_reporteplanillaporconceptos_web: conceptos de ingreso por rango de periodos."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    periodo_desde_raw = body.get('periodo_desde') or body.get('fecha_desde') or body.get('desde')
+    periodo_hasta_raw = body.get('periodo_hasta') or body.get('fecha_hasta') or body.get('hasta')
+
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+
+    periodo_desde, periodo_hasta, err_rango = _validar_rango_periodos_reporte(
+        periodo_desde_raw,
+        periodo_hasta_raw,
+        max_meses=12,
+    )
+    if err_rango:
+        return jsonify({'error': err_rango}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            'EXEC sp_pr_reporteplanillaporconceptos_web '
+            '@company=?, @periodo_desde=?, @periodo_hasta=?, '
+            '@filtro_afecto5ta=?, @filtro_afectoafp=?, @filtro_afectoutilidad=?',
+            (
+                cia,
+                periodo_desde,
+                periodo_hasta,
+                _filtro_afecto_reporte(body.get('filtro_afecto5ta')),
+                _filtro_afecto_reporte(body.get('filtro_afectoafp')),
+                _filtro_afecto_reporte(body.get('filtro_afectoutilidad')),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            try:
+                importe = float(r.get('importe') or 0)
+            except (TypeError, ValueError):
+                importe = 0.0
+            resultado.append(
+                {
+                    'dni': str(r.get('dni') or '').strip(),
+                    'nombre': str(r.get('nombre') or '').strip(),
+                    'proceso': str(r.get('proceso') or '').strip(),
+                    'planilla': str(r.get('planilla') or '').strip(),
+                    'periodo': _jsonable_value(r.get('periodo')) or '',
+                    'concepto': str(r.get('concepto') or '').strip(),
+                    'importe': importe,
+                }
+            )
+        return jsonify({
+            'rows': resultado,
+            'count': len(resultado),
+            'periodo_desde': periodo_desde,
+            'periodo_hasta': periodo_hasta,
+        })
+    except Exception as e:
+        logging.exception('api_reporte_planilla_por_conceptos')
+        return jsonify({'error': str(e)}), 500
     finally:
         if conn:
             try:

@@ -174,20 +174,30 @@
             text-align: center;
             padding: 0 8px;
         }
+        .firma-spacer {
+            height: 72px;
+            position: relative;
+            text-align: center;
+        }
+        .firma-spacer .firma-etiqueta {
+            position: absolute;
+            bottom: 2px;
+            left: 0;
+            right: 0;
+            margin: 0;
+        }
         .firma-img {
             max-height: 72px;
             max-width: 220px;
             object-fit: contain;
+            object-position: center bottom;
             display: block;
-            margin: 0 auto 4px;
+            margin: 0 auto;
         }
         .linea-firma {
             border-top: 1.5px solid #1a4b84;
             width: 78%;
-            margin: 40px auto 6px;
-        }
-        .linea-firma.con-imagen {
-            margin: 2px auto 6px;
+            margin: 0 auto 6px;
         }
         .firma-etiqueta {
             font-size: 8px;
@@ -337,13 +347,17 @@
                 <td>
                     {% if firma_src %}
                     <img src="{{ firma_src }}" alt="Firma" class="firma-img">
+                    {% else %}
+                    <div class="firma-spacer"></div>
                     {% endif %}
-                    <div class="linea-firma{% if firma_src %} con-imagen{% endif %}"></div>
+                    <div class="linea-firma"></div>
                     <p class="firma-nombre">{{ cab.representative or '' }}</p>
                     <p class="firma-cargo">{{ cab.rep_position or 'Representante legal' }}</p>
                 </td>
                 <td>
-                    <p class="firma-etiqueta">Trabajador</p>
+                    <div class="firma-spacer">
+                        <span class="firma-etiqueta">Trabajador</span>
+                    </div>
                     <div class="linea-firma"></div>
                     <p class="firma-nombre">{{ cab.person_name or '' }}</p>
                     <p class="firma-cargo">DNI: {{ cab.person_document or '' }}</p>

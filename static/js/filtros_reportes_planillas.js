@@ -27,6 +27,7 @@
     const STORAGE_KEY_FORMATO_UTILIDADES = 'filtros_formato_utilidades';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
     const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
+    const STORAGE_KEY_PLANILLA_POR_CONCEPTOS = 'filtros_planilla_por_conceptos';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -2131,6 +2132,58 @@
         };
     }
 
+    function crearPersistenciaPlanillaPorConceptos() {
+        function guardar() {
+            try {
+                const chk5 = document.getElementById('chkAfecto5ta');
+                const chkAfp = document.getElementById('chkAfectoAfp');
+                const chkUtil = document.getElementById('chkAfectoUtilidad');
+                const estado = {
+                    cia: val('cboCompania'),
+                    periodo_desde: val('cboPeriodoDesde'),
+                    periodo_hasta: val('cboPeriodoHasta'),
+                    filtro_afecto5ta: chk5 && chk5.checked ? 'Y' : 'T',
+                    filtro_afectoafp: chkAfp && chkAfp.checked ? 'Y' : 'T',
+                    filtro_afectoutilidad: chkUtil && chkUtil.checked ? 'Y' : 'T',
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_PLANILLA_POR_CONCEPTOS, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros planilla por conceptos: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_PLANILLA_POR_CONCEPTOS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodoDesde', 'cboPeriodoHasta'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            ['chkAfecto5ta', 'chkAfectoAfp', 'chkAfectoUtilidad'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaCalculoQuintaTrabajador() {
         function guardar() {
             try {
@@ -2262,6 +2315,7 @@
         STORAGE_KEY_CERTIFICADO_RETIRO_CTS,
         STORAGE_KEY_FORMATO_LIQUIDACION,
         STORAGE_KEY_FORMATO_UTILIDADES,
+        STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         obtenerPeriodoActivo,
@@ -2357,6 +2411,9 @@
         },
         formatoUtilidades: function () {
             return crearPersistenciaFormatoUtilidades();
+        },
+        planillaPorConceptos: function () {
+            return crearPersistenciaPlanillaPorConceptos();
         },
         certificadoQuinta: function () {
             return crearPersistenciaCertificadoQuinta();

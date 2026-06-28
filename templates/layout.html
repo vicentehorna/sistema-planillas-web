@@ -632,7 +632,7 @@
                     </ul>
                 </li>
 
-                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones') %}
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
                        class="sidebar-parent-link"
@@ -662,6 +662,11 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
                             <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio de Liquidaciones">
                                 <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio de Liquidaciones</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_planilla_por_conceptos_page' else '' }}">
+                            <a href="{{ url_for('reporte_planilla_por_conceptos_page') }}" title="Planilla por Conceptos">
+                                <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Planilla por Conceptos</span>
                             </a>
                         </li>
                     </ul>

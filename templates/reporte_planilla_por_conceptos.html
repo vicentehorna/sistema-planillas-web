@@ -1,0 +1,759 @@
+{% extends "layout.html" %}
+
+{% block title %}Planilla por Conceptos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-planilla-conceptos {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-planilla-conceptos .col-nombre {
+        max-width: 17.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .table-planilla-conceptos .col-proceso {
+        max-width: 7.25rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .table-planilla-conceptos th,
+    .table-planilla-conceptos td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-planilla-conceptos thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-planilla-conceptos .col-importe {
+        width: 4.5rem;
+        min-width: 4.5rem;
+        max-width: 5rem;
+        text-align: right;
+    }
+
+    .filtros-afecto .form-check-label {
+        font-size: 0.82rem;
+    }
+
+    .filtros-planilla-conceptos-row .filtro-compania {
+        width: 11rem;
+        max-width: 100%;
+    }
+
+    .filtros-planilla-conceptos-row .filtro-periodo {
+        width: 7.25rem;
+        max-width: 100%;
+    }
+
+    .filtros-planilla-conceptos-row .filtro-periodo .form-select {
+        min-width: 7.25rem;
+    }
+
+    .filtros-afecto-inline {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem 1rem;
+        padding-bottom: 0.15rem;
+    }
+
+    .filtros-afecto-inline .form-check {
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+
+    .reporte-estado-carga {
+        min-height: 0;
+    }
+
+    .reporte-estado-carga:not(:empty) {
+        min-height: 1rem;
+        margin-top: 0.25rem;
+    }
+
+    .reporte-estado-carga.is-active {
+        color: #1a4b84;
+        font-weight: 600;
+    }
+
+    .table-scroll-container.is-loading {
+        opacity: 0.45;
+        pointer-events: none;
+    }
+
+    .panel-cargando-reporte {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 1rem;
+        color: #6c757d;
+    }
+
+    .card-filtros-planilla-conceptos .card-body {
+        padding: 0.65rem 1rem 0.75rem;
+    }
+
+    .card-resultado-planilla-conceptos {
+        margin-top: 0.25rem;
+    }
+
+    .card-resultado-planilla-conceptos .card-body {
+        padding: 0.5rem 1rem 0.75rem;
+    }
+
+    .card-resultado-planilla-conceptos .titulo-reporte {
+        font-size: 1.05rem;
+        margin-bottom: 0.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-2 card-filtros-planilla-conceptos">
+    <div class="card-body">
+        <form id="frmPlanillaPorConceptos" class="row g-2">
+            <div class="col-12 filtros-planilla-conceptos-row">
+                <div class="d-flex flex-wrap align-items-end gap-2 gap-md-3">
+                    <div class="filtro-compania">
+                        <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                        <select id="cboCompania" class="form-select form-select-sm" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="filtro-periodo">
+                        <label for="cboPeriodoDesde" class="form-label small fw-bold text-muted mb-1">Periodo desde</label>
+                        <select id="cboPeriodoDesde" class="form-select form-select-sm" required disabled>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="filtro-periodo">
+                        <label for="cboPeriodoHasta" class="form-label small fw-bold text-muted mb-1">Periodo hasta</label>
+                        <select id="cboPeriodoHasta" class="form-select form-select-sm" required disabled>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="filtros-afecto-inline filtros-afecto">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkAfecto5ta">
+                            <label class="form-check-label" for="chkAfecto5ta">Afecto 5ta</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkAfectoAfp">
+                            <label class="form-check-label" for="chkAfectoAfp">Afecto AFP</label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkAfectoUtilidad">
+                            <label class="form-check-label" for="chkAfectoUtilidad">Afecto utilidad</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <span class="btn-consultar-label"><i class="bi bi-search"></i> Consultar</span>
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+            <div class="col-12">
+                <div id="lblEstadoCarga" class="reporte-estado-carga small text-muted" aria-live="polite"></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none card-resultado-planilla-conceptos" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold titulo-reporte">PLANILLA POR CONCEPTOS</h4>
+        <div id="panelCargandoReporte" class="panel-cargando-reporte d-none">
+            <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+            <div id="lblCargaDetalle" class="small">Cargando reporte...</div>
+        </div>
+        <div class="table-scroll-container" id="scrollReporte">
+            <table class="table table-bordered table-sm table-hover table-planilla-conceptos align-middle">
+                <thead>
+                    <tr>
+                        <th>DNI</th>
+                        <th class="col-nombre">Nombre del trabajador</th>
+                        <th class="col-proceso">Proceso</th>
+                        <th>Planilla</th>
+                        <th>Periodo</th>
+                        <th>Concepto</th>
+                        <th class="col-importe">Importe</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-reporte"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.planillaPorConceptos
+        ? window.FiltrosPlanillasReportes.planillaPorConceptos()
+        : null;
+
+    const URL_REPORTE = {{ url_for('api_reporte_planilla_por_conceptos') | tojson }};
+    const HEADERS = ['DNI', 'Nombre del trabajador', 'Proceso', 'Planilla', 'Periodo', 'Concepto', 'Importe'];
+    const IDX_IMPORTE = 6;
+    const RENDER_CHUNK = 250;
+    let lastExport = null;
+    let consultaAbort = null;
+    let renderToken = 0;
+
+    const btnConsultar = document.getElementById('btnConsultar');
+    const lblEstadoCarga = document.getElementById('lblEstadoCarga');
+    const lblCargaDetalle = document.getElementById('lblCargaDetalle');
+    const panelCargandoReporte = document.getElementById('panelCargandoReporte');
+    const scrollReporte = document.getElementById('scrollReporte');
+    const btnExportExcel = document.getElementById('btnExportExcel');
+
+    function setEstadoCarga(activo, mensaje) {
+        if (lblEstadoCarga) {
+            if (mensaje) {
+                lblEstadoCarga.textContent = mensaje;
+            } else if (!activo) {
+                lblEstadoCarga.textContent = '';
+            } else {
+                lblEstadoCarga.textContent = 'Cargando...';
+            }
+            lblEstadoCarga.classList.toggle('is-active', !!(activo || mensaje));
+        }
+        if (lblCargaDetalle && activo && mensaje) {
+            lblCargaDetalle.textContent = mensaje;
+        }
+    }
+
+    function setConsultandoUI(activo) {
+        if (btnConsultar) {
+            btnConsultar.disabled = !!activo;
+            const label = btnConsultar.querySelector('.btn-consultar-label');
+            if (label) {
+                label.innerHTML = activo
+                    ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Consultando...'
+                    : '<i class="bi bi-search"></i> Consultar';
+            }
+        }
+        if (activo && btnExportExcel) {
+            btnExportExcel.disabled = true;
+        }
+    }
+
+    function mostrarPanelCarga(visible) {
+        if (panelCargandoReporte) panelCargandoReporte.classList.toggle('d-none', !visible);
+        if (scrollReporte) scrollReporte.classList.toggle('d-none', visible);
+    }
+
+    function yieldUi() {
+        return new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function formatearImporte(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatearPeriodo(periodo) {
+        const s = String(periodo || '').trim();
+        if (/^\d{8}$/.test(s)) {
+            return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+        }
+        return s;
+    }
+
+    function filtroAfectoFromCheck(el) {
+        return el && el.checked ? 'Y' : 'T';
+    }
+
+    function setCheckFromFiltro(el, val) {
+        if (!el) return;
+        el.checked = String(val || '').trim().toUpperCase() === 'Y';
+    }
+
+    function normalizarPeriodoYyyymm(valor) {
+        const s = String(valor || '').replace(/\D/g, '');
+        if (/^\d{6}$/.test(s)) return s;
+        if (/^\d{8}$/.test(s)) return s.slice(0, 6);
+        return '';
+    }
+
+    function parsePeriodoMes(yyyymm) {
+        const s = normalizarPeriodoYyyymm(yyyymm);
+        if (!/^\d{6}$/.test(s)) return null;
+        const y = Number(s.slice(0, 4));
+        const m = Number(s.slice(4, 6)) - 1;
+        if (m < 0 || m > 11) return null;
+        return new Date(y, m, 1);
+    }
+
+    function addMonths(fecha, meses) {
+        const d = new Date(fecha.getTime());
+        d.setMonth(d.getMonth() + meses);
+        return d;
+    }
+
+    function validarRangoPeriodos(desdeStr, hastaStr, maxMeses) {
+        const desde = parsePeriodoMes(desdeStr);
+        const hasta = parsePeriodoMes(hastaStr);
+        if (!desde || !hasta) {
+            return { ok: false, error: 'Seleccione periodos válidos (desde y hasta).' };
+        }
+        if (hasta < desde) {
+            return { ok: false, error: 'El periodo hasta debe ser mayor o igual al periodo desde.' };
+        }
+        const limite = addMonths(desde, maxMeses);
+        if (hasta > limite) {
+            return { ok: false, error: `El rango de periodos no puede superar ${maxMeses} meses.` };
+        }
+        return { ok: true };
+    }
+
+    function clonarOpcionesSelect(origen, destino) {
+        if (!origen || !destino) return;
+        destino.innerHTML = origen.innerHTML;
+        destino.disabled = origen.disabled;
+    }
+
+    function seleccionarPeriodo(select, valor) {
+        if (!select || !valor) return false;
+        const want = normalizarPeriodoYyyymm(valor);
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => normalizarPeriodoYyyymm(o.value) === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function rangoAnioActualDefecto(selectElement) {
+        const hoy = new Date();
+        const y = hoy.getFullYear();
+        const mesActual = String(hoy.getMonth() + 1).padStart(2, '0');
+        const desdePreferido = `${y}01`;
+        const hastaPreferido = `${y}${mesActual}`;
+        const periodos = Array.from(selectElement.options)
+            .map((o) => normalizarPeriodoYyyymm(o.value))
+            .filter((p) => /^\d{6}$/.test(p) && p.startsWith(String(y)));
+        if (!periodos.length) return { desde: '', hasta: '' };
+        periodos.sort();
+        const desde = periodos.includes(desdePreferido) ? desdePreferido : periodos[0];
+        const candidatosHasta = periodos.filter((p) => p <= hastaPreferido);
+        const hasta = candidatosHasta.length
+            ? candidatosHasta[candidatosHasta.length - 1]
+            : periodos[periodos.length - 1];
+        return { desde, hasta };
+    }
+
+    function establecerRangoPeriodos(desde, hasta) {
+        const elDesde = document.getElementById('cboPeriodoDesde');
+        const elHasta = document.getElementById('cboPeriodoHasta');
+        if (elDesde && desde) seleccionarPeriodo(elDesde, desde);
+        if (elHasta && hasta) seleccionarPeriodo(elHasta, hasta);
+    }
+
+    async function poblarPeriodosPlame(cia, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = true;
+        }
+    }
+
+    async function poblarPeriodosPlameRango(cia, cboDesde, cboHasta) {
+        if (!cia) {
+            cboDesde.innerHTML = '<option value="">Seleccione...</option>';
+            cboHasta.innerHTML = '<option value="">Seleccione...</option>';
+            cboDesde.disabled = true;
+            cboHasta.disabled = true;
+            return;
+        }
+        await poblarPeriodosPlame(cia, cboDesde);
+        clonarOpcionesSelect(cboDesde, cboHasta);
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function payloadFiltros() {
+        return {
+            cia: document.getElementById('cboCompania').value.trim(),
+            periodo_desde: document.getElementById('cboPeriodoDesde').value.trim(),
+            periodo_hasta: document.getElementById('cboPeriodoHasta').value.trim(),
+            filtro_afecto5ta: filtroAfectoFromCheck(document.getElementById('chkAfecto5ta')),
+            filtro_afectoafp: filtroAfectoFromCheck(document.getElementById('chkAfectoAfp')),
+            filtro_afectoutilidad: filtroAfectoFromCheck(document.getElementById('chkAfectoUtilidad')),
+        };
+    }
+
+    function buildRowHtml(row) {
+        const importe = Number(row.importe) || 0;
+        const proceso = row.proceso || '';
+        const concepto = row.concepto || '';
+        return `<tr>
+            <td class="font-monospace">${escapeHtml(row.dni)}</td>
+            <td class="col-nombre" title="${escapeHtml(row.nombre)}">${escapeHtml(row.nombre)}</td>
+            <td class="col-proceso" title="${escapeHtml(proceso)}">${escapeHtml(proceso)}</td>
+            <td>${escapeHtml(row.planilla)}</td>
+            <td class="font-monospace">${escapeHtml(formatearPeriodo(row.periodo))}</td>
+            <td title="${escapeHtml(concepto)}">${escapeHtml(concepto)}</td>
+            <td class="col-importe">${formatearImporte(importe)}</td>
+        </tr>`;
+    }
+
+    function buildExcelRow(row) {
+        const importe = Number(row.importe) || 0;
+        return [
+            row.dni || '',
+            row.nombre || '',
+            row.proceso || '',
+            row.planilla || '',
+            formatearPeriodo(row.periodo),
+            row.concepto || '',
+            importe,
+        ];
+    }
+
+    async function renderizarTabla(rows, token) {
+        const tbody = document.getElementById('tbody-reporte');
+        tbody.innerHTML = '';
+        const excelRows = [];
+        const total = rows.length;
+
+        if (scrollReporte) scrollReporte.classList.add('is-loading');
+
+        for (let i = 0; i < total; i += RENDER_CHUNK) {
+            if (token !== renderToken) return null;
+
+            const slice = rows.slice(i, i + RENDER_CHUNK);
+            let html = '';
+            for (const row of slice) {
+                html += buildRowHtml(row);
+                excelRows.push(buildExcelRow(row));
+            }
+            tbody.insertAdjacentHTML('beforeend', html);
+
+            if (i + RENDER_CHUNK < total) {
+                await yieldUi();
+            }
+        }
+
+        if (scrollReporte) scrollReporte.classList.remove('is-loading');
+        document.getElementById('lblRowCount').textContent = String(total);
+        return { excelRows, count: total };
+    }
+
+    async function exportExcel(payload) {
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+        setEstadoCarga(true, 'Generando archivo Excel...');
+        if (btnExportExcel) btnExportExcel.disabled = true;
+        try {
+        const headers = payload.headers || HEADERS;
+        const filas = payload.data || [];
+        const ncols = headers.length;
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Planilla por Conceptos', { views: [{ showGridLines: true }] });
+
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+
+        let rowIdx = 1;
+        ws.mergeCells(rowIdx, 1, rowIdx, ncols);
+        ws.getCell(rowIdx, 1).value = 'Planilla por Conceptos';
+        ws.getCell(rowIdx, 1).font = { bold: true, size: 14 };
+        ws.getCell(rowIdx, 1).alignment = { horizontal: 'center' };
+        rowIdx += 2;
+
+        const hr = ws.addRow(headers);
+        hr.eachCell({ includeEmpty: true }, (cell) => {
+            cell.font = { bold: true };
+            cell.fill = fill('FFF8F9FA');
+            cell.border = allBorders;
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+        });
+        rowIdx += 1;
+
+        filas.forEach((rowVals) => {
+            const r = ws.addRow(rowVals || []);
+            r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                const idx = colNumber - 1;
+                const v = rowVals && rowVals[idx];
+                cell.border = allBorders;
+                if (idx === IDX_IMPORTE && typeof v === 'number' && Number.isFinite(v)) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                }
+            });
+            rowIdx += 1;
+        });
+
+        ws.getColumn(1).width = 14;
+        ws.getColumn(2).width = 34;
+        ws.getColumn(3).width = 22;
+        ws.getColumn(4).width = 22;
+        ws.getColumn(5).width = 12;
+        ws.getColumn(6).width = 34;
+        ws.getColumn(7).width = 10;
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
+        a.download = `planilla_por_conceptos_${safe(payload.meta?.periodo_desde)}_${safe(payload.meta?.periodo_hasta)}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        } finally {
+            setEstadoCarga(false);
+            if (btnExportExcel) btnExportExcel.disabled = !(payload.data && payload.data.length);
+        }
+    }
+
+    async function ejecutarConsulta() {
+        if (consultaAbort) {
+            consultaAbort.abort();
+        }
+        consultaAbort = new AbortController();
+        const signal = consultaAbort.signal;
+        renderToken += 1;
+        const token = renderToken;
+
+        lastExport = null;
+        setConsultandoUI(true);
+        document.getElementById('cardResultado').classList.remove('d-none');
+        document.getElementById('tbody-reporte').innerHTML = '';
+        document.getElementById('lblRowCount').textContent = '0';
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        const filtros = payloadFiltros();
+        if (!filtros.cia) {
+            setConsultandoUI(false);
+            document.getElementById('cardResultado').classList.add('d-none');
+            alert('Seleccione una compañía.');
+            return;
+        }
+        const validacion = validarRangoPeriodos(filtros.periodo_desde, filtros.periodo_hasta, 12);
+        if (!validacion.ok) {
+            setConsultandoUI(false);
+            document.getElementById('cardResultado').classList.add('d-none');
+            alert(validacion.error);
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtros),
+                signal,
+            });
+            if (signal.aborted) return;
+
+            const payload = await res.json();
+            if (signal.aborted) return;
+
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultado').classList.add('d-none');
+                document.getElementById('lblRowCount').textContent = '0';
+                alert(payload.error || 'Error al generar el reporte.');
+                return;
+            }
+
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            const built = await renderizarTabla(rows, token);
+            if (!built || signal.aborted || token !== renderToken) return;
+
+            lastExport = {
+                headers: HEADERS,
+                data: built.excelRows,
+                meta: {
+                    compania: selectedText('cboCompania'),
+                    periodo_desde: filtros.periodo_desde,
+                    periodo_hasta: filtros.periodo_hasta,
+                },
+            };
+            if (btnExportExcel) btnExportExcel.disabled = rows.length === 0;
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            console.error(e);
+            document.getElementById('cardResultado').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        } finally {
+            setConsultandoUI(false);
+            if (scrollReporte) scrollReporte.classList.remove('is-loading');
+        }
+    }
+
+    const poblarSelect = async (url, selectElement) => {
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = 'Seleccione...';
+            selectElement.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    };
+
+    document.getElementById('frmPlanillaPorConceptos').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+
+    document.getElementById('btnExportExcel').addEventListener('click', function () {
+        if (lastExport) exportExcel(lastExport);
+    });
+
+    ['chkAfecto5ta', 'chkAfectoAfp', 'chkAfectoUtilidad'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', () => { if (filtrosPersist) filtrosPersist.guardar(); });
+    });
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodoDesde = document.getElementById('cboPeriodoDesde');
+    const cboPeriodoHasta = document.getElementById('cboPeriodoHasta');
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    let periodoDesdeGuardado = '';
+    let periodoHastaGuardado = '';
+
+    if (filtrosPersist) {
+        const guardado = filtrosPersist.leer();
+        if (guardado && guardado.cia && optionExists(cboCia, String(guardado.cia).trim())) {
+            cboCia.value = String(guardado.cia).trim();
+            periodoDesdeGuardado = normalizarPeriodoYyyymm(guardado.periodo_desde || guardado.fecha_desde);
+            periodoHastaGuardado = normalizarPeriodoYyyymm(guardado.periodo_hasta || guardado.fecha_hasta);
+            setCheckFromFiltro(document.getElementById('chkAfecto5ta'), guardado.filtro_afecto5ta);
+            setCheckFromFiltro(document.getElementById('chkAfectoAfp'), guardado.filtro_afectoafp);
+            setCheckFromFiltro(document.getElementById('chkAfectoUtilidad'), guardado.filtro_afectoutilidad);
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    if (!String(cboCia.value || '').trim()) {
+        seleccionarCompaniaInsensitive(cboCia, 'BGT');
+    }
+
+    const ciaInicial = cboCia.value.trim();
+    if (ciaInicial) {
+        await poblarPeriodosPlameRango(ciaInicial, cboPeriodoDesde, cboPeriodoHasta);
+        if (periodoDesdeGuardado && periodoHastaGuardado
+            && validarRangoPeriodos(periodoDesdeGuardado, periodoHastaGuardado, 12).ok
+            && seleccionarPeriodo(cboPeriodoDesde, periodoDesdeGuardado)
+            && seleccionarPeriodo(cboPeriodoHasta, periodoHastaGuardado)) {
+            // rango restaurado desde localStorage
+        } else {
+            const defecto = rangoAnioActualDefecto(cboPeriodoDesde);
+            establecerRangoPeriodos(defecto.desde, defecto.hasta);
+        }
+    }
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value.trim();
+        await poblarPeriodosPlameRango(cia, cboPeriodoDesde, cboPeriodoHasta);
+        if (cia) {
+            const defecto = rangoAnioActualDefecto(cboPeriodoDesde);
+            establecerRangoPeriodos(defecto.desde, defecto.hasta);
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    [cboPeriodoDesde, cboPeriodoHasta].forEach((el) => {
+        if (el) el.addEventListener('change', () => { if (filtrosPersist) filtrosPersist.guardar(); });
+    });
+
+    if (ciaInicial && cboPeriodoDesde.value.trim() && cboPeriodoHasta.value.trim()) {
+        setTimeout(() => ejecutarConsulta(), 150);
+    }
+});
+</script>
+{% endblock %}

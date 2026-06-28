@@ -63,6 +63,25 @@
         border-color: #fff;
     }
 
+    .table-formato-utilidades .formato-acciones {
+        display: inline-flex;
+        gap: 0.25rem;
+        justify-content: center;
+    }
+
+    .table-formato-utilidades tbody tr.formato-row-located .btn-outline-info {
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.85);
+        background-color: rgba(255, 255, 255, 0.12);
+    }
+
+    .table-formato-utilidades tbody tr.formato-row-located .btn-outline-info:hover,
+    .table-formato-utilidades tbody tr.formato-row-located .btn-outline-info:focus {
+        color: #0d6efd;
+        background-color: #fff;
+        border-color: #fff;
+    }
+
     .table-formato-utilidades .form-check-input {
         width: 0.75rem;
         height: 0.75rem;
@@ -145,7 +164,7 @@
                         <th style="width: 14rem;">Email</th>
                         <th style="width: 7rem;">F. ingreso</th>
                         <th style="width: 7rem;">F. cese</th>
-                        <th style="width: 8rem;" class="text-center">Acciones</th>
+                        <th style="width: 10rem;" class="text-center">Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyFormatos"></tbody>
@@ -154,6 +173,44 @@
 
         <div class="mt-2 text-muted small fw-bold">
             <span id="lblFormatosCount">0 registros</span>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDetalleCalculoUtilidades" tabindex="-1" aria-labelledby="modalDetalleCalculoUtilidadesLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold" id="modalDetalleCalculoUtilidadesLabel">Detalle de cálculo</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2" id="lblDetalleCalculoUtilidadesSubtitulo"></p>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm table-hover align-middle mb-2" style="font-size: 11px;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Proceso</th>
+                                <th>Periodo</th>
+                                <th>Concepto</th>
+                                <th class="text-end">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDetalleCalculoUtilidades">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>
+                        </tbody>
+                        <tfoot class="table-light fw-semibold">
+                            <tr>
+                                <td colspan="3" class="text-end">Total</td>
+                                <td class="text-end" id="tdTotalDetalleUtilidades">0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
         </div>
     </div>
 </div>
@@ -170,6 +227,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const URL_LISTA = {{ url_for('get_lista_formato_utilidades') | tojson }};
     const URL_PREVIEW = {{ url_for('preview_formato_utilidades') | tojson }};
+    const URL_DETALLE_CALCULO = {{ url_for('get_detalle_calculo_formato_utilidades') | tojson }};
     const URL_MASIVO = {{ url_for('procesar_formatos_utilidades_masivo') | tojson }};
     const URL_DESCARGA_ZIP = {{ url_for('descargar_zip_formatos_utilidades') | tojson }};
     const URL_ENVIO_MASIVO = {{ url_for('enviar_formatos_utilidades_masivo') | tojson }};
@@ -179,9 +237,115 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
     const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
+    const modalDetalleCalculoEl = document.getElementById('modalDetalleCalculoUtilidades');
+    const modalDetalleCalculo = modalDetalleCalculoEl ? new bootstrap.Modal(modalDetalleCalculoEl) : null;
 
     let formatosCache = [];
     let filtrosListaActuales = null;
+
+    function formatearImporteNum(n) {
+        const v = Number(n) || 0;
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatearPeriodoDetalle(periodo) {
+        const s = String(periodo || '').trim();
+        if (/^\d{8}$/.test(s)) {
+            return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
+        }
+        return s;
+    }
+
+    function formatearPeriodoUtilidad(period) {
+        const s = String(period || '').trim();
+        if (/^\d{8}$/.test(s)) {
+            const meses = [
+                'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+            ];
+            const mes = parseInt(s.slice(4, 6), 10);
+            const nombreMes = meses[mes - 1] || s.slice(4, 6);
+            return `${nombreMes} ${s.slice(0, 4)}`;
+        }
+        return s;
+    }
+
+    function escHtmlDetalle(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderDetalleCalculoModal(data) {
+        const tbody = document.getElementById('tbodyDetalleCalculoUtilidades');
+        const lblSub = document.getElementById('lblDetalleCalculoUtilidadesSubtitulo');
+        const tdTotal = document.getElementById('tdTotalDetalleUtilidades');
+        const lblTitulo = document.getElementById('modalDetalleCalculoUtilidadesLabel');
+        if (!tbody) return;
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const nombre = String(data.nombre || data.person || '').trim();
+        const ejercicio = String(data.ejercicio || '').trim();
+        const periodoUtilidad = formatearPeriodoUtilidad(data.period);
+        if (lblTitulo) lblTitulo.textContent = 'Detalle de cálculo — participación en utilidades';
+        if (lblSub) {
+            const refEjercicio = periodoUtilidad
+                ? `Utilidad ${periodoUtilidad} · Ejercicio ${ejercicio}`
+                : `Ejercicio ${ejercicio}`;
+            lblSub.textContent = nombre ? `${nombre} · ${refEjercicio}` : refEjercicio;
+        }
+
+        if (!rows.length) {
+            tbody.innerHTML = `<tr><td colspan="4" class="text-center text-muted py-3">No hay conceptos afectos a utilidad en planillas del ejercicio ${escHtmlDetalle(ejercicio)}.</td></tr>`;
+        } else {
+            tbody.innerHTML = rows.map((r) => {
+                const proc = r.proceso_descripcion
+                    ? `${r.proceso} (${r.proceso_descripcion})`
+                    : (r.proceso || '');
+                return `<tr>
+                    <td>${escHtmlDetalle(proc)}</td>
+                    <td class="font-monospace">${escHtmlDetalle(formatearPeriodoDetalle(r.periodo))}</td>
+                    <td>${escHtmlDetalle(r.concepto || r.formulacode || '')}</td>
+                    <td class="text-end font-monospace">${formatearImporteNum(r.importe)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        if (tdTotal) tdTotal.textContent = formatearImporteNum(data.total);
+    }
+
+    async function verDetalleCalculo(data) {
+        if (!modalDetalleCalculo) return;
+        const tbody = document.getElementById('tbodyDetalleCalculoUtilidades');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Cargando...</td></tr>';
+        }
+        modalDetalleCalculo.show();
+        try {
+            const res = await fetch(URL_DETALLE_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: data.cia || cboCia.value.trim(),
+                    payroll_type: data.payroll_type || cboPt.value.trim(),
+                    period: data.period || cboPer.value.trim(),
+                    person: data.person || '',
+                    nombre: data.nombre || '',
+                }),
+            });
+            const payload = await res.json();
+            if (!res.ok) {
+                throw new Error(payload.error || 'No se pudo cargar el detalle.');
+            }
+            renderDetalleCalculoModal(payload);
+        } catch (err) {
+            console.error(err);
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escHtmlDetalle(err.message)}</td></tr>`;
+            }
+        }
+    }
 
     function esProcesoUtilidad(item) {
         const id = String(item?.id || '').trim().toUpperCase();
@@ -348,7 +512,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             btnPreview.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
             btnPreview.title = 'Ver formato';
             btnPreview.innerHTML = '<i class="bi bi-eye"></i>';
-            btnPreview.addEventListener('click', function () {
+            btnPreview.addEventListener('click', function (evt) {
+                evt.stopPropagation();
                 verFormato({
                     person: pid,
                     nombre: nombreRaw,
@@ -358,9 +523,31 @@ document.addEventListener('DOMContentLoaded', async function () {
                     period: period
                 });
             });
+
+            const btnDetalle = document.createElement('button');
+            btnDetalle.type = 'button';
+            btnDetalle.className = 'btn btn-outline-info btn-sm py-0 px-2';
+            btnDetalle.title = 'Detalle de cálculo';
+            btnDetalle.innerHTML = '<i class="bi bi-calculator"></i>';
+            btnDetalle.addEventListener('click', function (evt) {
+                evt.stopPropagation();
+                verDetalleCalculo({
+                    person: pid,
+                    nombre: nombreRaw,
+                    cia: cia,
+                    payroll_type: payroll_type,
+                    period: period
+                });
+            });
+
+            const acciones = document.createElement('div');
+            acciones.className = 'formato-acciones';
+            acciones.appendChild(btnPreview);
+            acciones.appendChild(btnDetalle);
+
             const td6 = document.createElement('td');
             td6.className = 'text-center';
-            td6.appendChild(btnPreview);
+            td6.appendChild(acciones);
             tr.appendChild(td0);
             tr.appendChild(td1);
             tr.appendChild(td2);

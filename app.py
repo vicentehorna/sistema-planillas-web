@@ -4443,6 +4443,67 @@ def descansos_guardar_post():
                 pass
 
 
+@app.route('/descansos/eliminar', methods=['POST'])
+@login_required
+def descansos_eliminar_post():
+    """sp_pr_descansos_eliminar_web: elimina registro de descanso médico."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    line_raw = body.get('line')
+    xlastuser = _xlastuser_id()
+
+    if not cia or not person:
+        return jsonify({"error": "Faltan datos del trabajador."}), 400
+    if line_raw is None:
+        return jsonify({"error": "Seleccione un registro de descanso."}), 400
+
+    try:
+        line = int(line_raw)
+    except Exception:
+        return jsonify({"error": "Registro de descanso inválido."}), 400
+    if line <= 0:
+        return jsonify({"error": "Registro de descanso inválido."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_descansos_eliminar_web @company=?, @person=?, @line=?, @xlastuser=?",
+            (cia, person, line, xlastuser),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+
+        adjunto = _jsonable_value((rows[0] if rows else {}).get('adjunto'))
+        if adjunto:
+            uploads_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
+            adj_path = os.path.normpath(os.path.join(uploads_root, adjunto.replace('/', os.sep)))
+            if adj_path.startswith(uploads_root) and os.path.isfile(adj_path):
+                try:
+                    os.remove(adj_path)
+                except OSError:
+                    logging.warning('No se pudo eliminar adjunto de descanso: %s', adj_path)
+
+        return jsonify({"ok": True})
+    except Exception as e:
+        logging.exception("descansos_eliminar_post")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/conceptos')
 @login_required
 def conceptos_page():

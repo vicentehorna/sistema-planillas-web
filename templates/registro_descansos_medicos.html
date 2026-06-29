@@ -29,17 +29,89 @@
         align-self: stretch;
     }
 
+    .dm-paneles-trabajo {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .dm-panel-historial {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .dm-panel-historial .dm-historial-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    #historialScroll {
+        flex: 1 1 auto;
+        min-height: 8rem;
+        max-height: 200px;
+        overflow: auto;
+    }
+
+    .dm-paneles-trabajo.registro-collapsed #historialScroll {
+        max-height: none;
+    }
+
+    #panelNuevoDescanso {
+        flex: 0 0 auto;
+    }
+
+    #panelNuevoDescanso.dm-registro-collapsed .dm-registro-body {
+        display: none;
+    }
+
+    .dm-registro-toggle {
+        width: 24px;
+        height: 24px;
+        padding: 0;
+        border: 1px solid #8a9aab;
+        border-radius: 3px;
+        background: rgba(255, 255, 255, 0.55);
+        color: #4a5868;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.2s, border-color 0.2s;
+    }
+
+    .dm-registro-toggle:hover {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: #6c7d8f;
+    }
+
+    .dm-registro-toggle i {
+        font-size: 0.8rem;
+        transition: transform 0.25s ease;
+    }
+
+    #panelNuevoDescanso.dm-registro-collapsed .dm-registro-toggle i {
+        transform: rotate(180deg);
+    }
+
     .dm-grilla-trabajadores {
         display: flex;
         flex-direction: column;
-        flex: 0 0 auto;
-        height: 34rem;
-        min-height: 34rem;
-        max-height: 34rem;
+        flex: 1 1 auto;
+        min-height: 12rem;
         overflow: hidden;
         border: 1px solid #dee2e6;
         border-radius: 0.375rem;
         background: #fff;
+    }
+
+    .dm-grilla-trabajadores.altura-sincronizada {
+        flex: 0 0 auto;
     }
 
     .dm-grilla-scroll {
@@ -131,24 +203,139 @@
     }
 
     .dm-kpi-card .card-body {
-        padding: 0.85rem 1rem;
+        padding: 0.45rem 0.65rem;
     }
 
     .dm-kpi-valor {
-        font-size: 1.65rem;
+        font-size: 1.15rem;
         font-weight: 700;
         line-height: 1.1;
     }
 
     .dm-kpi-label {
-        font-size: 0.78rem;
+        font-size: 0.65rem;
         color: #6c757d;
         text-transform: uppercase;
         letter-spacing: 0.02em;
     }
 
+    .dm-kpi-sub {
+        font-size: 0.68rem;
+        color: #6c757d;
+        line-height: 1.2;
+    }
+
     .dm-progress-empleador .progress {
-        height: 0.55rem;
+        height: 0.35rem;
+    }
+
+    .dm-dw-panel {
+        border: 1px solid #7f90a3;
+        border-radius: 0.4rem 0.4rem 0.2rem 0.2rem;
+        background: #e9eef3;
+        box-shadow:
+            inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+            inset -1px -1px 0 rgba(108, 124, 145, 0.35),
+            0 1px 2px rgba(31, 45, 61, 0.08);
+        overflow: hidden;
+    }
+
+    .dm-dw-titlebar {
+        background: linear-gradient(180deg, #f3f6fa 0%, #d7e0ea 48%, #c2cedc 100%);
+        border-bottom: 1px solid #8a9aab;
+        padding: 0.35rem 0.65rem;
+        min-height: 1.75rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #3a4a5c;
+    }
+
+    .dm-dw-titlebar .dm-dw-title-text {
+        color: #4a5868;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+        font-size: 0.72rem;
+    }
+
+    .dm-dw-body {
+        background: #e3e9f0;
+        padding: 0.4rem;
+        border-top: 1px solid #a8b6c6;
+    }
+
+    .dm-dw-body .table-historial-scroll {
+        border: 1px solid #95a5b5;
+        background: #fff;
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .dm-form-descanso {
+        background: #fff;
+        border: 1px solid #95a5b5;
+        padding: 0.65rem 0.75rem;
+        border-radius: 0.15rem;
+        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+    }
+
+    .dm-form-descanso .form-label {
+        margin-bottom: 0.1rem;
+        font-size: 0.72rem;
+    }
+
+    .dm-form-descanso .dm-col-fecha {
+        width: 9.5rem;
+        min-width: 9.5rem;
+        max-width: 9.5rem;
+    }
+
+    .dm-form-descanso .dm-col-fecha input[type="date"] {
+        min-width: 0;
+        width: 100%;
+    }
+
+    .dm-form-descanso .dm-col-dias {
+        min-width: 2.75rem;
+        max-width: 3rem;
+        text-align: center;
+    }
+
+    .dm-form-descanso .dm-col-subsidio {
+        min-width: 7.5rem;
+    }
+
+    .dm-form-descanso .dm-col-periodo {
+        min-width: 8.5rem;
+    }
+
+    .dm-form-descanso .dm-col-tipo {
+        min-width: 10rem;
+        flex: 1 1 12rem;
+    }
+
+    .dm-form-descanso .dm-col-citt {
+        min-width: 8rem;
+        flex: 1 1 9rem;
+    }
+
+    .dm-form-descanso .dm-dias-calculados {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0d6efd;
+        line-height: 1.9rem;
+        min-height: 1.9rem;
+    }
+
+    .dm-form-descanso .dm-form-fila-principal {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+    }
+
+    .dm-form-descanso .dm-form-fila-principal > [class*="col"] {
+        flex-shrink: 0;
     }
 
     .table-historial-dm {
@@ -164,10 +351,7 @@
     }
 
     .table-historial-scroll {
-        max-height: 340px;
-        overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
+        border-radius: 0.15rem;
     }
 
     .table-historial-dm thead th {
@@ -182,6 +366,18 @@
         max-width: 14rem;
         overflow: hidden;
         text-overflow: ellipsis;
+    }
+
+    .table-historial-dm .col-acciones {
+        width: 4.5rem;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .table-historial-dm .col-acciones .btn-link {
+        font-size: 11px;
+        line-height: 1;
+        text-decoration: none;
     }
 
     .badge-cobertura-empleador {
@@ -201,36 +397,7 @@
         display: block;
     }
 
-    #drawerNuevoDescanso.offcanvas {
-        width: min(400px, 100vw);
-    }
-
-    #drawerNuevoDescanso .offcanvas-header {
-        padding: 0.55rem 0.85rem;
-    }
-
-    #drawerNuevoDescanso .offcanvas-title {
-        font-size: 0.95rem;
-    }
-
-    #drawerNuevoDescanso .offcanvas-body {
-        padding: 0.65rem 0.85rem 0.85rem;
-    }
-
-    .dm-drawer-form .form-label {
-        margin-bottom: 0.1rem;
-        font-size: 0.72rem;
-    }
-
-    .dm-drawer-form .dm-drawer-dias {
-        font-size: 1rem;
-        font-weight: 700;
-        color: #0d6efd;
-        line-height: 1.9rem;
-        min-height: 1.9rem;
-    }
-
-    .dm-drawer-form .alert {
+    .dm-form-descanso .alert {
         font-size: 0.78rem;
         margin-bottom: 0.5rem;
     }
@@ -313,70 +480,66 @@
             </div>
         </div>
 
-        <div id="contenidoDetalle" class="d-none flex-column gap-3" style="display: none;">
+        <div id="contenidoDetalle" class="d-none flex-column gap-2" style="display: none;">
             <div class="card border-0 shadow-sm">
-                <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
-                    <div>
-                        <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
-                        <div class="small text-muted">
-                            <span>DNI: <span id="lblDniTrabajador"></span></span>
-                            <span class="mx-1">·</span>
-                            <span>Ingreso: <span id="lblIngresoTrabajador"></span></span>
-                            <span class="mx-1">·</span>
-                            <span>Año: <span id="lblAnioConsulta"></span></span>
-                        </div>
+                <div class="card-body py-2">
+                    <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
+                    <div class="small text-muted">
+                        <span>DNI: <span id="lblDniTrabajador"></span></span>
+                        <span class="mx-1">·</span>
+                        <span>Ingreso: <span id="lblIngresoTrabajador"></span></span>
+                        <span class="mx-1">·</span>
+                        <span>Año: <span id="lblAnioConsulta"></span></span>
                     </div>
-                    <button type="button" class="btn btn-success btn-sm" id="btnNuevoRegistro" disabled>
-                        <i class="bi bi-plus-circle me-1"></i>Nuevo Registro
-                    </button>
                 </div>
             </div>
 
-            <div class="row g-3" id="panelKpis">
-                <div class="col-12 col-md-4">
+            <div class="row g-2" id="panelKpis">
+                <div class="col-4">
                     <div class="card dm-kpi-card">
                         <div class="card-body">
-                            <div class="dm-kpi-label mb-1">Días empleador</div>
-                            <div class="dm-kpi-valor text-primary" id="kpiDiasEmpleador">0</div>
-                            <div class="dm-progress-empleador mt-2">
-                                <div class="d-flex justify-content-between small text-muted mb-1">
-                                    <span>Límite legal: <strong id="kpiLimiteEmpleador">20</strong> días</span>
-                                    <span id="kpiRestanteEmpleador">20 restantes</span>
-                                </div>
+                            <div class="dm-kpi-label mb-0">Días empleador</div>
+                            <div class="d-flex align-items-baseline gap-2">
+                                <div class="dm-kpi-valor text-primary" id="kpiDiasEmpleador">0</div>
+                                <div class="dm-kpi-sub">/ <span id="kpiLimiteEmpleador">20</span></div>
+                            </div>
+                            <div class="dm-progress-empleador mt-1">
                                 <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="20">
                                     <div class="progress-bar bg-primary" id="barEmpleador" style="width: 0%"></div>
                                 </div>
+                                <div class="dm-kpi-sub mt-1" id="kpiRestanteEmpleador">20 restantes</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-4">
                     <div class="card dm-kpi-card">
                         <div class="card-body">
-                            <div class="dm-kpi-label mb-1">Días EsSalud</div>
+                            <div class="dm-kpi-label mb-0">Días EsSalud</div>
                             <div class="dm-kpi-valor text-success" id="kpiDiasEssalud">0</div>
-                            <div class="small text-muted mt-2">Subsidios cubiertos por EsSalud en el año</div>
+                            <div class="dm-kpi-sub mt-1">Subsidios en el año</div>
                         </div>
                     </div>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-4">
                     <div class="card dm-kpi-card">
                         <div class="card-body">
-                            <div class="dm-kpi-label mb-1">Total acumulado</div>
+                            <div class="dm-kpi-label mb-0">Total acumulado</div>
                             <div class="dm-kpi-valor text-dark" id="kpiTotalAnio">0</div>
-                            <div class="small text-muted mt-2">Días de descanso registrados en el año actual</div>
+                            <div class="dm-kpi-sub mt-1">Descansos en el año</div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-                    <span class="small fw-bold text-uppercase text-muted">Historial de descansos</span>
+            <div class="dm-paneles-trabajo" id="dmPanelesTrabajo">
+            <div class="dm-dw-panel dm-panel-historial" id="panelHistorial">
+                <div class="dm-dw-titlebar">
+                    <span class="dm-dw-title-text">Historial de descansos</span>
                     <span class="badge bg-secondary" id="badgeTotalHistorial">0 registros</span>
                 </div>
-                <div class="card-body p-2">
-                    <div class="table-historial-scroll">
+                <div class="dm-dw-body dm-historial-body">
+                    <div class="table-historial-scroll" id="historialScroll">
                         <table class="table table-sm table-hover table-historial-dm mb-0" id="tblHistorial">
                             <thead>
                                 <tr>
@@ -387,6 +550,7 @@
                                     <th class="col-tipo">Tipo</th>
                                     <th>Cobertura</th>
                                     <th>CITT</th>
+                                    <th class="col-acciones">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -394,82 +558,78 @@
                     </div>
                 </div>
             </div>
+
+            <div class="dm-dw-panel" id="panelNuevoDescanso">
+                <div class="dm-dw-titlebar">
+                    <span class="dm-dw-title-text">Registrar descanso médico</span>
+                    <button type="button" class="dm-registro-toggle" id="btnToggleRegistroDescanso" aria-expanded="true" aria-label="Contraer panel de registro" title="Contraer panel">
+                        <i class="bi bi-chevron-down" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <div class="dm-dw-body dm-registro-body">
+                    <form id="frmNuevoDescanso" class="dm-form-descanso">
+                        <div class="row g-2 align-items-end dm-form-fila-principal mb-2">
+                            <div class="col-auto dm-col-subsidio">
+                                <label for="cboDrawerSubsidio" class="form-label fw-bold text-muted">Subsidio</label>
+                                <select id="cboDrawerSubsidio" name="subsidio" class="form-select form-select-sm" required disabled>
+                                    <option value="N" selected>No subsidiado</option>
+                                    <option value="S">Subsidiado</option>
+                                </select>
+                            </div>
+                            <div class="col-auto dm-col-periodo">
+                                <label for="cboDrawerPeriodo" class="form-label fw-bold text-muted">Periodo</label>
+                                <select id="cboDrawerPeriodo" name="prperiod" class="form-select form-select-sm" required disabled>
+                                    <option value="">Seleccione trabajador...</option>
+                                </select>
+                            </div>
+                            <div class="col-auto dm-col-tipo">
+                                <label for="cboDrawerTipo" class="form-label fw-bold text-muted">Tipo de descanso</label>
+                                <select id="cboDrawerTipo" name="medicalresttype" class="form-select form-select-sm" required disabled>
+                                    <option value="">Seleccione...</option>
+                                </select>
+                            </div>
+                            <div class="col-auto dm-col-fecha">
+                                <label for="txtDrawerFechaInicio" class="form-label fw-bold text-muted">Inicio</label>
+                                <input type="date" id="txtDrawerFechaInicio" name="fecha_inicio" class="form-control form-control-sm" required disabled>
+                            </div>
+                            <div class="col-auto dm-col-fecha">
+                                <label for="txtDrawerFechaFin" class="form-label fw-bold text-muted">Fin</label>
+                                <input type="date" id="txtDrawerFechaFin" name="fecha_fin" class="form-control form-control-sm" required disabled>
+                            </div>
+                            <div class="col-auto dm-col-dias">
+                                <label class="form-label fw-bold text-muted">Días</label>
+                                <div class="dm-dias-calculados" id="lblDrawerDias">—</div>
+                            </div>
+                            <div class="col-auto dm-col-citt">
+                                <label for="txtDrawerCitt" class="form-label fw-bold text-muted">Número de CITT</label>
+                                <input type="text" id="txtDrawerCitt" name="citt" class="form-control form-control-sm" maxlength="20" placeholder="Si aplica" disabled>
+                            </div>
+                            <div class="col-auto">
+                                <button type="submit" class="btn btn-success btn-sm" id="btnGuardarDescanso" disabled>
+                                    <i class="bi bi-check2-circle me-1"></i>Guardar
+                                </button>
+                            </div>
+                        </div>
+
+                        <div class="d-none" aria-hidden="true">
+                            <input type="text" id="txtDrawerCmp" name="cmp_medico" tabindex="-1">
+                            <input type="file" id="fileDrawerSustento" name="sustento" tabindex="-1">
+                        </div>
+
+                        <div class="alert alert-warning py-2 mb-2 dm-alerta-citt" id="alertaCittRequerido" role="alert">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Al superar los <strong>20 días</strong> a cargo del empleador, la cobertura pasará a <strong>Subsidio EsSalud</strong> y el CITT será obligatorio.
+                        </div>
+                        <div class="alert alert-info py-2 mb-0 d-none" id="alertaCoberturaForzada" role="alert">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Este registro se guardará con cobertura <strong>Subsidio EsSalud</strong>.
+                        </div>
+                    </form>
+                </div>
+            </div>
+            </div>
         </div>
     </section>
-</div>
-
-<div class="offcanvas offcanvas-end" tabindex="-1" id="drawerNuevoDescanso" aria-labelledby="drawerNuevoDescansoLabel">
-    <div class="offcanvas-header border-bottom py-2">
-        <h5 class="offcanvas-title" id="drawerNuevoDescansoLabel">Nuevo descanso médico</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
-    </div>
-    <div class="offcanvas-body">
-        <form id="frmNuevoDescanso" class="dm-drawer-form">
-            <div class="row g-2 mb-2">
-                <div class="col-6">
-                    <label for="cboDrawerSubsidio" class="form-label fw-bold text-muted">Subsidio</label>
-                    <select id="cboDrawerSubsidio" name="subsidio" class="form-select form-select-sm" required>
-                        <option value="N" selected>No subsidiado</option>
-                        <option value="S">Subsidiado</option>
-                    </select>
-                </div>
-                <div class="col-6">
-                    <label for="cboDrawerPeriodo" class="form-label fw-bold text-muted">Periodo</label>
-                    <select id="cboDrawerPeriodo" name="prperiod" class="form-select form-select-sm" required disabled>
-                        <option value="">Cargando...</option>
-                    </select>
-                </div>
-            </div>
-
-            <div class="mb-2">
-                <label for="cboDrawerTipo" class="form-label fw-bold text-muted">Tipo de descanso</label>
-                <select id="cboDrawerTipo" name="medicalresttype" class="form-select form-select-sm" required disabled>
-                    <option value="">Seleccione subsidio...</option>
-                </select>
-            </div>
-
-            <div class="row g-2 mb-2 align-items-end">
-                <div class="col-5">
-                    <label for="txtDrawerFechaInicio" class="form-label fw-bold text-muted">Inicio</label>
-                    <input type="date" id="txtDrawerFechaInicio" name="fecha_inicio" class="form-control form-control-sm" required>
-                </div>
-                <div class="col-5">
-                    <label for="txtDrawerFechaFin" class="form-label fw-bold text-muted">Fin</label>
-                    <input type="date" id="txtDrawerFechaFin" name="fecha_fin" class="form-control form-control-sm" required>
-                </div>
-                <div class="col-2 text-center">
-                    <label class="form-label fw-bold text-muted">Días</label>
-                    <div class="dm-drawer-dias" id="lblDrawerDias">—</div>
-                </div>
-            </div>
-
-            <div class="mb-2">
-                <label for="txtDrawerCitt" class="form-label fw-bold text-muted">Número de CITT</label>
-                <input type="text" id="txtDrawerCitt" name="citt" class="form-control form-control-sm" maxlength="20" placeholder="Obligatorio si es subsidiado">
-            </div>
-
-            <div class="d-none" aria-hidden="true">
-                <input type="text" id="txtDrawerCmp" name="cmp_medico" tabindex="-1">
-                <input type="file" id="fileDrawerSustento" name="sustento" tabindex="-1">
-            </div>
-
-            <div class="alert alert-warning py-2 dm-alerta-citt" id="alertaCittRequerido" role="alert">
-                <i class="bi bi-exclamation-triangle me-1"></i>
-                Al superar los <strong>20 días</strong> a cargo del empleador, la cobertura pasará a <strong>Subsidio EsSalud</strong> y el CITT será obligatorio.
-            </div>
-            <div class="alert alert-info py-2 d-none" id="alertaCoberturaForzada" role="alert">
-                <i class="bi bi-info-circle me-1"></i>
-                Este registro se guardará con cobertura <strong>Subsidio EsSalud</strong>.
-            </div>
-
-            <div class="d-flex gap-2 mt-3">
-                <button type="submit" class="btn btn-success btn-sm flex-grow-1" id="btnGuardarDescanso">
-                    <i class="bi bi-check2-circle me-1"></i>Guardar
-                </button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
-            </div>
-        </form>
-    </div>
 </div>
 {% endblock %}
 
@@ -544,13 +704,125 @@ document.addEventListener('DOMContentLoaded', async function () {
     const lblConteo = document.getElementById('lblConteoTrabajadores');
     const placeholderDetalle = document.getElementById('placeholderDetalle');
     const contenidoDetalle = document.getElementById('contenidoDetalle');
-    const btnNuevoRegistro = document.getElementById('btnNuevoRegistro');
-    const drawerEl = document.getElementById('drawerNuevoDescanso');
-    const drawer = drawerEl ? new bootstrap.Offcanvas(drawerEl) : null;
+    const grillaTrabajadores = document.getElementById('grillaTrabajadores');
+    const panelNuevoDescanso = document.getElementById('panelNuevoDescanso');
+    const panelHistorial = document.getElementById('panelHistorial');
+    const dmPanelesTrabajo = document.getElementById('dmPanelesTrabajo');
+    const btnToggleRegistroDescanso = document.getElementById('btnToggleRegistroDescanso');
     const frmNuevoDescanso = document.getElementById('frmNuevoDescanso');
     const cboDrawerTipo = document.getElementById('cboDrawerTipo');
     const cboDrawerSubsidio = document.getElementById('cboDrawerSubsidio');
     const cboDrawerPeriodo = document.getElementById('cboDrawerPeriodo');
+
+    let resizeObsGrilla = null;
+    let alturaFijaPanelesTrabajo = null;
+    const DM_REGISTRO_COLLAPSED_KEY = 'registroDescansosMedicos_registroCollapsed';
+
+    function medirAlturaPanelesTrabajoExpandido() {
+        if (!dmPanelesTrabajo || !panelNuevoDescanso) return 0;
+
+        const estabaColapsado = panelNuevoDescanso.classList.contains('dm-registro-collapsed');
+        if (estabaColapsado) {
+            panelNuevoDescanso.classList.remove('dm-registro-collapsed');
+            if (dmPanelesTrabajo) dmPanelesTrabajo.classList.remove('registro-collapsed');
+        }
+
+        dmPanelesTrabajo.style.height = '';
+        dmPanelesTrabajo.style.minHeight = '';
+        dmPanelesTrabajo.style.maxHeight = '';
+
+        const altura = Math.round(dmPanelesTrabajo.getBoundingClientRect().height);
+
+        if (estabaColapsado) {
+            panelNuevoDescanso.classList.add('dm-registro-collapsed');
+            if (dmPanelesTrabajo) dmPanelesTrabajo.classList.add('registro-collapsed');
+        }
+
+        return altura > 80 ? altura : 0;
+    }
+
+    function fijarAlturaPanelesTrabajo() {
+        if (!dmPanelesTrabajo) return;
+
+        const altura = medirAlturaPanelesTrabajoExpandido();
+        if (!altura) return;
+
+        alturaFijaPanelesTrabajo = altura;
+        dmPanelesTrabajo.style.height = altura + 'px';
+        dmPanelesTrabajo.style.minHeight = altura + 'px';
+        dmPanelesTrabajo.style.maxHeight = altura + 'px';
+        programarAjusteAlturaGrilla();
+    }
+
+    function aplicarEstadoRegistro(colapsado) {
+        if (!panelNuevoDescanso || !dmPanelesTrabajo) return;
+        panelNuevoDescanso.classList.toggle('dm-registro-collapsed', colapsado);
+        dmPanelesTrabajo.classList.toggle('registro-collapsed', colapsado);
+        if (btnToggleRegistroDescanso) {
+            btnToggleRegistroDescanso.setAttribute('aria-expanded', colapsado ? 'false' : 'true');
+            btnToggleRegistroDescanso.setAttribute(
+                'aria-label',
+                colapsado ? 'Expandir panel de registro' : 'Contraer panel de registro'
+            );
+            btnToggleRegistroDescanso.title = colapsado ? 'Expandir panel' : 'Contraer panel';
+        }
+        if (alturaFijaPanelesTrabajo) {
+            dmPanelesTrabajo.style.height = alturaFijaPanelesTrabajo + 'px';
+            dmPanelesTrabajo.style.minHeight = alturaFijaPanelesTrabajo + 'px';
+            dmPanelesTrabajo.style.maxHeight = alturaFijaPanelesTrabajo + 'px';
+        }
+        programarAjusteAlturaGrilla();
+    }
+
+    function ajustarAlturaGrillaTrabajadores() {
+        if (!grillaTrabajadores) return;
+
+        const detalleVisible = contenidoDetalle
+            && !contenidoDetalle.classList.contains('d-none')
+            && panelNuevoDescanso;
+
+        if (!detalleVisible) {
+            grillaTrabajadores.classList.remove('altura-sincronizada');
+            grillaTrabajadores.style.height = '';
+            grillaTrabajadores.style.minHeight = '';
+            return;
+        }
+
+        const grillaTop = grillaTrabajadores.getBoundingClientRect().top;
+        const targetBottom = panelNuevoDescanso.getBoundingClientRect().bottom;
+        const altura = Math.round(targetBottom - grillaTop);
+
+        if (altura > 120) {
+            grillaTrabajadores.classList.add('altura-sincronizada');
+            grillaTrabajadores.style.height = altura + 'px';
+            grillaTrabajadores.style.minHeight = altura + 'px';
+        }
+    }
+
+    function programarAjusteAlturaGrilla() {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(ajustarAlturaGrillaTrabajadores);
+        });
+    }
+
+    function registrarObservadorAlturaGrilla() {
+        if (resizeObsGrilla || !contenidoDetalle) return;
+        if (typeof ResizeObserver === 'undefined') {
+            window.addEventListener('resize', ajustarAlturaGrillaTrabajadores);
+            return;
+        }
+        resizeObsGrilla = new ResizeObserver(programarAjusteAlturaGrilla);
+        resizeObsGrilla.observe(contenidoDetalle);
+        if (panelNuevoDescanso) {
+            resizeObsGrilla.observe(panelNuevoDescanso);
+        }
+        if (panelHistorial) {
+            resizeObsGrilla.observe(panelHistorial);
+        }
+        if (dmPanelesTrabajo) {
+            resizeObsGrilla.observe(dmPanelesTrabajo);
+        }
+    }
 
     const PDTS_SUBSIDIADO = new Set(['21', '22']);
 
@@ -635,6 +907,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         cboDrawerTipo.disabled = filtrados.length === 0;
         if (!filtrados.length) {
             cboDrawerTipo.innerHTML = '<option value="">Sin tipos para esta opción</option>';
+        } else if (trabajadorActivo) {
+            cboDrawerTipo.disabled = false;
         }
     }
 
@@ -693,6 +967,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboDrawerPeriodo.innerHTML = '<option value="">Sin periodos</option>';
             } else {
                 seleccionarPeriodoActualDrawer();
+                if (trabajadorActivo) cboDrawerPeriodo.disabled = false;
             }
         } catch (err) {
             console.error(err);
@@ -768,6 +1043,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (row) await seleccionarTrabajador(row);
             });
         });
+
+        const filaActiva = tbodyTrabajadores.querySelector('.trabajador-row.active');
+        if (filaActiva) {
+            filaActiva.scrollIntoView({ block: 'nearest' });
+        }
     }
 
     async function cargarTrabajadores() {
@@ -807,8 +1087,34 @@ document.addEventListener('DOMContentLoaded', async function () {
             contenidoDetalle.style.display = 'flex';
         } else {
             contenidoDetalle.style.display = 'none';
+            actualizarFormularioHabilitado(false);
+            alturaFijaPanelesTrabajo = null;
+            if (dmPanelesTrabajo) {
+                dmPanelesTrabajo.style.height = '';
+                dmPanelesTrabajo.style.minHeight = '';
+                dmPanelesTrabajo.style.maxHeight = '';
+            }
         }
-        btnNuevoRegistro.disabled = !visible;
+        programarAjusteAlturaGrilla();
+    }
+
+    function actualizarFormularioHabilitado(habilitar) {
+        [
+            'cboDrawerSubsidio',
+            'txtDrawerFechaInicio',
+            'txtDrawerFechaFin',
+            'txtDrawerCitt',
+        ].forEach((id) => {
+            const el = document.getElementById(id);
+            if (el) el.disabled = !habilitar;
+        });
+        if (!habilitar) {
+            if (cboDrawerPeriodo) cboDrawerPeriodo.disabled = true;
+            if (cboDrawerTipo) cboDrawerTipo.disabled = true;
+            document.getElementById('btnGuardarDescanso').disabled = true;
+        } else {
+            validarFormularioDrawer();
+        }
     }
 
     function renderKpis(kpis) {
@@ -848,14 +1154,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         badge.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
 
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin descansos registrados</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin descansos registrados</td></tr>';
             return;
         }
 
         tbody.innerHTML = rows.map((h) => {
             const esEssalud = String(h.payreponsableflag || '').toUpperCase() === 'S';
             const badgeClass = esEssalud ? 'badge-cobertura-essalud' : 'badge-cobertura-empleador';
-            return `<tr>
+            return `<tr class="historial-row" data-line="${h.line}">
                 <td>${escHtml(formatearPeriodo(h.prperiod))}</td>
                 <td>${escHtml(formatearFecha(h.datebegin))}</td>
                 <td>${escHtml(formatearFecha(h.dateend))}</td>
@@ -863,8 +1169,45 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-tipo" title="${escHtml(h.tipo_descanso || '')}">${escHtml(h.tipo_descanso || '')}</td>
                 <td><span class="badge ${badgeClass}">${escHtml(h.cobertura_texto || '')}</span></td>
                 <td>${escHtml(h.citt || '—')}</td>
+                <td class="col-acciones">
+                    <button type="button" class="btn btn-link text-danger p-0 btn-eliminar-descanso" title="Eliminar registro">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
             </tr>`;
         }).join('');
+
+        tbody.querySelectorAll('.btn-eliminar-descanso').forEach((btn) => {
+            btn.addEventListener('click', async function (e) {
+                e.stopPropagation();
+                const tr = this.closest('.historial-row');
+                if (!tr) return;
+                const line = Number(tr.getAttribute('data-line'));
+                await eliminarDescanso(line);
+            });
+        });
+    }
+
+    async function eliminarDescanso(line) {
+        if (!trabajadorActivo) return;
+        if (!confirm('¿Eliminar este registro de descanso médico?')) return;
+
+        try {
+            const res = await fetch('/descansos/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: trabajadorActivo.person,
+                    line,
+                }),
+            });
+            await leerJson(res);
+            await cargarDetalleTrabajador(trabajadorActivo.person);
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        }
     }
 
     async function cargarDetalleTrabajador(person) {
@@ -884,7 +1227,24 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderKpis(data.kpis || {});
             renderHistorial(data.historial || []);
             mostrarPanelDetalle(true);
-            validarFormularioDrawer();
+            await Promise.all([
+                cargarTiposDescanso(cia),
+                cargarPeriodosDrawer(),
+            ]);
+            limpiarFormularioDrawer();
+            actualizarFormularioHabilitado(true);
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    fijarAlturaPanelesTrabajo();
+                    try {
+                        if (sessionStorage.getItem(DM_REGISTRO_COLLAPSED_KEY) === '1') {
+                            aplicarEstadoRegistro(true);
+                        }
+                    } catch (err) {
+                        /* ignorar */
+                    }
+                });
+            });
         } catch (err) {
             console.error(err);
             mostrarError(err.message);
@@ -894,6 +1254,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function seleccionarTrabajador(row) {
         trabajadorActivo = row;
         renderListaTrabajadores(trabajadoresCache);
+        actualizarFormularioHabilitado(false);
+        frmNuevoDescanso.reset();
+        if (cboDrawerSubsidio) cboDrawerSubsidio.value = 'N';
+        document.getElementById('lblDrawerDias').textContent = '—';
+        document.getElementById('alertaCoberturaForzada').classList.add('d-none');
         await cargarDetalleTrabajador(row.person);
     }
 
@@ -928,6 +1293,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cittOk = !cittRequerido || !!cittEl.value.trim();
         const periodoOk = !!periodo;
         btnGuardar.disabled = !fechasOk || !tipo || !cittOk || !periodoOk || cboDrawerTipo.disabled;
+        programarAjusteAlturaGrilla();
     }
 
     function limpiarFormularioDrawer() {
@@ -939,16 +1305,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         seleccionarPeriodoActualDrawer();
         validarFormularioDrawer();
     }
-
-    btnNuevoRegistro.addEventListener('click', async function () {
-        if (!trabajadorActivo) return;
-        await Promise.all([
-            cargarTiposDescanso(cboCia.value.trim()),
-            cargarPeriodosDrawer(),
-        ]);
-        limpiarFormularioDrawer();
-        if (drawer) drawer.show();
-    });
 
     if (cboDrawerSubsidio) {
         cboDrawerSubsidio.addEventListener('change', function () {
@@ -979,15 +1335,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo guardar.');
 
-            if (drawer) drawer.hide();
             limpiarFormularioDrawer();
             await cargarDetalleTrabajador(trabajadorActivo.person);
-
-            let msg = 'Descanso médico registrado correctamente.';
-            if (data.cobertura_forzada) {
-                msg += ' Cobertura asignada: Subsidio EsSalud.';
-            }
-            alert(msg);
         } catch (err) {
             console.error(err);
             mostrarError(err.message);
@@ -1044,6 +1393,27 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (filtrosPersist && filtrosPersist.registrarGuardadoEnCambio) {
         filtrosPersist.registrarGuardadoEnCambio();
     }
+
+    if (btnToggleRegistroDescanso) {
+        btnToggleRegistroDescanso.addEventListener('click', function () {
+            const colapsado = !panelNuevoDescanso.classList.contains('dm-registro-collapsed');
+            aplicarEstadoRegistro(colapsado);
+            try {
+                sessionStorage.setItem(DM_REGISTRO_COLLAPSED_KEY, colapsado ? '1' : '0');
+            } catch (err) {
+                /* ignorar */
+            }
+        });
+    }
+
+    window.addEventListener('resize', function () {
+        if (!contenidoDetalle || contenidoDetalle.classList.contains('d-none')) return;
+        const colapsado = panelNuevoDescanso && panelNuevoDescanso.classList.contains('dm-registro-collapsed');
+        fijarAlturaPanelesTrabajo();
+        if (colapsado) aplicarEstadoRegistro(true);
+    });
+
+    registrarObservadorAlturaGrilla();
 
     if (cboCia.value) {
         await cargarTiposDescanso(cboCia.value.trim());

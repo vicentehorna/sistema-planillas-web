@@ -19,6 +19,7 @@
     const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
     const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
     const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
+    const STORAGE_KEY_REGISTRO_DESCANSOS = 'filtros_registro_descansos_medicos';
     const STORAGE_KEY_APERTURAR_PERIODOS = 'filtros_aperturar_periodos';
     const STORAGE_KEY_GENERAR_BOLETAS = 'filtros_generar_boletas';
     const STORAGE_KEY_CERTIFICADO_TRABAJO = 'filtros_certificado_trabajo';
@@ -1543,6 +1544,43 @@
         };
     }
 
+    function crearPersistenciaRegistroDescansosMedicos() {
+        function guardar() {
+            try {
+                localStorage.setItem(STORAGE_KEY_REGISTRO_DESCANSOS, JSON.stringify({
+                    cia: val('cboCompania'),
+                    payrolltype: val('cboTipoPlanilla') || '0',
+                }));
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_REGISTRO_DESCANSOS);
+                return raw ? JSON.parse(raw) : null;
+            } catch (e) {
+                console.error(e);
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_REGISTRO_DESCANSOS,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaGenerarBoletas() {
         function guardar() {
             try {
@@ -2309,6 +2347,7 @@
         STORAGE_KEY_BANBIF,
         STORAGE_KEY_LISTADO_PAGOS,
         STORAGE_KEY_REGISTRO_VACACIONES,
+        STORAGE_KEY_REGISTRO_DESCANSOS,
         STORAGE_KEY_APERTURAR_PERIODOS,
         STORAGE_KEY_GENERAR_BOLETAS,
         STORAGE_KEY_CERTIFICADO_TRABAJO,
@@ -2369,6 +2408,9 @@
         },
         registroVacaciones: function () {
             return crearPersistenciaRegistroVacaciones();
+        },
+        registroDescansosMedicos: function () {
+            return crearPersistenciaRegistroDescansosMedicos();
         },
         aperturarPeriodos: function () {
             return crearPersistenciaAperturarPeriodos();

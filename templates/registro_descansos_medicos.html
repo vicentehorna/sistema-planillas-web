@@ -1,0 +1,1054 @@
+{% extends "layout.html" %}
+
+{% block title %}Registro de Descansos Médicos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dm-layout {
+        display: flex;
+        gap: 1rem;
+        align-items: stretch;
+        min-height: 72vh;
+    }
+
+    .dm-panel-izq {
+        flex: 0 0 30%;
+        max-width: 30%;
+        min-width: 220px;
+        display: flex;
+        flex-direction: column;
+        align-self: stretch;
+    }
+
+    .dm-panel-der {
+        flex: 1 1 70%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-self: stretch;
+    }
+
+    .dm-grilla-trabajadores {
+        display: flex;
+        flex-direction: column;
+        flex: 0 0 auto;
+        height: 34rem;
+        min-height: 34rem;
+        max-height: 34rem;
+        overflow: hidden;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .dm-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+    }
+
+    .dm-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #dee2e6;
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .table-trabajadores-dm {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-trabajadores-dm th,
+    .table-trabajadores-dm td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-trabajadores-dm thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-trabajadores-dm .col-dni {
+        width: 5.75rem;
+        max-width: 5.75rem;
+    }
+
+    .table-trabajadores-dm .col-ingreso {
+        width: 5.5rem;
+        max-width: 5.5rem;
+        text-align: center;
+    }
+
+    .table-trabajadores-dm .col-nombre {
+        min-width: 6rem;
+        max-width: 10rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .table-trabajadores-dm tbody tr.trabajador-row {
+        cursor: pointer;
+    }
+
+    .table-trabajadores-dm tbody tr.trabajador-row:hover {
+        background-color: #f8f9fa;
+    }
+
+    .table-trabajadores-dm tbody tr.trabajador-row.active {
+        background-color: #cfe2ff;
+    }
+
+    .table-trabajadores-dm tbody tr.trabajador-row.active td {
+        font-weight: 600;
+    }
+
+    .dm-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    .dm-kpi-card {
+        border: 0;
+        box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+        height: 100%;
+    }
+
+    .dm-kpi-card .card-body {
+        padding: 0.85rem 1rem;
+    }
+
+    .dm-kpi-valor {
+        font-size: 1.65rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+
+    .dm-kpi-label {
+        font-size: 0.78rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    .dm-progress-empleador .progress {
+        height: 0.55rem;
+    }
+
+    .table-historial-dm {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-historial-dm th,
+    .table-historial-dm td {
+        padding: 0.3rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-historial-scroll {
+        max-height: 340px;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+    }
+
+    .table-historial-dm thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-historial-dm .col-tipo {
+        max-width: 14rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .badge-cobertura-empleador {
+        background-color: #0d6efd;
+    }
+
+    .badge-cobertura-essalud {
+        background-color: #198754;
+    }
+
+    .dm-alerta-citt {
+        display: none;
+        font-size: 0.85rem;
+    }
+
+    .dm-alerta-citt.visible {
+        display: block;
+    }
+
+    #drawerNuevoDescanso.offcanvas {
+        width: min(400px, 100vw);
+    }
+
+    #drawerNuevoDescanso .offcanvas-header {
+        padding: 0.55rem 0.85rem;
+    }
+
+    #drawerNuevoDescanso .offcanvas-title {
+        font-size: 0.95rem;
+    }
+
+    #drawerNuevoDescanso .offcanvas-body {
+        padding: 0.65rem 0.85rem 0.85rem;
+    }
+
+    .dm-drawer-form .form-label {
+        margin-bottom: 0.1rem;
+        font-size: 0.72rem;
+    }
+
+    .dm-drawer-form .dm-drawer-dias {
+        font-size: 1rem;
+        font-weight: 700;
+        color: #0d6efd;
+        line-height: 1.9rem;
+        min-height: 1.9rem;
+    }
+
+    .dm-drawer-form .alert {
+        font-size: 0.78rem;
+        margin-bottom: 0.5rem;
+    }
+
+    @media (max-width: 991.98px) {
+        .dm-layout {
+            flex-direction: column;
+        }
+
+        .dm-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .dm-grilla-trabajadores {
+            max-height: 240px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosDescansos" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="dm-layout">
+    <aside class="dm-panel-izq">
+        <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Buscar trabajador</label>
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
+        </div>
+        <div class="dm-grilla-trabajadores" id="grillaTrabajadores">
+            <div class="dm-grilla-scroll">
+                <table class="table table-bordered table-sm table-hover table-trabajadores-dm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-dni">DNI</th>
+                            <th class="col-nombre">Nombre</th>
+                            <th class="col-ingreso">F. ingreso</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTrabajadores">
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoTrabajadores" class="dm-grilla-footer">0 trabajadores</div>
+        </div>
+    </aside>
+
+    <section class="dm-panel-der" id="panelDetalle">
+        <div id="placeholderDetalle" class="dm-placeholder">
+            <div>
+                <i class="bi bi-heart-pulse fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione un trabajador para ver sus descansos médicos y registrar nuevos.
+            </div>
+        </div>
+
+        <div id="contenidoDetalle" class="d-none flex-column gap-3" style="display: none;">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-3 d-flex flex-wrap justify-content-between align-items-start gap-2">
+                    <div>
+                        <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
+                        <div class="small text-muted">
+                            <span>DNI: <span id="lblDniTrabajador"></span></span>
+                            <span class="mx-1">·</span>
+                            <span>Ingreso: <span id="lblIngresoTrabajador"></span></span>
+                            <span class="mx-1">·</span>
+                            <span>Año: <span id="lblAnioConsulta"></span></span>
+                        </div>
+                    </div>
+                    <button type="button" class="btn btn-success btn-sm" id="btnNuevoRegistro" disabled>
+                        <i class="bi bi-plus-circle me-1"></i>Nuevo Registro
+                    </button>
+                </div>
+            </div>
+
+            <div class="row g-3" id="panelKpis">
+                <div class="col-12 col-md-4">
+                    <div class="card dm-kpi-card">
+                        <div class="card-body">
+                            <div class="dm-kpi-label mb-1">Días empleador</div>
+                            <div class="dm-kpi-valor text-primary" id="kpiDiasEmpleador">0</div>
+                            <div class="dm-progress-empleador mt-2">
+                                <div class="d-flex justify-content-between small text-muted mb-1">
+                                    <span>Límite legal: <strong id="kpiLimiteEmpleador">20</strong> días</span>
+                                    <span id="kpiRestanteEmpleador">20 restantes</span>
+                                </div>
+                                <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="20">
+                                    <div class="progress-bar bg-primary" id="barEmpleador" style="width: 0%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card dm-kpi-card">
+                        <div class="card-body">
+                            <div class="dm-kpi-label mb-1">Días EsSalud</div>
+                            <div class="dm-kpi-valor text-success" id="kpiDiasEssalud">0</div>
+                            <div class="small text-muted mt-2">Subsidios cubiertos por EsSalud en el año</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <div class="card dm-kpi-card">
+                        <div class="card-body">
+                            <div class="dm-kpi-label mb-1">Total acumulado</div>
+                            <div class="dm-kpi-valor text-dark" id="kpiTotalAnio">0</div>
+                            <div class="small text-muted mt-2">Días de descanso registrados en el año actual</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                    <span class="small fw-bold text-uppercase text-muted">Historial de descansos</span>
+                    <span class="badge bg-secondary" id="badgeTotalHistorial">0 registros</span>
+                </div>
+                <div class="card-body p-2">
+                    <div class="table-historial-scroll">
+                        <table class="table table-sm table-hover table-historial-dm mb-0" id="tblHistorial">
+                            <thead>
+                                <tr>
+                                    <th>Periodo</th>
+                                    <th>Inicio</th>
+                                    <th>Fin</th>
+                                    <th class="text-end">Días</th>
+                                    <th class="col-tipo">Tipo</th>
+                                    <th>Cobertura</th>
+                                    <th>CITT</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<div class="offcanvas offcanvas-end" tabindex="-1" id="drawerNuevoDescanso" aria-labelledby="drawerNuevoDescansoLabel">
+    <div class="offcanvas-header border-bottom py-2">
+        <h5 class="offcanvas-title" id="drawerNuevoDescansoLabel">Nuevo descanso médico</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Cerrar"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form id="frmNuevoDescanso" class="dm-drawer-form">
+            <div class="row g-2 mb-2">
+                <div class="col-6">
+                    <label for="cboDrawerSubsidio" class="form-label fw-bold text-muted">Subsidio</label>
+                    <select id="cboDrawerSubsidio" name="subsidio" class="form-select form-select-sm" required>
+                        <option value="N" selected>No subsidiado</option>
+                        <option value="S">Subsidiado</option>
+                    </select>
+                </div>
+                <div class="col-6">
+                    <label for="cboDrawerPeriodo" class="form-label fw-bold text-muted">Periodo</label>
+                    <select id="cboDrawerPeriodo" name="prperiod" class="form-select form-select-sm" required disabled>
+                        <option value="">Cargando...</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label for="cboDrawerTipo" class="form-label fw-bold text-muted">Tipo de descanso</label>
+                <select id="cboDrawerTipo" name="medicalresttype" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione subsidio...</option>
+                </select>
+            </div>
+
+            <div class="row g-2 mb-2 align-items-end">
+                <div class="col-5">
+                    <label for="txtDrawerFechaInicio" class="form-label fw-bold text-muted">Inicio</label>
+                    <input type="date" id="txtDrawerFechaInicio" name="fecha_inicio" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-5">
+                    <label for="txtDrawerFechaFin" class="form-label fw-bold text-muted">Fin</label>
+                    <input type="date" id="txtDrawerFechaFin" name="fecha_fin" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-2 text-center">
+                    <label class="form-label fw-bold text-muted">Días</label>
+                    <div class="dm-drawer-dias" id="lblDrawerDias">—</div>
+                </div>
+            </div>
+
+            <div class="mb-2">
+                <label for="txtDrawerCitt" class="form-label fw-bold text-muted">Número de CITT</label>
+                <input type="text" id="txtDrawerCitt" name="citt" class="form-control form-control-sm" maxlength="20" placeholder="Obligatorio si es subsidiado">
+            </div>
+
+            <div class="d-none" aria-hidden="true">
+                <input type="text" id="txtDrawerCmp" name="cmp_medico" tabindex="-1">
+                <input type="file" id="fileDrawerSustento" name="sustento" tabindex="-1">
+            </div>
+
+            <div class="alert alert-warning py-2 dm-alerta-citt" id="alertaCittRequerido" role="alert">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Al superar los <strong>20 días</strong> a cargo del empleador, la cobertura pasará a <strong>Subsidio EsSalud</strong> y el CITT será obligatorio.
+            </div>
+            <div class="alert alert-info py-2 d-none" id="alertaCoberturaForzada" role="alert">
+                <i class="bi bi-info-circle me-1"></i>
+                Este registro se guardará con cobertura <strong>Subsidio EsSalud</strong>.
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+                <button type="submit" class="btn btn-success btn-sm flex-grow-1" id="btnGuardarDescanso">
+                    <i class="bi bi-check2-circle me-1"></i>Guardar
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="offcanvas">Cancelar</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value);
+        return Array.from(select.options).some((o) => o.value === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    const poblarSelect = async (url, selectElement, opciones) => {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    };
+
+    const DEFAULT_CIA = 'BGT';
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.registroDescansosMedicos
+        ? window.FiltrosPlanillasReportes.registroDescansosMedicos()
+        : null;
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const txtBuscar = document.getElementById('txtBuscarTrabajador');
+    const tbodyTrabajadores = document.getElementById('tbodyTrabajadores');
+    const lblConteo = document.getElementById('lblConteoTrabajadores');
+    const placeholderDetalle = document.getElementById('placeholderDetalle');
+    const contenidoDetalle = document.getElementById('contenidoDetalle');
+    const btnNuevoRegistro = document.getElementById('btnNuevoRegistro');
+    const drawerEl = document.getElementById('drawerNuevoDescanso');
+    const drawer = drawerEl ? new bootstrap.Offcanvas(drawerEl) : null;
+    const frmNuevoDescanso = document.getElementById('frmNuevoDescanso');
+    const cboDrawerTipo = document.getElementById('cboDrawerTipo');
+    const cboDrawerSubsidio = document.getElementById('cboDrawerSubsidio');
+    const cboDrawerPeriodo = document.getElementById('cboDrawerPeriodo');
+
+    const PDTS_SUBSIDIADO = new Set(['21', '22']);
+
+    let trabajadoresCache = [];
+    let trabajadorActivo = null;
+    let datosDescansos = null;
+    let tiposDescansoCache = [];
+    let buscarTimer = null;
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function mostrarError(msg) {
+        alert(msg || 'Ocurrió un error.');
+    }
+
+    async function leerJson(res) {
+        const data = await res.json();
+        if (!res.ok) {
+            throw new Error(data.error || 'Error en la solicitud.');
+        }
+        return data;
+    }
+
+    function calcularDiasCalendario(inicio, fin) {
+        if (!inicio || !fin) return null;
+        const d1 = new Date(inicio + 'T00:00:00');
+        const d2 = new Date(fin + 'T00:00:00');
+        if (Number.isNaN(d1.getTime()) || Number.isNaN(d2.getTime())) return null;
+        if (d2 < d1) return null;
+        const diff = Math.round((d2 - d1) / 86400000) + 1;
+        return diff > 0 ? diff : null;
+    }
+
+    function pdtTipoSeleccionado() {
+        if (!cboDrawerTipo || !cboDrawerTipo.value) return '';
+        const opt = cboDrawerTipo.options[cboDrawerTipo.selectedIndex];
+        return opt ? String(opt.getAttribute('data-pdt') || '').trim() : '';
+    }
+
+    function payrolltypeTrabajadorActivo() {
+        if (!trabajadorActivo) return '';
+        return String(
+            trabajadorActivo.payrolltype
+            || (datosDescansos && datosDescansos.empleado && datosDescansos.empleado.payrolltype)
+            || ''
+        ).trim();
+    }
+
+    function esTipoSubsidiado(pdt) {
+        return PDTS_SUBSIDIADO.has(String(pdt || '').trim());
+    }
+
+    function tiposFiltradosPorSubsidio(subsidio) {
+        const modo = String(subsidio || 'N').toUpperCase();
+        return tiposDescansoCache.filter((item) => {
+            const pdt = String(item.pdt || '').trim();
+            return modo === 'S' ? esTipoSubsidiado(pdt) : !esTipoSubsidiado(pdt);
+        });
+    }
+
+    function renderTiposDrawer(subsidio) {
+        if (!cboDrawerTipo) return;
+        const filtrados = tiposFiltradosPorSubsidio(subsidio);
+        const valorPrevio = cboDrawerTipo.value;
+        cboDrawerTipo.innerHTML = '<option value="">Seleccione...</option>';
+        filtrados.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : '';
+            opt.textContent = item.text != null ? String(item.text) : '';
+            if (item.pdt != null) opt.setAttribute('data-pdt', String(item.pdt).trim());
+            cboDrawerTipo.appendChild(opt);
+        });
+        if (valorPrevio && optionExists(cboDrawerTipo, valorPrevio)) {
+            cboDrawerTipo.value = valorPrevio;
+        }
+        cboDrawerTipo.disabled = filtrados.length === 0;
+        if (!filtrados.length) {
+            cboDrawerTipo.innerHTML = '<option value="">Sin tipos para esta opción</option>';
+        }
+    }
+
+    function periodoIdMesActual() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        return `${y}${m}`;
+    }
+
+    function seleccionarPeriodoActualDrawer() {
+        if (!cboDrawerPeriodo || !cboDrawerPeriodo.options.length) return;
+        const yyyymm = periodoIdMesActual();
+        const opciones = Array.from(cboDrawerPeriodo.options).filter((o) => o.value);
+        const delMes = opciones
+            .filter((o) => String(o.value).replace(/\D/g, '').slice(0, 6) === yyyymm)
+            .sort((a, b) => String(b.value).localeCompare(String(a.value)));
+        if (delMes.length) {
+            cboDrawerPeriodo.value = delMes[0].value;
+            return;
+        }
+        const prefTexto = `${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}`;
+        const porTexto = opciones.find((o) => String(o.textContent || '').startsWith(prefTexto));
+        if (porTexto) {
+            cboDrawerPeriodo.value = porTexto.value;
+        }
+    }
+
+    async function cargarPeriodosDrawer() {
+        if (!cboDrawerPeriodo) return;
+        const cia = cboCia.value.trim();
+        const payrolltype = payrolltypeTrabajadorActivo();
+        if (!cia || !payrolltype) {
+            cboDrawerPeriodo.innerHTML = '<option value="">Sin tipo de planilla</option>';
+            cboDrawerPeriodo.disabled = true;
+            return;
+        }
+
+        cboDrawerPeriodo.innerHTML = '<option value="">Cargando...</option>';
+        cboDrawerPeriodo.disabled = true;
+        try {
+            const res = await fetch(
+                `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json();
+            const items = Array.isArray(data) ? data : [];
+            cboDrawerPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                cboDrawerPeriodo.appendChild(opt);
+            });
+            cboDrawerPeriodo.disabled = items.length === 0;
+            if (!items.length) {
+                cboDrawerPeriodo.innerHTML = '<option value="">Sin periodos</option>';
+            } else {
+                seleccionarPeriodoActualDrawer();
+            }
+        } catch (err) {
+            console.error(err);
+            cboDrawerPeriodo.innerHTML = '<option value="">Error al cargar periodos</option>';
+            cboDrawerPeriodo.disabled = true;
+        }
+    }
+
+    async function cargarTiposDescanso(cia) {
+        if (!cboDrawerTipo) return;
+        const codigo = String(cia || '').trim();
+        if (!codigo) {
+            tiposDescansoCache = [];
+            cboDrawerTipo.innerHTML = '<option value="">Seleccione compañía...</option>';
+            cboDrawerTipo.disabled = true;
+            return;
+        }
+
+        cboDrawerTipo.innerHTML = '<option value="">Cargando tipos...</option>';
+        cboDrawerTipo.disabled = true;
+
+        try {
+            const res = await fetch(`/api/selectores/tipos-descanso-medico?cia=${encodeURIComponent(codigo)}`);
+            const data = await res.json();
+            tiposDescansoCache = Array.isArray(data) ? data : [];
+            renderTiposDrawer(cboDrawerSubsidio ? cboDrawerSubsidio.value : 'N');
+        } catch (err) {
+            console.error(err);
+            tiposDescansoCache = [];
+            cboDrawerTipo.innerHTML = '<option value="">Error al cargar tipos</option>';
+            cboDrawerTipo.disabled = true;
+        }
+    }
+
+    function formatearFecha(valor) {
+        if (!valor) return '—';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+        if (/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+        return s;
+    }
+
+    function formatearFechaIngreso(valor) {
+        return formatearFecha(valor);
+    }
+
+    function renderListaTrabajadores(rows) {
+        if (!rows.length) {
+            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores activos</td></tr>';
+            lblConteo.textContent = '0 trabajadores';
+            return;
+        }
+
+        tbodyTrabajadores.innerHTML = rows.map((t) => {
+            const activo = trabajadorActivo && trabajadorActivo.person === t.person;
+            const dni = escHtml(t.documento || t.person || '');
+            const nombre = escHtml(t.nombre || '');
+            const ingreso = escHtml(formatearFechaIngreso(t.fechaingreso));
+            return `<tr class="trabajador-row ${activo ? 'active' : ''}" data-person="${escHtml(t.person)}" title="${nombre}">
+                <td class="col-dni">${dni}</td>
+                <td class="col-nombre">${nombre}</td>
+                <td class="col-ingreso">${ingreso}</td>
+            </tr>`;
+        }).join('');
+
+        lblConteo.textContent = `${rows.length} trabajador${rows.length === 1 ? '' : 'es'}`;
+
+        tbodyTrabajadores.querySelectorAll('.trabajador-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const person = this.getAttribute('data-person');
+                const row = trabajadoresCache.find((x) => x.person === person);
+                if (row) await seleccionarTrabajador(row);
+            });
+        });
+    }
+
+    async function cargarTrabajadores() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            trabajadoresCache = [];
+            renderListaTrabajadores([]);
+            return;
+        }
+
+        tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+
+        try {
+            const res = await fetch('/api/vacaciones/trabajadores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype: cboPlanilla.value || '0',
+                    busqueda: txtBuscar.value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            trabajadoresCache = data.rows || [];
+            renderListaTrabajadores(trabajadoresCache);
+        } catch (err) {
+            console.error(err);
+            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">Error al cargar trabajadores</td></tr>';
+            mostrarError(err.message);
+        }
+    }
+
+    function mostrarPanelDetalle(visible) {
+        placeholderDetalle.classList.toggle('d-none', visible);
+        contenidoDetalle.classList.toggle('d-none', !visible);
+        if (visible) {
+            contenidoDetalle.style.display = 'flex';
+        } else {
+            contenidoDetalle.style.display = 'none';
+        }
+        btnNuevoRegistro.disabled = !visible;
+    }
+
+    function renderKpis(kpis) {
+        const limite = Number(kpis.limite_empleador || 20);
+        const diasEmp = Number(kpis.dias_empleador || 0);
+        const diasEss = Number(kpis.dias_essalud || 0);
+        const total = Number(kpis.total_anio || 0);
+        const restante = Math.max(0, limite - diasEmp);
+        const pct = Math.min(100, Math.round((diasEmp / limite) * 100));
+
+        document.getElementById('kpiDiasEmpleador').textContent = String(diasEmp);
+        document.getElementById('kpiDiasEssalud').textContent = String(diasEss);
+        document.getElementById('kpiTotalAnio').textContent = String(total);
+        document.getElementById('kpiLimiteEmpleador').textContent = String(limite);
+        document.getElementById('kpiRestanteEmpleador').textContent = `${restante} restante${restante === 1 ? '' : 's'}`;
+
+        const bar = document.getElementById('barEmpleador');
+        bar.style.width = `${pct}%`;
+        bar.setAttribute('aria-valuenow', String(diasEmp));
+        bar.setAttribute('aria-valuemax', String(limite));
+        bar.classList.toggle('bg-danger', diasEmp >= limite);
+        bar.classList.toggle('bg-primary', diasEmp < limite);
+    }
+
+    function formatearPeriodo(valor) {
+        if (!valor) return '—';
+        const s = String(valor).trim().replace(/\D/g, '');
+        if (s.length >= 8) return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+        if (s.length >= 6) return `${s.slice(0, 4)}-${s.slice(4, 6)}`;
+        return String(valor).trim();
+    }
+
+    function renderHistorial(historial) {
+        const tbody = document.querySelector('#tblHistorial tbody');
+        const badge = document.getElementById('badgeTotalHistorial');
+        const rows = historial || [];
+        badge.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin descansos registrados</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map((h) => {
+            const esEssalud = String(h.payreponsableflag || '').toUpperCase() === 'S';
+            const badgeClass = esEssalud ? 'badge-cobertura-essalud' : 'badge-cobertura-empleador';
+            return `<tr>
+                <td>${escHtml(formatearPeriodo(h.prperiod))}</td>
+                <td>${escHtml(formatearFecha(h.datebegin))}</td>
+                <td>${escHtml(formatearFecha(h.dateend))}</td>
+                <td class="text-end fw-semibold">${h.days}</td>
+                <td class="col-tipo" title="${escHtml(h.tipo_descanso || '')}">${escHtml(h.tipo_descanso || '')}</td>
+                <td><span class="badge ${badgeClass}">${escHtml(h.cobertura_texto || '')}</span></td>
+                <td>${escHtml(h.citt || '—')}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function cargarDetalleTrabajador(person) {
+        const cia = cboCia.value.trim();
+        if (!cia || !person) return;
+
+        try {
+            const res = await fetch(`/descansos/trabajador/${encodeURIComponent(person)}?cia=${encodeURIComponent(cia)}`);
+            const data = await leerJson(res);
+            datosDescansos = data;
+
+            document.getElementById('lblNombreTrabajador').textContent = data.empleado.nombre || '—';
+            document.getElementById('lblDniTrabajador').textContent = data.empleado.documento || data.empleado.person || '';
+            document.getElementById('lblIngresoTrabajador').textContent = formatearFechaIngreso(data.empleado.fechaingreso);
+            document.getElementById('lblAnioConsulta').textContent = String(data.anio || new Date().getFullYear());
+
+            renderKpis(data.kpis || {});
+            renderHistorial(data.historial || []);
+            mostrarPanelDetalle(true);
+            validarFormularioDrawer();
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        }
+    }
+
+    async function seleccionarTrabajador(row) {
+        trabajadorActivo = row;
+        renderListaTrabajadores(trabajadoresCache);
+        await cargarDetalleTrabajador(row.person);
+    }
+
+    function validarFormularioDrawer() {
+        const inicio = document.getElementById('txtDrawerFechaInicio').value;
+        const fin = document.getElementById('txtDrawerFechaFin').value;
+        const tipo = cboDrawerTipo.value;
+        const periodo = cboDrawerPeriodo ? cboDrawerPeriodo.value : '';
+        const subsidio = cboDrawerSubsidio ? cboDrawerSubsidio.value : 'N';
+        const pdt = pdtTipoSeleccionado();
+        const cittEl = document.getElementById('txtDrawerCitt');
+        const alertaCitt = document.getElementById('alertaCittRequerido');
+        const alertaForzada = document.getElementById('alertaCoberturaForzada');
+        const btnGuardar = document.getElementById('btnGuardarDescanso');
+        const lblDias = document.getElementById('lblDrawerDias');
+
+        const dias = calcularDiasCalendario(inicio, fin);
+        lblDias.textContent = dias != null ? String(dias) : '—';
+
+        const kpis = (datosDescansos && datosDescansos.kpis) ? datosDescansos.kpis : {};
+        const diasEmpPrev = Number(kpis.dias_empleador || 0);
+        const limite = Number(kpis.limite_empleador || 20);
+        const aplicaRegla20 = subsidio === 'N' && pdt === '20';
+        const supera20 = aplicaRegla20 && dias != null && (diasEmpPrev + dias) > limite;
+        const cittRequerido = subsidio === 'S' || supera20;
+
+        alertaCitt.classList.toggle('visible', aplicaRegla20 || subsidio === 'S');
+        alertaForzada.classList.toggle('d-none', !supera20);
+        cittEl.classList.toggle('is-invalid', cittRequerido && !cittEl.value.trim());
+
+        const fechasOk = dias != null && dias > 0;
+        const cittOk = !cittRequerido || !!cittEl.value.trim();
+        const periodoOk = !!periodo;
+        btnGuardar.disabled = !fechasOk || !tipo || !cittOk || !periodoOk || cboDrawerTipo.disabled;
+    }
+
+    function limpiarFormularioDrawer() {
+        frmNuevoDescanso.reset();
+        if (cboDrawerSubsidio) cboDrawerSubsidio.value = 'N';
+        document.getElementById('lblDrawerDias').textContent = '—';
+        document.getElementById('alertaCoberturaForzada').classList.add('d-none');
+        renderTiposDrawer('N');
+        seleccionarPeriodoActualDrawer();
+        validarFormularioDrawer();
+    }
+
+    btnNuevoRegistro.addEventListener('click', async function () {
+        if (!trabajadorActivo) return;
+        await Promise.all([
+            cargarTiposDescanso(cboCia.value.trim()),
+            cargarPeriodosDrawer(),
+        ]);
+        limpiarFormularioDrawer();
+        if (drawer) drawer.show();
+    });
+
+    if (cboDrawerSubsidio) {
+        cboDrawerSubsidio.addEventListener('change', function () {
+            renderTiposDrawer(this.value);
+            validarFormularioDrawer();
+        });
+    }
+
+    ['txtDrawerFechaInicio', 'txtDrawerFechaFin', 'cboDrawerTipo', 'cboDrawerPeriodo', 'txtDrawerCitt'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('input', validarFormularioDrawer);
+        if (el) el.addEventListener('change', validarFormularioDrawer);
+    });
+
+    frmNuevoDescanso.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        if (!trabajadorActivo) return;
+
+        const btnGuardar = document.getElementById('btnGuardarDescanso');
+        btnGuardar.disabled = true;
+
+        const fd = new FormData(frmNuevoDescanso);
+        fd.append('cia', cboCia.value.trim());
+        fd.append('person', trabajadorActivo.person);
+
+        try {
+            const res = await fetch('/descansos/guardar', { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo guardar.');
+
+            if (drawer) drawer.hide();
+            limpiarFormularioDrawer();
+            await cargarDetalleTrabajador(trabajadorActivo.person);
+
+            let msg = 'Descanso médico registrado correctamente.';
+            if (data.cobertura_forzada) {
+                msg += ' Cobertura asignada: Subsidio EsSalud.';
+            }
+            alert(msg);
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        } finally {
+            validarFormularioDrawer();
+        }
+    });
+
+    document.getElementById('frmFiltrosDescansos').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        trabajadorActivo = null;
+        datosDescansos = null;
+        mostrarPanelDetalle(false);
+        if (filtrosPersist && filtrosPersist.guardar) filtrosPersist.guardar();
+        await cargarTrabajadores();
+    });
+
+    txtBuscar.addEventListener('input', function () {
+        clearTimeout(buscarTimer);
+        buscarTimer = setTimeout(cargarTrabajadores, 300);
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    if (filtrosPersist && filtrosPersist.leer) {
+        const saved = filtrosPersist.leer();
+        if (saved && saved.cia) seleccionarCompaniaInsensitive(cboCia, saved.cia);
+    }
+    if (!cboCia.value && optionExists(cboCia, DEFAULT_CIA)) {
+        cboCia.value = DEFAULT_CIA;
+    }
+
+    await poblarSelect(
+        `/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value || DEFAULT_CIA)}`,
+        cboPlanilla,
+        { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+    );
+    if (filtrosPersist && filtrosPersist.leer) {
+        const saved = filtrosPersist.leer();
+        if (saved && saved.payrolltype && optionExists(cboPlanilla, saved.payrolltype)) {
+            cboPlanilla.value = saved.payrolltype;
+        }
+    }
+
+    cboCia.addEventListener('change', async function () {
+        if (filtrosPersist && filtrosPersist.guardar) filtrosPersist.guardar();
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value)}`,
+            cboPlanilla,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+        await cargarTiposDescanso(cboCia.value.trim());
+    });
+
+    if (filtrosPersist && filtrosPersist.registrarGuardadoEnCambio) {
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    if (cboCia.value) {
+        await cargarTiposDescanso(cboCia.value.trim());
+        await cargarTrabajadores();
+    }
+});
+</script>
+{% endblock %}

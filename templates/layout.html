@@ -409,6 +409,12 @@
                     </a>
                 </li>
 
+                <li class="{{ 'active' if request.endpoint == 'registro_descansos_medicos_page' else '' }}">
+                    <a href="{{ url_for('registro_descansos_medicos_page') }}" title="Registro de Descansos Médicos">
+                        <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Registro de Descansos Médicos</span>
+                    </a>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>

@@ -4184,6 +4184,265 @@ def registro_vacaciones_page():
     return render_template('registro_vacaciones.html')
 
 
+@app.route('/registro-descansos-medicos')
+@login_required
+def registro_descansos_medicos_page():
+    return render_template('registro_descansos_medicos.html')
+
+
+DESCANSOS_MEDICOS_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'uploads',
+    'descansos_medicos',
+)
+
+
+def _descanso_historial_dict(r):
+    return {
+        'line': int(r.get('line') or 0),
+        'datebegin': _jsonable_value(r.get('datebegin')),
+        'dateend': _jsonable_value(r.get('dateend')),
+        'days': int(r.get('days') or 0),
+        'prperiod': _jsonable_value(r.get('prperiod')),
+        'payreponsableflag': _jsonable_value(r.get('payreponsableflag')),
+        'cobertura_texto': _jsonable_value(r.get('cobertura_texto')),
+        'tipo_descanso': _jsonable_value(r.get('tipo_descanso')),
+        'pdt': _jsonable_value(r.get('pdt')),
+        'citt': _jsonable_value(r.get('citt')),
+        'cmp_medico': _jsonable_value(r.get('cmp_medico')),
+        'adjunto': _jsonable_value(r.get('adjunto')),
+        'status': _jsonable_value(r.get('status')),
+        'fecha_modificacion': _jsonable_datetime(r.get('fecha_modificacion')),
+    }
+
+
+def _descanso_kpis_dict(r):
+    if not r:
+        return {
+            'dias_empleador': 0,
+            'dias_essalud': 0,
+            'total_anio': 0,
+            'limite_empleador': 20,
+        }
+    return {
+        'dias_empleador': int(r.get('dias_empleador') or 0),
+        'dias_essalud': int(r.get('dias_essalud') or 0),
+        'total_anio': int(r.get('total_anio') or 0),
+        'limite_empleador': int(r.get('limite_empleador') or 20),
+    }
+
+
+def _descanso_empleado_dict(r):
+    if not r:
+        return None
+    return {
+        'person': _jsonable_value(r.get('person')),
+        'codigo': _jsonable_value(r.get('codigo')),
+        'nombre': _jsonable_value(r.get('nombre')),
+        'documento': _jsonable_value(r.get('documento')),
+        'fechaingreso': _jsonable_value(r.get('fechaingreso')),
+        'payrolltype': _jsonable_value(r.get('payrolltype')),
+    }
+
+
+def _guardar_adjunto_descanso_medico(archivo, cia, person):
+    """Guarda PDF de sustento y devuelve ruta relativa para PR_EmployeeMedicalRest.adjunto."""
+    if not archivo or not getattr(archivo, 'filename', ''):
+        return None
+    nombre = os.path.basename(str(archivo.filename or ''))
+    if not nombre.lower().endswith('.pdf'):
+        raise ValueError('El sustento debe ser un archivo PDF.')
+    os.makedirs(DESCANSOS_MEDICOS_UPLOAD_DIR, exist_ok=True)
+    base = re.sub(r'[^A-Za-z0-9._-]+', '_', f'{cia}_{person}_{int(time.time())}')
+    dest_name = f'{base}.pdf'
+    dest_path = os.path.join(DESCANSOS_MEDICOS_UPLOAD_DIR, dest_name)
+    archivo.save(dest_path)
+    return f'descansos_medicos/{dest_name}'
+
+
+@app.route('/descansos/trabajador/<person>')
+@login_required
+def descansos_trabajador_get(person):
+    """sp_pr_descansos_obtener_trabajador_web: historial y KPIs del trabajador."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    anio_raw = request.args.get('anio') or request.args.get('year')
+    person = str(person or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+
+    anio = None
+    if anio_raw is not None and str(anio_raw).strip() != '':
+        try:
+            anio = int(anio_raw)
+        except Exception:
+            return jsonify({"error": "Año inválido."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if anio is not None:
+            cursor.execute(
+                "EXEC sp_pr_descansos_obtener_trabajador_web @company=?, @person=?, @anio=?",
+                (cia, person, anio),
+            )
+        else:
+            cursor.execute(
+                "EXEC sp_pr_descansos_obtener_trabajador_web @company=?, @person=?",
+                (cia, person),
+            )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=4)
+        empleado = _descanso_empleado_dict(sets[0][0] if len(sets) > 0 and sets[0] else None)
+        if not empleado:
+            return jsonify({"error": "No se encontró el trabajador."}), 404
+        kpis = _descanso_kpis_dict(sets[1][0] if len(sets) > 1 and sets[1] else None)
+        historial = [_descanso_historial_dict(r) for r in (sets[2] if len(sets) > 2 else [])]
+        return jsonify({
+            "empleado": empleado,
+            "kpis": kpis,
+            "historial": historial,
+            "anio": anio or date.today().year,
+        })
+    except Exception as e:
+        logging.exception("descansos_trabajador_get")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/descansos/guardar', methods=['POST'])
+@login_required
+def descansos_guardar_post():
+    """sp_pr_descansos_guardar_web: alta de descanso médico con validación de 20 días."""
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    person = str(request.form.get('person') or '').strip()
+    medicalresttype = str(
+        request.form.get('medicalresttype')
+        or request.form.get('tipo_descanso')
+        or ''
+    ).strip()
+    subsidio = str(request.form.get('subsidio') or '').strip().upper()
+    prperiod = _normalize_pr_period(request.form.get('prperiod') or request.form.get('periodo'))
+    citt = str(request.form.get('citt') or '').strip()
+    cmp_medico = str(request.form.get('cmp_medico') or request.form.get('medico') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if not medicalresttype:
+        return jsonify({"error": "Seleccione el tipo de descanso."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione el periodo de aplicación."}), 400
+    if subsidio not in ('S', 'N'):
+        return jsonify({"error": "Seleccione si el descanso es subsidiado o no."}), 400
+
+    fecha_inicio = _sql_date_str_param(request.form.get('fecha_inicio') or request.form.get('datebegin'))
+    fecha_fin = _sql_date_str_param(request.form.get('fecha_fin') or request.form.get('dateend'))
+    if not fecha_inicio or not fecha_fin:
+        return jsonify({"error": "Indique fecha de inicio y término."}), 400
+    if fecha_inicio > fecha_fin:
+        return jsonify({"error": "La fecha de término no puede ser anterior a la de inicio."}), 400
+
+    dias = None
+    try:
+        d1 = datetime.strptime(fecha_inicio, '%Y-%m-%d').date()
+        d2 = datetime.strptime(fecha_fin, '%Y-%m-%d').date()
+        dias = (d2 - d1).days + 1
+    except Exception:
+        return jsonify({"error": "Fechas inválidas."}), 400
+    if dias <= 0:
+        return jsonify({"error": "El rango de fechas debe generar al menos 1 día."}), 400
+
+    adjunto = None
+    archivo = request.files.get('sustento') or request.files.get('adjunto')
+    if archivo and archivo.filename:
+        try:
+            adjunto = _guardar_adjunto_descanso_medico(archivo, cia, person)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        anio = int(fecha_inicio[:4])
+        cursor.execute(
+            "EXEC sp_pr_descansos_obtener_trabajador_web @company=?, @person=?, @anio=?",
+            (cia, person, anio),
+        )
+        sets_prev = _dicts_collect_nonempty_resultsets(cursor, max_sets=4)
+        kpis_prev = _descanso_kpis_dict(sets_prev[1][0] if len(sets_prev) > 1 and sets_prev[1] else None)
+        dias_empleador_prev = int(kpis_prev.get('dias_empleador') or 0)
+
+        cursor.execute(
+            "SELECT LTRIM(RTRIM(PDT)) AS pdt FROM PR_MedicalRestType WHERE Company = ? AND MedicalRestType = ?",
+            (cia, medicalresttype),
+        )
+        pdt_row = _dicts_first_nonempty_resultset(cursor)
+        pdt_sel = str((pdt_row[0].get('pdt') if pdt_row else '') or '').strip()
+        if not pdt_sel:
+            return jsonify({"error": "Tipo de descanso no válido para la compañía."}), 400
+
+        if subsidio == 'S' and pdt_sel not in ('21', '22'):
+            return jsonify({"error": "El tipo de descanso no corresponde a un registro subsidiado."}), 400
+        if subsidio == 'N' and pdt_sel in ('21', '22'):
+            return jsonify({"error": "El tipo de descanso no corresponde a un registro no subsidiado."}), 400
+
+        cobertura_forzada = pdt_sel == '20' and (dias_empleador_prev + dias) > 20
+        citt_requerido = subsidio == 'S' or cobertura_forzada
+        if citt_requerido and not citt:
+            msg_citt = (
+                "Al superar los 20 días a cargo del empleador se requiere el número de CITT para el subsidio EsSalud."
+                if cobertura_forzada
+                else "El número de CITT es obligatorio para descansos subsidiados."
+            )
+            return jsonify({
+                "error": msg_citt,
+                "cobertura_forzada": cobertura_forzada,
+            }), 400
+
+        cursor.execute(
+            "EXEC sp_pr_descansos_guardar_web "
+            "@company=?, @person=?, @datebegin=?, @dateend=?, @medicalresttype=?, "
+            "@prperiod=?, @citt=?, @cmp_medico=?, @adjunto=?, @days=?, @xlastuser=?",
+            (
+                cia, person, fecha_inicio, fecha_fin, medicalresttype,
+                prperiod, citt or None, cmp_medico or None, adjunto, dias, xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        if cobertura_forzada:
+            row['cobertura_forzada'] = True
+        return jsonify({"ok": True, "row": row, "cobertura_forzada": cobertura_forzada})
+    except Exception as e:
+        logging.exception("descansos_guardar_post")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/conceptos')
 @login_required
 def conceptos_page():
@@ -8802,6 +9061,7 @@ def api_tipos_descanso_medico():
                 {
                     "id": rd.get("medicalresttype"),
                     "text": rd.get("description"),
+                    "pdt": rd.get("pdt"),
                 }
             )
         return jsonify(data)

@@ -15,7 +15,7 @@
       EXEC sp_pr_reportelog_calculo_web
            @cia = 'BGT',
            @payrolltype = 'LIMABGT 000000000005',
-           @process = 'LIMABGT 000000000001',
+           @process = 'BGT 000000000011',
            @period = '20260404',
            @person = '0';
 */
@@ -32,6 +32,21 @@ BEGIN
     SET @person = LTRIM(RTRIM(ISNULL(@person, '0')));
     IF @person = '' SET @person = '0';
 
+    ;WITH periodbegin_map AS (
+        SELECT
+            epc.Person,
+            c.FormulaCode,
+            MIN(epc.periodbegin) AS periodbegin
+        FROM PR_EmployeePayRollConcept epc
+        INNER JOIN PR_Concept c
+            ON c.Company = epc.Company
+           AND c.Concept = epc.Concept
+        WHERE epc.Company = @cia
+          AND epc.PayRollType = @payrolltype
+          AND epc.ProcessType = @process
+          AND epc.PRPeriod = @period
+        GROUP BY epc.Person, c.FormulaCode
+    )
     SELECT
         SY_Person.Person AS person,
         SY_Person.Name AS name,
@@ -47,22 +62,7 @@ BEGIN
         ISNULL(PR_Concept.flaginsertar, 'N') AS flaginsertar,
         ISNULL(PR_Concept.flagafecto5ta, 'N') AS flagafecto5ta,
         ISNULL(PR_Concept.flagafectoAFP, 'N') AS flagafectoafp,
-        (
-            SELECT TOP 1 epc.periodbegin
-            FROM PR_EmployeePayRollConcept epc
-            WHERE epc.Person = PR_LOG_CALCULO_PLANILLAS.person
-              AND epc.Company = @cia
-              AND epc.PayRollType = @payrolltype
-              AND epc.ProcessType = @process
-              AND epc.PRPeriod = @period
-              AND EXISTS (
-                  SELECT 1
-                  FROM PR_Concept c
-                  WHERE c.Company = @cia
-                    AND c.FormulaCode = PR_LOG_CALCULO_PLANILLAS.concepto
-                    AND c.Concept = epc.Concept
-              )
-        ) AS periodbegin
+        pb.periodbegin AS periodbegin
     FROM PR_LOG_CALCULO_PLANILLAS
     LEFT JOIN PR_Concept
         ON PR_LOG_CALCULO_PLANILLAS.concepto = PR_Concept.FormulaCode
@@ -71,6 +71,9 @@ BEGIN
         ON PR_Concept.ConceptType = PR_ConceptType.ConceptType
     INNER JOIN SY_Person
         ON PR_LOG_CALCULO_PLANILLAS.person = SY_Person.Person
+    LEFT JOIN periodbegin_map pb
+        ON pb.Person = PR_LOG_CALCULO_PLANILLAS.person
+       AND pb.FormulaCode = PR_LOG_CALCULO_PLANILLAS.concepto
     WHERE PR_LOG_CALCULO_PLANILLAS.Company = @cia
       AND PR_LOG_CALCULO_PLANILLAS.payrolltype = @payrolltype
       AND PR_LOG_CALCULO_PLANILLAS.process = @process
@@ -81,3 +84,4 @@ BEGIN
         SY_Person.Name,
         PR_LOG_CALCULO_PLANILLAS.fecha;
 END
+GO

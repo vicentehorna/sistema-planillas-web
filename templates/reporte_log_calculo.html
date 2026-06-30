@@ -346,6 +346,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function ejecutarConsultaLogCalculo() {
         lastExportLogCalculo = null;
         document.getElementById('btnExportExcelLog').disabled = true;
+        const btnConsultar = document.querySelector('#frmLogCalculo button[type="submit"]');
+        const lblCount = document.getElementById('lblRowCountLog');
+        if (btnConsultar) btnConsultar.disabled = true;
+        if (lblCount) lblCount.textContent = '...';
         if (filtrosPersist) filtrosPersist.guardar();
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
@@ -398,6 +402,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.getElementById('btnExportExcelLog').disabled = true;
             document.getElementById('lblRowCountLog').textContent = '0';
             alert('Error de red o del servidor.');
+        } finally {
+            const btnConsultar = document.querySelector('#frmLogCalculo button[type="submit"]');
+            if (btnConsultar) btnConsultar.disabled = false;
         }
     }
 

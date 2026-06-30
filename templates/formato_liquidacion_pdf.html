@@ -30,14 +30,21 @@
             vertical-align: top;
         }
         .encabezado .logo-cell {
-            width: 32%;
+            width: 34%;
         }
         .encabezado .empresa-cell {
-            width: 68%;
+            width: 66%;
             text-align: right;
             font-size: 8px;
-            padding-top: 4px;
+            padding-top: 2px;
             color: #555;
+        }
+        .empresa-nombre {
+            font-size: 10px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin-bottom: 2px;
         }
         .logo-img {
             max-height: 58px;
@@ -89,31 +96,88 @@
         }
         table.datos-grid td.col-izq .datos-lbl,
         table.datos-grid td.col-der .datos-lbl {
+            vertical-align: top;
+        }
+        table.datos-grid td.nowrap .datos-lbl,
+        table.datos-grid td.nowrap .datos-val {
             display: inline-block;
             vertical-align: top;
         }
-        table.datos-grid td.col-izq .datos-lbl {
+        table.datos-grid td.col-izq.nowrap .datos-lbl {
             width: 3.1cm;
         }
-        table.datos-grid td.col-der .datos-lbl {
+        table.datos-grid td.col-der.nowrap .datos-lbl {
             width: 2.8cm;
-        }
-        table.datos-grid .datos-val {
-            display: inline-block;
-            vertical-align: top;
-        }
-        table.datos-grid td.col-izq.wrap .datos-val {
-            max-width: calc(100% - 3.1cm);
-        }
-        table.datos-grid td.col-der.wrap .datos-val {
-            max-width: calc(100% - 2.8cm);
-        }
-        table.datos-grid td.nowrap {
-            white-space: nowrap;
         }
         table.datos-grid td.wrap {
             white-space: normal;
+            overflow-wrap: break-word;
             word-wrap: break-word;
+        }
+        table.datos-grid td.col-izq.wrap .datos-lbl,
+        table.datos-grid td.col-der.wrap .datos-lbl {
+            float: left;
+            display: block;
+        }
+        table.datos-grid td.col-izq.wrap .datos-lbl {
+            width: 3.1cm;
+        }
+        table.datos-grid td.col-der.wrap .datos-lbl {
+            width: 2.8cm;
+        }
+        table.datos-grid td.col-izq.wrap .datos-val {
+            display: block;
+            margin-left: 3.1cm;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        table.datos-grid td.col-der.wrap .datos-val {
+            display: block;
+            margin-left: 2.8cm;
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+        }
+        /* Motivo de cese: fila ancho completo para evitar desborde del marco */
+        table.datos-grid td.celda-motivo-cese-full {
+            padding-left: 0;
+            padding-right: 0;
+        }
+        table.datos-grid td.celda-motivo-cese-full .dato-par {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.datos-grid td.celda-motivo-cese-full .dato-par td {
+            width: auto;
+            padding: 0;
+            vertical-align: top;
+            font-size: 8.5px;
+            line-height: 1.22;
+            border: none;
+        }
+        table.datos-grid td.celda-motivo-cese-full .dato-par .lbl-cell {
+            width: 3.1cm;
+            font-weight: bold;
+            color: #444;
+            padding-right: 2px;
+        }
+        table.datos-grid td.celda-motivo-cese-full .dato-par .val-cell {
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            max-width: 0;
+        }
+        table.datos-grid tr.fila-ingreso-tiempo td.col-der .datos-lbl {
+            display: inline-block;
+            width: auto;
+            margin-right: 4px;
+        }
+        table.datos-grid td.wrap::after {
+            content: '';
+            display: table;
+            clear: both;
+        }
+        table.datos-grid td.nowrap {
+            white-space: nowrap;
         }
         table.datos-grid td.fila-completa {
             width: 100%;
@@ -342,7 +406,9 @@
                 {% endif %}
             </div>
             <div class="empresa-cell">
-                {% if liq.company_telephone %}CENTRAL TELEFÓNICA: {{ liq.company_telephone }}{% endif %}
+                <div class="empresa-nombre">{{ liq.company_name or '' }}</div>
+                <div>RUC: {{ liq.company_ruc or '' }}</div>
+                <div>{{ liq.company_address or '' }}</div>
             </div>
         </div>
 
@@ -370,15 +436,22 @@
                 </tr>
                 <tr>
                     <td class="col-izq nowrap"><span class="lbl datos-lbl">Sueldo:</span><span class="datos-val">{{ basico_fmt }}</span></td>
-                    <td class="col-der wrap"><span class="lbl datos-lbl">Motivo de cese:</span><span class="datos-val">{{ liq.cease_reason or '' }}</span></td>
-                </tr>
-                <tr>
-                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Fecha de ingreso:</span><span class="datos-val">{{ entry_date_fmt }}</span></td>
                     <td class="col-der nowrap"><span class="lbl datos-lbl">Fecha de cese:</span><span class="datos-val">{{ cease_date_fmt }}</span></td>
                 </tr>
-                <tr class="fila-tiempo-servicio">
-                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Tiempo de servicio:</span></td>
+                <tr>
+                    <td colspan="2" class="fila-completa celda-motivo-cese-full">
+                        <table class="dato-par">
+                            <tr>
+                                <td class="lbl-cell">Motivo de cese:</td>
+                                <td class="val-cell">{{ liq.cease_reason or '' }}</td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <tr class="fila-ingreso-tiempo fila-tiempo-servicio">
+                    <td class="col-izq nowrap"><span class="lbl datos-lbl">Fecha de ingreso:</span><span class="datos-val">{{ entry_date_fmt }}</span></td>
                     <td class="col-der nowrap">
+                        <span class="lbl datos-lbl">Tiempo de servicio:</span>
                         <span class="tiempo-segmento"><span class="lbl">Año:</span> {{ liq.anios_servicio | default(0) | int }}</span>
                         <span class="tiempo-segmento"><span class="lbl">Mes:</span> {{ liq.meses_servicio | default(0) | int }}</span>
                         <span class="tiempo-segmento"><span class="lbl">Día:</span> {{ liq.dias_servicio | default(0) | int }}</span>

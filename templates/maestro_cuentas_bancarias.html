@@ -1,0 +1,607 @@
+{% extends "layout.html" %}
+
+{% block title %}Cuentas Bancarias{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cb-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+
+    .cb-panel-izq {
+        flex: 0 0 42%;
+        max-width: 42%;
+        min-width: 280px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .cb-panel-der {
+        flex: 1 1 58%;
+        min-width: 0;
+    }
+
+    .cb-grilla {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 5rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-cb-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-cb-lista th,
+    .table-cb-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-cb-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-cb-lista tbody tr.cb-row {
+        cursor: pointer;
+    }
+
+    .table-cb-lista tbody tr.cb-row:hover {
+        background: #f8f9fa;
+    }
+
+    .table-cb-lista tbody tr.cb-row.active {
+        background: #cfe2ff;
+    }
+
+    .table-cb-lista .col-numero {
+        min-width: 8rem;
+    }
+
+    .table-cb-lista .col-tipo,
+    .table-cb-lista .col-banco {
+        min-width: 7rem;
+        max-width: 12rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .cb-form-card .form-label {
+        font-size: 0.78rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .cb-form-card .form-control-sm,
+    .cb-form-card .form-select-sm {
+        font-size: 0.82rem;
+    }
+
+    .campo-obligatorio.form-control,
+    .campo-obligatorio.form-select {
+        background-color: #d9edf7;
+        border-color: #b8daff;
+    }
+
+    .campo-obligatorio.form-control:focus,
+    .campo-obligatorio.form-select:focus {
+        background-color: #cce5f6;
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+
+    .cb-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    .cb-msg-guardado {
+        margin-top: 0.75rem;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #0f5132;
+        background-color: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 0.375rem;
+    }
+
+    .cb-campo-auditoria {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+
+    @media (max-width: 991.98px) {
+        .cb-layout {
+            flex-direction: column;
+        }
+
+        .cb-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .cb-grilla {
+            max-height: 280px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosCuentasBancarias" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtBuscarCuenta" class="form-label small fw-bold text-muted mb-1">Buscar cuenta</label>
+                <input type="search" id="txtBuscarCuenta" class="form-control form-control-sm" placeholder="Número, banco o tipo..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevaCuenta">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="cb-layout">
+    <aside class="cb-panel-izq">
+        <div class="cb-grilla">
+            <table class="table table-bordered table-sm table-hover table-cb-lista align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th class="col-numero">Número</th>
+                        <th class="col-tipo">Tipo</th>
+                        <th class="col-banco">Banco</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyCuentas">
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="lblConteoCuentas" class="small text-muted mt-2">0 registros</div>
+    </aside>
+
+    <section class="cb-panel-der">
+        <div id="placeholderCuenta" class="cb-placeholder">
+            <div>
+                <i class="bi bi-bank fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione una cuenta de la lista o cree una nueva.
+            </div>
+        </div>
+
+        <div id="panelEdicionCuenta" class="card border-0 shadow-sm cb-form-card d-none">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="fw-semibold" id="tituloEdicionCuenta">Nueva cuenta bancaria</span>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" id="btnGuardarCuenta">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm d-none" id="btnEliminarCuenta">
+                        <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="frmCuentaBancaria" class="row g-3">
+                    <input type="hidden" id="hidBankAccount" value="">
+                    <input type="hidden" id="hidModo" value="I">
+
+                    <div class="col-12 col-md-6">
+                        <label for="cboAccountType" class="form-label fw-semibold text-muted">Tipo De Cuenta</label>
+                        <select id="cboAccountType" class="form-select form-select-sm campo-obligatorio" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="cboBank" class="form-label fw-semibold text-muted">Banco</label>
+                        <select id="cboBank" class="form-select form-select-sm campo-obligatorio" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12">
+                        <label for="txtBankAccountNumber" class="form-label fw-semibold text-muted">Número De Cuenta</label>
+                        <input type="text" id="txtBankAccountNumber" class="form-control form-control-sm campo-obligatorio" maxlength="30" required>
+                    </div>
+
+                    <div class="col-12 col-md-6" id="wrapAuditoriaUser">
+                        <label for="txtXLastUser" class="form-label fw-semibold text-muted">Último Usuario</label>
+                        <input type="text" id="txtXLastUser" class="form-control form-control-sm cb-campo-auditoria" readonly disabled>
+                    </div>
+
+                    <div class="col-12 col-md-6" id="wrapAuditoriaDate">
+                        <label for="txtXLastDate" class="form-label fw-semibold text-muted">Última Modificación</label>
+                        <input type="text" id="txtXLastDate" class="form-control form-control-sm cb-campo-auditoria" readonly disabled>
+                    </div>
+                </form>
+                <div id="msgGuardadoCuenta" class="cb-msg-guardado d-none" role="status"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectElement) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                throw new Error('Respuesta no válida del servidor.');
+            }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function formatearFecha(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+        return s;
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const tbodyCuentas = document.getElementById('tbodyCuentas');
+    const placeholder = document.getElementById('placeholderCuenta');
+    const panelEdicion = document.getElementById('panelEdicionCuenta');
+    const msgGuardado = document.getElementById('msgGuardadoCuenta');
+    const cboAccountType = document.getElementById('cboAccountType');
+    const cboBank = document.getElementById('cboBank');
+
+    let cuentasCache = [];
+    let cuentaSeleccionada = null;
+    let obtenerAbort = null;
+    let msgGuardadoTimer = null;
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function ocultarMensajeGuardado() {
+        if (msgGuardadoTimer) {
+            clearTimeout(msgGuardadoTimer);
+            msgGuardadoTimer = null;
+        }
+        if (msgGuardado) {
+            msgGuardado.textContent = '';
+            msgGuardado.classList.add('d-none');
+        }
+    }
+
+    function mostrarMensajeGuardado(texto) {
+        if (!msgGuardado) return;
+        ocultarMensajeGuardado();
+        msgGuardado.textContent = texto || 'Registro guardado correctamente.';
+        msgGuardado.classList.remove('d-none');
+        msgGuardadoTimer = setTimeout(ocultarMensajeGuardado, 6000);
+    }
+
+    function syncVisibilidadModo() {
+        const esNuevo = document.getElementById('hidModo').value === 'I';
+        document.getElementById('wrapAuditoriaUser').classList.toggle('d-none', esNuevo);
+        document.getElementById('wrapAuditoriaDate').classList.toggle('d-none', esNuevo);
+        document.getElementById('btnEliminarCuenta').classList.toggle('d-none', esNuevo);
+    }
+
+    function limpiarFormulario() {
+        ocultarMensajeGuardado();
+        document.getElementById('hidBankAccount').value = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('frmCuentaBancaria').reset();
+        document.getElementById('txtXLastUser').value = '';
+        document.getElementById('txtXLastDate').value = '';
+        document.getElementById('tituloEdicionCuenta').textContent = 'Nueva cuenta bancaria';
+        syncVisibilidadModo();
+    }
+
+    function cargarFormulario(data) {
+        document.getElementById('hidBankAccount').value = data.bankaccount || '';
+        document.getElementById('hidModo').value = 'U';
+        document.getElementById('cboAccountType').value = data.accounttype || '';
+        document.getElementById('cboBank').value = data.bank || '';
+        document.getElementById('txtBankAccountNumber').value = data.bankaccountnumber || '';
+        document.getElementById('txtXLastUser').value = data.xlastuser || '';
+        document.getElementById('txtXLastDate').value = formatearFecha(data.xlastdate);
+        const titulo = data.bankaccountnumber || data.bank_name || 'Editar cuenta';
+        document.getElementById('tituloEdicionCuenta').textContent = titulo;
+        syncVisibilidadModo();
+    }
+
+    function payloadFormulario() {
+        return {
+            cia: cboCia.value.trim(),
+            bankaccount: document.getElementById('hidBankAccount').value.trim(),
+            modo: document.getElementById('hidModo').value.trim() || 'I',
+            accounttype: cboAccountType.value.trim(),
+            bank: cboBank.value.trim(),
+            bankaccountnumber: document.getElementById('txtBankAccountNumber').value.trim(),
+        };
+    }
+
+    function updateRowHighlight() {
+        tbodyCuentas.querySelectorAll('.cb-row').forEach((tr) => {
+            const id = tr.getAttribute('data-bankaccount');
+            tr.classList.toggle('active', !!(cuentaSeleccionada && cuentaSeleccionada.bankaccount === id));
+        });
+    }
+
+    function renderListaCuentas(rows) {
+        if (!rows.length) {
+            tbodyCuentas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin registros</td></tr>';
+            document.getElementById('lblConteoCuentas').textContent = '0 registros';
+            return;
+        }
+
+        tbodyCuentas.innerHTML = rows.map((r) => {
+            const activo = cuentaSeleccionada && cuentaSeleccionada.bankaccount === r.bankaccount;
+            return `<tr class="cb-row ${activo ? 'active' : ''}" data-bankaccount="${escHtml(r.bankaccount || '')}">
+                <td class="col-numero" title="${escHtml(r.bankaccountnumber || '')}">${escHtml(r.bankaccountnumber || '')}</td>
+                <td class="col-tipo" title="${escHtml(r.accounttype_description || '')}">${escHtml(r.accounttype_description || r.accounttype || '')}</td>
+                <td class="col-banco" title="${escHtml(r.bank_name || '')}">${escHtml(r.bank_name || '')}</td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('lblConteoCuentas').textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+
+        tbodyCuentas.querySelectorAll('.cb-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const bankaccount = this.getAttribute('data-bankaccount');
+                const row = cuentasCache.find((x) => x.bankaccount === bankaccount);
+                if (row) await seleccionarCuenta(row);
+            });
+        });
+    }
+
+    async function eliminarCuenta(row) {
+        const nombre = row.bankaccountnumber || row.bank_name || 'cuenta bancaria';
+        if (!confirm(`¿Eliminar la cuenta "${nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+
+        try {
+            const res = await fetch('/api/cuentas-bancarias/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    bankaccount: row.bankaccount,
+                }),
+            });
+            const data = await leerJson(res);
+            if (cuentaSeleccionada && cuentaSeleccionada.bankaccount === row.bankaccount) {
+                cuentaSeleccionada = null;
+                limpiarFormulario();
+                mostrarPanelEdicion(false);
+            }
+            await cargarListado();
+            mostrarMensajeGuardado(data.mensaje || 'Cuenta bancaria eliminada correctamente.');
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    async function cargarSelectores(cia) {
+        if (!cia) {
+            cboAccountType.innerHTML = '<option value="">Seleccione compañía</option>';
+            cboBank.innerHTML = '<option value="">Seleccione compañía</option>';
+            return;
+        }
+        await Promise.all([
+            poblarSelect(`/api/selectores/tipos-cuenta?cia=${encodeURIComponent(cia)}`, cboAccountType),
+            poblarSelect(`/api/selectores/bancos?cia=${encodeURIComponent(cia)}`, cboBank),
+        ]);
+    }
+
+    async function cargarListado() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            cuentasCache = [];
+            renderListaCuentas([]);
+            return;
+        }
+
+        tbodyCuentas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+
+        try {
+            const res = await fetch('/api/cuentas-bancarias/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    busqueda: document.getElementById('txtBuscarCuenta').value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            cuentasCache = data.rows || [];
+            renderListaCuentas(cuentasCache);
+        } catch (err) {
+            console.error(err);
+            tbodyCuentas.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function seleccionarCuenta(row) {
+        if (!row || !row.bankaccount) return;
+
+        ocultarMensajeGuardado();
+        if (obtenerAbort) obtenerAbort.abort();
+        obtenerAbort = new AbortController();
+        const signal = obtenerAbort.signal;
+
+        cuentaSeleccionada = row;
+        updateRowHighlight();
+        mostrarPanelEdicion(true);
+
+        try {
+            const res = await fetch('/api/cuentas-bancarias/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia: cboCia.value.trim(), bankaccount: row.bankaccount }),
+                signal,
+            });
+            const data = await leerJson(res);
+            if (signal.aborted) return;
+            cargarFormulario(data);
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            alert(err.message);
+        }
+    }
+
+    async function guardarCuenta() {
+        const payload = payloadFormulario();
+        if (!payload.cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        if (!payload.accounttype || !payload.bank || !payload.bankaccountnumber) {
+            alert('Complete tipo de cuenta, banco y número de cuenta.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/cuentas-bancarias/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            await cargarListado();
+            const bankaccount = data.bankaccount;
+            const row = cuentasCache.find((x) => x.bankaccount === bankaccount);
+            if (row) {
+                await seleccionarCuenta(row);
+            } else if (bankaccount) {
+                await seleccionarCuenta({ bankaccount });
+            }
+            mostrarMensajeGuardado(data.mensaje || 'Registro guardado correctamente.');
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    function iniciarNuevaCuenta() {
+        if (!cboCia.value.trim()) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        cuentaSeleccionada = null;
+        updateRowHighlight();
+        limpiarFormulario();
+        mostrarPanelEdicion(true);
+        cboAccountType.focus();
+    }
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    if (!seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA) && cboCia.options.length > 1) {
+        /* sin default */
+    }
+
+    if (cboCia.value.trim()) {
+        await cargarSelectores(cboCia.value.trim());
+        await cargarListado();
+    }
+
+    cboCia.addEventListener('change', async function () {
+        cuentaSeleccionada = null;
+        mostrarPanelEdicion(false);
+        await cargarSelectores(this.value.trim());
+        await cargarListado();
+    });
+
+    document.getElementById('frmFiltrosCuentasBancarias').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await cargarListado();
+    });
+
+    document.getElementById('txtBuscarCuenta').addEventListener('keydown', async function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await cargarListado();
+        }
+    });
+
+    document.getElementById('btnNuevaCuenta').addEventListener('click', iniciarNuevaCuenta);
+    document.getElementById('btnGuardarCuenta').addEventListener('click', guardarCuenta);
+    document.getElementById('btnEliminarCuenta').addEventListener('click', async function () {
+        if (!cuentaSeleccionada || !cuentaSeleccionada.bankaccount) return;
+        await eliminarCuenta(cuentaSeleccionada);
+    });
+});
+</script>
+{% endblock %}

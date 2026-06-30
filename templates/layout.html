@@ -387,6 +387,36 @@
                     </a>
                 </li>
 
+                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'unidades_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if tablas_active else '' }}">
+                    <a href="#submenuTablas"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if tablas_active else 'false' }}"
+                       aria-controls="submenuTablas"
+                       title="Tablas">
+                        <i class="bi bi-table"></i><span class="sidebar-link-text">Tablas</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if tablas_active else '' }}" id="submenuTablas">
+                        <li class="{{ 'active' if request.endpoint == 'cuentas_bancarias_page' else '' }}">
+                            <a href="{{ url_for('cuentas_bancarias_page') }}" title="Cuentas Bancarias">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Cuentas Bancarias</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'cargos_page' else '' }}">
+                            <a href="{{ url_for('cargos_page') }}" title="Cargos">
+                                <i class="bi bi-briefcase"></i><span class="sidebar-link-text">Cargos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'unidades_page' else '' }}">
+                            <a href="{{ url_for('unidades_page') }}" title="Unidades">
+                                <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Unidades</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Administración</p>
                 </li>

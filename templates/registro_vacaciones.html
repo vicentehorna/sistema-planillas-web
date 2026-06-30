@@ -196,6 +196,18 @@
         font-size: 1.1rem;
         font-weight: 600;
         color: #0d6efd;
+        line-height: 1.9rem;
+        min-height: 1.9rem;
+        display: flex;
+        align-items: center;
+    }
+
+    .vac-form-utilizacion .form-label {
+        margin-bottom: 0.25rem;
+    }
+
+    .vac-form-utilizacion .vac-label-invisible {
+        visibility: hidden;
     }
 
     .vac-dw-panel {
@@ -246,7 +258,7 @@
     .vac-dw-body .vac-form-utilizacion {
         background: #fff;
         border: 1px solid #95a5b5;
-        padding: 0.75rem;
+        padding: 0.55rem 0.65rem;
         border-radius: 0.15rem;
         box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
     }
@@ -296,6 +308,15 @@
 
     .vac-form-utilizacion .vac-btn-guardar {
         white-space: nowrap;
+        min-height: calc(1.5em + 0.5rem + 2px);
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .vac-form-utilizacion .vac-col-guardar .vac-label-invisible {
+        display: block;
+        line-height: 1.2;
+        min-height: calc(0.875rem * 1.2);
     }
 
     @media (max-width: 991.98px) {
@@ -446,19 +467,19 @@
                 </div>
                 <div class="vac-dw-body">
                     <form id="frmNuevaVacacion" class="vac-form-utilizacion">
-                        <div class="row g-2 g-md-3 align-items-end vac-form-fila-principal mb-2 mb-md-3">
+                        <div class="row g-2 align-items-end vac-form-fila-principal">
                             <div class="col-auto vac-col-consumo">
-                                <label for="cboConsumoEfectivo" class="form-label small fw-bold text-muted">Consumo efectivo</label>
+                                <label for="cboConsumoEfectivo" class="form-label small fw-bold text-muted">Consumo Efectivo</label>
                                 <select id="cboConsumoEfectivo" class="form-select form-select-sm" required disabled>
                                     <option value="">Seleccione...</option>
                                 </select>
                             </div>
                             <div class="col-auto vac-col-fecha">
-                                <label for="txtFechaInicio" class="form-label small fw-bold text-muted">Fecha inicio</label>
+                                <label for="txtFechaInicio" class="form-label small fw-bold text-muted">Fecha Inicio</label>
                                 <input type="date" id="txtFechaInicio" class="form-control form-control-sm" required disabled>
                             </div>
                             <div class="col-auto vac-col-fecha">
-                                <label for="txtFechaFin" class="form-label small fw-bold text-muted">Fecha fin</label>
+                                <label for="txtFechaFin" class="form-label small fw-bold text-muted">Fecha Fin</label>
                                 <input type="date" id="txtFechaFin" class="form-control form-control-sm" required disabled>
                             </div>
                             <div class="col-auto vac-col-dias">
@@ -472,20 +493,17 @@
                                     <option value="V">Venta</option>
                                 </select>
                             </div>
-                        </div>
-                        <div class="row g-3 align-items-end">
-                            <div class="col-auto">
+                            <div class="col-auto vac-col-guardar">
+                                <label class="form-label small fw-bold text-muted vac-label-invisible" aria-hidden="true">Guardar</label>
                                 <button type="submit" id="btnGuardarVacaciones" class="btn btn-success btn-sm vac-btn-guardar" disabled>
-                                    <i class="bi bi-check2-circle me-1"></i>Guardar vacaciones
+                                    Guardar
                                 </button>
                             </div>
-                        <div class="col-12">
-                            <div class="alert alert-warning py-2 mb-0 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                Los días calculados superan el saldo pendiente del periodo seleccionado
-                                (<strong id="lblPendientesPeriodo">0</strong> día(s)).
-                            </div>
                         </div>
+                        <div class="alert alert-warning py-2 mb-0 mt-2 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Los días calculados superan el saldo pendiente del periodo seleccionado
+                            (<strong id="lblPendientesPeriodo">0</strong> día(s)).
                         </div>
                     </form>
                 </div>

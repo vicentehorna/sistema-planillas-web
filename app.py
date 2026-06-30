@@ -4510,6 +4510,601 @@ def conceptos_page():
     return render_template('maestro_conceptos.html')
 
 
+@app.route('/cuentas-bancarias')
+@login_required
+def cuentas_bancarias_page():
+    return render_template('maestro_cuentas_bancarias.html')
+
+
+@app.route('/cargos')
+@login_required
+def cargos_page():
+    return render_template('maestro_cargos.html')
+
+
+@app.route('/unidades')
+@login_required
+def unidades_page():
+    return render_template('maestro_unidades.html')
+
+
+def _bankaccount_lista_dict(r):
+    return {
+        'bankaccount': _jsonable_value(r.get('bankaccount')),
+        'bankaccountnumber': _jsonable_value(r.get('bankaccountnumber')),
+        'accounttype': _jsonable_value(r.get('accounttype')),
+        'accounttype_description': _jsonable_value(r.get('accounttype_description')),
+        'bank': _jsonable_value(r.get('bank')),
+        'bank_name': _jsonable_value(r.get('bank_name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _bankaccount_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'bankaccount': _jsonable_value(r.get('bankaccount')),
+        'company': _jsonable_value(r.get('company')),
+        'accounttype': _jsonable_value(r.get('accounttype')),
+        'accounttype_description': _jsonable_value(r.get('accounttype_description')),
+        'bank': _jsonable_value(r.get('bank')),
+        'bank_name': _jsonable_value(r.get('bank_name')),
+        'bankaccountnumber': _jsonable_value(r.get('bankaccountnumber')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+@app.route('/api/cuentas-bancarias/listado', methods=['POST'])
+@login_required
+def api_cuentas_bancarias_listado():
+    """sp_pr_listarbankaccount_web: listado maestro de cuentas bancarias."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarbankaccount_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_bankaccount_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_cuentas_bancarias_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cuentas-bancarias/obtener', methods=['POST'])
+@login_required
+def api_cuentas_bancarias_obtener():
+    """sp_pr_obtenerbankaccount_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    bankaccount = str(body.get('bankaccount') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not bankaccount:
+        return jsonify({"error": "Seleccione una cuenta bancaria."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerbankaccount_web @company=?, @bankaccount=?",
+            (cia, bankaccount),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _bankaccount_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Cuenta bancaria no encontrada."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_cuentas_bancarias_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cuentas-bancarias/guardar', methods=['POST'])
+@login_required
+def api_cuentas_bancarias_guardar():
+    """sp_pr_guardarbankaccount_web: alta / edición de cuenta bancaria."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    bankaccount = str(body.get('bankaccount') or '').strip()
+    modo = str(body.get('modo') or ('U' if bankaccount else 'I')).strip().upper()
+    accounttype = str(body.get('accounttype') or '').strip()
+    bank = str(body.get('bank') or '').strip()
+    bankaccountnumber = str(body.get('bankaccountnumber') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not accounttype or not bank or not bankaccountnumber:
+        return jsonify({"error": "Complete tipo de cuenta, banco y número de cuenta."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarbankaccount_web "
+            "@modo=?, @company=?, @bankaccount=?, @accounttype=?, @bank=?, "
+            "@bankaccountnumber=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                bankaccount or None,
+                accounttype,
+                bank,
+                bankaccountnumber,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "bankaccount": _jsonable_value(row.get('bankaccount')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_cuentas_bancarias_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cuentas-bancarias/eliminar', methods=['POST'])
+@login_required
+def api_cuentas_bancarias_eliminar():
+    """sp_pr_eliminarbankaccount_web: elimina cuenta bancaria."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    bankaccount = str(body.get('bankaccount') or '').strip()
+
+    if not cia or not bankaccount:
+        return jsonify({"error": "Seleccione la cuenta bancaria a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarbankaccount_web @company=?, @bankaccount=?",
+            (cia, bankaccount),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "bankaccount": _jsonable_value(row.get('bankaccount')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Cuenta bancaria eliminada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_cuentas_bancarias_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _position_lista_dict(r):
+    return {
+        'position': _jsonable_value(r.get('position')),
+        'name': _jsonable_value(r.get('name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _position_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'position': _jsonable_value(r.get('position')),
+        'company': _jsonable_value(r.get('company')),
+        'name': _jsonable_value(r.get('name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+@app.route('/api/cargos/listado', methods=['POST'])
+@login_required
+def api_cargos_listado():
+    """sp_pr_listarposition_web: listado maestro de cargos."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarposition_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_position_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_cargos_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cargos/obtener', methods=['POST'])
+@login_required
+def api_cargos_obtener():
+    """sp_pr_obtenerposition_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    position = str(body.get('position') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not position:
+        return jsonify({"error": "Seleccione un cargo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerposition_web @company=?, @position=?",
+            (cia, position),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _position_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Cargo no encontrado."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_cargos_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cargos/guardar', methods=['POST'])
+@login_required
+def api_cargos_guardar():
+    """sp_pr_guardarposition_web: alta / edición de cargo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    position = str(body.get('position') or '').strip()
+    modo = str(body.get('modo') or ('U' if position else 'I')).strip().upper()
+    name = str(body.get('name') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not name:
+        return jsonify({"error": "Indique el nombre del cargo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarposition_web "
+            "@modo=?, @company=?, @position=?, @name=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                position or None,
+                name,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "position": _jsonable_value(row.get('position')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_cargos_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cargos/eliminar', methods=['POST'])
+@login_required
+def api_cargos_eliminar():
+    """sp_pr_eliminarposition_web: elimina cargo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    position = str(body.get('position') or '').strip()
+
+    if not cia or not position:
+        return jsonify({"error": "Seleccione el cargo a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarposition_web @company=?, @position=?",
+            (cia, position),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "position": _jsonable_value(row.get('position')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Cargo eliminado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_cargos_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _replicationunit_lista_dict(r):
+    return {
+        'replicationunit': _jsonable_value(r.get('replicationunit')),
+        'name': _jsonable_value(r.get('name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _replicationunit_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'replicationunit': _jsonable_value(r.get('replicationunit')),
+        'name': _jsonable_value(r.get('name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+@app.route('/api/unidades/listado', methods=['POST'])
+@login_required
+def api_unidades_listado():
+    """sp_pr_listarreplicationunit_web: listado maestro de unidades."""
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarreplicationunit_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_replicationunit_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_unidades_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/unidades/obtener', methods=['POST'])
+@login_required
+def api_unidades_obtener():
+    """sp_pr_obtenerreplicationunit_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    replicationunit = str(body.get('replicationunit') or '').strip().upper()
+
+    if not replicationunit:
+        return jsonify({"error": "Seleccione una unidad."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerreplicationunit_web @replicationunit=?",
+            (replicationunit,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _replicationunit_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Unidad no encontrada."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_unidades_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/unidades/guardar', methods=['POST'])
+@login_required
+def api_unidades_guardar():
+    """sp_pr_guardarreplicationunit_web: alta / edición de unidad."""
+    body = request.get_json(silent=True) or {}
+    replicationunit = str(body.get('replicationunit') or '').strip().upper()
+    modo = str(body.get('modo') or ('U' if replicationunit else 'I')).strip().upper()
+    name = str(body.get('name') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not replicationunit:
+        return jsonify({"error": "Indique el código de unidad."}), 400
+    if len(replicationunit) > 3:
+        return jsonify({"error": "El código de unidad debe tener como máximo 3 caracteres."}), 400
+    if not name:
+        return jsonify({"error": "Indique el nombre de la unidad."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarreplicationunit_web "
+            "@modo=?, @replicationunit=?, @name=?, @xlastuser=?",
+            (
+                modo,
+                replicationunit,
+                name,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "replicationunit": _jsonable_value(row.get('replicationunit')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_unidades_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/unidades/eliminar', methods=['POST'])
+@login_required
+def api_unidades_eliminar():
+    """sp_pr_eliminarreplicationunit_web: elimina unidad."""
+    body = request.get_json(silent=True) or {}
+    replicationunit = str(body.get('replicationunit') or '').strip().upper()
+
+    if not replicationunit:
+        return jsonify({"error": "Seleccione la unidad a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarreplicationunit_web @replicationunit=?",
+            (replicationunit,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "replicationunit": _jsonable_value(row.get('replicationunit')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Unidad eliminada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_unidades_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _concepto_lista_dict(r):
     return {
         'concept': _jsonable_value(r.get('concept')),
@@ -8640,6 +9235,39 @@ def api_bancos():
         return jsonify(data)
     except Exception:
         logging.exception("api_bancos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/tipos-cuenta')
+@login_required
+def api_tipos_cuenta():
+    """sp_pr_selectortipocuenta_web @cia → accounttype, description."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectortipocuenta_web @cia=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({
+                "id": rd.get("id") or rd.get("accounttype"),
+                "text": rd.get("text") or rd.get("description"),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_tipos_cuenta")
         return jsonify([])
     finally:
         if conn:

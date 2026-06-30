@@ -1990,6 +1990,7 @@
                     payroll: val('cboTipoPlanilla'),
                     periodo: val('cboPeriodo'),
                     nombre: val('txtBuscarTrabajador'),
+                    fecha_pago: val('txtFechaPago'),
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY_FORMATO_UTILIDADES, JSON.stringify(estado));
@@ -2022,6 +2023,7 @@
             const cboProc = document.getElementById('cboProceso');
             const cboPer = document.getElementById('cboPeriodo');
             const txtNombre = document.getElementById('txtBuscarTrabajador');
+            const txtFechaPago = document.getElementById('txtFechaPago');
             if (!cboCia || !cboPt || !cboProc || !cboPer) return false;
 
             const cia = String(filtros.cia).trim();
@@ -2034,6 +2036,9 @@
             if (!payroll || !optionExists(cboPt, payroll)) {
                 if (txtNombre && filtros.nombre != null) {
                     txtNombre.value = String(filtros.nombre);
+                }
+                if (txtFechaPago && filtros.fecha_pago) {
+                    txtFechaPago.value = String(filtros.fecha_pago);
                 }
                 guardar();
                 return true;
@@ -2052,6 +2057,9 @@
             if (txtNombre && filtros.nombre != null) {
                 txtNombre.value = String(filtros.nombre);
             }
+            if (txtFechaPago && filtros.fecha_pago) {
+                txtFechaPago.value = String(filtros.fecha_pago);
+            }
 
             guardar();
             return true;
@@ -2063,9 +2071,13 @@
                 if (el) el.addEventListener('change', guardar);
             });
             const txtNombre = document.getElementById('txtBuscarTrabajador');
+            const txtFechaPago = document.getElementById('txtFechaPago');
             if (txtNombre) {
                 txtNombre.addEventListener('change', guardar);
                 txtNombre.addEventListener('input', guardar);
+            }
+            if (txtFechaPago) {
+                txtFechaPago.addEventListener('change', guardar);
             }
         }
 

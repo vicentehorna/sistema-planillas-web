@@ -3146,6 +3146,19 @@ def _texto_intro_formato_utilidades(cab):
     ).replace('  ', ' ').strip()
 
 
+def _formato_utilidades_fecha_pago_fmt(params, cab):
+    """Fecha de pago del PDF: parámetro de pantalla o valor del SP."""
+    fecha_param = str((params or {}).get('fecha_pago') or '').strip()
+    if fecha_param:
+        parsed = _parse_fecha_flexible(fecha_param)
+        if parsed:
+            return parsed.strftime('%d/%m/%Y')
+        return fecha_filter(fecha_param)
+    cab = cab or {}
+    fecha_pago = cab.get('fecha_pago_display') or cab.get('fecha_pago')
+    return fecha_filter(fecha_pago) if fecha_pago else ''
+
+
 def generar_pdf_formato_utilidades(params):
     cia_param = str(params.get('cia') or '').strip()
     if not cia_param and has_request_context():
@@ -3182,8 +3195,7 @@ def generar_pdf_formato_utilidades(params):
     conceptos = sets[1] if len(sets) > 1 else []
     secciones = _build_formato_utilidades_secciones(conceptos)
 
-    fecha_pago = cab.get('fecha_pago_display') or cab.get('fecha_pago')
-    fecha_pago_fmt = fecha_filter(fecha_pago) if fecha_pago else ''
+    fecha_pago_fmt = _formato_utilidades_fecha_pago_fmt(params, cab)
 
     ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
     logo_src = _image_data_uri(ruta_logo)
@@ -7589,7 +7601,7 @@ def generar_boletas_page():
 @app.route('/documentos/formato_utilidades')
 @login_required
 def formato_utilidades_page():
-    return render_template('formato_utilidades.html')
+    return render_template('formato_utilidades.html', fecha_hoy=date.today().strftime('%Y-%m-%d'))
 
 
 @app.route('/get_lista_formato_utilidades', methods=['POST'])
@@ -7715,6 +7727,7 @@ def procesar_formatos_utilidades_masivo():
     payroll_type = str(body.get('payroll_type') or '').strip()
     processtype = str(body.get('process') or body.get('processtype') or '').strip()
     period = _normalize_pr_period(body.get('period'))
+    fecha_pago = str(body.get('fecha_pago') or '').strip()
     modo = str(body.get('modo') or '').strip().lower()
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
@@ -7755,6 +7768,7 @@ def procesar_formatos_utilidades_masivo():
                         'payroll_type': payroll_type,
                         'process': processtype,
                         'period': period,
+                        'fecha_pago': fecha_pago,
                     }
                 )
                 zf.writestr(
@@ -7786,6 +7800,7 @@ def descargar_zip_formatos_utilidades():
     payroll_type = (request.args.get('payroll_type') or '').strip()
     processtype = (request.args.get('process') or request.args.get('processtype') or '').strip()
     period = _normalize_pr_period(request.args.get('period'))
+    fecha_pago = str(request.args.get('fecha_pago') or '').strip()
     company_name = (request.args.get('company_name') or '').strip()
     trabajadores_raw = (request.args.get('trabajadores') or '').strip()
     seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
@@ -7826,6 +7841,7 @@ def descargar_zip_formatos_utilidades():
                         'process': processtype,
                         'period': period,
                         'person': person_id,
+                        'fecha_pago': fecha_pago,
                     }
                 )
                 zip_file.writestr(
@@ -7858,6 +7874,7 @@ def enviar_formatos_utilidades_masivo():
     payroll_type = str(data.get('payroll_type') or '').strip()
     processtype = str(data.get('process') or data.get('processtype') or '').strip()
     period = _normalize_pr_period(data.get('period'))
+    fecha_pago = str(data.get('fecha_pago') or '').strip()
     seleccionados = data.get('empleados', data.get('trabajadores', []))
 
     if not isinstance(seleccionados, list) or not seleccionados:
@@ -7904,6 +7921,7 @@ def enviar_formatos_utilidades_masivo():
                         'process': processtype,
                         'period': period,
                         'person': emp_code,
+                        'fecha_pago': fecha_pago,
                     }
                 )
                 exito, msg = enviar_correo_formato_utilidades(

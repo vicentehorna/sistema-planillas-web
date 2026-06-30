@@ -5848,7 +5848,18 @@ BEGIN
             ELSE 0
         END AS porc_aporte,
         CASE
-            WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.FixedAmount, 0)
+            WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM PR_EmployeeConcept ec (NOLOCK)
+                            INNER JOIN PR_Concept c (NOLOCK) ON c.Concept = ec.Concept
+                        WHERE ec.Person = pe.Person
+                          AND ec.PayRollType = @payrolltype
+                          AND c.FormulaCode = 'AFP_FLUJO'
+                    ) THEN ISNULL(afp.FixedAmount, 0)
+                    ELSE ISNULL(afp.VariablePercentage, 0)
+                END
             ELSE 0
         END AS porc_comision,
         CASE

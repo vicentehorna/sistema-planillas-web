@@ -3065,10 +3065,14 @@ def _formato_liquidacion_pdf_filename(person, period_raw):
     return f'formato_liquidacion_{person_safe}_{period_safe}.pdf'
 
 
-def _formato_utilidades_pdf_filename(person, period_raw):
+def _formato_utilidades_pdf_filename(person, period_raw, person_name=None):
     person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
     period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
-    return f'formato_utilidades_{person_safe}_{period_safe}.pdf'
+    name_raw = str(person_name or '').strip()
+    name_safe = re.sub(r'[\\/:*?"<>|]+', '', name_raw).strip()
+    if name_safe:
+        return f'Utilidades_{name_safe}_{person_safe}_{period_safe}.pdf'
+    return f'Utilidades_{person_safe}_{period_safe}.pdf'
 
 
 def _formato_utilidades_concepto_display(row):
@@ -3776,7 +3780,7 @@ def enviar_correo_formato_utilidades(destinatario, nombre_empleado, periodo, sex
             'attachments': [
                 {
                     'content': pdf_base64,
-                    'filename': _formato_utilidades_pdf_filename(person or nombre_empleado, periodo),
+                    'filename': _formato_utilidades_pdf_filename(person, periodo, person_name=nombre_empleado),
                 }
             ],
         }
@@ -7686,6 +7690,7 @@ def preview_formato_utilidades():
     params = request.args
     person = str(params.get('person') or '').strip()
     period = _normalize_pr_period(params.get('period'))
+    person_name = str(params.get('nombre') or params.get('person_name') or '').strip()
     try:
         pdf_buffer = generar_pdf_formato_utilidades(params)
     except ValueError as e:
@@ -7697,7 +7702,7 @@ def preview_formato_utilidades():
         pdf_buffer,
         mimetype='application/pdf',
         as_attachment=False,
-        download_name=_formato_utilidades_pdf_filename(person, period),
+        download_name=_formato_utilidades_pdf_filename(person, period, person_name=person_name),
     )
 
 
@@ -7729,9 +7734,20 @@ def procesar_formatos_utilidades_masivo():
         period_yyyymm = period[:6] if len(period) >= 6 else period
         safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
         nombre_zip = f'formatos_utilidades_{safe_company.lower()}_{safe_period}.zip'
+        try:
+            empleados_zip = _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, '0', None)
+        except Exception:
+            logging.exception('procesar_formatos_utilidades_masivo listado')
+            empleados_zip = []
+        by_person_zip = {
+            str(e.get('person') or '').strip(): e
+            for e in empleados_zip
+            if str(e.get('person') or '').strip()
+        }
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
             for pid in ids:
+                emp_nombre = str(by_person_zip.get(pid, {}).get('nombre') or '').strip()
                 pdf_data = generar_pdf_formato_utilidades(
                     {
                         'person': pid,
@@ -7741,7 +7757,10 @@ def procesar_formatos_utilidades_masivo():
                         'period': period,
                     }
                 )
-                zf.writestr(_formato_utilidades_pdf_filename(pid, period), pdf_data.getvalue())
+                zf.writestr(
+                    _formato_utilidades_pdf_filename(pid, period, person_name=emp_nombre),
+                    pdf_data.getvalue(),
+                )
         memory_file.seek(0)
         return send_file(
             memory_file,
@@ -7798,6 +7817,7 @@ def descargar_zip_formatos_utilidades():
             person_id = str(emp.get('person') or '').strip()
             if not person_id:
                 continue
+            emp_nombre = str(emp.get('nombre') or '').strip()
             try:
                 pdf_io = generar_pdf_formato_utilidades(
                     {
@@ -7808,7 +7828,10 @@ def descargar_zip_formatos_utilidades():
                         'person': person_id,
                     }
                 )
-                zip_file.writestr(_formato_utilidades_pdf_filename(person_id, period), pdf_io.getvalue())
+                zip_file.writestr(
+                    _formato_utilidades_pdf_filename(person_id, period, person_name=emp_nombre),
+                    pdf_io.getvalue(),
+                )
             except Exception:
                 logging.exception('descargar_zip_formatos_utilidades persona=%s', person_id)
                 continue

@@ -20,7 +20,33 @@
             box-sizing: border-box;
             position: relative;
         }
-        .logo-wrap { margin-bottom: 8px; }
+        .encabezado {
+            display: table;
+            width: 100%;
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+        }
+        .encabezado .logo-cell,
+        .encabezado .empresa-cell {
+            display: table-cell;
+            vertical-align: top;
+        }
+        .encabezado .logo-cell { width: 34%; }
+        .encabezado .empresa-cell {
+            width: 66%;
+            text-align: right;
+            font-size: 9px;
+            color: #555;
+            padding-top: 2px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .empresa-nombre {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
         .logo-img {
             max-height: 72px;
             max-width: 240px;
@@ -31,7 +57,7 @@
             display: block;
         }
         .cuerpo {
-            padding-top: 38px;
+            padding-top: 20px;
         }
         .titulo-principal {
             text-align: center;
@@ -88,11 +114,18 @@
 </head>
 <body>
     <div class="documento">
-        {% if logo_src %}
-        <div class="logo-wrap">
-            <img src="{{ logo_src }}" alt="Logo" class="logo-img">
+        <div class="encabezado">
+            <div class="logo-cell">
+                {% if logo_src %}
+                <img src="{{ logo_src }}" alt="Logo" class="logo-img">
+                {% endif %}
+            </div>
+            <div class="empresa-cell">
+                <div class="empresa-nombre">{{ cert.company_name or '' }}</div>
+                <div>RUC: {{ cert.company_ruc or '' }}</div>
+                <div>{{ cert.company_address or '' }}</div>
+            </div>
         </div>
-        {% endif %}
 
         <div class="cuerpo">
             <div class="titulo-principal">Certificado de Trabajo</div>

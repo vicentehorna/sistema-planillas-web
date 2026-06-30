@@ -3925,9 +3925,73 @@ def _cargar_selectores_pensiones(cursor, cia):
     return pension_types, regime_health
 
 
+def _cargar_selectores_generales(cursor, cia):
+    tipos_documento = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorpersondocumenttype_web @cia=?', (cia,)
+    )
+    usuarios = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorusuarios_web', ())
+    cursor.execute('EXEC sp_pr_selectorunidades_web')
+    col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+    unidades = []
+    for row in cursor.fetchall():
+        rd = _row_dict_from_columns(col_names, row)
+        item_id = rd.get('replicationunit') or rd.get('ReplicationUnit')
+        item_text = rd.get('description') or rd.get('Description') or item_id
+        if item_id is None:
+            continue
+        unidades.append({'id': str(item_id).strip(), 'text': str(item_text or item_id).strip()})
+    return tipos_documento, unidades, usuarios
+
+
 def _trabajadores_editar_seccion(raw):
-    seccion = str(raw or 'bancario').strip().lower()
-    return seccion if seccion in ('bancario', 'pensiones') else 'bancario'
+    seccion = str(raw or 'generales').strip().lower()
+    return seccion if seccion in ('bancario', 'pensiones', 'generales') else 'generales'
+
+
+def _empleado_generales_desde_form(form):
+    return {
+        'name1': str(form.get('name1') or '').strip().upper()[:40],
+        'name2': str(form.get('name2') or '').strip().upper()[:40],
+        'lastname1': str(form.get('lastname1') or '').strip().upper()[:40],
+        'lastname2': str(form.get('lastname2') or '').strip().upper()[:40],
+        'sectelephone': str(form.get('sectelephone') or '').strip()[:15],
+        'email': str(form.get('email') or '').strip()[:255],
+        'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
+        'documentnumber': str(form.get('documentnumber') or '').strip()[:15],
+        'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
+        'userid': str(form.get('userid') or '').strip().lower()[:20],
+    }
+
+
+def _render_trabajadores_editar(
+    cia,
+    person_id,
+    seccion,
+    empleado,
+    bancos=None,
+    formas_pago=None,
+    tipos_cuenta=None,
+    pension_types=None,
+    regime_health=None,
+    tipos_documento=None,
+    unidades=None,
+    usuarios=None,
+):
+    return render_template(
+        'trabajadores_editar.html',
+        cia=cia,
+        person_id=person_id,
+        seccion=seccion,
+        empleado=empleado,
+        bancos=bancos or [],
+        formas_pago=formas_pago or [],
+        tipos_cuenta=tipos_cuenta or [],
+        pension_types=pension_types or [],
+        regime_health=regime_health or [],
+        tipos_documento=tipos_documento or [],
+        unidades=unidades or [],
+        usuarios=usuarios or [],
+    )
 
 
 def _empleado_pensiones_desde_form(form):
@@ -3953,7 +4017,7 @@ def _empleado_pensiones_para_form(empleado):
 @app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
 @login_required
 def trabajadores_editar(person_id):
-    """Edición de datos bancarios, CTS y pensiones del trabajador."""
+    """Edición de datos generales, bancarios, CTS y pensiones del trabajador."""
     person_id = str(person_id or '').strip()
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
     seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion'))
@@ -3969,6 +4033,34 @@ def trabajadores_editar(person_id):
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+        if request.method == 'POST' and seccion == 'generales':
+            datos = _empleado_generales_desde_form(request.form)
+            cursor.execute(
+                'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
+                '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
+                '@sectelephone=?, @email=?, @employeedocumenttype=?, @documentnumber=?, '
+                '@replicationunit=?, @userid=?, @xlastuser=?',
+                (
+                    cia,
+                    person_id,
+                    datos['name1'],
+                    datos['name2'] or None,
+                    datos['lastname1'],
+                    datos['lastname2'] or None,
+                    datos['sectelephone'] or None,
+                    datos['email'] or None,
+                    datos['employeedocumenttype'],
+                    datos['documentnumber'],
+                    datos['replicationunit'],
+                    datos['userid'] or None,
+                    xlastuser,
+                ),
+            )
+            conn.commit()
+            flash('Datos generales actualizados correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales'))
 
         if request.method == 'POST' and seccion == 'pensiones':
             datos = _empleado_pensiones_desde_form(request.form)
@@ -3985,14 +4077,14 @@ def trabajadores_editar(person_id):
                     datos['flagmixta'],
                     datos['flagasigfamiliar'],
                     datos['cuspp'],
-                    str(getattr(current_user, 'username', '') or '')[:20],
+                    xlastuser,
                 ),
             )
             conn.commit()
             flash('Datos de pensiones actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones'))
 
-        if request.method == 'POST':
+        if request.method == 'POST' and seccion == 'bancario':
             collectionform = str(request.form.get('collectionform') or '').strip()
             cci = re.sub(r'\D', '', str(request.form.get('cci') or ''))[:20]
 
@@ -4009,9 +4101,10 @@ def trabajadores_editar(person_id):
                 if cf_row and 'DEPOSITO' in str(cf_row[0] or '').upper():
                     forma_es_deposito = True
 
+            bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
+
             if forma_es_deposito and len(cci) != 20:
                 flash('El CCI debe tener 20 dígitos cuando la forma de pago es depósito.', 'danger')
-                bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
                 cursor.execute(
                     'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
                     (cia, person_id),
@@ -4026,17 +4119,9 @@ def trabajadores_editar(person_id):
                 empleado['ctsbank'] = str(request.form.get('ctsbank') or '').strip()
                 empleado['ctsaccount'] = str(request.form.get('ctsaccount') or '').strip()
                 empleado['ctscurrency'] = str(request.form.get('ctscurrency') or 'LO').strip() or 'LO'
-                return render_template(
-                    'trabajadores_editar.html',
-                    cia=cia,
-                    person_id=person_id,
-                    seccion=seccion,
-                    empleado=empleado,
-                    bancos=bancos,
-                    formas_pago=formas_pago,
-                    tipos_cuenta=tipos_cuenta,
-                    pension_types=[],
-                    regime_health=[],
+                return _render_trabajadores_editar(
+                    cia, person_id, seccion, empleado,
+                    bancos=bancos, formas_pago=formas_pago, tipos_cuenta=tipos_cuenta,
                 )
 
             cursor.execute(
@@ -4054,14 +4139,19 @@ def trabajadores_editar(person_id):
                     str(request.form.get('ctsbank') or '').strip(),
                     str(request.form.get('ctsaccount') or '').strip(),
                     str(request.form.get('ctscurrency') or 'LO').strip() or 'LO',
-                    str(getattr(current_user, 'username', '') or '')[:20],
+                    xlastuser,
                 ),
             )
             conn.commit()
             flash('Datos bancarios actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario'))
 
-        if seccion == 'pensiones':
+        if seccion == 'generales':
+            cursor.execute(
+                'EXEC sp_pr_obtener_datosgenerales_trabajador_web @cia=?, @person=?',
+                (cia, person_id),
+            )
+        elif seccion == 'pensiones':
             cursor.execute(
                 'EXEC sp_pr_obtener_pensiones_trabajador_web @cia=?, @person=?',
                 (cia, person_id),
@@ -4079,20 +4169,21 @@ def trabajadores_editar(person_id):
         empleado = rows[0]
         if seccion == 'pensiones':
             empleado = _empleado_pensiones_para_form(empleado)
+
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
         pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
+        tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
 
-        return render_template(
-            'trabajadores_editar.html',
-            cia=cia,
-            person_id=person_id,
-            seccion=seccion,
-            empleado=empleado,
+        return _render_trabajadores_editar(
+            cia, person_id, seccion, empleado,
             bancos=bancos,
             formas_pago=formas_pago,
             tipos_cuenta=tipos_cuenta,
             pension_types=pension_types,
             regime_health=regime_health,
+            tipos_documento=tipos_documento,
+            unidades=unidades,
+            usuarios=usuarios,
         )
     except Exception as e:
         if conn:
@@ -4522,6 +4613,12 @@ def cargos_page():
     return render_template('maestro_cargos.html')
 
 
+@app.route('/tipos-documento')
+@login_required
+def tipos_documento_page():
+    return render_template('maestro_tipos_documento.html')
+
+
 @app.route('/unidades')
 @login_required
 def unidades_page():
@@ -4909,6 +5006,203 @@ def api_cargos_eliminar():
         })
     except Exception as e:
         logging.exception("api_cargos_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _persondocumenttype_lista_dict(r):
+    return {
+        'persondocumenttype': _jsonable_value(r.get('persondocumenttype')),
+        'description': _jsonable_value(r.get('description')),
+        'pdt': _jsonable_value(r.get('pdt')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _persondocumenttype_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'persondocumenttype': _jsonable_value(r.get('persondocumenttype')),
+        'company': _jsonable_value(r.get('company')),
+        'description': _jsonable_value(r.get('description')),
+        'pdt': _jsonable_value(r.get('pdt')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+@app.route('/api/tipos-documento/listado', methods=['POST'])
+@login_required
+def api_tipos_documento_listado():
+    """sp_pr_listarpersondocumenttype_web: listado maestro de tipos de documento."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarpersondocumenttype_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_persondocumenttype_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_tipos_documento_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-documento/obtener', methods=['POST'])
+@login_required
+def api_tipos_documento_obtener():
+    """sp_pr_obtenerpersondocumenttype_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    persondocumenttype = str(body.get('persondocumenttype') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not persondocumenttype:
+        return jsonify({"error": "Seleccione un tipo de documento."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerpersondocumenttype_web @company=?, @persondocumenttype=?",
+            (cia, persondocumenttype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _persondocumenttype_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Tipo de documento no encontrado."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_tipos_documento_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-documento/guardar', methods=['POST'])
+@login_required
+def api_tipos_documento_guardar():
+    """sp_pr_guardarpersondocumenttype_web: alta / edición de tipo de documento."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    persondocumenttype = str(body.get('persondocumenttype') or '').strip()
+    modo = str(body.get('modo') or ('U' if persondocumenttype else 'I')).strip().upper()
+    description = str(body.get('description') or '').strip()
+    pdt = str(body.get('pdt') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not description:
+        return jsonify({"error": "Indique la descripción del tipo de documento."}), 400
+    if not pdt:
+        return jsonify({"error": "Indique el código PDT."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarpersondocumenttype_web "
+            "@modo=?, @company=?, @persondocumenttype=?, @description=?, @pdt=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                persondocumenttype or None,
+                description,
+                pdt,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "persondocumenttype": _jsonable_value(row.get('persondocumenttype')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_tipos_documento_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-documento/eliminar', methods=['POST'])
+@login_required
+def api_tipos_documento_eliminar():
+    """sp_pr_eliminarpersondocumenttype_web: elimina tipo de documento."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    persondocumenttype = str(body.get('persondocumenttype') or '').strip()
+
+    if not cia or not persondocumenttype:
+        return jsonify({"error": "Seleccione el tipo de documento a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarpersondocumenttype_web @company=?, @persondocumenttype=?",
+            (cia, persondocumenttype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "persondocumenttype": _jsonable_value(row.get('persondocumenttype')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Tipo de documento eliminado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_tipos_documento_eliminar")
         err = str(e)
         if 'RAISERROR' in err or '50000' in err:
             parts = err.split(']')
@@ -9298,6 +9592,53 @@ def api_unidades():
         return jsonify(data)
     except Exception:
         logging.exception("api_unidades")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/tipos-documento-persona')
+@login_required
+def api_tipos_documento_persona():
+    """sp_pr_selectorpersondocumenttype_web → tipos de documento SY_PersonDocumentType por compañía."""
+    cia = str(request.args.get('cia') or '').strip()
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        items = _selector_items_from_sp(
+            cursor, 'EXEC sp_pr_selectorpersondocumenttype_web @cia=?', (cia,)
+        )
+        return jsonify(items)
+    except Exception:
+        logging.exception("api_tipos_documento_persona")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/usuarios')
+@login_required
+def api_usuarios():
+    """sp_pr_selectorusuarios_web → usuarios SY_User."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        items = _selector_items_from_sp(cursor, 'EXEC sp_pr_selectorusuarios_web', ())
+        return jsonify(items)
+    except Exception:
+        logging.exception("api_usuarios")
         return jsonify([])
     finally:
         if conn:

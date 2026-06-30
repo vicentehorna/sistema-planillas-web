@@ -47,6 +47,19 @@
         border-radius: 0.5rem;
     }
 
+    .campo-obligatorio.form-control,
+    .campo-obligatorio.form-select {
+        background-color: #d9edf7;
+        border-color: #b8daff;
+    }
+
+    .campo-bloqueado {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+    }
+
 </style>
 {% endblock %}
 
@@ -55,7 +68,9 @@
     <div>
         <h4 class="mb-1 fw-bold">Edición de trabajador</h4>
         <p class="text-muted small mb-0">
-            {% if seccion == 'pensiones' %}Datos de pensiones y aseguramiento{% else %}Información bancaria y depósito de CTS{% endif %}
+            {% if seccion == 'generales' %}Datos generales del trabajador
+            {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
+            {% else %}Información bancaria y depósito de CTS{% endif %}
         </p>
     </div>
     <a href="{{ url_for('trabajadores_page') }}" class="btn btn-outline-secondary btn-sm">
@@ -66,7 +81,7 @@
 <div class="worker-summary p-3 mb-4">
     <div class="row g-2 small">
         <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
-        <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.employeecode or '—' }}</strong></div>
+        <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.person or person_id or empleado.employeecode or '—' }}</strong></div>
         <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
     </div>
 </div>
@@ -74,17 +89,121 @@
 <div class="row g-4">
     <div class="col-lg-3">
         <div class="nav flex-column nav-pills edit-tabs" role="tablist" aria-orientation="vertical">
-            <span class="nav-link disabled">Datos Generales</span>
+            <a class="nav-link {% if seccion == 'generales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
             <span class="nav-link disabled">Datos Laborales</span>
             <a class="nav-link {% if seccion == 'pensiones' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
-            <a class="nav-link {% if seccion != 'pensiones' %}active{% endif %}"
+            <a class="nav-link {% if seccion == 'bancario' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
         </div>
     </div>
 
     <div class="col-lg-9">
-        {% if seccion == 'pensiones' %}
+        {% if seccion == 'generales' %}
+        <form id="frmGenerales" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=generales"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="generales">
+
+            <div class="section-card mb-4">
+                <div class="section-title">Identificación</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="txtPerson" class="form-label small fw-bold text-muted">Código</label>
+                            <input type="text" id="txtPerson" class="form-control form-control-sm campo-bloqueado text-uppercase"
+                                   value="{{ empleado.person or person_id }}" readonly disabled>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtName1" class="form-label small fw-bold text-muted">Primer Nombre</label>
+                            <input type="text" id="txtName1" name="name1" class="form-control form-control-sm campo-obligatorio text-uppercase"
+                                   maxlength="40" value="{{ empleado.name1 or '' }}" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtName2" class="form-label small fw-bold text-muted">Segundo Nombre</label>
+                            <input type="text" id="txtName2" name="name2" class="form-control form-control-sm text-uppercase"
+                                   maxlength="40" value="{{ empleado.name2 or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtLastName1" class="form-label small fw-bold text-muted">Apellido Paterno</label>
+                            <input type="text" id="txtLastName1" name="lastname1" class="form-control form-control-sm campo-obligatorio text-uppercase"
+                                   maxlength="40" value="{{ empleado.lastname1 or '' }}" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtLastName2" class="form-label small fw-bold text-muted">Apellido Materno</label>
+                            <input type="text" id="txtLastName2" name="lastname2" class="form-control form-control-sm text-uppercase"
+                                   maxlength="40" value="{{ empleado.lastname2 or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-8">
+                            <label for="txtNombreCompleto" class="form-label small fw-bold text-muted">Nombre</label>
+                            <input type="text" id="txtNombreCompleto" class="form-control form-control-sm campo-bloqueado text-uppercase"
+                                   value="{{ empleado.name or '' }}" readonly disabled>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card mb-4">
+                <div class="section-title">Contacto y documento</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="txtCelular" class="form-label small fw-bold text-muted">Celular</label>
+                            <input type="text" id="txtCelular" name="sectelephone" class="form-control form-control-sm"
+                                   maxlength="15" value="{{ empleado.sectelephone or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-8">
+                            <label for="txtEmail" class="form-label small fw-bold text-muted">Email</label>
+                            <input type="email" id="txtEmail" name="email" class="form-control form-control-sm"
+                                   maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-5">
+                            <label for="cboTipoDocumento" class="form-label small fw-bold text-muted">Tipo De Documento</label>
+                            <select id="cboTipoDocumento" name="employeedocumenttype" class="form-select form-select-sm campo-obligatorio" required>
+                                <option value="">Seleccione...</option>
+                                {% for opt in tipos_documento %}
+                                <option value="{{ opt.id }}" {% if empleado.employeedocumenttype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="txtDocumentNumber" class="form-label small fw-bold text-muted">Número</label>
+                            <input type="text" id="txtDocumentNumber" name="documentnumber" class="form-control form-control-sm campo-obligatorio"
+                                   maxlength="15" value="{{ empleado.documentnumber or '' }}" required autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                            <select id="cboUnidad" name="replicationunit" class="form-select form-select-sm campo-obligatorio" required>
+                                <option value="">Seleccione...</option>
+                                {% for opt in unidades %}
+                                <option value="{{ opt.id }}" {% if empleado.replicationunit == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cboUsuario" class="form-label small fw-bold text-muted">Usuario</label>
+                            <select id="cboUsuario" name="userid" class="form-select form-select-sm">
+                                <option value="">Sin usuario</option>
+                                {% for opt in usuarios %}
+                                <option value="{{ opt.id }}" {% if empleado.userid == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                            <div class="form-text">Opcional. Si se asigna, debe ser único por trabajador.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('trabajadores_page') }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+            </div>
+        </form>
+        {% elif seccion == 'pensiones' %}
         <form id="frmPensiones" method="POST"
               action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=pensiones"
               novalidate>
@@ -250,7 +369,60 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const seccion = {{ (seccion or 'bancario') | tojson }};
+    const seccion = {{ (seccion or 'generales') | tojson }};
+
+    function normalizarMayusculas(input) {
+        if (!input) return;
+        input.addEventListener('input', function () {
+            this.value = this.value.toUpperCase();
+        });
+    }
+
+    function calcularNombreCompleto() {
+        const partes = ['txtLastName1', 'txtLastName2', 'txtName1', 'txtName2']
+            .map((id) => (document.getElementById(id)?.value || '').trim().toUpperCase())
+            .filter(Boolean);
+        const destino = document.getElementById('txtNombreCompleto');
+        if (destino) destino.value = partes.join(' ');
+    }
+
+    if (seccion === 'generales') {
+        ['txtName1', 'txtName2', 'txtLastName1', 'txtLastName2'].forEach((id) => {
+            normalizarMayusculas(document.getElementById(id));
+            const el = document.getElementById(id);
+            if (el) el.addEventListener('input', calcularNombreCompleto);
+        });
+        calcularNombreCompleto();
+
+        const frmGenerales = document.getElementById('frmGenerales');
+        if (frmGenerales) {
+            frmGenerales.addEventListener('submit', function (e) {
+                calcularNombreCompleto();
+                const name1 = (document.getElementById('txtName1')?.value || '').trim();
+                const lastname1 = (document.getElementById('txtLastName1')?.value || '').trim();
+                if (!name1 || !lastname1) {
+                    e.preventDefault();
+                    alert('Indique primer nombre y apellido paterno.');
+                    return;
+                }
+                if (!(document.getElementById('cboTipoDocumento')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione el tipo de documento.');
+                    return;
+                }
+                if (!(document.getElementById('txtDocumentNumber')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Indique el número de documento.');
+                    return;
+                }
+                if (!(document.getElementById('cboUnidad')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione la unidad.');
+                }
+            });
+        }
+        return;
+    }
 
     if (seccion === 'pensiones') {
         const frmPensiones = document.getElementById('frmPensiones');

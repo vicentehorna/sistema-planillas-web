@@ -387,7 +387,7 @@
                     </a>
                 </li>
 
-                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'unidades_page') %}
+                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'tipos_documento_page', 'unidades_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if tablas_active else '' }}">
                     <a href="#submenuTablas"
                        class="sidebar-parent-link"
@@ -407,6 +407,11 @@
                         <li class="{{ 'active' if request.endpoint == 'cargos_page' else '' }}">
                             <a href="{{ url_for('cargos_page') }}" title="Cargos">
                                 <i class="bi bi-briefcase"></i><span class="sidebar-link-text">Cargos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'tipos_documento_page' else '' }}">
+                            <a href="{{ url_for('tipos_documento_page') }}" title="Tipos de Documentos">
+                                <i class="bi bi-card-text"></i><span class="sidebar-link-text">Tipos de Documentos</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'unidades_page' else '' }}">

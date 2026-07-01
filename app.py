@@ -197,11 +197,10 @@ def format_dias(value):
 
 @app.context_processor
 def inject_now():
-    from database import get_client_database_from_session
-    active_db = get_client_database_from_session() or (os.getenv('SQL_DATABASE') or '').strip()
+    from database import get_active_database
     return {
         'now': datetime.now(),
-        'sql_database': active_db,
+        'sql_database': get_active_database(),
     }
 
 
@@ -3847,6 +3846,8 @@ def enviar_correo_certificado_retiro_cts(destinatario, nombre_empleado, periodo,
 
 @login_manager.user_loader
 def load_user(user_id):
+    from database import _restore_client_database_from_login_cache
+    _restore_client_database_from_login_cache()
     user = User.get_user_by_id(user_id)
     if user:
         _cache_session_user(user)

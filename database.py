@@ -39,9 +39,38 @@ def persist_client_database(database):
         pass
 
 
+def _restore_client_database_from_login_cache():
+    """Recupera client_database si la sesión la perdió (workers, cookies, etc.)."""
+    try:
+        from flask import has_request_context, session
+        if not has_request_context():
+            return None
+        if session.get('client_database'):
+            return str(session['client_database']).strip()
+        cached = session.get('_user_login') or {}
+        db = (cached.get('client_database') or '').strip()
+        if db:
+            session['client_database'] = db
+            return db
+        username = (cached.get('username') or '').strip()
+        if username and _use_db_router():
+            db = resolve_client_database(username)
+            if db:
+                session['client_database'] = db
+                cached['client_database'] = db
+                session['_user_login'] = cached
+                return db
+    except Exception:
+        pass
+    return None
+
+
 def get_active_database():
-    """BD activa: sesión del cliente logueado, o SQL_DATABASE como respaldo local."""
+    """BD activa: sesión del cliente, caché de login o SQL_DATABASE como último respaldo."""
     db = get_client_database_from_session()
+    if db:
+        return db
+    db = _restore_client_database_from_login_cache()
     if db:
         return db
     return (os.getenv('SQL_DATABASE') or '').strip()

@@ -9,7 +9,7 @@ load_dotenv()
 
 
 def _use_db_router():
-    """Activa enrutamiento por USUARIOS_ROUTER (hm_planillas). Desactivar en local con SQL_USE_DB_ROUTER=N."""
+    """Enrutamiento por USUARIOS_ROUTER (hm_planillas). Desactivar en local con SQL_USE_DB_ROUTER=N."""
     val = (os.getenv('SQL_USE_DB_ROUTER') or 'Y').strip().upper()
     return val not in ('N', '0', 'NO', 'FALSE')
 
@@ -88,22 +88,73 @@ def _restore_client_database_from_login_cache():
     return None
 
 
-def get_active_database():
-    """BD activa: sesión, caché de login, USUARIOS_ROUTER o SQL_DATABASE."""
+def _resolve_routed_database():
+    """BD del cliente: sesión, caché de login o USUARIOS_ROUTER."""
     db = get_client_database_from_session()
     if db:
         return db
     db = _restore_client_database_from_login_cache()
     if db:
         return db
-    if _use_db_router():
+    username = _login_username_for_router()
+    if username:
+        db = resolve_client_database(username)
+        if db:
+            persist_client_database(db)
+            return db
+    return None
+
+
+def bind_client_database_for_request():
+    """
+    Con enrutador activo, fija en sesión la BD del usuario logueado en cada petición.
+    USUARIOS_ROUTER es la única fuente de verdad (no SQL_DATABASE).
+    """
+    if not _use_db_router():
+        return
+    try:
+        from flask import has_request_context, session
+        from flask_login import current_user
+        if not has_request_context() or not current_user.is_authenticated:
+            return
         username = _login_username_for_router()
-        if username:
-            db = resolve_client_database(username)
-            if db:
-                persist_client_database(db)
-                return db
-    return (os.getenv('SQL_DATABASE') or '').strip()
+        if not username:
+            return
+        db = resolve_client_database(username)
+        if not db:
+            return
+        persist_client_database(db)
+        cached = session.get('_user_login') or {}
+        if cached:
+            cached['client_database'] = db
+            session['_user_login'] = cached
+    except Exception as e:
+        print(f"Error en bind_client_database_for_request: {e}")
+
+
+def get_active_database(*, required=False):
+    """
+    BD activa del request actual.
+    Con enrutador: solo USUARIOS_ROUTER (nunca SQL_DATABASE).
+    Sin enrutador (local): SQL_DATABASE del .env.
+    """
+    if _use_db_router():
+        db = _resolve_routed_database()
+        if db:
+            return db
+        msg = (
+            'No se pudo resolver la base de datos del cliente desde USUARIOS_ROUTER. '
+            'Cierre sesión y vuelva a ingresar.'
+        )
+        if required:
+            raise ValueError(msg)
+        return ''
+    db = (os.getenv('SQL_DATABASE') or '').strip()
+    if db:
+        return db
+    if required:
+        raise ValueError('No hay SQL_DATABASE configurada (modo local sin enrutador).')
+    return ''
 
 
 def resolve_client_database(username):
@@ -148,7 +199,9 @@ class DatabaseConfig:
     def get_connection_string(database=None, driver_override=None):
         """Construye la cadena de conexión a SQL Server"""
         server = os.getenv('SQL_SERVER')
-        database = (database or os.getenv('SQL_DATABASE') or '').strip()
+        database = (database or '').strip()
+        if not database and not _use_db_router():
+            database = (os.getenv('SQL_DATABASE') or '').strip()
         username = os.getenv('SQL_USER')
         password = os.getenv('SQL_PASSWORD')
 
@@ -179,9 +232,12 @@ class DatabaseConfig:
     @staticmethod
     def get_connection(database=None):
         """Crea y retorna una conexión a SQL Server"""
-        database = (database or get_active_database() or '').strip()
+        database = (database or get_active_database(required=True) or '').strip()
         if not database:
-            raise ValueError('No hay base de datos configurada (SQL_DATABASE o sesión client_database).')
+            raise ValueError(
+                'No hay base de datos configurada para esta conexión. '
+                'Con enrutador activo use USUARIOS_ROUTER; en local defina SQL_DATABASE.'
+            )
 
         if platform.system() == 'Windows':
             try:
@@ -214,9 +270,9 @@ class DatabaseConfig:
 
 
 def get_db_connection(database=None):
-    """Conexión pyodbc reutilizable (APIs, reportes). Usa la BD del cliente en sesión."""
+    """Conexión pyodbc. Con enrutador usa la BD del usuario (USUARIOS_ROUTER)."""
     if database is None:
-        database = get_active_database()
+        database = get_active_database(required=True)
     return DatabaseConfig.get_connection(database=database)
 
 

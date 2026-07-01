@@ -109,12 +109,23 @@ login_manager.login_message_category = 'info'
 def _cache_session_user(user):
     if not user:
         return
+    from database import (
+        resolve_client_database,
+        persist_client_database,
+        get_client_database_from_session,
+        _use_db_router,
+    )
+    username = getattr(user, 'username', None) or getattr(user, 'id', None)
+    if _use_db_router() and username:
+        db = resolve_client_database(username)
+        if db:
+            persist_client_database(db)
     session['_user_login'] = {
         'id': user.id,
         'username': user.username,
         'email': getattr(user, 'email', None),
         'nombre': getattr(user, 'nombre', None),
-        'client_database': session.get('client_database'),
+        'client_database': get_client_database_from_session() or session.get('client_database'),
     }
 
 
@@ -137,6 +148,13 @@ def unauthorized():
     if request.path.startswith('/api/'):
         return jsonify({'error': 'Sesión expirada o no autorizado. Vuelva a iniciar sesión.'}), 401
     return redirect(url_for('login', next=request.url))
+
+
+@app.before_request
+def bind_client_database():
+    """Todas las peticiones autenticadas usan la BD de USUARIOS_ROUTER."""
+    from database import bind_client_database_for_request
+    bind_client_database_for_request()
 
 
 def ensure_user_session():
@@ -12511,7 +12529,7 @@ def ejecutar_calculo_streaming():
         return jsonify({'error': 'No hay IDs de trabajador válidos en la lista.'}), 400
 
     from database import get_active_database
-    client_db = get_active_database()
+    client_db = get_active_database(required=True)
     tc = 3.0
 
     def generar_progreso():

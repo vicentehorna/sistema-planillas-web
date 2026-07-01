@@ -12175,12 +12175,39 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
         (cia, payrolltype, processtype, period),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
+    personas_validar_pension = [
+        str(r.get('person') or '').strip()
+        for r in rows
+        if str(r.get('person') or '').strip()
+        and str(r.get('observacion') or '').strip() == 'Trabajador no tiene régimen de pensión'
+    ]
+    personas_con_pension_ficha = set()
+    if personas_validar_pension:
+        placeholders = ','.join('?' for _ in personas_validar_pension)
+        cursor.execute(
+            f"""
+            SELECT LTRIM(RTRIM(Person)) AS person
+            FROM PR_Employee (NOLOCK)
+            WHERE Company = ?
+              AND PayRollType = ?
+              AND Person IN ({placeholders})
+              AND LTRIM(RTRIM(ISNULL(PensionType, ''))) <> ''
+            """,
+            (cia, payrolltype, *personas_validar_pension),
+        )
+        personas_con_pension_ficha = {
+            str(r.get('person') or '').strip()
+            for r in _dicts_first_nonempty_resultset(cursor)
+        }
+
     mensajes = []
     for r in rows:
         person = str(r.get('person') or '').strip()
         name = str(r.get('name') or '').strip()
         obs = str(r.get('observacion') or '').strip()
         if not obs:
+            continue
+        if obs == 'Trabajador no tiene régimen de pensión' and person in personas_con_pension_ficha:
             continue
         if person or name:
             etiqueta = ' — '.join([p for p in [person, name] if p])

@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-07-01 13:46
+  Generado: 2026-07-01 15:21
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -18777,32 +18777,27 @@ BEGIN
           AND ISNULL(C.pdt, '') = ''
     ) T;
 
+    /* Régimen de pensión: PR_Employee.PensionType en la ficha del trabajador. */
     INSERT INTO #errores (person, name, observacion)
-    SELECT T.Person, T.Name, 'Trabajador no tiene régimen de pensión'
-    FROM (
-        SELECT
-            E.Person,
-            LTRIM(RTRIM(
-                ISNULL(P.LastName1, '') + ' ' +
-                ISNULL(P.LastName2, '') + ' ' +
-                ISNULL(P.Name1, '') + ' ' +
-                ISNULL(P.Name2, '')
-            )) AS Name,
-            E.PensionType,
-            PT.PDT
-        FROM PR_Employee E (NOLOCK)
-            INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
-            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
-            INNER JOIN PR_EmployeeCategory ECAT (NOLOCK)
-                ON E.EmployeeCategory = ECAT.EmployeeCategory
-               AND ECAT.PDT = '1'
-            LEFT JOIN PR_PensionType PT (NOLOCK)
-                ON E.PensionType = PT.PensionType
-        WHERE E.Company = @cia
-          AND E.PayRollType = @payrolltype
-          AND E.Status = 'N'
-    ) T
-    WHERE ISNULL(T.PensionType, '') = '' OR T.PDT = '99';
+    SELECT
+        E.Person,
+        LTRIM(RTRIM(
+            ISNULL(P.LastName1, '') + ' ' +
+            ISNULL(P.LastName2, '') + ' ' +
+            ISNULL(P.Name1, '') + ' ' +
+            ISNULL(P.Name2, '')
+        )),
+        'Trabajador no tiene régimen de pensión'
+    FROM PR_Employee E (NOLOCK)
+        INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
+        INNER JOIN PR_EmployeeCategory ECAT (NOLOCK)
+            ON E.EmployeeCategory = ECAT.EmployeeCategory
+           AND ECAT.PDT = '1'
+    WHERE E.Company = @cia
+      AND E.PayRollType = @payrolltype
+      AND E.Status = 'N'
+      AND LTRIM(RTRIM(ISNULL(E.PensionType, ''))) = '';
 
     INSERT INTO #errores (person, name, observacion)
     SELECT T.Person, T.Name, 'Trabajador no tiene cargo'

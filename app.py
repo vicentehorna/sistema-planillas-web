@@ -4654,6 +4654,12 @@ def tipos_documento_page():
     return render_template('maestro_tipos_documento.html')
 
 
+@app.route('/tipos-planilla')
+@login_required
+def tipos_planilla_page():
+    return render_template('maestro_tipos_planilla.html')
+
+
 @app.route('/unidades')
 @login_required
 def unidades_page():
@@ -5238,6 +5244,313 @@ def api_tipos_documento_eliminar():
         })
     except Exception as e:
         logging.exception("api_tipos_documento_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _payrolltype_lista_dict(r):
+    return {
+        'payrolltype': _jsonable_value(r.get('payrolltype')),
+        'shortname': _jsonable_value(r.get('shortname')),
+        'description': _jsonable_value(r.get('description')),
+        'diasvacaciones': _jsonable_value(r.get('diasvacaciones')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _payrolltype_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'payrolltype': _jsonable_value(r.get('payrolltype')),
+        'company': _jsonable_value(r.get('company')),
+        'shortname': _jsonable_value(r.get('shortname')),
+        'description': _jsonable_value(r.get('description')),
+        'title': _jsonable_value(r.get('title')),
+        'diasvacaciones': _jsonable_value(r.get('diasvacaciones')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _periodo_payrolltype_dict(r):
+    return {
+        'prperiod': _jsonable_value(r.get('prperiod')),
+        'datebegin': _jsonable_datetime(r.get('datebegin')),
+        'dateend': _jsonable_datetime(r.get('dateend')),
+        'cadatebegin': _jsonable_datetime(r.get('cadatebegin')),
+        'cadateend': _jsonable_datetime(r.get('cadateend')),
+        'periodorder': _jsonable_value(r.get('periodorder')),
+        'glperiod': _jsonable_value(r.get('glperiod')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+@app.route('/api/tipos-planilla/listado', methods=['POST'])
+@login_required
+def api_tipos_planilla_listado():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarpayrolltype_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_payrolltype_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_tipos_planilla_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-planilla/obtener', methods=['POST'])
+@login_required
+def api_tipos_planilla_obtener():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione un tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerpayrolltype_web @company=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _payrolltype_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Tipo de planilla no encontrado."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_tipos_planilla_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-planilla/guardar', methods=['POST'])
+@login_required
+def api_tipos_planilla_guardar():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    modo = str(body.get('modo') or ('U' if payrolltype else 'I')).strip().upper()
+    shortname = str(body.get('shortname') or '').strip()
+    description = str(body.get('description') or '').strip()
+    try:
+        diasvacaciones = int(str(body.get('diasvacaciones') or '30').strip())
+    except ValueError:
+        diasvacaciones = -1
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not shortname or not description:
+        return jsonify({"error": "Complete nombre corto y descripción."}), 400
+    if diasvacaciones < 0 or diasvacaciones > 365:
+        return jsonify({"error": "Los días de vacaciones deben estar entre 0 y 365."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarpayrolltype_web "
+            "@modo=?, @company=?, @payrolltype=?, @shortname=?, @description=?, "
+            "@diasvacaciones=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                payrolltype or None,
+                shortname,
+                description,
+                diasvacaciones,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "payrolltype": _jsonable_value(row.get('payrolltype')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Tipo de planilla guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_tipos_planilla_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-planilla/periodos/listado', methods=['POST'])
+@login_required
+def api_tipos_planilla_periodos_listado():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+
+    if not cia or not payrolltype:
+        return jsonify({"error": "Seleccione compañía y tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarperiodos_payrolltype_web @company=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_periodo_payrolltype_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_tipos_planilla_periodos_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-planilla/periodos/guardar', methods=['POST'])
+@login_required
+def api_tipos_planilla_periodos_guardar():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    prperiod = str(body.get('prperiod') or '').strip()
+    modo = str(body.get('modo') or 'U').strip().upper()
+    xlastuser = _xlastuser_id()
+
+    if not cia or not payrolltype or not prperiod:
+        return jsonify({"error": "Indique compañía, tipo de planilla y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarperiodo_payrolltype_web "
+            "@modo=?, @company=?, @payrolltype=?, @prperiod=?, "
+            "@datebegin=?, @dateend=?, @cadatebegin=?, @cadateend=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                payrolltype,
+                prperiod,
+                _sql_date_str_param(body.get('datebegin')),
+                _sql_date_str_param(body.get('dateend')),
+                _sql_date_str_param(body.get('cadatebegin')) or None,
+                _sql_date_str_param(body.get('cadateend')) or None,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "prperiod": _jsonable_value(row.get('prperiod')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Periodo guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_tipos_planilla_periodos_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tipos-planilla/periodos/eliminar', methods=['POST'])
+@login_required
+def api_tipos_planilla_periodos_eliminar():
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    prperiod = str(body.get('prperiod') or '').strip()
+
+    if not cia or not payrolltype or not prperiod:
+        return jsonify({"error": "Indique compañía, tipo de planilla y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarperiodo_payrolltype_web @company=?, @payrolltype=?, @prperiod=?",
+            (cia, payrolltype, prperiod),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "prperiod": _jsonable_value(row.get('prperiod')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Periodo eliminado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_tipos_planilla_periodos_eliminar")
         err = str(e)
         if 'RAISERROR' in err or '50000' in err:
             parts = err.split(']')

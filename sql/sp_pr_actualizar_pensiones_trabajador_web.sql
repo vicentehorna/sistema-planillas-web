@@ -31,7 +31,8 @@ BEGIN
 
     DECLARE @fecha_inscripcion DATETIME = NULL;
     IF RTRIM(ISNULL(@pensioninscriptiondate, '')) <> ''
-        SET @fecha_inscripcion = TRY_CONVERT(DATETIME, @pensioninscriptiondate, 23);
+       AND ISDATE(@pensioninscriptiondate) = 1
+        SET @fecha_inscripcion = CONVERT(DATETIME, @pensioninscriptiondate, 120);
 
     UPDATE pr_employee
     SET

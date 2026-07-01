@@ -51,10 +51,10 @@ BEGIN
 
     DECLARE @fd DATE = NULL;
     DECLARE @fh DATE = NULL;
-    IF @fecha_ingreso_desde <> ''
-        SET @fd = TRY_CONVERT(DATE, @fecha_ingreso_desde, 23);
-    IF @fecha_ingreso_hasta <> ''
-        SET @fh = TRY_CONVERT(DATE, @fecha_ingreso_hasta, 23);
+    IF @fecha_ingreso_desde <> '' AND ISDATE(@fecha_ingreso_desde) = 1
+        SET @fd = CONVERT(DATE, @fecha_ingreso_desde, 120);
+    IF @fecha_ingreso_hasta <> '' AND ISDATE(@fecha_ingreso_hasta) = 1
+        SET @fh = CONVERT(DATE, @fecha_ingreso_hasta, 120);
 
     DECLARE @personid     VARCHAR(20);
     DECLARE @name         VARCHAR(255);

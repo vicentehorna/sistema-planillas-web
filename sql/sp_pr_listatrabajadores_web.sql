@@ -39,10 +39,10 @@ BEGIN
     SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
     SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
 
-    IF @fecha_ingreso_desde <> ''
-        SET @fd = TRY_CONVERT(DATE, @fecha_ingreso_desde, 23);
-    IF @fecha_ingreso_hasta <> ''
-        SET @fh = TRY_CONVERT(DATE, @fecha_ingreso_hasta, 23);
+    IF @fecha_ingreso_desde <> '' AND ISDATE(@fecha_ingreso_desde) = 1
+        SET @fd = CONVERT(DATE, @fecha_ingreso_desde, 120);
+    IF @fecha_ingreso_hasta <> '' AND ISDATE(@fecha_ingreso_hasta) = 1
+        SET @fh = CONVERT(DATE, @fecha_ingreso_hasta, 120);
 
     SELECT
         PR_PAYROLLTYPE.DESCRIPTION AS tipoplanilla,

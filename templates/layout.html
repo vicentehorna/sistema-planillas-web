@@ -381,10 +381,29 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                <li class="{{ 'active' if request.endpoint == 'conceptos_page' else '' }}">
-                    <a href="{{ url_for('conceptos_page') }}" title="Conceptos">
-                        <i class="bi bi-box-seam"></i><span class="sidebar-link-text">Conceptos</span>
+                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if generales_active else '' }}">
+                    <a href="#submenuGenerales"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if generales_active else 'false' }}"
+                       aria-controls="submenuGenerales"
+                       title="Generales">
+                        <i class="bi bi-sliders"></i><span class="sidebar-link-text">Generales</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if generales_active else '' }}" id="submenuGenerales">
+                        <li class="{{ 'active' if request.endpoint == 'conceptos_page' else '' }}">
+                            <a href="{{ url_for('conceptos_page') }}" title="Conceptos">
+                                <i class="bi bi-box-seam"></i><span class="sidebar-link-text">Conceptos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'tipos_planilla_page' else '' }}">
+                            <a href="{{ url_for('tipos_planilla_page') }}" title="Tipo de Planillas">
+                                <i class="bi bi-calendar3"></i><span class="sidebar-link-text">Tipo de Planillas</span>
+                            </a>
+                        </li>
+                    </ul>
                 </li>
 
                 {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'tipos_documento_page', 'unidades_page') %}

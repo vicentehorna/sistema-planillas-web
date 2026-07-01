@@ -39,6 +39,29 @@ def persist_client_database(database):
         pass
 
 
+def _login_username_for_router():
+    """Usuario de login para consultar USUARIOS_ROUTER."""
+    try:
+        from flask import has_request_context, session
+        if has_request_context():
+            cached = session.get('_user_login') or {}
+            un = (cached.get('username') or '').strip()
+            if un:
+                return un
+    except Exception:
+        pass
+    try:
+        from flask_login import current_user
+        if current_user.is_authenticated:
+            for attr in ('username', 'id'):
+                un = str(getattr(current_user, attr, '') or '').strip()
+                if un:
+                    return un
+    except Exception:
+        pass
+    return ''
+
+
 def _restore_client_database_from_login_cache():
     """Recupera client_database si la sesión la perdió (workers, cookies, etc.)."""
     try:
@@ -66,13 +89,20 @@ def _restore_client_database_from_login_cache():
 
 
 def get_active_database():
-    """BD activa: sesión del cliente, caché de login o SQL_DATABASE como último respaldo."""
+    """BD activa: sesión, caché de login, USUARIOS_ROUTER o SQL_DATABASE."""
     db = get_client_database_from_session()
     if db:
         return db
     db = _restore_client_database_from_login_cache()
     if db:
         return db
+    if _use_db_router():
+        username = _login_username_for_router()
+        if username:
+            db = resolve_client_database(username)
+            if db:
+                persist_client_database(db)
+                return db
     return (os.getenv('SQL_DATABASE') or '').strip()
 
 
@@ -86,7 +116,7 @@ def resolve_client_database(username):
         return None
 
     if not _use_db_router():
-        return get_active_database() or None
+        return (os.getenv('SQL_DATABASE') or '').strip() or None
 
     conn = None
     try:

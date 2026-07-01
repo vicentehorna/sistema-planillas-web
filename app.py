@@ -12256,6 +12256,7 @@ def api_procesar_planilla_validar_calculo():
         return jsonify({"error": "Faltan compañía, tipo de planilla, proceso o periodo."}), 400
     conn = None
     try:
+        from database import get_active_database
         conn = get_db_connection()
         cursor = conn.cursor()
         validaciones = _validar_calculo_planilla_mensajes(
@@ -12264,6 +12265,7 @@ def api_procesar_planilla_validar_calculo():
         return jsonify({
             "validaciones": validaciones,
             "total": len(validaciones),
+            "database": get_active_database(),
         })
     except Exception as e:
         logging.exception("api_procesar_planilla_validar_calculo")
@@ -12508,12 +12510,14 @@ def ejecutar_calculo_streaming():
     if total == 0:
         return jsonify({'error': 'No hay IDs de trabajador válidos en la lista.'}), 400
 
+    from database import get_active_database
+    client_db = get_active_database()
     tc = 3.0
 
     def generar_progreso():
         conn = None
         try:
-            conn = get_db_connection()
+            conn = get_db_connection(database=client_db)
             cursor = conn.cursor()
             _set_cursor_timeout_payroll(cursor)
             sp_name, proceso_desc = _resolve_payroll_calc_procedure(cursor, cia, processtype)
@@ -12564,7 +12568,7 @@ def ejecutar_calculo_streaming():
                                 conn.close()
                             except Exception:
                                 pass
-                            conn = get_db_connection()
+                            conn = get_db_connection(database=client_db)
                             cursor = conn.cursor()
                             _set_cursor_timeout_payroll(cursor)
                             cursor.execute(
@@ -12634,6 +12638,7 @@ def ejecutar_calculo_streaming():
                         'errores': len(errores),
                         'detalles': errores,
                         'validaciones': validaciones,
+                        'database': client_db,
                     }
                 )
                 + '\n\n'
@@ -12649,7 +12654,7 @@ def ejecutar_calculo_streaming():
                     pass
 
     return Response(
-        generar_progreso(),
+        stream_with_context(generar_progreso()),
         mimetype='text/event-stream',
         headers={
             'Cache-Control': 'no-cache',

@@ -133,8 +133,21 @@
                         </div>
                         <div class="col-md-4">
                             <label for="txtLastName2" class="form-label small fw-bold text-muted">Apellido Materno</label>
-                            <input type="text" id="txtLastName2" name="lastname2" class="form-control form-control-sm text-uppercase"
+                            <input type="text" id="txtLastName2" name="lastname2" class="form-control form-control-sm campo-obligatorio text-uppercase"
                                    maxlength="40" value="{{ empleado.lastname2 or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtBirthDate" class="form-label small fw-bold text-muted">Fecha de nacimiento</label>
+                            <input type="date" id="txtBirthDate" name="birthdate" class="form-control form-control-sm"
+                                   value="{{ empleado.birthdate or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="cboSex" class="form-label small fw-bold text-muted">Sexo</label>
+                            <select id="cboSex" name="sex" class="form-select form-select-sm campo-obligatorio" required>
+                                <option value="">Seleccione...</option>
+                                <option value="1" {% if empleado.sex == '1' %}selected{% endif %}>Masculino</option>
+                                <option value="2" {% if empleado.sex == '2' %}selected{% endif %}>Femenino</option>
+                            </select>
                         </div>
                         <div class="col-md-8">
                             <label for="txtNombreCompleto" class="form-label small fw-bold text-muted">Nombre</label>
@@ -403,6 +416,11 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!name1 || !lastname1) {
                     e.preventDefault();
                     alert('Indique primer nombre y apellido paterno.');
+                    return;
+                }
+                if (!(document.getElementById('cboSex')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione el sexo.');
                     return;
                 }
                 if (!(document.getElementById('cboTipoDocumento')?.value || '').trim()) {

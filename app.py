@@ -3965,11 +3965,14 @@ def _trabajadores_editar_seccion(raw):
 
 
 def _empleado_generales_desde_form(form):
+    sex = str(form.get('sex') or '').strip()
     return {
         'name1': str(form.get('name1') or '').strip().upper()[:40],
         'name2': str(form.get('name2') or '').strip().upper()[:40],
         'lastname1': str(form.get('lastname1') or '').strip().upper()[:40],
         'lastname2': str(form.get('lastname2') or '').strip().upper()[:40],
+        'birthdate': _sql_date_str_param(form.get('birthdate')),
+        'sex': sex if sex in ('1', '2') else '',
         'sectelephone': str(form.get('sectelephone') or '').strip()[:15],
         'email': str(form.get('email') or '').strip()[:255],
         'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
@@ -3977,6 +3980,17 @@ def _empleado_generales_desde_form(form):
         'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
         'userid': str(form.get('userid') or '').strip().lower()[:20],
     }
+
+
+def _empleado_generales_para_form(empleado):
+    """Fechas en YYYY-MM-DD para <input type=\"date\"> (pyodbc devuelve datetime)."""
+    if not empleado:
+        return empleado
+    out = dict(empleado)
+    out['birthdate'] = _sql_date_str_param(out.get('birthdate'))
+    sex = str(out.get('sex') or '').strip()
+    out['sex'] = sex if sex in ('1', '2') else ''
+    return out
 
 
 def _render_trabajadores_editar(
@@ -4056,6 +4070,7 @@ def trabajadores_editar(person_id):
             cursor.execute(
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
+                '@birthdate=?, @sex=?, '
                 '@sectelephone=?, @email=?, @employeedocumenttype=?, @documentnumber=?, '
                 '@replicationunit=?, @userid=?, @xlastuser=?',
                 (
@@ -4065,6 +4080,8 @@ def trabajadores_editar(person_id):
                     datos['name2'] or None,
                     datos['lastname1'],
                     datos['lastname2'] or None,
+                    datos['birthdate'] or None,
+                    datos['sex'],
                     datos['sectelephone'] or None,
                     datos['email'] or None,
                     datos['employeedocumenttype'],
@@ -4183,7 +4200,9 @@ def trabajadores_editar(person_id):
             return redirect(url_for('trabajadores_page'))
 
         empleado = rows[0]
-        if seccion == 'pensiones':
+        if seccion == 'generales':
+            empleado = _empleado_generales_para_form(empleado)
+        elif seccion == 'pensiones':
             empleado = _empleado_pensiones_para_form(empleado)
 
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)

@@ -20,6 +20,8 @@ BEGIN
         LTRIM(RTRIM(ISNULL(sp.name2, ''))) AS name2,
         LTRIM(RTRIM(ISNULL(sp.lastname1, ''))) AS lastname1,
         LTRIM(RTRIM(ISNULL(sp.lastname2, ''))) AS lastname2,
+        sp.birthdate AS birthdate,
+        LTRIM(RTRIM(ISNULL(sp.sex, ''))) AS sex,
         LTRIM(RTRIM(ISNULL(sp.name, ''))) AS name,
         LTRIM(RTRIM(ISNULL(sp.sectelephone, ''))) AS sectelephone,
         LTRIM(RTRIM(ISNULL(sp.email, ''))) AS email,

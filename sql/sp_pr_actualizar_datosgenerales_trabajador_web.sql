@@ -10,6 +10,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datosgenerales_trabajador_web]
     @name2                  VARCHAR(40) = NULL,
     @lastname1              VARCHAR(40),
     @lastname2              VARCHAR(40) = NULL,
+    @birthdate              VARCHAR(10) = NULL,
+    @sex                    CHAR(1),
     @sectelephone           VARCHAR(15) = NULL,
     @email                  VARCHAR(255) = NULL,
     @employeedocumenttype   VARCHAR(20),
@@ -23,6 +25,7 @@ BEGIN
 
     DECLARE @nombre_completo VARCHAR(100);
     DECLARE @userid_norm     VARCHAR(20);
+    DECLARE @birthdate_dt    DATETIME;
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
@@ -30,6 +33,8 @@ BEGIN
     SET @name2 = UPPER(LTRIM(RTRIM(ISNULL(@name2, ''))));
     SET @lastname1 = UPPER(LTRIM(RTRIM(ISNULL(@lastname1, ''))));
     SET @lastname2 = UPPER(LTRIM(RTRIM(ISNULL(@lastname2, ''))));
+    SET @birthdate = NULLIF(LTRIM(RTRIM(ISNULL(@birthdate, ''))), '');
+    SET @sex = NULLIF(LTRIM(RTRIM(ISNULL(@sex, ''))), '');
     SET @sectelephone = NULLIF(LTRIM(RTRIM(ISNULL(@sectelephone, ''))), '');
     SET @email = NULLIF(LTRIM(RTRIM(ISNULL(@email, ''))), '');
     SET @employeedocumenttype = LTRIM(RTRIM(ISNULL(@employeedocumenttype, '')));
@@ -87,6 +92,29 @@ BEGIN
     BEGIN
         RAISERROR('Indique la unidad.', 16, 1);
         RETURN;
+    END;
+
+    IF @sex IS NULL OR @sex = ''
+    BEGIN
+        RAISERROR('Indique el sexo.', 16, 1);
+        RETURN;
+    END;
+
+    IF @sex NOT IN ('1', '2')
+    BEGIN
+        RAISERROR('Sexo no válido. Use 1 (Masculino) o 2 (Femenino).', 16, 1);
+        RETURN;
+    END;
+
+    SET @birthdate_dt = NULL;
+    IF @birthdate IS NOT NULL
+    BEGIN
+        IF ISDATE(@birthdate) = 0
+        BEGIN
+            RAISERROR('Fecha de nacimiento no válida.', 16, 1);
+            RETURN;
+        END;
+        SET @birthdate_dt = CONVERT(DATETIME, @birthdate, 120);
     END;
 
     IF NOT EXISTS (
@@ -149,6 +177,8 @@ BEGIN
         name2 = NULLIF(@name2, ''),
         lastname1 = @lastname1,
         lastname2 = NULLIF(@lastname2, ''),
+        birthdate = @birthdate_dt,
+        sex = @sex,
         name = @nombre_completo,
         sectelephone = @sectelephone,
         email = @email,

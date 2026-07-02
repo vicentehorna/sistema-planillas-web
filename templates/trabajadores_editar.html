@@ -69,6 +69,7 @@
         <h4 class="mb-1 fw-bold">Edición de trabajador</h4>
         <p class="text-muted small mb-0">
             {% if seccion == 'generales' %}Datos generales del trabajador
+            {% elif seccion == 'laborales' %}Datos laborales del trabajador
             {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
             {% else %}Información bancaria y depósito de CTS{% endif %}
         </p>
@@ -91,7 +92,8 @@
         <div class="nav flex-column nav-pills edit-tabs" role="tablist" aria-orientation="vertical">
             <a class="nav-link {% if seccion == 'generales' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
-            <span class="nav-link disabled">Datos Laborales</span>
+            <a class="nav-link {% if seccion == 'laborales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
             <a class="nav-link {% if seccion == 'pensiones' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
             <a class="nav-link {% if seccion == 'bancario' %}active{% endif %}"
@@ -204,6 +206,140 @@
                                 {% endfor %}
                             </select>
                             <div class="form-text">Opcional. Si se asigna, debe ser único por trabajador.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{{ url_for('trabajadores_page') }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+            </div>
+        </form>
+        {% elif seccion == 'laborales' %}
+        <form id="frmLaborales" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=laborales"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="laborales">
+
+            <div class="section-card mb-4">
+                <div class="section-title">Datos del trabajador</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cboEmployeeType" class="form-label small fw-bold text-muted">Tipo de trabajador</label>
+                            <select id="cboEmployeeType" name="employeetype" class="form-select form-select-sm campo-obligatorio">
+                                <option value="">Seleccione...</option>
+                                {% for opt in employee_types %}
+                                <option value="{{ opt.id }}" {% if empleado.employeetype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboEmployeeCategory" class="form-label small fw-bold text-muted">Categoría</label>
+                            <select id="cboEmployeeCategory" name="employeecategory" class="form-select form-select-sm campo-obligatorio">
+                                <option value="">Seleccione...</option>
+                                {% for opt in employee_categories %}
+                                <option value="{{ opt.id }}" {% if empleado.employeecategory == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtEntryDate" class="form-label small fw-bold text-muted">Fecha de ingreso</label>
+                            <input type="date" id="txtEntryDate" name="entrydate" class="form-control form-control-sm campo-obligatorio"
+                                   value="{{ empleado.entrydate or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtReentryDate" class="form-label small fw-bold text-muted">Fecha de reingreso</label>
+                            <input type="date" id="txtReentryDate" name="reentrydate" class="form-control form-control-sm"
+                                   value="{{ empleado.reentrydate or '' }}">
+                        </div>
+                        <div class="col-12">
+                            <label for="cboContractModality" class="form-label small fw-bold text-muted">Tipo de contrato</label>
+                            <select id="cboContractModality" name="contractmodality" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in contract_modalities %}
+                                <option value="{{ opt.id }}" {% if empleado.contractmodality == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <label for="cboOcupation" class="form-label small fw-bold text-muted">Ocupación</label>
+                            <select id="cboOcupation" name="ocupation" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in ocupations %}
+                                <option value="{{ opt.id }}" {% if empleado.ocupation == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboSpecialStatus" class="form-label small fw-bold text-muted">Situación especial</label>
+                            <select id="cboSpecialStatus" name="specialstatus" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in special_statuses %}
+                                <option value="{{ opt.id }}" {% if empleado.specialstatus == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card mb-4">
+                <div class="section-title">Puesto</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cboPosition" class="form-label small fw-bold text-muted">Cargo</label>
+                            <select id="cboPosition" name="position" class="form-select form-select-sm campo-obligatorio">
+                                <option value="">Seleccione...</option>
+                                {% for opt in positions %}
+                                <option value="{{ opt.id }}" {% if empleado.position == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboCostCenter" class="form-label small fw-bold text-muted">Centro de costo</label>
+                            <select id="cboCostCenter" name="costcenter" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in cost_centers %}
+                                <option value="{{ opt.id }}" {% if empleado.costcenter == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="section-card mb-4">
+                <div class="section-title">Planilla</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cboPayrollType" class="form-label small fw-bold text-muted">Tipo de planilla</label>
+                            <select id="cboPayrollType" name="payrolltype" class="form-select form-select-sm campo-obligatorio">
+                                <option value="">Seleccione...</option>
+                                {% for opt in payroll_types %}
+                                <option value="{{ opt.id }}" {% if empleado.payrolltype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
+                            <select id="cboAccountProfile" name="accountprofile" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in account_profiles %}
+                                <option value="{{ opt.id }}" {% if empleado.accountprofile == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtSueldo" class="form-label small fw-bold text-muted">Sueldo básico</label>
+                            <input type="number" id="txtSueldo" name="sueldo" class="form-control form-control-sm campo-obligatorio text-end"
+                                   min="0" step="0.01" value="{{ empleado.sueldo or '' }}" autocomplete="off">
                         </div>
                     </div>
                 </div>
@@ -436,6 +572,47 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!(document.getElementById('cboUnidad')?.value || '').trim()) {
                     e.preventDefault();
                     alert('Seleccione la unidad.');
+                }
+            });
+        }
+        return;
+    }
+
+    if (seccion === 'laborales') {
+        const frmLaborales = document.getElementById('frmLaborales');
+        const txtSueldo = document.getElementById('txtSueldo');
+        if (frmLaborales) {
+            frmLaborales.addEventListener('submit', function (e) {
+                if (!(document.getElementById('cboEmployeeType')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione el tipo de trabajador.');
+                    return;
+                }
+                if (!(document.getElementById('cboEmployeeCategory')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione la categoría.');
+                    return;
+                }
+                if (!(document.getElementById('txtEntryDate')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Indique la fecha de ingreso.');
+                    return;
+                }
+                if (!(document.getElementById('cboPosition')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione el cargo.');
+                    return;
+                }
+                if (!(document.getElementById('cboPayrollType')?.value || '').trim()) {
+                    e.preventDefault();
+                    alert('Seleccione el tipo de planilla.');
+                    return;
+                }
+                const sueldo = parseFloat((txtSueldo?.value || '').replace(',', '.'));
+                if (!txtSueldo || Number.isNaN(sueldo) || sueldo < 0) {
+                    e.preventDefault();
+                    alert('Indique un sueldo básico válido.');
+                    txtSueldo?.focus();
                 }
             });
         }

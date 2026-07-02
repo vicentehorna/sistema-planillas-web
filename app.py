@@ -4561,6 +4561,54 @@ def _cargar_selectores_pensiones(cursor, cia):
     return pension_types, regime_health
 
 
+def _cargar_selectores_laborales(cursor, cia):
+    employee_types = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectoremployeetype_web @cia=?', (cia,)
+    )
+    employee_categories = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectoremployeecategory_web @cia=?', (cia,)
+    )
+    contract_modalities = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorcontractmodality_web @cia=?', (cia,)
+    )
+    ocupations = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorocupation_web @cia=?', (cia,)
+    )
+    special_statuses = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorspecialstatus_web @cia=?', (cia,)
+    )
+    positions = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorposition_web @cia=?', (cia,)
+    )
+    cost_centers = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorcostcenter_web @cia=?', (cia,)
+    )
+    account_profiles = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectoraccountprofile_web @cia=?', (cia,)
+    )
+    cursor.execute('EXEC sp_pr_selectorplanillas_web @cia=?', (cia,))
+    col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+    payroll_types = []
+    for row in cursor.fetchall():
+        rd = _row_dict_from_columns(col_names, row)
+        item_id = rd.get('payrolltype') or rd.get('PayRollType')
+        item_text = rd.get('tipoplanilla') or rd.get('Description') or item_id
+        if item_id is None:
+            continue
+        payroll_types.append({'id': str(item_id).strip(), 'text': str(item_text or item_id).strip()})
+    return (
+        employee_types,
+        employee_categories,
+        contract_modalities,
+        ocupations,
+        special_statuses,
+        positions,
+        cost_centers,
+        payroll_types,
+        account_profiles,
+    )
+
+
 def _cargar_selectores_generales(cursor, cia):
     tipos_documento = _selector_items_from_sp(
         cursor, 'EXEC sp_pr_selectorpersondocumenttype_web @cia=?', (cia,)
@@ -4581,7 +4629,7 @@ def _cargar_selectores_generales(cursor, cia):
 
 def _trabajadores_editar_seccion(raw):
     seccion = str(raw or 'generales').strip().lower()
-    return seccion if seccion in ('bancario', 'pensiones', 'generales') else 'generales'
+    return seccion if seccion in ('bancario', 'pensiones', 'generales', 'laborales') else 'generales'
 
 
 def _empleado_generales_desde_form(form):
@@ -4626,6 +4674,15 @@ def _render_trabajadores_editar(
     tipos_documento=None,
     unidades=None,
     usuarios=None,
+    employee_types=None,
+    employee_categories=None,
+    contract_modalities=None,
+    ocupations=None,
+    special_statuses=None,
+    positions=None,
+    cost_centers=None,
+    payroll_types=None,
+    account_profiles=None,
 ):
     return render_template(
         'trabajadores_editar.html',
@@ -4641,6 +4698,15 @@ def _render_trabajadores_editar(
         tipos_documento=tipos_documento or [],
         unidades=unidades or [],
         usuarios=usuarios or [],
+        employee_types=employee_types or [],
+        employee_categories=employee_categories or [],
+        contract_modalities=contract_modalities or [],
+        ocupations=ocupations or [],
+        special_statuses=special_statuses or [],
+        positions=positions or [],
+        cost_centers=cost_centers or [],
+        payroll_types=payroll_types or [],
+        account_profiles=account_profiles or [],
     )
 
 
@@ -4664,10 +4730,45 @@ def _empleado_pensiones_para_form(empleado):
     return out
 
 
+def _empleado_laborales_desde_form(form):
+    sueldo_raw = str(form.get('sueldo') or '').strip().replace(',', '')
+    return {
+        'employeetype': str(form.get('employeetype') or '').strip(),
+        'employeecategory': str(form.get('employeecategory') or '').strip(),
+        'entrydate': str(form.get('entrydate') or '').strip(),
+        'reentrydate': str(form.get('reentrydate') or '').strip(),
+        'contractmodality': str(form.get('contractmodality') or '').strip(),
+        'ocupation': str(form.get('ocupation') or '').strip(),
+        'specialstatus': str(form.get('specialstatus') or '').strip(),
+        'position': str(form.get('position') or '').strip(),
+        'costcenter': str(form.get('costcenter') or '').strip(),
+        'payrolltype': str(form.get('payrolltype') or '').strip(),
+        'accountprofile': str(form.get('accountprofile') or '').strip(),
+        'sueldo': sueldo_raw,
+    }
+
+
+def _empleado_laborales_para_form(empleado):
+    if not empleado:
+        return empleado
+    out = dict(empleado)
+    out['entrydate'] = _sql_date_str_param(out.get('entrydate'))
+    out['reentrydate'] = _sql_date_str_param(out.get('reentrydate'))
+    sueldo = out.get('sueldo')
+    if sueldo is not None and str(sueldo).strip() != '':
+        try:
+            out['sueldo'] = f'{float(sueldo):.2f}'
+        except (TypeError, ValueError):
+            out['sueldo'] = str(sueldo)
+    else:
+        out['sueldo'] = ''
+    return out
+
+
 @app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
 @login_required
 def trabajadores_editar(person_id):
-    """Edición de datos generales, bancarios, CTS y pensiones del trabajador."""
+    """Edición de datos generales, laborales, bancarios, CTS y pensiones del trabajador."""
     person_id = str(person_id or '').strip()
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
     seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion'))
@@ -4736,6 +4837,36 @@ def trabajadores_editar(person_id):
             conn.commit()
             flash('Datos de pensiones actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones'))
+
+        if request.method == 'POST' and seccion == 'laborales':
+            datos = _empleado_laborales_desde_form(request.form)
+            cursor.execute(
+                'EXEC sp_pr_actualizar_datoslaborales_trabajador_web '
+                '@cia=?, @person=?, @employeetype=?, @employeecategory=?, '
+                '@entrydate=?, @reentrydate=?, @contractmodality=?, @ocupation=?, '
+                '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
+                '@accountprofile=?, @sueldo=?, @xlastuser=?',
+                (
+                    cia,
+                    person_id,
+                    datos['employeetype'],
+                    datos['employeecategory'],
+                    _sql_date_str_param(datos['entrydate']),
+                    _sql_date_str_param(datos['reentrydate']),
+                    datos['contractmodality'],
+                    datos['ocupation'],
+                    datos['specialstatus'],
+                    datos['position'],
+                    datos['costcenter'],
+                    datos['payrolltype'],
+                    datos['accountprofile'],
+                    datos['sueldo'] or None,
+                    xlastuser,
+                ),
+            )
+            conn.commit()
+            flash('Datos laborales actualizados correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales'))
 
         if request.method == 'POST' and seccion == 'bancario':
             collectionform = str(request.form.get('collectionform') or '').strip()
@@ -4809,6 +4940,11 @@ def trabajadores_editar(person_id):
                 'EXEC sp_pr_obtener_pensiones_trabajador_web @cia=?, @person=?',
                 (cia, person_id),
             )
+        elif seccion == 'laborales':
+            cursor.execute(
+                'EXEC sp_pr_obtener_datoslaborales_trabajador_web @cia=?, @person=?',
+                (cia, person_id),
+            )
         else:
             cursor.execute(
                 'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
@@ -4824,10 +4960,13 @@ def trabajadores_editar(person_id):
             empleado = _empleado_generales_para_form(empleado)
         elif seccion == 'pensiones':
             empleado = _empleado_pensiones_para_form(empleado)
+        elif seccion == 'laborales':
+            empleado = _empleado_laborales_para_form(empleado)
 
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
         pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
         tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
+        labor_selectors = _cargar_selectores_laborales(cursor, cia)
 
         return _render_trabajadores_editar(
             cia, person_id, seccion, empleado,
@@ -4839,6 +4978,15 @@ def trabajadores_editar(person_id):
             tipos_documento=tipos_documento,
             unidades=unidades,
             usuarios=usuarios,
+            employee_types=labor_selectors[0],
+            employee_categories=labor_selectors[1],
+            contract_modalities=labor_selectors[2],
+            ocupations=labor_selectors[3],
+            special_statuses=labor_selectors[4],
+            positions=labor_selectors[5],
+            cost_centers=labor_selectors[6],
+            payroll_types=labor_selectors[7],
+            account_profiles=labor_selectors[8],
         )
     except Exception as e:
         if conn:

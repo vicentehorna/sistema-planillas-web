@@ -315,6 +315,11 @@
             font-size: 8.5px;
             padding-right: 28px;
         }
+        table.cts-grid tr.cts-titulo-row td.cts-res {
+            font-weight: bold;
+            font-size: 8.5px;
+            color: #1a4b84;
+        }
         table.cts-grid tr.cts-total-row td {
             font-weight: bold;
             background-color: #f4f6f9;
@@ -613,6 +618,18 @@
                         <td class="cts-cant"></td>
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ vaca_calc.total_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
+
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="2">Devolución de Quinta</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.devolucion_quinta_fmt }}</td>
                     </tr>
                 </table>
             </div>

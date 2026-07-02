@@ -678,16 +678,17 @@ BEGIN
                SELECT
         SUM(EC.ConceptValueLo)
         FROM
-        PR_EmployeePayRollConcept EC (NOLOCK),
-        PR_Concept C (NOLOCK),
-        PR_ProcessType PT (NOLOCK)
+        PR_EmployeePayRollConcept EC (NOLOCK)
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Company = EC.Company AND C.Concept = EC.Concept
+        INNER JOIN PR_ProcessType PT (NOLOCK)
+            ON PT.Company = EC.Company AND PT.ProcessType = EC.ProcessType
         WHERE
         EC.Company = @cia
-        AND	EC.Concept = C.Concept
         AND EC.Person = P.Person
-        AND PT.ProcessType = EC.ProcessType and
-                C.FormulaCode = 'DEVOLUCION_QUINTA'
-        AND LEFT(EC.PRPeriod,4) = @anio
+        AND C.FormulaCode = 'DEVOLUCION_QUINTA'
+        AND PT.ShortName = 'LIQUIDACION'
+        AND LEFT(EC.PRPeriod, 4) = @anio
                 )
         ,0) AS devol_quinta,
 

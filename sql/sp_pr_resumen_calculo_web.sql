@@ -39,7 +39,7 @@ BEGIN
     WHERE LTRIM(RTRIM(Split.a.value('.', 'VARCHAR(20)'))) <> '';
 
     SELECT
-        ISNULL(NULLIF(LTRIM(RTRIM(C.PrintText)), ''), C.Description) AS concepto,
+        LTRIM(RTRIM(ISNULL(C.Description, ''))) AS concepto,
         LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) AS formulacode,
         UPPER(LTRIM(RTRIM(ISNULL(CT.Description, '')))) AS tipo,
         LTRIM(RTRIM(ISNULL(CT.ShortName, ''))) AS tipo_codigo,
@@ -58,7 +58,7 @@ BEGIN
       AND EC.ProcessType = @processtype
       AND LTRIM(RTRIM(EC.PRPeriod)) = @period
     GROUP BY
-        ISNULL(NULLIF(LTRIM(RTRIM(C.PrintText)), ''), C.Description),
+        LTRIM(RTRIM(ISNULL(C.Description, ''))),
         C.FormulaCode,
         CT.Description,
         CT.ShortName,

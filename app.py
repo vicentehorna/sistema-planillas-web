@@ -3489,8 +3489,10 @@ def generar_pdf_certificado_quinta(params):
 
     monto_sueldos = float(cert.get('importe_sueldos_asignaciones') or 0)
     texto_remuneracion = f'S/. {format_importe(monto_sueldos)}'
-    monto_retenido = float(cert.get('importe_impuesto_total_retenido') or 0)
-    texto_retenido = f'S/. {format_importe(monto_retenido)}'
+    monto_retenido_total = float(cert.get('importe_impuesto_total_retenido') or 0)
+    devolucion_quinta_liq = float(cert.get('devol_quinta') or 0)
+    monto_retenido_encabezado = max(0.0, monto_retenido_total - devolucion_quinta_liq)
+    texto_retenido = f'S/. {format_importe(monto_retenido_encabezado)}'
 
     html_renderizado = render_template(
         'certificado_quinta_pdf.html',

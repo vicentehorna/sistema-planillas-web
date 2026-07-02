@@ -1063,6 +1063,60 @@
         };
     }
 
+    function crearPersistenciaPlameTRegistro() {
+        const STORAGE_KEY = 'filtros_plame_tregistro';
+
+        function guardar() {
+            try {
+                const archivos = Array.from(document.querySelectorAll('.chk-archivo-tregistro:checked'))
+                    .map((cb) => String(cb.value || '').trim())
+                    .filter(Boolean);
+                const estado = {
+                    cia: val('cboCompania'),
+                    fecha_desde: val('txtFechaDesde'),
+                    fecha_hasta: val('txtFechaHasta'),
+                    activos: document.getElementById('chkActivos')
+                        ? document.getElementById('chkActivos').checked
+                        : true,
+                    archivos,
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros plame t-registro: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'txtFechaDesde', 'txtFechaHasta', 'chkActivos'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            document.querySelectorAll('.chk-archivo-tregistro').forEach((el) => {
+                el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaPlameValidar() {
         const STORAGE_KEY = 'filtros_plame_validar';
 
@@ -2438,6 +2492,9 @@
         },
         plameArchivo26: function () {
             return crearPersistenciaPlameArchivo26();
+        },
+        plameTRegistro: function () {
+            return crearPersistenciaPlameTRegistro();
         },
         plameValidar: function () {
             return crearPersistenciaPlameValidar();

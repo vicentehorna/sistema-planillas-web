@@ -288,17 +288,612 @@ def _ejercicio_utilidades_from_period(period_raw):
     return ''
 
 
-def _parse_fecha_flexible(fecha_raw):
-    """Acepta YYYY-MM-DD, YYYY/MM/DD o YYYYMMDD y devuelve date o None."""
-    s = str(fecha_raw or '').strip()
-    if not s:
-        return None
-    for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%Y%m%d'):
-        try:
-            return datetime.strptime(s[:10] if fmt != '%Y%m%d' else s[:8], fmt).date()
-        except Exception:
-            continue
+def _normalize_date_yyyymmdd(fecha_raw):
+    """Fecha para filtros SQL (CHAR 8)."""
+    d = _parse_fecha_flexible(fecha_raw)
+    if d:
+        return d.strftime('%Y%m%d')
+    s = str(fecha_raw or '').strip().replace('-', '').replace('/', '')
+    if len(s) >= 8 and s[:8].isdigit():
+        return s[:8]
+    return ''
+
+
+def _tregistro_params_from_json(body):
+    body = body or {}
+    activos = str(body.get('activos') or 'S').strip().upper()
+    if activos not in ('S', 'N'):
+        activos = 'S'
+    return {
+        'cia': str(body.get('cia') or '').strip(),
+        'fecha_desde': _normalize_date_yyyymmdd(body.get('fecha_desde')),
+        'fecha_hasta': _normalize_date_yyyymmdd(body.get('fecha_hasta')),
+        'activos': activos,
+    }
+
+
+def _tregistro_validar_params(p):
+    if not p.get('cia'):
+        return 'Seleccione compañía.'
+    if not p.get('fecha_desde') or not p.get('fecha_hasta'):
+        return 'Indique fecha desde y fecha hasta.'
+    if p['fecha_desde'] > p['fecha_hasta']:
+        return 'La fecha desde no puede ser mayor que la fecha hasta.'
     return None
+
+
+TREGISTRO_ARCHIVO_EXTENSION = {
+    '04': 'ide',
+    '05': 'tra',
+    '11': 'per',
+    '17': 'est',
+    '29': 'edu',
+    '30': 'cta',
+}
+
+
+def _tregistro_archivos_from_json(body):
+    archivos = body.get('archivos') if isinstance(body, dict) else None
+    if not isinstance(archivos, list):
+        return []
+    resultado = []
+    for item in archivos:
+        codigo = str(item or '').strip()
+        if codigo and codigo not in resultado:
+            resultado.append(codigo)
+    return resultado
+
+
+def _tregistro_personas_from_json(body):
+    rows = body.get('rows') if isinstance(body, dict) else None
+    if not isinstance(rows, list):
+        return []
+    personas = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        person = str(row.get('person') or '').strip()
+        if person and person not in personas:
+            personas.append(person)
+    return personas
+
+
+def _tregistro_filename(ruc, codigo_estructura):
+    """Nomenclatura T-Registro (ej. RP_20123456789.ide para estructura 04)."""
+    digits = ''.join(ch for ch in str(ruc or '') if ch.isdigit())
+    ruc11 = digits.zfill(11)[-11:] if digits else '00000000000'
+    ext = TREGISTRO_ARCHIVO_EXTENSION.get(str(codigo_estructura), 'txt')
+    return f'RP_{ruc11}.{ext}'
+
+
+def _tregistro_valor_campo(row, column):
+    aliases = {
+        'DocIssuingCountry': 'docissuingcountry',
+        'Block': 'block',
+        'Block2': 'block2',
+        'codeLDN': 'codeldn',
+    }
+    key = aliases.get(column, column)
+    if key in row:
+        return row.get(key)
+    lower = str(key).lower()
+    for k, v in row.items():
+        if str(k).lower() == lower:
+            return v
+    return row.get(column)
+
+
+def _tregistro_fecha_ddmmyyyy(valor):
+    d = _parse_fecha_flexible(valor)
+    if d:
+        return d.strftime('%d/%m/%Y')
+    s = str(valor or '').strip()
+    if len(s) == 8 and s.isdigit():
+        return f'{s[6:8]}/{s[4:6]}/{s[0:4]}'
+    return ''
+
+
+def _tregistro_campo_linea(row, column, max_len):
+    """Replica wf_get_line de PowerBuilder (w_pr_treg_structure_04)."""
+    doc_type = str(_tregistro_valor_campo(row, 'documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+
+    direccion1 = {
+        'streettype', 'streetname', 'addressnumber', 'room', 'inside', 'apple',
+        'lot', 'kilometer', 'Block', 'stage', 'zone', 'zonename', 'reference', 'localite',
+    }
+    direccion2 = {
+        'streettype2', 'streetname2', 'addressnumber2', 'room2', 'inside2', 'apple2',
+        'lot2', 'kilometer2', 'Block2', 'stage2', 'zone2', 'zonename2', 'reference2', 'localite2',
+    }
+
+    if column == 'birthdate':
+        if doc_type == '06' or not _tregistro_valor_campo(row, 'birthdate'):
+            return '|'
+        fecha = _tregistro_fecha_ddmmyyyy(_tregistro_valor_campo(row, 'birthdate'))
+        return (fecha + '|') if fecha else '|'
+
+    if column in direccion1:
+        if doc_type in ('01', '06'):
+            return '|'
+        valor = _tregistro_valor_campo(row, column)
+        if valor is None or str(valor).strip() == '':
+            return '|'
+        return str(valor).strip()[:max_len] + '|'
+
+    if column in direccion2:
+        indicator = str(_tregistro_valor_campo(row, 'indicator') or '').strip()
+        if indicator in ('0', '1'):
+            return '|'
+        valor = _tregistro_valor_campo(row, column)
+        if valor is None or str(valor).strip() == '':
+            return '|'
+        return str(valor).strip()[:max_len] + '|'
+
+    valor = _tregistro_valor_campo(row, column)
+    if valor is None or str(valor).strip() == '':
+        return '|'
+    if max_len and max_len > 0:
+        return str(valor).strip()[:max_len] + '|'
+    return str(valor).strip() + '|'
+
+
+def _tregistro_linea_archivo04(row):
+    """Genera una línea del archivo RP_RUC.ide (estructura 04)."""
+    partes = [
+        _tregistro_campo_linea(row, 'documenttype', 2),
+        _tregistro_campo_linea(row, 'documentnumber', 15),
+        _tregistro_campo_linea(row, 'DocIssuingCountry', 3),
+        _tregistro_campo_linea(row, 'birthdate', 0),
+        _tregistro_campo_linea(row, 'lastname1', 40),
+        _tregistro_campo_linea(row, 'lastname2', 40),
+        _tregistro_campo_linea(row, 'employeename', 40),
+        _tregistro_campo_linea(row, 'sex', 1),
+        _tregistro_campo_linea(row, 'nationality', 4),
+        _tregistro_campo_linea(row, 'codeLDN', 3),
+        _tregistro_campo_linea(row, 'telephone', 9),
+        _tregistro_campo_linea(row, 'email', 50),
+        _tregistro_campo_linea(row, 'streettype', 2),
+        _tregistro_campo_linea(row, 'streetname', 20),
+        _tregistro_campo_linea(row, 'addressnumber', 4),
+        _tregistro_campo_linea(row, 'room', 4),
+        _tregistro_campo_linea(row, 'inside', 4),
+        _tregistro_campo_linea(row, 'apple', 4),
+        _tregistro_campo_linea(row, 'lot', 4),
+        _tregistro_campo_linea(row, 'kilometer', 4),
+        _tregistro_campo_linea(row, 'Block', 4),
+        _tregistro_campo_linea(row, 'stage', 4),
+        _tregistro_campo_linea(row, 'zone', 2),
+        _tregistro_campo_linea(row, 'zonename', 20),
+        _tregistro_campo_linea(row, 'reference', 40),
+        _tregistro_campo_linea(row, 'localite', 6),
+        _tregistro_campo_linea(row, 'streettype2', 2),
+        _tregistro_campo_linea(row, 'streetname2', 20),
+        _tregistro_campo_linea(row, 'addressnumber2', 4),
+        _tregistro_campo_linea(row, 'room2', 4),
+        _tregistro_campo_linea(row, 'inside2', 4),
+        _tregistro_campo_linea(row, 'apple2', 4),
+        _tregistro_campo_linea(row, 'lot2', 4),
+        _tregistro_campo_linea(row, 'kilometer2', 4),
+        _tregistro_campo_linea(row, 'Block2', 4),
+        _tregistro_campo_linea(row, 'stage2', 4),
+        _tregistro_campo_linea(row, 'zone2', 2),
+        _tregistro_campo_linea(row, 'zonename2', 20),
+        _tregistro_campo_linea(row, 'reference2', 40),
+        _tregistro_campo_linea(row, 'localite2', 6),
+        _tregistro_campo_linea(row, 'indicator', 1),
+    ]
+    return ''.join(partes)
+
+
+def _tregistro_fetch_datos_personales(cursor, cia, personas):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_datos_personales_web @cia=?, @personas=?',
+        (cia, personas_csv),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
+
+
+def _tregistro_num_2dec(valor):
+    """Formatea decimal con 2 decimales (######0.00) o '' si es nulo/vacío."""
+    if valor is None:
+        return ''
+    s = str(valor).strip()
+    if s == '':
+        return ''
+    try:
+        return f'{float(s):.2f}'
+    except (TypeError, ValueError):
+        return ''
+
+
+def _tregistro_campo_linea_05(row, column, max_len):
+    """Replica wf_get_line de w_pr_treg_structure_05 (estructura 05)."""
+    def gv(col):
+        v = _tregistro_valor_campo(row, col)
+        return '' if v is None else str(v).strip()
+
+    doc_type = gv('documenttype')
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+
+    if column == 'sctrpension':
+        val = gv('sctrpension')
+        if val == '0' or val == '':
+            return '|'
+        return val[:max_len] + '|'
+
+    if column == 'pensioninscriptiondate':
+        raw = _tregistro_valor_campo(row, 'pensioninscriptiondate')
+        fecha = _tregistro_fecha_ddmmyyyy(raw)
+        return (fecha + '|') if fecha else '|'
+
+    if column == 'salarybasic':
+        planilla = gv('planilla').upper()
+        if planilla == 'CONSTRUCCION CIVIL':
+            monto = _tregistro_num_2dec(_tregistro_valor_campo(row, 'jornalbasic'))
+        else:
+            monto = _tregistro_num_2dec(_tregistro_valor_campo(row, 'salarybasic'))
+        return (monto + '|') if monto != '' else '|'
+
+    val = gv(column)
+
+    if val == '':
+        if column in ('discapacity', 'taxagreement'):
+            return '0|'
+        return '|'
+
+    if column == 'regimenlabour':
+        if val == '1':
+            return '01|'
+        if val == '2':
+            return '02|'
+        return val + '|'
+
+    if column == 'employeestatus':
+        mapa = {
+            '10': '1', '11': '1',
+            '18': '2', '19': '2',
+            '14': '3', '15': '3',
+            '12': '0', '13': '0',
+        }
+        return (mapa.get(val, '') + '|') if val in mapa else '|'
+
+    if column == 'professionalcategory':
+        mapa = {'1': '01', '2': '02', '3': '03'}
+        return (mapa.get(val, '') + '|') if val in mapa else '|'
+
+    if column == 'ruccas':
+        if doc_type == '06':
+            return '|'
+        return val[:max_len] + '|'
+
+    if max_len and max_len > 0:
+        return val[:max_len] + '|'
+    return val + '|'
+
+
+def _tregistro_linea_archivo05(row):
+    """Genera una línea del archivo RP_RUC.tra (estructura 05)."""
+    partes = [
+        _tregistro_campo_linea_05(row, 'documenttype', 2),
+        _tregistro_campo_linea_05(row, 'documentnumber', 15),
+        _tregistro_campo_linea_05(row, 'docissuingcountry', 3),
+        _tregistro_campo_linea_05(row, 'regimenlabour', 2),
+        _tregistro_campo_linea_05(row, 'instructionlevel', 2),
+        _tregistro_campo_linea_05(row, 'ocupation', 6),
+        _tregistro_campo_linea_05(row, 'discapacity', 1),
+        _tregistro_campo_linea_05(row, 'afpcard', 12),
+        _tregistro_campo_linea_05(row, 'sctrpension', 1),
+        _tregistro_campo_linea_05(row, 'contractmodality', 2),
+        _tregistro_campo_linea_05(row, 'flagalternativeregimen', 1),
+        _tregistro_campo_linea_05(row, 'flagmaxworkinghours', 1),
+        _tregistro_campo_linea_05(row, 'flagnightschedule', 1),
+        _tregistro_campo_linea_05(row, 'isunionized', 1),
+        _tregistro_campo_linea_05(row, 'periodtype', 1),
+        _tregistro_campo_linea_05(row, 'salarybasic', 0),
+        _tregistro_campo_linea_05(row, 'employeestatus', 2),
+        _tregistro_campo_linea_05(row, 'relievedrenttax', 1),
+        _tregistro_campo_linea_05(row, 'specialstatus', 1),
+        _tregistro_campo_linea_05(row, 'collectionform', 1),
+        _tregistro_campo_linea_05(row, 'professionalcategory', 2),
+        _tregistro_campo_linea_05(row, 'taxagreement', 1),
+        _tregistro_campo_linea_05(row, 'ruccas', 11),
+    ]
+    return ''.join(partes)
+
+
+def _tregistro_fetch_trabajador(cursor, cia, personas):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_trabajador_web @cia=?, @personas=?',
+        (cia, personas_csv),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
+
+
+def _tregistro_tiene_fecha(valor):
+    """Equivalente a Not IsNull(datetime) en PowerBuilder."""
+    if valor is None:
+        return False
+    s = str(valor).strip()
+    return s != '' and s.lower() not in ('none', 'nat')
+
+
+def _tregistro_campo_linea_11(row, column, max_len):
+    """Replica wf_get_line de w_pr_treg_structure_11."""
+    fecha_cols = {
+        'entrydate', 'ceasedate', 'startdate2', 'enddate2', 'startdate3', 'enddate3',
+        'startdate4', 'enddate4', 'startdate5', 'enddate5',
+    }
+    if column in fecha_cols:
+        raw = _tregistro_valor_campo(row, column)
+        if not _tregistro_tiene_fecha(raw):
+            return '|'
+        fecha = _tregistro_fecha_ddmmyyyy(raw)
+        return (fecha + '|') if fecha else '|'
+
+    valor = _tregistro_valor_campo(row, column)
+    if valor is None or str(valor).strip() == '':
+        return '|'
+    if max_len and max_len > 0:
+        return str(valor).strip()[:max_len] + '|'
+    return str(valor).strip() + '|'
+
+
+def _tregistro_campo_healthentity_11(row):
+    rh = str(_tregistro_valor_campo(row, 'regimehealth') or '').strip()
+    if rh in ('01', '03'):
+        return _tregistro_campo_linea_11(row, 'healthentity', 1)
+    return '|'
+
+
+def _tregistro_lineas_archivo11(row):
+    """Genera 0-5 líneas del archivo RP_RUC.per (estructura 11) por trabajador."""
+    lineas = []
+
+    if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'entrydate')):
+        partes = [
+            _tregistro_campo_linea_11(row, 'documenttype', 2),
+            _tregistro_campo_linea_11(row, 'documentnumber', 15),
+            _tregistro_campo_linea_11(row, 'countryissuingdocument', 3),
+            _tregistro_campo_linea_11(row, 'employeecategory', 1),
+            '1|',
+        ]
+        if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'ceasedate')):
+            partes.append('|')
+        else:
+            partes.append(_tregistro_campo_linea_11(row, 'entrydate', 0))
+        partes.extend([
+            _tregistro_campo_linea_11(row, 'ceasedate', 0),
+            _tregistro_campo_linea_11(row, 'ceasereason', 2),
+            _tregistro_campo_healthentity_11(row),
+        ])
+        lineas.append(''.join(partes))
+
+    if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'startdate2')):
+        partes = [
+            _tregistro_campo_linea_11(row, 'documenttype', 2),
+            _tregistro_campo_linea_11(row, 'documentnumber', 15),
+            _tregistro_campo_linea_11(row, 'countryissuingdocument', 3),
+            _tregistro_campo_linea_11(row, 'employeecategory', 2),
+            '2|',
+        ]
+        if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'enddate2')):
+            partes.append('|')
+        else:
+            partes.append(_tregistro_campo_linea_11(row, 'startdate2', 0))
+        partes.extend([
+            _tregistro_campo_linea_11(row, 'enddate2', 0),
+            _tregistro_campo_linea_11(row, 'indicator2', 2),
+            _tregistro_campo_healthentity_11(row),
+        ])
+        lineas.append(''.join(partes))
+
+    if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'startdate3')):
+        partes = [
+            _tregistro_campo_linea_11(row, 'documenttype', 2),
+            _tregistro_campo_linea_11(row, 'documentnumber', 15),
+            _tregistro_campo_linea_11(row, 'countryissuingdocument', 3),
+            _tregistro_campo_linea_11(row, 'employeecategory', 2),
+            '3|',
+        ]
+        if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'enddate3')):
+            partes.append('|')
+        else:
+            partes.append(_tregistro_campo_linea_11(row, 'startdate3', 0))
+        partes.extend([
+            _tregistro_campo_linea_11(row, 'enddate3', 0),
+            _tregistro_campo_linea_11(row, 'indicator3', 2),
+            _tregistro_campo_healthentity_11(row),
+        ])
+        lineas.append(''.join(partes))
+
+    if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'startdate4')):
+        partes = [
+            _tregistro_campo_linea_11(row, 'documenttype', 2),
+            _tregistro_campo_linea_11(row, 'documentnumber', 15),
+            _tregistro_campo_linea_11(row, 'countryissuingdocument', 3),
+            _tregistro_campo_linea_11(row, 'employeecategory', 2),
+            '4|',
+        ]
+        if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'enddate4')):
+            partes.append('|')
+        else:
+            start4 = _parse_fecha_flexible(_tregistro_valor_campo(row, 'startdate4'))
+            entry = _parse_fecha_flexible(_tregistro_valor_campo(row, 'entrydate'))
+            if start4 and entry and start4 < entry:
+                partes.append(_tregistro_campo_linea_11(row, 'entrydate', 0))
+            else:
+                partes.append(_tregistro_campo_linea_11(row, 'startdate4', 0))
+        partes.extend([
+            _tregistro_campo_linea_11(row, 'enddate4', 0),
+            _tregistro_campo_linea_11(row, 'indicator4', 2),
+            _tregistro_campo_healthentity_11(row),
+        ])
+        lineas.append(''.join(partes))
+
+    if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'startdate5')):
+        partes = [
+            _tregistro_campo_linea_11(row, 'documenttype', 2),
+            _tregistro_campo_linea_11(row, 'documentnumber', 15),
+            _tregistro_campo_linea_11(row, 'countryissuingdocument', 3),
+            _tregistro_campo_linea_11(row, 'employeecategory', 2),
+            '5|',
+        ]
+        if _tregistro_tiene_fecha(_tregistro_valor_campo(row, 'enddate5')):
+            partes.append('|')
+        else:
+            partes.append(_tregistro_campo_linea_11(row, 'startdate5', 0))
+        partes.extend([
+            _tregistro_campo_linea_11(row, 'enddate5', 0),
+            _tregistro_campo_linea_11(row, 'indicator5', 2),
+            _tregistro_campo_healthentity_11(row),
+        ])
+        lineas.append(''.join(partes))
+
+    return lineas
+
+
+def _tregistro_fetch_periodos(cursor, cia, personas):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_periodos_web @cia=?, @personas=?',
+        (cia, personas_csv),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
+
+
+def _tregistro_campo_linea_17(row, column, max_len):
+    """Replica wf_get_line de w_pr_treg_structure_17."""
+    valor = _tregistro_valor_campo(row, column)
+    if valor is None or str(valor).strip() == '':
+        return '|'
+    if max_len and max_len > 0:
+        return str(valor).strip()[:max_len] + '|'
+    return str(valor).strip() + '|'
+
+
+def _tregistro_linea_archivo17(row):
+    """Genera una línea del archivo RP_RUC.est (estructura 17)."""
+    partes = [
+        _tregistro_campo_linea_17(row, 'documenttype', 2),
+        _tregistro_campo_linea_17(row, 'documentnumber', 15),
+        _tregistro_campo_linea_17(row, 'docissuingcountry', 3),
+        _tregistro_campo_linea_17(row, 'ruc', 11),
+        _tregistro_campo_linea_17(row, 'localcode', 4),
+    ]
+    return ''.join(partes)
+
+
+def _tregistro_fetch_establecimiento(cursor, cia, personas, fecha_desde, fecha_hasta):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_establecimiento_web '
+        '@cia=?, @personas=?, @fecha_desde=?, @fecha_hasta=?',
+        (cia, personas_csv, fecha_desde, fecha_hasta),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
+
+
+def _tregistro_debe_escribir_archivo29(row):
+    """Replica filtro wf_calculate de w_pr_treg_structure_29."""
+    ni = str(_tregistro_valor_campo(row, 'nivelinstruccion') or '').strip()
+    if len(ni) >= 2 and '01' <= ni <= '12' and ni != '11':
+        return False
+    return True
+
+
+def _tregistro_linea_archivo29(row):
+    """Genera una línea del archivo RP_RUC.edu (estructura 29) o None si se omite."""
+    if not _tregistro_debe_escribir_archivo29(row):
+        return None
+
+    il = str(_tregistro_valor_campo(row, 'instructionlevel') or '').strip()
+    trainer = il in ('11', '13')
+
+    def campo_texto(column, max_len):
+        valor = _tregistro_valor_campo(row, column)
+        if valor is None or str(valor).strip() == '':
+            return '|'
+        return str(valor).strip()[:max_len] + '|'
+
+    partes = [
+        campo_texto('documenttype', 2),
+        campo_texto('documentnumber', 15),
+        campo_texto('docissuingcountry', 3),
+        campo_texto('instructionlevel', 2),
+        '1|' if trainer else '0|',
+    ]
+
+    if trainer:
+        partes.append(campo_texto('costcenter1', 9))
+        partes.append(campo_texto('costcenter2', 6))
+        dla = _tregistro_valor_campo(row, 'driverlicenseantiquity')
+        if dla is None or str(dla).strip() == '':
+            partes.append('|')
+        else:
+            try:
+                num = int(float(dla))
+                partes.append(f'{num:04d}'[:4] + '|')
+            except (TypeError, ValueError):
+                partes.append(str(dla).strip()[:4] + '|')
+    else:
+        partes.extend(['|', '|', '|'])
+
+    return ''.join(partes)
+
+
+def _tregistro_fetch_estudios(cursor, cia, personas):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_estudios_web @cia=?, @personas=?',
+        (cia, personas_csv),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
+
+
+def _tregistro_campo_linea_30(row, column, max_len):
+    valor = _tregistro_valor_campo(row, column)
+    if valor is None or str(valor).strip() == '':
+        return '|'
+    if max_len and max_len > 0:
+        return str(valor).strip()[:max_len] + '|'
+    return str(valor).strip() + '|'
+
+
+def _tregistro_linea_archivo30(row):
+    """Genera una línea del archivo RP_RUC.cta (estructura 30)."""
+    return ''.join([
+        _tregistro_campo_linea_30(row, 'documenttype', 2),
+        _tregistro_campo_linea_30(row, 'documentnumber', 15),
+        '604|',
+        _tregistro_campo_linea_30(row, 'salarybank', 3),
+        _tregistro_campo_linea_30(row, 'salaryaccount', 20),
+    ])
+
+
+def _tregistro_fetch_cuentas(cursor, cia, personas):
+    if not personas:
+        return []
+    personas_csv = ','.join(personas)
+    cursor.execute(
+        'EXEC sp_pr_tregistro_cuentas_web @cia=?, @personas=?',
+        (cia, personas_csv),
+    )
+    return _dicts_first_nonempty_resultset(cursor)
 
 
 def _add_months_to_date(base_date, months):
@@ -553,7 +1148,7 @@ def _parse_fecha_flexible(value):
     s = str(value).strip()
     if not s:
         return None
-    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d'):
+    for fmt in ('%Y-%m-%d', '%Y/%m/%d', '%d/%m/%Y', '%Y%m%d'):
         try:
             return datetime.strptime(s[:10] if fmt != '%Y%m%d' else s[:8], fmt).date()
         except Exception:
@@ -6173,6 +6768,12 @@ def plame_archivo26_page():
     return render_template('plame_archivo26.html')
 
 
+@app.route('/plame/t-registro')
+@login_required
+def plame_tregistro_page():
+    return render_template('plame_tregistro.html')
+
+
 @app.route('/plame/validar')
 @login_required
 def plame_validar_page():
@@ -6986,6 +7587,215 @@ def api_plame_archivo18_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_plame_archivo18_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/t-registro/listado', methods=['POST'])
+@login_required
+def api_plame_tregistro_listado():
+    """sp_pr_listado_tregistro_web: trabajadores por rango de fecha de ingreso."""
+    body = request.get_json(silent=True) or {}
+    p = _tregistro_params_from_json(body)
+    err = _tregistro_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_tregistro_web "
+            "@cia=?, @fecha_desde=?, @fecha_hasta=?, @activos=?",
+            (p['cia'], p['fecha_desde'], p['fecha_hasta'], p['activos']),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            entry_raw = str(r.get('entry_date') or '').strip()
+            entry_fmt = ''
+            if len(entry_raw) == 8 and entry_raw.isdigit():
+                entry_fmt = f'{entry_raw[6:8]}/{entry_raw[4:6]}/{entry_raw[0:4]}'
+            else:
+                entry_fmt = _fecha_hora_tabla_json(r.get('entry_date'))
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "entry_date": _jsonable_value(entry_raw or r.get('entry_date')),
+                "entry_date_fmt": entry_fmt,
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_plame_tregistro_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/t-registro/generar-txt', methods=['POST'])
+@login_required
+def api_plame_tregistro_generar_txt():
+    """Genera archivos TXT T-Registro (por ahora estructura 04: RP_RUC.ide)."""
+    body = request.get_json(silent=True) or {}
+    p = _tregistro_params_from_json(body)
+    err = _tregistro_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    archivos = _tregistro_archivos_from_json(body)
+    if not archivos:
+        return jsonify({"error": "Seleccione al menos un archivo T-Registro a generar."}), 400
+
+    archivos_implementados = ('04', '05', '11', '17', '29', '30')
+    archivos_a_generar = [a for a in archivos if a in archivos_implementados]
+    if not archivos_a_generar:
+        lista = ', '.join(archivos)
+        return jsonify({
+            "error": f"La generación de las estructuras {lista} aún no está implementada."
+        }), 400
+
+    personas = _tregistro_personas_from_json(body)
+    if not personas:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        archivos_generados = {}
+
+        if '04' in archivos_a_generar:
+            filas = _tregistro_fetch_datos_personales(cursor, p['cia'], personas)
+            if not filas:
+                return jsonify({"error": "No se encontraron datos personales para los trabajadores seleccionados (estructura 04)."}), 400
+            lineas = [_tregistro_linea_archivo04(row) for row in filas]
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['04'] = {
+                'filename': _tregistro_filename(ruc, '04'),
+                'content': contenido,
+            }
+
+        if '05' in archivos_a_generar:
+            filas = _tregistro_fetch_trabajador(cursor, p['cia'], personas)
+            if not filas:
+                return jsonify({"error": "No se encontraron datos del trabajador para los seleccionados (estructura 05)."}), 400
+            lineas = [_tregistro_linea_archivo05(row) for row in filas]
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['05'] = {
+                'filename': _tregistro_filename(ruc, '05'),
+                'content': contenido,
+            }
+
+        if '11' in archivos_a_generar:
+            filas = _tregistro_fetch_periodos(cursor, p['cia'], personas)
+            if not filas:
+                return jsonify({"error": "No se encontraron datos de períodos para los seleccionados (estructura 11)."}), 400
+            lineas = []
+            for row in filas:
+                lineas.extend(_tregistro_lineas_archivo11(row))
+            if not lineas:
+                return jsonify({"error": "No hay períodos registrados para generar el archivo (estructura 11)."}), 400
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['11'] = {
+                'filename': _tregistro_filename(ruc, '11'),
+                'content': contenido,
+            }
+
+        if '17' in archivos_a_generar:
+            filas = _tregistro_fetch_establecimiento(
+                cursor, p['cia'], personas, p['fecha_desde'], p['fecha_hasta'],
+            )
+            if not filas:
+                return jsonify({"error": "No se encontraron establecimientos para los trabajadores seleccionados (estructura 17)."}), 400
+            lineas = [_tregistro_linea_archivo17(row) for row in filas]
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['17'] = {
+                'filename': _tregistro_filename(ruc, '17'),
+                'content': contenido,
+            }
+
+        if '29' in archivos_a_generar:
+            filas = _tregistro_fetch_estudios(cursor, p['cia'], personas)
+            if not filas:
+                return jsonify({"error": "No se encontraron datos de estudios para los seleccionados (estructura 29)."}), 400
+            lineas = []
+            for row in filas:
+                ln = _tregistro_linea_archivo29(row)
+                if ln:
+                    lineas.append(ln)
+            if not lineas:
+                return jsonify({"error": "Ningún trabajador seleccionado cumple los criterios de estudios concluidos (estructura 29)."}), 400
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['29'] = {
+                'filename': _tregistro_filename(ruc, '29'),
+                'content': contenido,
+            }
+
+        if '30' in archivos_a_generar:
+            filas = _tregistro_fetch_cuentas(cursor, p['cia'], personas)
+            if not filas:
+                return jsonify({"error": "No se encontraron cuentas de abono para los seleccionados (estructura 30)."}), 400
+            lineas = [_tregistro_linea_archivo30(row) for row in filas]
+            contenido = '\r\n'.join(lineas)
+            if lineas:
+                contenido += '\r\n'
+            archivos_generados['30'] = {
+                'filename': _tregistro_filename(ruc, '30'),
+                'content': contenido,
+            }
+
+        if len(archivos_generados) == 1:
+            item = next(iter(archivos_generados.values()))
+            resp = Response(
+                item['content'].encode('latin-1', errors='replace'),
+                mimetype='text/plain; charset=iso-8859-1',
+            )
+            resp.headers['Content-Disposition'] = f'attachment; filename="{item["filename"]}"'
+            return resp
+
+        mem = io.BytesIO()
+        with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for codigo in archivos_a_generar:
+                item = archivos_generados.get(codigo)
+                if not item:
+                    continue
+                zf.writestr(
+                    item['filename'],
+                    item['content'].encode('latin-1', errors='replace'),
+                )
+        mem.seek(0)
+        zip_name = f'TREGISTRO_{"".join(ch for ch in ruc if ch.isdigit())[-11:] or "00000000000"}.zip'
+        resp = Response(mem.getvalue(), mimetype='application/zip')
+        resp.headers['Content-Disposition'] = f'attachment; filename="{zip_name}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_tregistro_generar_txt")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

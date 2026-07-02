@@ -1,0 +1,500 @@
+{% extends "layout.html" %}
+
+{% block title %}Archivo T-Registro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-tregistro {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-tregistro th,
+    .table-tregistro td {
+        padding: 0.35rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-tregistro thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-tregistro .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+
+    .tregistro-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    .tregistro-archivos {
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.75rem 1rem;
+        background: #fafbfc;
+    }
+
+    .tregistro-archivos .form-check {
+        margin-bottom: 0;
+        min-height: 1.35rem;
+    }
+
+    .tregistro-archivos .form-check-label {
+        font-size: 0.85rem;
+    }
+
+    .tregistro-archivos .archivo-codigo {
+        display: inline-block;
+        min-width: 1.6rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    @media (min-width: 768px) {
+        .tregistro-filtro-compania {
+            flex: 0 0 35%;
+            max-width: 35%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .tregistro-filtro-compania {
+            flex: 0 0 28%;
+            max-width: 28%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmTRegistro" class="row g-3 align-items-end">
+            <div class="col-12 col-md-auto tregistro-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-auto">
+                <label for="txtFechaDesde" class="form-label small fw-bold text-muted">Fecha desde</label>
+                <input type="date" id="txtFechaDesde" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6 col-md-auto">
+                <label for="txtFechaHasta" class="form-label small fw-bold text-muted">Fecha hasta</label>
+                <input type="date" id="txtFechaHasta" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-12 col-md-auto">
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="chkActivos" checked>
+                    <label class="form-check-label small" for="chkActivos">Solo trabajadores activos</label>
+                </div>
+            </div>
+            <div class="col-12">
+                <label class="form-label small fw-bold text-muted mb-2">Archivos a generar</label>
+                <div class="tregistro-archivos row g-2" id="panelArchivosTRegistro">
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg04" value="04" checked>
+                            <label class="form-check-label" for="chkTReg04">
+                                <span class="archivo-codigo">04</span> Datos personales
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg05" value="05" checked>
+                            <label class="form-check-label" for="chkTReg05">
+                                <span class="archivo-codigo">05</span> Datos del trabajador
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg11" value="11" checked>
+                            <label class="form-check-label" for="chkTReg11">
+                                <span class="archivo-codigo">11</span> Datos de períodos
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg17" value="17" checked>
+                            <label class="form-check-label" for="chkTReg17">
+                                <span class="archivo-codigo">17</span> Establecimiento
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg29" value="29" checked>
+                            <label class="form-check-label" for="chkTReg29">
+                                <span class="archivo-codigo">29</span> Datos de estudios concluidos
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-xl-4">
+                        <div class="form-check">
+                            <input class="form-check-input chk-archivo-tregistro" type="checkbox" id="chkTReg30" value="30" checked>
+                            <label class="form-check-label" for="chkTReg30">
+                                <span class="archivo-codigo">30</span> Cuentas de trabajadores
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTRegistro" disabled>
+                    <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountTRegistro">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosTRegistro">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoTRegistro">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">Archivo T-Registro</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-tregistro align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="checkAllTRegistro" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th style="min-width: 7rem;">Nº Documento</th>
+                        <th>Nombre del trabajador</th>
+                        <th style="min-width: 6.5rem;">F. ingreso</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-tregistro"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameTRegistro
+        ? window.FiltrosPlanillasReportes.plameTRegistro()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_plame_tregistro_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_plame_tregistro_generar_txt') | tojson }};
+    let lastRowsTRegistro = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function primerDiaMesIso() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        return `${y}-${m}-01`;
+    }
+
+    function hoyIso() {
+        const d = new Date();
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${y}-${m}-${day}`;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function obtenerArchivosSeleccionados() {
+        return Array.from(document.querySelectorAll('.chk-archivo-tregistro:checked'))
+            .map((cb) => String(cb.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function aplicarArchivosSeleccionados(codigos) {
+        const set = new Set((Array.isArray(codigos) ? codigos : []).map((c) => String(c).trim()));
+        document.querySelectorAll('.chk-archivo-tregistro').forEach((cb) => {
+            cb.checked = set.size ? set.has(String(cb.value).trim()) : true;
+        });
+    }
+
+    function rowKey(row) {
+        return String(row.person || row.documentnumber || '').trim();
+    }
+
+    function obtenerSeleccionados() {
+        const mapa = new Map((lastRowsTRegistro || []).map((r) => [rowKey(r), r]));
+        const seleccionados = [];
+        document.querySelectorAll('.check-tregistro:checked').forEach((cb) => {
+            const row = mapa.get(String(cb.value || '').trim());
+            if (row) seleccionados.push(row);
+        });
+        return seleccionados;
+    }
+
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-tregistro').length;
+        const sel = obtenerSeleccionados().length;
+        document.getElementById('lblRowCountTRegistro').textContent = String(total);
+        document.getElementById('lblSeleccionadosTRegistro').textContent = String(sel);
+        document.getElementById('btnGenerarTRegistro').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAll() {
+        const all = document.querySelectorAll('.check-tregistro');
+        const chk = document.getElementById('checkAllTRegistro');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let marcados = 0;
+        all.forEach((x) => { if (x.checked) marcados++; });
+        chk.checked = marcados === all.length;
+        chk.indeterminate = marcados > 0 && marcados < all.length;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-tregistro');
+        tbody.innerHTML = '';
+
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+            const tr = document.createElement('tr');
+            const key = rowKey(row);
+            tr.innerHTML = `
+                <td class="text-center">
+                    <input type="checkbox" class="check-tregistro form-check-input" value="${escapeHtml(key)}" checked>
+                </td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(row.entry_date_fmt || row.entry_date || '')}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.check-tregistro').forEach((cb) => {
+            cb.addEventListener('change', function () {
+                sincronizarCheckAll();
+                actualizarContadores();
+            });
+        });
+
+        sincronizarCheckAll();
+        actualizarContadores();
+    }
+
+    async function poblarSelect(url, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    async function ejecutarConsulta() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const fecha_desde = document.getElementById('txtFechaDesde').value.trim();
+        const fecha_hasta = document.getElementById('txtFechaHasta').value.trim();
+        const activos = document.getElementById('chkActivos').checked ? 'S' : 'N';
+
+        if (!cia || !fecha_desde || !fecha_hasta) {
+            alert('Seleccione compañía y rango de fechas.');
+            return;
+        }
+        if (fecha_desde > fecha_hasta) {
+            alert('La fecha desde no puede ser mayor que la fecha hasta.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        document.getElementById('lblRowCountTRegistro').textContent = '0';
+        document.getElementById('lblSeleccionadosTRegistro').textContent = '0';
+        document.getElementById('btnGenerarTRegistro').disabled = true;
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, fecha_desde, fecha_hasta, activos })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoTRegistro').classList.add('d-none');
+                alert(payload.error || 'Error al consultar el listado.');
+                return;
+            }
+            lastRowsTRegistro = Array.isArray(payload.rows) ? payload.rows : [];
+            renderizarTabla(lastRowsTRegistro);
+            document.getElementById('cardResultadoTRegistro').classList.remove('d-none');
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoTRegistro').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function generarTxt() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const fecha_desde = document.getElementById('txtFechaDesde').value.trim();
+        const fecha_hasta = document.getElementById('txtFechaHasta').value.trim();
+        const activos = document.getElementById('chkActivos').checked ? 'S' : 'N';
+        const archivos = obtenerArchivosSeleccionados();
+        const seleccionados = obtenerSeleccionados();
+
+        if (!cia || !fecha_desde || !fecha_hasta) {
+            alert('Seleccione compañía y rango de fechas.');
+            return;
+        }
+        if (!archivos.length) {
+            alert('Seleccione al menos un archivo T-Registro a generar.');
+            return;
+        }
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    fecha_desde,
+                    fecha_hasta,
+                    activos,
+                    archivos,
+                    rows: seleccionados
+                })
+            });
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                } catch (e) {}
+                alert(msg);
+                return;
+            }
+
+            const blob = await res.blob();
+            let filename = 'RP_00000000000.ide';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el archivo TXT.');
+        }
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const txtDesde = document.getElementById('txtFechaDesde');
+    const txtHasta = document.getElementById('txtFechaHasta');
+
+    txtDesde.value = primerDiaMesIso();
+    txtHasta.value = hoyIso();
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    if (filtrosPersist) {
+        const saved = filtrosPersist.leer();
+        if (saved) {
+            if (saved.cia) seleccionarCompaniaInsensitive(cboCia, saved.cia);
+            if (saved.fecha_desde) txtDesde.value = saved.fecha_desde;
+            if (saved.fecha_hasta) txtHasta.value = saved.fecha_hasta;
+            if (typeof saved.activos === 'boolean') {
+                document.getElementById('chkActivos').checked = saved.activos;
+            }
+            if (Array.isArray(saved.archivos)) {
+                aplicarArchivosSeleccionados(saved.archivos);
+            }
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    cboCia.addEventListener('change', function () {
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    document.getElementById('frmTRegistro').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+
+    document.getElementById('checkAllTRegistro').addEventListener('change', function () {
+        const marcar = this.checked;
+        document.querySelectorAll('.check-tregistro').forEach((cb) => { cb.checked = marcar; });
+        this.indeterminate = false;
+        actualizarContadores();
+    });
+
+    document.getElementById('btnGenerarTRegistro').addEventListener('click', generarTxt);
+});
+</script>
+{% endblock %}

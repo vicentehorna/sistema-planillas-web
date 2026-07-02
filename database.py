@@ -40,23 +40,25 @@ def persist_client_database(database):
 
 
 def _login_username_for_router():
-    """Usuario de login para consultar USUARIOS_ROUTER."""
+    """UserID de login para USUARIOS_ROUTER (no el nombre del trabajador)."""
     try:
         from flask import has_request_context, session
         if has_request_context():
+            login_uid = (session.get('login_userid') or '').strip()
+            if login_uid:
+                return login_uid
             cached = session.get('_user_login') or {}
-            un = (cached.get('username') or '').strip()
-            if un:
-                return un
+            uid = str(cached.get('id') or '').strip()
+            if uid:
+                return uid
     except Exception:
         pass
     try:
         from flask_login import current_user
         if current_user.is_authenticated:
-            for attr in ('username', 'id'):
-                un = str(getattr(current_user, attr, '') or '').strip()
-                if un:
-                    return un
+            un = str(getattr(current_user, 'id', '') or '').strip()
+            if un:
+                return un
     except Exception:
         pass
     return ''
@@ -75,7 +77,7 @@ def _restore_client_database_from_login_cache():
         if db:
             session['client_database'] = db
             return db
-        username = (cached.get('username') or '').strip()
+        username = str(cached.get('id') or session.get('login_userid') or '').strip()
         if username and _use_db_router():
             db = resolve_client_database(username)
             if db:

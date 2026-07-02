@@ -115,7 +115,7 @@ def _cache_session_user(user):
         get_client_database_from_session,
         _use_db_router,
     )
-    username = getattr(user, 'username', None) or getattr(user, 'id', None)
+    username = getattr(user, 'id', None) or session.get('login_userid')
     if _use_db_router() and username:
         db = resolve_client_database(username)
         if db:
@@ -3886,6 +3886,7 @@ def login_post():
     password = request.form.get('password') or ''
     user = User.validate_user(username, password)
     if user:
+        session['login_userid'] = username
         login_user(user)
         _cache_session_user(user)
         ensure_user_session()
@@ -12529,7 +12530,10 @@ def ejecutar_calculo_streaming():
         return jsonify({'error': 'No hay IDs de trabajador válidos en la lista.'}), 400
 
     from database import get_active_database
-    client_db = get_active_database(required=True)
+    try:
+        client_db = get_active_database(required=True)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
     tc = 3.0
 
     def generar_progreso():

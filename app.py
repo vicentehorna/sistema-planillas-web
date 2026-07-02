@@ -13260,6 +13260,119 @@ def api_procesar_planilla_validar_calculo():
                 pass
 
 
+@app.route('/api/procesar-planilla/resumen-calculo', methods=['POST'])
+@login_required
+def api_procesar_planilla_resumen_calculo():
+    """sp_pr_resumen_calculo_web: resumen por concepto del cálculo recién procesado."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    seleccionados = body.get('trabajadores')
+
+    if not isinstance(seleccionados, list) or len(seleccionados) == 0:
+        return jsonify({'error': 'Debe indicar los trabajadores del cálculo.'}), 400
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
+
+    personas = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not personas:
+        return jsonify({'error': 'No hay trabajadores válidos en la lista.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        proceso_desc = str(body.get('proceso_desc') or '').strip() or processtype
+        planilla_desc = str(body.get('planilla_desc') or '').strip() or payrolltype
+
+        cursor.execute(
+            "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Description, ''))) "
+            "FROM PR_ProcessType (NOLOCK) WHERE Company = ? AND ProcessType = ?",
+            (cia, processtype),
+        )
+        row_proc = cursor.fetchone()
+        if row_proc and row_proc[0]:
+            proceso_desc = str(row_proc[0]).strip()
+
+        cursor.execute(
+            "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Description, ''))) "
+            "FROM PR_PayRollType (NOLOCK) WHERE Company = ? AND PayRollType = ?",
+            (cia, payrolltype),
+        )
+        row_pt = cursor.fetchone()
+        if row_pt and row_pt[0]:
+            planilla_desc = str(row_pt[0]).strip()
+
+        cursor.execute(
+            'EXEC sp_pr_resumen_calculo_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @personas=?',
+            (cia, payrolltype, processtype, period, ','.join(personas)),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+
+        detalle = []
+        total_ingresos = 0.0
+        total_descuentos = 0.0
+        total_auxiliar = 0.0
+        total_otros = 0.0
+
+        for r in rows:
+            try:
+                importe = float(r.get('importe') or 0)
+            except (TypeError, ValueError):
+                importe = 0.0
+            tipo_codigo = str(r.get('tipo_codigo') or '').strip().upper()
+            if tipo_codigo == 'I':
+                total_ingresos += importe
+            elif tipo_codigo == 'D':
+                total_descuentos += importe
+            elif tipo_codigo == 'A':
+                total_auxiliar += importe
+            else:
+                total_otros += importe
+            detalle.append(
+                {
+                    'concepto': str(r.get('concepto') or '').strip(),
+                    'formulacode': str(r.get('formulacode') or '').strip(),
+                    'tipo': str(r.get('tipo') or '').strip(),
+                    'tipo_codigo': tipo_codigo,
+                    'num_trabajadores': int(r.get('num_trabajadores') or 0),
+                    'importe': importe,
+                }
+            )
+
+        return jsonify(
+            {
+                'cia': cia,
+                'payrolltype': payrolltype,
+                'payrolltype_desc': planilla_desc,
+                'processtype': processtype,
+                'proceso_desc': proceso_desc,
+                'period': period,
+                'num_trabajadores': len(personas),
+                'rows': detalle,
+                'totales': {
+                    'ingresos': total_ingresos,
+                    'descuentos': total_descuentos,
+                    'auxiliar': total_auxiliar,
+                    'otros': total_otros,
+                    'neto': total_ingresos - total_descuentos,
+                },
+            }
+        )
+    except Exception as e:
+        logging.exception('api_procesar_planilla_resumen_calculo')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/procesar-planilla/eliminar-calculo', methods=['POST'])
 @login_required
 def api_procesar_planilla_eliminar_calculo():

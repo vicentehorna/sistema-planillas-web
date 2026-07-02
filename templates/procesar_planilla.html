@@ -92,6 +92,26 @@
         color: #5c3d3f;
         opacity: 0.55;
     }
+
+    .btn-resumen-calculo {
+        background-color: #d4e8f7;
+        border-color: #a8c9e0;
+        color: #2c4a63;
+    }
+
+    .btn-resumen-calculo:hover:not(:disabled),
+    .btn-resumen-calculo:focus:not(:disabled) {
+        background-color: #c5dff2;
+        border-color: #8fb8d4;
+        color: #1f3547;
+    }
+
+    .btn-resumen-calculo:disabled {
+        background-color: #e9ecef;
+        border-color: #dee2e6;
+        color: #6c757d;
+        opacity: 0.65;
+    }
 </style>
 {% endblock %}
 
@@ -145,6 +165,10 @@
                 </button>
                 <button type="button" class="btn btn-eliminar-calculo btn-sm px-4" id="btnEliminarCalculo" disabled>
                     <i class="bi bi-trash"></i> Eliminar cálculo
+                </button>
+                <button type="button" class="btn btn-resumen-calculo btn-sm px-4" id="btnResumenCalculo" disabled
+                        title="Disponible tras calcular la planilla">
+                    <i class="bi bi-list-check"></i> Resumen de Cálculo
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
                     Registros: <span id="lblRowCountPlanilla">0</span>
@@ -205,6 +229,52 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalResumenCalculo" tabindex="-1" aria-labelledby="modalResumenCalculoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title fw-bold" id="modalResumenCalculoLabel">Resumen de cálculo</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <p class="small text-muted mb-2" id="lblResumenCalculoSubtitulo"></p>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm table-hover align-middle mb-2" style="font-size: 11px;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Concepto</th>
+                                <th class="text-center">Trab.</th>
+                                <th class="text-end">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyResumenCalculo">
+                            <tr><td colspan="4" class="text-center text-muted py-3">Sin datos</td></tr>
+                        </tbody>
+                        <tfoot class="table-light fw-semibold">
+                            <tr>
+                                <td colspan="3" class="text-end">Total ingresos</td>
+                                <td class="text-end font-monospace" id="tdResumenIngresos">0.00</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="text-end">Total descuentos</td>
+                                <td class="text-end font-monospace" id="tdResumenDescuentos">0.00</td>
+                            </tr>
+                            <tr>
+                                <td colspan="3" class="text-end">Neto (ingresos − descuentos)</td>
+                                <td class="text-end font-monospace" id="tdResumenNeto">0.00</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -222,6 +292,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
     const URL_VALIDAR_CALCULO = {{ url_for('api_procesar_planilla_validar_calculo') | tojson }};
     const URL_ELIMINAR_CALCULO = {{ url_for('api_procesar_planilla_eliminar_calculo') | tojson }};
+    const URL_RESUMEN_CALCULO = {{ url_for('api_procesar_planilla_resumen_calculo') | tojson }};
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
@@ -229,6 +300,110 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProc = document.getElementById('cboProcesoCalculo');
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
+    const btnResumenCalculo = document.getElementById('btnResumenCalculo');
+    const modalResumenCalculoEl = document.getElementById('modalResumenCalculo');
+    const modalResumenCalculo = modalResumenCalculoEl ? new bootstrap.Modal(modalResumenCalculoEl) : null;
+    let ultimoResumenCalculo = null;
+
+    function invalidarResumenCalculo() {
+        ultimoResumenCalculo = null;
+        if (btnResumenCalculo) btnResumenCalculo.disabled = true;
+    }
+
+    function habilitarResumenCalculo(contexto) {
+        if (!contexto || !Array.isArray(contexto.trabajadores) || !contexto.trabajadores.length) {
+            invalidarResumenCalculo();
+            return;
+        }
+        ultimoResumenCalculo = contexto;
+        if (btnResumenCalculo) btnResumenCalculo.disabled = false;
+    }
+
+    function formatearImporteNum(n) {
+        const v = Number(n) || 0;
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function formatearPeriodoResumen(periodo) {
+        const s = String(periodo || '').trim();
+        if (/^\d{8}$/.test(s)) {
+            return `${s.slice(6, 8)}/${s.slice(4, 6)}/${s.slice(0, 4)}`;
+        }
+        return s;
+    }
+
+    function renderResumenCalculoModal(data) {
+        const tbody = document.getElementById('tbodyResumenCalculo');
+        const lblSub = document.getElementById('lblResumenCalculoSubtitulo');
+        const tdIng = document.getElementById('tdResumenIngresos');
+        const tdDes = document.getElementById('tdResumenDescuentos');
+        const tdNeto = document.getElementById('tdResumenNeto');
+        if (!tbody) return;
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        const totales = data.totales || {};
+        const proc = data.proceso_desc || data.processtype || '';
+        const planilla = data.payrolltype_desc || data.payrolltype || '';
+        const periodo = formatearPeriodoResumen(data.period);
+        const nTrab = data.num_trabajadores || 0;
+
+        if (lblSub) {
+            lblSub.textContent = [
+                planilla,
+                proc ? `Proceso: ${proc}` : '',
+                periodo ? `Periodo: ${periodo}` : '',
+                `${nTrab} trabajador${nTrab === 1 ? '' : 'es'}`,
+            ].filter(Boolean).join(' · ');
+        }
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">No hay conceptos calculados para los filtros indicados.</td></tr>';
+        } else {
+            tbody.innerHTML = rows.map((r) => {
+                const tipo = r.tipo || r.tipo_codigo || '';
+                const concepto = r.concepto || r.formulacode || '';
+                const fc = r.formulacode && r.formulacode !== concepto
+                    ? ` <span class="text-muted">(${escapeHtml(r.formulacode)})</span>`
+                    : '';
+                return `<tr>
+                    <td>${escapeHtml(tipo)}</td>
+                    <td>${escapeHtml(concepto)}${fc}</td>
+                    <td class="text-center font-monospace">${Number(r.num_trabajadores) || 0}</td>
+                    <td class="text-end font-monospace">${formatearImporteNum(r.importe)}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        if (tdIng) tdIng.textContent = formatearImporteNum(totales.ingresos);
+        if (tdDes) tdDes.textContent = formatearImporteNum(totales.descuentos);
+        if (tdNeto) tdNeto.textContent = formatearImporteNum(totales.neto);
+    }
+
+    async function verResumenCalculo() {
+        if (!ultimoResumenCalculo || !modalResumenCalculo) return;
+        const tbody = document.getElementById('tbodyResumenCalculo');
+        if (tbody) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Cargando...</td></tr>';
+        }
+        modalResumenCalculo.show();
+        try {
+            const res = await fetch(URL_RESUMEN_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(ultimoResumenCalculo),
+            });
+            const payload = await res.json();
+            if (!res.ok) {
+                throw new Error(payload.error || 'No se pudo cargar el resumen.');
+            }
+            renderResumenCalculoModal(payload);
+        } catch (err) {
+            console.error(err);
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHtml(err.message)}</td></tr>`;
+            }
+        }
+    }
 
     function esProcesoLiquidacionSeleccionado() {
         if (!cboProc) return false;
@@ -273,6 +448,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const chk = document.getElementById('checkAll');
         chk.checked = false;
         chk.indeterminate = false;
+        invalidarResumenCalculo();
         actualizarContadores();
     }
 
@@ -516,6 +692,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             'txtPeriodoDesc',
             'btnConsultarPlanilla',
             'btnEliminarCalculo',
+            'btnResumenCalculo',
             'checkAll'
         ];
         ids.forEach((id) => {
@@ -722,6 +899,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         resetBarraProgreso();
         ocultarValidacionesCalculo();
+        invalidarResumenCalculo();
         container.classList.remove('d-none');
         btn.disabled = true;
         setUiCalculoEnCurso(true);
@@ -774,6 +952,26 @@ document.addEventListener('DOMContentLoaded', async function () {
                 : [];
 
             renderizarValidacionesCalculo(validaciones);
+
+            const exitos = resultado && typeof resultado.exitos === 'number' ? resultado.exitos : 0;
+            if (exitos > 0) {
+                const optProcesoFin = cboProc.options[cboProc.selectedIndex];
+                habilitarResumenCalculo({
+                    cia: cia,
+                    payrolltype: payroll_type,
+                    payroll_type: payroll_type,
+                    processtype: processtype,
+                    period: period,
+                    trabajadores: listaPerson,
+                    proceso_desc: optProcesoFin ? String(optProcesoFin.textContent || '').trim() : '',
+                    planilla_desc: cboPt.options[cboPt.selectedIndex]
+                        ? String(cboPt.options[cboPt.selectedIndex].textContent || '').trim()
+                        : '',
+                });
+            } else {
+                invalidarResumenCalculo();
+            }
+
             await listarTrabajadores({ seleccionPersonas: listaPerson });
         } catch (error) {
             console.error(error);
@@ -793,6 +991,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnCalcular').addEventListener('click', function () {
         iniciarCalculo();
     });
+    if (btnResumenCalculo) {
+        btnResumenCalculo.addEventListener('click', function () {
+            verResumenCalculo();
+        });
+    }
 
     async function eliminarCalculo() {
         const checks = document.querySelectorAll('.check-trabajador:checked');
@@ -822,6 +1025,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.disabled = true;
         setUiCalculoEnCurso(true);
         ocultarValidacionesCalculo();
+        invalidarResumenCalculo();
 
         try {
             const res = await fetch(URL_ELIMINAR_CALCULO, {
@@ -917,6 +1121,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     limpiarValorComboSiObsoleto(cboPt);
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
+        invalidarResumenCalculo();
         const cia = this.value.trim();
         cboProc.innerHTML = '<option value="">Seleccione...</option>';
         cboProc.disabled = true;

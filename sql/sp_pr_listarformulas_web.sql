@@ -45,7 +45,7 @@ BEGIN
            AND fh.Company = c.Company
         INNER JOIN PR_ConceptType ct (NOLOCK)
             ON c.ConceptType = ct.ConceptType
-        INNER JOIN PR_GrupoFormula gf (NOLOCK)
+        LEFT JOIN PR_GrupoFormula gf (NOLOCK)
             ON fh.GrupoFormula = gf.GrupoFormula
            AND fh.Company = gf.Company
         LEFT JOIN PR_Concept cc (NOLOCK)

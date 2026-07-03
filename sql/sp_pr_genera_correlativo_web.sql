@@ -9,7 +9,7 @@
     Devuelve el ID generado en resultset: id_generado.
 
     Usado por: sp_pr_guardarconcepto_web, sp_pr_guardarbankaccount_web,
-               sp_pr_guardarposition_web y futuros maestros web.
+               sp_pr_guardarposition_web, sp_pr_guardarformula_web (PRA_FORM2024), etc.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_genera_correlativo_web]
     @cia        VARCHAR(4),

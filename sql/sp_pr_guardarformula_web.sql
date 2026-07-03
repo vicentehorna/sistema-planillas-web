@@ -85,7 +85,7 @@ BEGIN
             INSERT INTO @tabla_id (id_generado)
             EXEC sp_pr_genera_correlativo_web
                 @cia = @company,
-                @object = 'PR_FORMULA',
+                @object = 'PRA_FORM2024',
                 @xlastuser = @xlastuser;
 
             SELECT TOP 1 @id_generado = id_generado FROM @tabla_id;

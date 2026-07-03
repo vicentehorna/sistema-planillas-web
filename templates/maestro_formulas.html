@@ -1,0 +1,1102 @@
+{% extends "layout.html" %}
+
+{% block title %}Fórmulas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .formulas-workspace {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: calc(100vh - 10.5rem);
+        max-height: calc(100vh - 8rem);
+    }
+
+    .formulas-panel-lista {
+        flex: 0 0 auto;
+    }
+
+    .formulas-panel-lista .card-body {
+        padding: 0.5rem 0.75rem;
+    }
+
+    .formulas-grilla {
+        max-height: 9.5rem;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-formulas-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-formulas-lista th,
+    .table-formulas-lista td {
+        padding: 0.2rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-formulas-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-formulas-lista tbody tr.formula-row {
+        cursor: pointer;
+    }
+
+    .table-formulas-lista tbody tr.formula-row:hover {
+        background: #f8f9fa;
+    }
+
+    .table-formulas-lista tbody tr.formula-row.active {
+        background: #cfe2ff;
+    }
+
+    .formulas-panel-detalle {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .formulas-panel-detalle > .card,
+    .formulas-placeholder {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .formulas-panel-detalle .card-body {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        padding: 0.55rem 0.75rem;
+        overflow: hidden;
+    }
+
+    .formulas-form-card .form-label {
+        font-size: 0.72rem;
+        margin-bottom: 0.1rem;
+        white-space: nowrap;
+    }
+
+    .formulas-form-card .form-control-sm,
+    .formulas-form-card .form-select-sm {
+        font-size: 0.8rem;
+    }
+
+    .formulas-cabecera-fila {
+        flex: 0 0 auto;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 0.4rem 0.55rem;
+        padding-bottom: 0.45rem;
+        border-bottom: 1px solid #e9ecef;
+        margin-bottom: 0.45rem;
+    }
+
+    .formulas-cabecera-fila .campo-item {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+    }
+
+    .formulas-cabecera-fila .campo-concepto {
+        flex: 2 1 14rem;
+        min-width: 11rem;
+    }
+
+    .formulas-cabecera-fila .campo-tipo {
+        flex: 0 1 6.5rem;
+        min-width: 5.5rem;
+    }
+
+    .formulas-cabecera-fila .campo-cond {
+        flex: 1.5 1 11rem;
+        min-width: 9rem;
+    }
+
+    .formulas-cabecera-fila .campo-orden {
+        flex: 0 0 4rem;
+        width: 4rem;
+    }
+
+    .formulas-cabecera-fila .campo-truncar {
+        flex: 0 0 auto;
+        padding-bottom: 0.2rem;
+    }
+
+    .formulas-cabecera-fila .campo-grupo {
+        flex: 1 1 10rem;
+        min-width: 8rem;
+    }
+
+    .formulas-cabecera-fila .campo-truncar .form-check {
+        margin-bottom: 0;
+        min-height: 31px;
+        display: flex;
+        align-items: center;
+    }
+
+    .formulas-cabecera-fila .campo-truncar .form-check-label {
+        font-size: 0.78rem;
+        white-space: nowrap;
+    }
+
+    .formulas-placeholder {
+        align-items: center;
+        justify-content: center;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+        min-height: 8rem;
+    }
+
+    .formulas-detalle-seccion {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .formulas-detalle-toolbar {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.35rem;
+    }
+
+    .formulas-detalle-toolbar .formulas-seccion-titulo {
+        margin: 0;
+    }
+
+    .formulas-seccion-titulo {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #0d6efd;
+    }
+
+    .formulas-detalle-wrap {
+        flex: 1 1 auto;
+        min-height: 6rem;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-formula-detalle {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+        table-layout: fixed;
+        width: 100%;
+        min-width: 50rem;
+    }
+
+    .table-formula-detalle th,
+    .table-formula-detalle td {
+        padding: 0.2rem 0.25rem;
+        vertical-align: middle;
+        overflow: hidden;
+    }
+
+    .table-formula-detalle th:nth-child(1),
+    .table-formula-detalle td:nth-child(1) {
+        width: 6.25rem;
+    }
+
+    /* Elemento: más estrecho (~1 cm menos que antes) */
+    .table-formula-detalle th:nth-child(2),
+    .table-formula-detalle td:nth-child(2) {
+        width: 10rem;
+        max-width: 10rem;
+    }
+
+    .table-formula-detalle th:nth-child(3),
+    .table-formula-detalle td:nth-child(3) {
+        width: 4.6rem;
+    }
+
+    .table-formula-detalle th:nth-child(4),
+    .table-formula-detalle td:nth-child(4) {
+        width: 7rem;
+    }
+
+    .table-formula-detalle th:nth-child(5),
+    .table-formula-detalle td:nth-child(5),
+    .table-formula-detalle th:nth-child(7),
+    .table-formula-detalle td:nth-child(7) {
+        width: 5.85rem;
+    }
+
+    .table-formula-detalle th:nth-child(6),
+    .table-formula-detalle td:nth-child(6),
+    .table-formula-detalle th:nth-child(8),
+    .table-formula-detalle td:nth-child(8) {
+        width: 2.35rem;
+    }
+
+    .table-formula-detalle th:nth-child(9),
+    .table-formula-detalle td:nth-child(9) {
+        width: 4.1rem;
+    }
+
+    .table-formula-detalle thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+    }
+
+    .table-formula-detalle tbody tr.active {
+        background: #e7f1ff;
+    }
+
+    .table-formula-detalle .form-select,
+    .table-formula-detalle .form-control {
+        font-size: 11px;
+        padding: 0.1rem 0.2rem;
+        min-height: 26px;
+        height: 26px;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    .table-formula-detalle .form-select {
+        padding-right: 1.35rem;
+        background-position: right 0.2rem center;
+        background-size: 9px 7px;
+    }
+
+    .table-formula-detalle td:nth-child(2) .form-select,
+    .table-formula-detalle td:nth-child(2) .form-control {
+        text-overflow: ellipsis;
+    }
+
+    .table-formula-detalle td:nth-child(3) .form-select,
+    .table-formula-detalle td:nth-child(5) .form-select,
+    .table-formula-detalle td:nth-child(7) .form-select {
+        padding-right: 1.3rem;
+    }
+
+    .formulas-msg-guardado {
+        flex: 0 0 auto;
+        margin-top: 0.45rem;
+        padding: 0.45rem 0.75rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: #0f5132;
+        background-color: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 0.375rem;
+    }
+
+    .formulas-conteo {
+        font-size: 0.75rem;
+    }
+
+    @media (max-width: 767.98px) {
+        .formulas-grilla {
+            max-height: 8rem;
+        }
+
+        .formulas-cabecera-fila .campo-concepto,
+        .formulas-cabecera-fila .campo-cond,
+        .formulas-cabecera-fila .campo-grupo {
+            flex: 1 1 100%;
+            min-width: 100%;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosFormulas" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo de Planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-lg-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevaFormula">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="formulas-workspace">
+    <section class="formulas-panel-lista card shadow-sm border-0">
+        <div class="card-body py-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <span class="formulas-seccion-titulo">Listado de fórmulas</span>
+                <span id="lblConteoFormulas" class="text-muted formulas-conteo">0 registros</span>
+            </div>
+            <div class="formulas-grilla">
+                <table class="table table-bordered table-sm table-hover table-formulas-lista align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Grupo</th>
+                            <th>Tipo</th>
+                            <th>Concepto</th>
+                            <th style="width:3rem;">Ord.</th>
+                            <th>Condición</th>
+                            <th>Últ. cambio</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyFormulas">
+                        <tr><td colspan="6" class="text-center text-muted py-2">Seleccione filtros y busque</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="formulas-panel-detalle">
+        <div id="placeholderEdicion" class="formulas-placeholder">
+            Seleccione una fórmula del listado o pulse <strong>Nuevo</strong>
+        </div>
+
+        <div id="panelEdicion" class="card shadow-sm border-0 formulas-form-card d-none">
+            <div class="card-header py-1 px-3 d-flex justify-content-between align-items-center">
+                <h6 class="mb-0 small" id="tituloEdicionFormula">Editar fórmula</h6>
+                <button type="button" class="btn btn-primary btn-sm" id="btnGuardarFormula">
+                    <i class="bi bi-save"></i> Guardar
+                </button>
+            </div>
+            <div class="card-body">
+                <form id="frmFormula">
+                    <input type="hidden" id="hidFormulaHeader" value="">
+                    <input type="hidden" id="hidModo" value="U">
+                    <input type="hidden" id="hidDescription" value="">
+                    <input type="hidden" id="hidPeriod" value="">
+                    <input type="hidden" id="hidFormulaCode" value="">
+
+                    <div class="formulas-cabecera-fila">
+                        <div class="campo-item campo-concepto">
+                            <label class="form-label" for="cboConcepto">Concepto</label>
+                            <select id="cboConcepto" class="form-select form-select-sm" required>
+                                <option value="">Seleccione...</option>
+                            </select>
+                        </div>
+                        <div class="campo-item campo-tipo">
+                            <label class="form-label" for="cboTipoHeader">Tipo</label>
+                            <select id="cboTipoHeader" class="form-select form-select-sm">
+                                <option value="N">Ninguno</option>
+                                <option value="C">Concepto</option>
+                                <option value="A">Asignación</option>
+                                <option value="V">Validación</option>
+                            </select>
+                        </div>
+                        <div class="campo-item campo-cond" id="wrapConceptCond">
+                            <label class="form-label" for="cboConceptCond">Concepto condicional</label>
+                            <select id="cboConceptCond" class="form-select form-select-sm">
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                        <div class="campo-item campo-cond d-none" id="wrapParametroFormula">
+                            <label class="form-label" for="cboParametroFormula">Parámetro fórmula</label>
+                            <select id="cboParametroFormula" class="form-select form-select-sm">
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                        <div class="campo-item campo-orden">
+                            <label class="form-label" for="txtOrden">Orden</label>
+                            <input type="number" class="form-control form-control-sm" id="txtOrden" min="0" max="999">
+                        </div>
+                        <div class="campo-item campo-truncar">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="chkFlagTruncate">
+                                <label class="form-check-label" for="chkFlagTruncate">Truncar</label>
+                            </div>
+                        </div>
+                        <div class="campo-item campo-grupo">
+                            <label class="form-label" for="cboGrupoFormula">Grupo</label>
+                            <select id="cboGrupoFormula" class="form-select form-select-sm">
+                                <option value="">—</option>
+                            </select>
+                        </div>
+                    </div>
+                </form>
+
+                <div class="formulas-detalle-seccion">
+                    <div class="formulas-detalle-toolbar">
+                        <span class="formulas-seccion-titulo">Detalle de fórmula</span>
+                        <div class="btn-group btn-group-sm">
+                            <button type="button" class="btn btn-outline-primary" id="btnAgregarLinea">Agregar</button>
+                            <button type="button" class="btn btn-outline-danger" id="btnBorrarLinea">Borrar</button>
+                        </div>
+                    </div>
+                    <div class="formulas-detalle-wrap">
+                        <table class="table table-bordered table-sm table-formula-detalle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tipo</th>
+                                    <th>Elemento</th>
+                                    <th>Oper.</th>
+                                    <th>Proceso</th>
+                                    <th>Per. ini</th>
+                                    <th>#</th>
+                                    <th>Per. fin</th>
+                                    <th>#</th>
+                                    <th>T.Liq</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyDetalleFormula"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="msgGuardadoFormula" class="formulas-msg-guardado d-none"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const STORAGE_KEY = 'filtros_formulas_maestro';
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const tbodyFormulas = document.getElementById('tbodyFormulas');
+    const placeholder = document.getElementById('placeholderEdicion');
+    const panelEdicion = document.getElementById('panelEdicion');
+    const tbodyDetalle = document.getElementById('tbodyDetalleFormula');
+
+    let formulasCache = [];
+    let formulaSeleccionada = null;
+    let lineasDetalle = [];
+    let lineaSeleccionada = -1;
+    let cacheConceptos = [];
+    let cacheProcesos = [];
+    let cacheParameters = [];
+    let cacheGrupos = [];
+    let cacheParametrosFormula = [];
+    let selectoresCacheKey = '';
+
+    function invalidarCacheSelectores() {
+        selectoresCacheKey = '';
+        cacheConceptos = [];
+        cacheProcesos = [];
+        cacheParameters = [];
+        cacheParametrosFormula = [];
+        cacheGrupos = [];
+    }
+
+    async function ensureSelectoresCache(cia, payrolltype) {
+        const key = `${cia}|${payrolltype}`;
+        if (selectoresCacheKey === key && cacheConceptos.length) {
+            return;
+        }
+        const enc = encodeURIComponent;
+        const data = await fetch(
+            `/api/formulas/selectores-edicion?cia=${enc(cia)}&payrolltype=${enc(payrolltype)}`
+        ).then(leerJson);
+        cacheConceptos = data.conceptos || [];
+        cacheProcesos = data.procesos || [];
+        cacheParameters = data.parameters || [];
+        cacheParametrosFormula = data.parametros_formula || [];
+        cacheGrupos = data.grupos || [];
+        selectoresCacheKey = key;
+    }
+
+    function llenarSelectDesdeCache(selectEl, items, placeholder, valor) {
+        if (!selectEl) return;
+        const valPrev = valor != null ? String(valor) : selectEl.value;
+        selectEl.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
+        (items || []).forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? item.id : item.value;
+            opt.textContent = item.text != null ? item.text : item.label;
+            selectEl.appendChild(opt);
+        });
+        if (valPrev && Array.from(selectEl.options).some((o) => o.value === valPrev)) {
+            selectEl.value = valPrev;
+        }
+    }
+
+    function poblarSelectoresCabecera() {
+        llenarSelectDesdeCache(document.getElementById('cboConcepto'), cacheConceptos, 'Seleccione...');
+        llenarSelectDesdeCache(document.getElementById('cboConceptCond'), cacheConceptos, '—');
+        llenarSelectDesdeCache(document.getElementById('cboGrupoFormula'), cacheGrupos, '—');
+        llenarSelectDesdeCache(document.getElementById('cboParametroFormula'), cacheParametrosFormula, '—');
+    }
+
+    function marcarLineaActiva(idx) {
+        if (lineaSeleccionada === idx) return;
+        lineaSeleccionada = idx;
+        tbodyDetalle.querySelectorAll('.linea-detalle').forEach((r) => {
+            r.classList.toggle('active', parseInt(r.getAttribute('data-idx'), 10) === idx);
+        });
+    }
+
+    function esControlDetalle(target) {
+        return !!(target && target.closest && target.closest('select, input, textarea, button, label, option'));
+    }
+
+    const TIPOS_DETALLE = [
+        { v: 'C', t: 'Concepto' },
+        { v: 'A', t: 'Asignación' },
+        { v: 'V', t: 'Valor' },
+        { v: 'G', t: 'Grupo' },
+        { v: 'P', t: 'Parámetro' },
+        { v: 'S', t: 'SumaConc' },
+        { v: 'X', t: 'CuentaLiq' },
+        { v: 'Y', t: 'CuentaConcepto' },
+        { v: 'Z', t: 'SumaProv' },
+        { v: 'T', t: 'Tipo' },
+    ];
+
+    const OPERADORES = [
+        { v: 'P', t: '(+)' },
+        { v: 'M', t: '(-)' },
+        { v: 'X', t: '(*)' },
+        { v: 'D', t: '(/)' },
+        { v: 'F', t: '()' },
+        { v: 'T', t: 'ES' },
+    ];
+
+    const GRUPOS_PAR = [
+        { v: 'O', t: 'Abre' },
+        { v: 'C', t: 'Cierra' },
+    ];
+
+    const PERIODOS = [
+        { v: 'A', t: 'ACTUAL' },
+        { v: 'I', t: 'INICIAL' },
+    ];
+
+    const TIPOS_LIQ = [
+        { v: 'C', t: 'CTS' },
+        { v: 'G', t: 'GRATI' },
+        { v: 'V', t: 'VACA' },
+    ];
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function fmtFecha(d) {
+        if (!d) return '';
+        const s = String(d);
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}`;
+        return s;
+    }
+
+    async function leerJson(res) {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud');
+        return data;
+    }
+
+    async function poblarSelect(url, selectElement, placeholder) {
+        if (!selectElement) return;
+        const valPrev = selectElement.value;
+        selectElement.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? item.id : item.value;
+                opt.textContent = item.text != null ? item.text : item.label;
+                selectElement.appendChild(opt);
+            });
+            if (valPrev && Array.from(selectElement.options).some((o) => o.value === valPrev)) {
+                selectElement.value = valPrev;
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function guardarFiltros() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                cia: cboCia.value,
+                payrolltype: cboPlanilla.value,
+                processtype: cboProceso.value,
+            }));
+        } catch (e) { /* ignore */ }
+    }
+
+    function cargarFiltros() {
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function syncTipoHeaderUI() {
+        const tipo = document.getElementById('cboTipoHeader').value;
+        const wrapCond = document.getElementById('wrapConceptCond');
+        const wrapPar = document.getElementById('wrapParametroFormula');
+        const cboCond = document.getElementById('cboConceptCond');
+        wrapPar.classList.toggle('d-none', tipo !== 'V');
+        wrapCond.classList.toggle('d-none', tipo === 'V');
+        cboCond.disabled = tipo === 'N';
+        if (tipo === 'N') cboCond.value = '';
+        if (tipo !== 'V') document.getElementById('cboParametroFormula').value = '';
+    }
+
+    function opcionesHtml(items, valSel, blank) {
+        let html = blank ? '<option value="">—</option>' : '';
+        items.forEach((it) => {
+            const sel = String(valSel || '') === String(it.v) ? ' selected' : '';
+            html += `<option value="${escHtml(it.v)}"${sel}>${escHtml(it.t)}</option>`;
+        });
+        return html;
+    }
+
+    function opcionesSelectApi(items, valSel, idKey, textKey) {
+        let html = '<option value="">—</option>';
+        (items || []).forEach((it) => {
+            const id = it[idKey || 'id'];
+            const txt = it[textKey || 'text'];
+            const sel = String(valSel || '') === String(id) ? ' selected' : '';
+            html += `<option value="${escHtml(id)}"${sel}>${escHtml(txt)}</option>`;
+        });
+        return html;
+    }
+
+    function tipoDetalleMuestraConcepto(tipo) {
+        return ['C', 'A', 'S', 'X', 'Y', 'Z', 'T'].includes(tipo);
+    }
+
+    function tipoDetalleMuestraSuma(tipo) {
+        return tipo === 'S' || tipo === 'Z';
+    }
+
+    function tipoDetalleMuestraTipoLiq(tipo) {
+        return tipo === 'X' || tipo === 'Y' || tipo === 'T';
+    }
+
+    function renderElementoCelda(ln, idx) {
+        const tipo = ln.tipo || '';
+        if (tipo === 'V') {
+            return `<input type="number" step="0.01" class="form-control form-control-sm celda-valor" data-idx="${idx}" value="${escHtml(ln.valor != null ? ln.valor : '')}">`;
+        }
+        if (tipo === 'G') {
+            return `<select class="form-select form-select-sm celda-grupo" data-idx="${idx}">${opcionesHtml(GRUPOS_PAR, ln.grupo, true)}</select>`;
+        }
+        if (tipo === 'P') {
+            return `<select class="form-select form-select-sm celda-parameter" data-idx="${idx}">${opcionesSelectApi(cacheParameters, ln.parameter)}</select>`;
+        }
+        if (tipoDetalleMuestraConcepto(tipo)) {
+            return `<select class="form-select form-select-sm celda-concept" data-idx="${idx}">${opcionesSelectApi(cacheConceptos, ln.concept)}</select>`;
+        }
+        return '<span class="text-muted">—</span>';
+    }
+
+    function renderDetalle() {
+        if (!lineasDetalle.length) {
+            tbodyDetalle.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
+            return;
+        }
+        tbodyDetalle.innerHTML = lineasDetalle.map((ln, idx) => {
+            const activo = idx === lineaSeleccionada ? ' active' : '';
+            const showProc = tipoDetalleMuestraSuma(ln.tipo);
+            const showPer = showProc;
+            const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
+            return `<tr class="linea-detalle${activo}" data-idx="${idx}">
+                <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
+                <td>${renderElementoCelda(ln, idx)}</td>
+                <td><select class="form-select form-select-sm celda-operador" data-idx="${idx}">${opcionesHtml(OPERADORES, ln.operador, true)}</select></td>
+                <td>${showProc ? `<select class="form-select form-select-sm celda-process" data-idx="${idx}">${opcionesSelectApi(cacheProcesos, ln.process)}</select>` : '—'}</td>
+                <td>${showPer ? `<select class="form-select form-select-sm celda-periodoini" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodoini, true)}</select>` : '—'}</td>
+                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
+                <td>${showPer ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
+                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
+                <td>${showTlq ? `<select class="form-select form-select-sm celda-tipoliq" data-idx="${idx}">${opcionesHtml(TIPOS_LIQ, ln.tipoliq, true)}</select>` : '—'}</td>
+            </tr>`;
+        }).join('');
+
+        tbodyDetalle.querySelectorAll('.linea-detalle').forEach((tr) => {
+            tr.addEventListener('click', function (e) {
+                if (esControlDetalle(e.target)) return;
+                marcarLineaActiva(parseInt(this.getAttribute('data-idx'), 10));
+            });
+        });
+
+        tbodyDetalle.querySelectorAll('select, input').forEach((el) => {
+            el.addEventListener('mousedown', (e) => e.stopPropagation());
+            el.addEventListener('click', (e) => e.stopPropagation());
+        });
+
+        const bind = (sel, field, parser) => {
+            tbodyDetalle.querySelectorAll(sel).forEach((el) => {
+                el.addEventListener('change', function () {
+                    const i = parseInt(this.getAttribute('data-idx'), 10);
+                    let v = this.value;
+                    if (parser) v = parser(v);
+                    lineasDetalle[i][field] = v;
+                    if (field === 'tipo') renderDetalle();
+                });
+                if (el.tagName === 'INPUT') {
+                    el.addEventListener('input', function () {
+                        const i = parseInt(this.getAttribute('data-idx'), 10);
+                        lineasDetalle[i][field] = parser ? parser(this.value) : this.value;
+                    });
+                }
+            });
+        };
+
+        bind('.celda-tipo', 'tipo');
+        bind('.celda-operador', 'operador');
+        bind('.celda-concept', 'concept');
+        bind('.celda-grupo', 'grupo');
+        bind('.celda-valor', 'valor', (v) => (v === '' ? null : v));
+        bind('.celda-parameter', 'parameter');
+        bind('.celda-process', 'process');
+        bind('.celda-periodoini', 'periodoini');
+        bind('.celda-periodofin', 'periodofin');
+        bind('.celda-numberini', 'numberini', (v) => (v === '' ? null : parseInt(v, 10)));
+        bind('.celda-numberfin', 'numberfin', (v) => (v === '' ? null : parseInt(v, 10)));
+        bind('.celda-tipoliq', 'tipoliq');
+    }
+
+    function renderListaFormulas(rows) {
+        if (!rows.length) {
+            tbodyFormulas.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin registros</td></tr>';
+            document.getElementById('lblConteoFormulas').textContent = '0 registros';
+            return;
+        }
+
+        tbodyFormulas.innerHTML = rows.map((r) => {
+            const activo = formulaSeleccionada && formulaSeleccionada.formulaheader === r.formulaheader;
+            return `<tr class="formula-row ${activo ? 'active' : ''}" data-fh="${escHtml(r.formulaheader)}">
+                <td>${escHtml(r.grupo)}</td>
+                <td>${escHtml(r.tipo)}</td>
+                <td title="${escHtml(r.concepto)}">${escHtml(r.concepto)}</td>
+                <td>${escHtml(r.orden)}</td>
+                <td>${escHtml(r.condicion || r.formulacode || '')}</td>
+                <td>${escHtml(fmtFecha(r.ultimafecha))}</td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('lblConteoFormulas').textContent =
+            `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+
+        tbodyFormulas.querySelectorAll('.formula-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const fh = this.getAttribute('data-fh');
+                const row = formulasCache.find((x) => x.formulaheader === fh);
+                if (row) await seleccionarFormula(row);
+            });
+        });
+    }
+
+    async function cargarListado() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        const processtype = cboProceso.value.trim();
+        guardarFiltros();
+
+        if (!cia || !payrolltype || !processtype) {
+            formulasCache = [];
+            renderListaFormulas([]);
+            return;
+        }
+
+        tbodyFormulas.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
+
+        try {
+            const res = await fetch('/api/formulas/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, processtype }),
+            });
+            const data = await leerJson(res);
+            formulasCache = data.rows || [];
+            renderListaFormulas(formulasCache);
+            ensureSelectoresCache(cia, payrolltype).catch((e) => console.error(e));
+        } catch (err) {
+            formulasCache = [];
+            tbodyFormulas.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function seleccionarFormula(row) {
+        if (!row || !row.formulaheader) return;
+        formulaSeleccionada = row;
+        renderListaFormulas(formulasCache);
+
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        mostrarPanelEdicion(true);
+        document.getElementById('tituloEdicionFormula').textContent = row.concepto || 'Cargando...';
+        tbodyDetalle.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
+
+        try {
+            const [, data] = await Promise.all([
+                ensureSelectoresCache(cia, payrolltype),
+                fetch('/api/formulas/obtener', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cia, formulaheader: row.formulaheader }),
+                }).then(leerJson),
+            ]);
+            poblarSelectoresCabecera();
+            cargarFormulario(data.cabecera, data.detalle || []);
+        } catch (err) {
+            alert(err.message || 'No se pudo cargar la fórmula.');
+        }
+    }
+
+    function cargarFormulario(cab, detalle) {
+        document.getElementById('hidFormulaHeader').value = cab.formulaheader || '';
+        document.getElementById('hidModo').value = 'U';
+        document.getElementById('cboConcepto').value = cab.concept || '';
+        document.getElementById('hidPeriod').value = cab.period || '';
+        document.getElementById('cboTipoHeader').value = cab.tipo || 'N';
+        document.getElementById('cboConceptCond').value = cab.conceptcond || '';
+        document.getElementById('cboParametroFormula').value = cab.parametroformula || '';
+        document.getElementById('txtOrden').value = cab.orden != null ? cab.orden : '';
+        document.getElementById('chkFlagTruncate').checked = String(cab.flagtruncate || 'N').toUpperCase() === 'Y';
+        document.getElementById('cboGrupoFormula').value = cab.grupoformula || '';
+        document.getElementById('hidDescription').value = cab.description || '';
+        document.getElementById('hidFormulaCode').value = cab.formulacode || '';
+        document.getElementById('tituloEdicionFormula').textContent = cab.concepto_desc || cab.formulacode || 'Editar fórmula';
+        syncTipoHeaderUI();
+
+        lineasDetalle = (detalle || []).map((ln) => ({ ...ln }));
+        lineaSeleccionada = lineasDetalle.length ? 0 : -1;
+        renderDetalle();
+    }
+
+    async function nuevaFormula() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        if (!cia || !payrolltype || !cboProceso.value) {
+            alert('Seleccione compañía, planilla y proceso antes de crear una fórmula.');
+            return;
+        }
+        formulaSeleccionada = null;
+        renderListaFormulas(formulasCache);
+        document.getElementById('hidFormulaHeader').value = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('cboConcepto').value = '';
+        document.getElementById('hidPeriod').value = '';
+        document.getElementById('cboTipoHeader').value = 'N';
+        document.getElementById('cboConceptCond').value = '';
+        document.getElementById('cboParametroFormula').value = '';
+        document.getElementById('txtOrden').value = '';
+        document.getElementById('chkFlagTruncate').checked = false;
+        document.getElementById('cboGrupoFormula').value = '';
+        document.getElementById('hidDescription').value = '';
+        document.getElementById('hidFormulaCode').value = '';
+        document.getElementById('tituloEdicionFormula').textContent = 'Nueva fórmula';
+        syncTipoHeaderUI();
+        lineasDetalle = [];
+        lineaSeleccionada = -1;
+        renderDetalle();
+        mostrarPanelEdicion(true);
+        try {
+            await ensureSelectoresCache(cia, payrolltype);
+            poblarSelectoresCabecera();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+
+    function payloadGuardar() {
+        const conceptSel = document.getElementById('cboConcepto');
+
+        return {
+            cia: cboCia.value.trim(),
+            formulaheader: document.getElementById('hidFormulaHeader').value.trim(),
+            modo: document.getElementById('hidModo').value.trim() || 'U',
+            payrolltype: cboPlanilla.value.trim(),
+            proccestype: cboProceso.value.trim(),
+            concept: conceptSel.value.trim(),
+            description: document.getElementById('hidDescription').value.trim(),
+            orden: document.getElementById('txtOrden').value.trim(),
+            period: document.getElementById('hidPeriod').value.trim(),
+            tipo: document.getElementById('cboTipoHeader').value,
+            conceptcond: document.getElementById('cboConceptCond').value.trim(),
+            parametroformula: document.getElementById('cboParametroFormula').value.trim(),
+            grupoformula: document.getElementById('cboGrupoFormula').value.trim(),
+            flagtruncate: document.getElementById('chkFlagTruncate').checked ? 'Y' : 'N',
+            formulacode: document.getElementById('hidFormulaCode').value.trim() || null,
+            detalle: lineasDetalle.map((ln, i) => ({
+                line: i + 1,
+                tipo: ln.tipo || null,
+                operador: ln.operador || null,
+                concept: ln.concept || null,
+                grupo: ln.grupo || null,
+                valor: ln.valor != null && ln.valor !== '' ? ln.valor : null,
+                parameter: ln.parameter || null,
+                process: ln.process || null,
+                periodoini: ln.periodoini || null,
+                periodofin: ln.periodofin || null,
+                numberini: ln.numberini != null && ln.numberini !== '' ? ln.numberini : null,
+                numberfin: ln.numberfin != null && ln.numberfin !== '' ? ln.numberfin : null,
+                tipoliq: ln.tipoliq || null,
+            })),
+        };
+    }
+
+    async function guardarFormula() {
+        const payload = payloadGuardar();
+        if (!payload.cia || !payload.payrolltype || !payload.proccestype) {
+            alert('Seleccione compañía, planilla y proceso en los filtros.');
+            return;
+        }
+        if (!payload.concept) {
+            alert('Seleccione el concepto de la fórmula.');
+            return;
+        }
+        const btn = document.getElementById('btnGuardarFormula');
+        const txt = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        try {
+            const res = await fetch('/api/formulas/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            document.getElementById('hidFormulaHeader').value = data.formulaheader || '';
+            document.getElementById('hidModo').value = 'U';
+            const msg = document.getElementById('msgGuardadoFormula');
+            msg.textContent = data.mensaje || 'Guardado correctamente.';
+            msg.classList.remove('d-none');
+            setTimeout(() => msg.classList.add('d-none'), 5000);
+            await cargarListado();
+            const row = formulasCache.find((x) => x.formulaheader === data.formulaheader);
+            if (row) await seleccionarFormula(row);
+        } catch (err) {
+            alert(err.message || 'No se pudo guardar.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = txt;
+        }
+    }
+
+    document.getElementById('frmFiltrosFormulas').addEventListener('submit', function (e) {
+        e.preventDefault();
+        cargarListado();
+    });
+
+    document.getElementById('btnNuevaFormula').addEventListener('click', nuevaFormula);
+    document.getElementById('btnGuardarFormula').addEventListener('click', guardarFormula);
+    document.getElementById('btnAgregarLinea').addEventListener('click', function () {
+        lineasDetalle.push({ tipo: 'C', operador: 'P' });
+        lineaSeleccionada = lineasDetalle.length - 1;
+        renderDetalle();
+    });
+    document.getElementById('btnBorrarLinea').addEventListener('click', function () {
+        if (lineaSeleccionada < 0 || lineaSeleccionada >= lineasDetalle.length) {
+            alert('Seleccione una línea del detalle.');
+            return;
+        }
+        lineasDetalle.splice(lineaSeleccionada, 1);
+        lineaSeleccionada = Math.min(lineaSeleccionada, lineasDetalle.length - 1);
+        renderDetalle();
+    });
+    document.getElementById('cboTipoHeader').addEventListener('change', syncTipoHeaderUI);
+
+    cboCia.addEventListener('change', async function () {
+        invalidarCacheSelectores();
+        const cia = this.value.trim();
+        cboPlanilla.disabled = !cia;
+        cboProceso.disabled = true;
+        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        if (cia) {
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+            cboPlanilla.disabled = false;
+        }
+        guardarFiltros();
+    });
+
+    cboPlanilla.addEventListener('change', async function () {
+        invalidarCacheSelectores();
+        const cia = cboCia.value.trim();
+        const pt = this.value.trim();
+        cboProceso.disabled = !pt;
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        if (cia && pt) {
+            await poblarSelect(`/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`, cboProceso);
+            cboProceso.disabled = false;
+        }
+        guardarFiltros();
+    });
+
+    cboProceso.addEventListener('change', guardarFiltros);
+
+    (async function init() {
+        await poblarSelect('/api/selectores/companias', cboCia);
+        const saved = cargarFiltros();
+        if (saved.cia && Array.from(cboCia.options).some((o) => o.value === saved.cia)) {
+            cboCia.value = saved.cia;
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(saved.cia)}`, cboPlanilla);
+            cboPlanilla.disabled = false;
+            if (saved.payrolltype && Array.from(cboPlanilla.options).some((o) => o.value === saved.payrolltype)) {
+                cboPlanilla.value = saved.payrolltype;
+                await poblarSelect(
+                    `/api/selectores/procesos?cia=${encodeURIComponent(saved.cia)}&payrolltype=${encodeURIComponent(saved.payrolltype)}`,
+                    cboProceso
+                );
+                cboProceso.disabled = false;
+                if (saved.processtype && Array.from(cboProceso.options).some((o) => o.value === saved.processtype)) {
+                    cboProceso.value = saved.processtype;
+                    await cargarListado();
+                }
+            }
+        }
+    })();
+})();
+</script>
+{% endblock %}

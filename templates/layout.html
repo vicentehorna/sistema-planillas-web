@@ -381,7 +381,7 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page') %}
+                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if generales_active else '' }}">
                     <a href="#submenuGenerales"
                        class="sidebar-parent-link"
@@ -401,6 +401,11 @@
                         <li class="{{ 'active' if request.endpoint == 'tipos_planilla_page' else '' }}">
                             <a href="{{ url_for('tipos_planilla_page') }}" title="Tipo de Planillas">
                                 <i class="bi bi-calendar3"></i><span class="sidebar-link-text">Tipo de Planillas</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'formulas_page' else '' }}">
+                            <a href="{{ url_for('formulas_page') }}" title="Fórmulas">
+                                <i class="bi bi-calculator"></i><span class="sidebar-link-text">Fórmulas</span>
                             </a>
                         </li>
                     </ul>

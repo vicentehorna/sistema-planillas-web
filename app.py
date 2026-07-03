@@ -5425,6 +5425,12 @@ def conceptos_page():
     return render_template('maestro_conceptos.html')
 
 
+@app.route('/formulas')
+@login_required
+def formulas_page():
+    return render_template('maestro_formulas.html')
+
+
 @app.route('/cuentas-bancarias')
 @login_required
 def cuentas_bancarias_page():
@@ -6629,6 +6635,391 @@ def _concepto_validacion_resumen_dict(r):
         'diferencias': int(r.get('diferencias') or 0),
         'total_incidencias': int(r.get('total_incidencias') or 0),
     }
+
+
+def _formula_lista_dict(r):
+    return {
+        'formulaheader': _jsonable_value(r.get('formulaheader')),
+        'company': _jsonable_value(r.get('company')),
+        'payrolltype': _jsonable_value(r.get('payrolltype')),
+        'proccestype': _jsonable_value(r.get('proccestype')),
+        'concept': _jsonable_value(r.get('concept')),
+        'description': _jsonable_value(r.get('description')),
+        'orden': _jsonable_value(r.get('orden')),
+        'concepto': _jsonable_value(r.get('concepto')),
+        'tipo': _jsonable_value(r.get('tipo')),
+        'condicion': _jsonable_value(r.get('condicion')),
+        'grupo': _jsonable_value(r.get('grupo')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'flag': _jsonable_value(r.get('flag')) or 'N',
+        'ultimafecha': _jsonable_datetime(r.get('ultimafecha')),
+    }
+
+
+def _formula_cabecera_dict(r):
+    if not r:
+        return None
+    return {
+        'formulaheader': _jsonable_value(r.get('formulaheader')),
+        'company': _jsonable_value(r.get('company')),
+        'payrolltype': _jsonable_value(r.get('payrolltype')),
+        'proccestype': _jsonable_value(r.get('proccestype')),
+        'concept': _jsonable_value(r.get('concept')),
+        'concepto_desc': _jsonable_value(r.get('concepto_desc')),
+        'description': _jsonable_value(r.get('description')),
+        'orden': _jsonable_value(r.get('orden')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+        'person': _jsonable_value(r.get('person')),
+        'period': _jsonable_value(r.get('period')),
+        'tipo': _jsonable_value(r.get('tipo')),
+        'conceptcond': _jsonable_value(r.get('conceptcond')),
+        'conceptcond_desc': _jsonable_value(r.get('conceptcond_desc')),
+        'grupoformula': _jsonable_value(r.get('grupoformula')),
+        'grupoformula_desc': _jsonable_value(r.get('grupoformula_desc')),
+        'flagtruncate': _jsonable_value(r.get('flagtruncate')) or 'N',
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'parametroformula': _jsonable_value(r.get('parametroformula')),
+        'parametroformula_desc': _jsonable_value(r.get('parametroformula_desc')),
+    }
+
+
+def _formula_detalle_dict(r):
+    return {
+        'line': _jsonable_value(r.get('line')),
+        'tipo': _jsonable_value(r.get('tipo')),
+        'operador': _jsonable_value(r.get('operador')),
+        'concept': _jsonable_value(r.get('concept')),
+        'concepto': _jsonable_value(r.get('concepto')),
+        'grupo': _jsonable_value(r.get('grupo')),
+        'valor': _jsonable_value(r.get('valor')),
+        'parameter': _jsonable_value(r.get('parameter')),
+        'parameter_desc': _jsonable_value(r.get('parameter_desc')),
+        'process': _jsonable_value(r.get('process')),
+        'process_desc': _jsonable_value(r.get('process_desc')),
+        'periodoini': _jsonable_value(r.get('periodoini')),
+        'periodofin': _jsonable_value(r.get('periodofin')),
+        'numberini': _jsonable_value(r.get('numberini')),
+        'numberfin': _jsonable_value(r.get('numberfin')),
+        'tipoliq': _jsonable_value(r.get('tipoliq')),
+    }
+
+
+def _formulas_detalle_to_xml(lineas):
+    root = ET.Element('root')
+    for idx, ln in enumerate(lineas or [], start=1):
+        if not isinstance(ln, dict):
+            continue
+        el = ET.SubElement(root, 'l')
+        fields = [
+            ('line', ln.get('line') or idx),
+            ('tipo', ln.get('tipo')),
+            ('operador', ln.get('operador')),
+            ('concept', ln.get('concept')),
+            ('grupo', ln.get('grupo')),
+            ('valor', ln.get('valor')),
+            ('parameter', ln.get('parameter')),
+            ('process', ln.get('process')),
+            ('periodoini', ln.get('periodoini')),
+            ('periodofin', ln.get('periodofin')),
+            ('numberini', ln.get('numberini')),
+            ('numberfin', ln.get('numberfin')),
+            ('tipoliq', ln.get('tipoliq')),
+        ]
+        for tag, val in fields:
+            if val is None:
+                continue
+            sval = str(val).strip()
+            if sval == '':
+                continue
+            child = ET.SubElement(el, tag)
+            child.text = sval
+    return ET.tostring(root, encoding='unicode')
+
+
+@app.route('/api/formulas/listado', methods=['POST'])
+@login_required
+def api_formulas_listado():
+    """sp_pr_listarformulas_web: listado maestro de fórmulas."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proccestype') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype or not processtype:
+        return jsonify({"error": "Seleccione tipo de planilla y proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarformulas_web @company=?, @payrolltype=?, @processtype=?",
+            (cia, payrolltype, processtype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_formula_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_formulas_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/formulas/obtener', methods=['POST'])
+@login_required
+def api_formulas_obtener():
+    """sp_pr_obtenerformula_web: cabecera + detalle."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    formulaheader = str(body.get('formulaheader') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not formulaheader:
+        return jsonify({"error": "Seleccione una fórmula."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerformula_web @company=?, @formulaheader=?",
+            (cia, formulaheader),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=2)
+        cabecera = _formula_cabecera_dict(sets[0][0] if sets and sets[0] else None)
+        if not cabecera:
+            return jsonify({"error": "Fórmula no encontrada."}), 404
+        detalle = [_formula_detalle_dict(r) for r in (sets[1] if len(sets) > 1 else [])]
+        return jsonify({"cabecera": cabecera, "detalle": detalle})
+    except Exception as e:
+        logging.exception("api_formulas_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/formulas/selectores-edicion', methods=['GET'])
+@login_required
+def api_formulas_selectores_edicion():
+    """Selectores para edición de fórmulas en una sola petición (conceptos, procesos, etc.)."""
+    cia = str(request.args.get('cia') or '').strip()
+    payrolltype = str(request.args.get('payrolltype') or '').strip()
+    if not cia or not payrolltype:
+        return jsonify({"error": "Indique compañía y tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("EXEC sp_pr_selectorconceptos_web @cia=?", (cia,))
+        conceptos = [
+            {"id": r.concept, "text": r.description}
+            for r in cursor.fetchall()
+        ]
+
+        cursor.execute(
+            "EXEC sp_pr_selectorprocesos_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        procesos = [
+            {"id": r.processtype, "text": r.proceso}
+            for r in cursor.fetchall()
+        ]
+
+        cursor.execute("EXEC sp_pr_selectorparameter_web @company=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        parameters = []
+        for row in cursor.fetchall():
+            rd = _row_dict_from_columns(col_names, row)
+            parameters.append({"id": rd.get("id"), "text": rd.get("text")})
+
+        cursor.execute("EXEC sp_pr_selectorparametroformula_web")
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        parametros_formula = []
+        for row in cursor.fetchall():
+            rd = _row_dict_from_columns(col_names, row)
+            parametros_formula.append({"id": rd.get("id"), "text": rd.get("text")})
+
+        cursor.execute("EXEC sp_pr_selectorgrupoformula_web @company=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        grupos = []
+        for row in cursor.fetchall():
+            rd = _row_dict_from_columns(col_names, row)
+            grupos.append({"id": rd.get("id"), "text": rd.get("text")})
+
+        return jsonify({
+            "conceptos": conceptos,
+            "procesos": procesos,
+            "parameters": parameters,
+            "parametros_formula": parametros_formula,
+            "grupos": grupos,
+        })
+    except Exception as e:
+        logging.exception("api_formulas_selectores_edicion")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/formulas/guardar', methods=['POST'])
+@login_required
+def api_formulas_guardar():
+    """sp_pr_guardarformula_web: alta / edición de fórmula."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    formulaheader = str(body.get('formulaheader') or '').strip()
+    modo = str(body.get('modo') or ('U' if formulaheader else 'I')).strip().upper()
+
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    proccestype = str(body.get('proccestype') or body.get('processtype') or '').strip()
+    concept = str(body.get('concept') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype or not proccestype or not concept:
+        return jsonify({"error": "Complete planilla, proceso y concepto."}), 400
+
+    orden = body.get('orden')
+    try:
+        orden = int(orden) if orden not in (None, '') else None
+    except Exception:
+        orden = None
+
+    detalle_xml = _formulas_detalle_to_xml(body.get('detalle') or [])
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarformula_web "
+            "@modo=?, @company=?, @formulaheader=?, @payrolltype=?, @proccestype=?, "
+            "@concept=?, @description=?, @orden=?, @person=?, @period=?, @tipo=?, "
+            "@conceptcond=?, @grupoformula=?, @flagtruncate=?, @formulacode=?, "
+            "@parametroformula=?, @detalle_xml=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                formulaheader or None,
+                payrolltype,
+                proccestype,
+                concept,
+                str(body.get('description') or '').strip() or None,
+                orden,
+                str(body.get('person') or '').strip() or None,
+                str(body.get('period') or '').strip() or None,
+                str(body.get('tipo') or '').strip().upper()[:1] or None,
+                str(body.get('conceptcond') or '').strip() or None,
+                str(body.get('grupoformula') or '').strip() or None,
+                _normalize_flag_yn(body.get('flagtruncate')),
+                str(body.get('formulacode') or '').strip().upper() or None,
+                str(body.get('parametroformula') or '').strip() or None,
+                detalle_xml or None,
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        fh_id = str(row.get('formulaheader') or formulaheader or '').strip()
+        return jsonify({
+            "ok": True,
+            "formulaheader": fh_id,
+            "modo": _jsonable_value(row.get('modo')) or modo,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_formulas_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/formulas/replicar', methods=['POST'])
+@login_required
+def api_formulas_replicar():
+    """sp_pr_replicar_formula_cia: replica fórmulas seleccionadas a otras compañías."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    formulas = body.get('formulas') or []
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía origen."}), 400
+    if not formulas:
+        return jsonify({"error": "Seleccione al menos una fórmula."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ok = 0
+        errores = []
+        for item in formulas:
+            fh = str((item or {}).get('formulaheader') or '').strip()
+            fc = str((item or {}).get('formulacode') or '').strip()
+            if not fh:
+                continue
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_replicar_formula_cia @cia=?, @formulacode=?, @formulaheader=?",
+                    (cia, fc or None, fh),
+                )
+                while cursor.nextset():
+                    pass
+                ok += 1
+            except Exception as ex:
+                errores.append({"formulaheader": fh, "error": str(ex)})
+
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "replicadas": ok,
+            "errores": errores,
+            "mensaje": f"Se replicaron {ok} fórmula(s)." + (
+                f" {len(errores)} con error." if errores else ''
+            ),
+        })
+    except Exception as e:
+        logging.exception("api_formulas_replicar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/conceptos/listado', methods=['POST'])
@@ -11183,6 +11574,93 @@ def api_conceptos():
         return jsonify(data)
     except Exception:
         logging.exception("api_conceptos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/grupos-formula')
+@login_required
+def api_grupos_formula():
+    """sp_pr_selectorgrupoformula_web @company → id, text."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorgrupoformula_web @company=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({"id": rd.get("id"), "text": rd.get("text")})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_grupos_formula")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/parametros-formula')
+@login_required
+def api_parametros_formula():
+    """sp_pr_selectorparametroformula_web → id, text."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorparametroformula_web")
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({"id": rd.get("id"), "text": rd.get("text")})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_parametros_formula")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/parameters')
+@login_required
+def api_parameters():
+    """sp_pr_selectorparameter_web @company → id, text."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorparameter_web @company=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({"id": rd.get("id"), "text": rd.get("text")})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_parameters")
         return jsonify([])
     finally:
         if conn:

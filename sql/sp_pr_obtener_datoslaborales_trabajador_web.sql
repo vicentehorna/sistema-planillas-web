@@ -32,6 +32,12 @@ BEGIN
             WHEN e.reentrydate IS NULL THEN ''
             ELSE CONVERT(VARCHAR(10), e.reentrydate, 23)
         END AS reentrydate,
+        CASE
+            WHEN e.ceasedate IS NULL THEN ''
+            ELSE CONVERT(VARCHAR(10), e.ceasedate, 23)
+        END AS ceasedate,
+        ISNULL(e.ceasereason, '') AS ceasereason,
+        ISNULL(cr.description, '') AS ceasereason_desc,
         ISNULL(e.contractmodality, '') AS contractmodality,
         ISNULL(cm.description, '') AS contractmodality_desc,
         ISNULL(e.ocupation, '') AS ocupation,
@@ -85,6 +91,9 @@ BEGIN
             ON pt.payrolltype = e.payrolltype
         LEFT JOIN pr_accountprofile ap
             ON ap.accountprofile = e.accountprofile
+        LEFT JOIN pr_ceasereason cr
+            ON cr.ceasereason = e.ceasereason
+           AND cr.company = e.company
     WHERE e.company = @cia
       AND e.person = @person;
 END

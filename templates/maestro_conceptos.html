@@ -290,6 +290,36 @@
         background: #fafbfc;
     }
 
+    .filtro-tipos-concepto {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem 0.85rem;
+        padding: 0.45rem 0.65rem;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #f8f9fa;
+        min-height: 2.1rem;
+    }
+
+    .filtro-tipos-concepto .form-check {
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+
+    .filtro-tipos-concepto .form-check-label {
+        font-size: 0.82rem;
+        cursor: pointer;
+    }
+
+    .filtro-tipos-concepto .filtro-tipos-sep {
+        width: 1px;
+        align-self: stretch;
+        min-height: 1.25rem;
+        background: #ced4da;
+        margin: 0 0.15rem;
+    }
+
     @media (max-width: 991.98px) {
         .conceptos-layout {
             flex-direction: column;
@@ -320,6 +350,12 @@
             <div class="col-12 col-md-5 col-lg-4">
                 <label for="txtBuscarConcepto" class="form-label small fw-bold text-muted mb-1">Buscar concepto</label>
                 <input type="search" id="txtBuscarConcepto" class="form-control form-control-sm" placeholder="Descripción o nemónico..." autocomplete="off">
+            </div>
+            <div class="col-12">
+                <label class="form-label small fw-bold text-muted mb-1">Tipo de concepto</label>
+                <div id="contenedorFiltroTiposConcepto" class="filtro-tipos-concepto">
+                    <span class="small text-muted">Seleccione una compañía</span>
+                </div>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4">
@@ -530,11 +566,13 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const DEFAULT_CIA = 'BGT';
     let conceptosCache = [];
+    let conceptosCacheServidor = [];
     let conceptoSeleccionado = null;
     let tiposConceptoCache = [];
     let obtenerAbort = null;
 
     const cboCia = document.getElementById('cboCompania');
+    const contenedorFiltroTipos = document.getElementById('contenedorFiltroTiposConcepto');
     const tbodyConceptos = document.getElementById('tbodyConceptos');
     const placeholder = document.getElementById('placeholderConcepto');
     const panelEdicion = document.getElementById('panelEdicionConcepto');
@@ -604,6 +642,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!cia) {
             tiposConceptoCache = [];
             document.getElementById('cboConceptType').innerHTML = '<option value="">Seleccione compañía</option>';
+            renderFiltroTiposConcepto();
             return;
         }
         await poblarSelect(`/api/selectores/concept-types?cia=${encodeURIComponent(cia)}`, document.getElementById('cboConceptType'));
@@ -613,6 +652,102 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch (e) {
             tiposConceptoCache = [];
         }
+        renderFiltroTiposConcepto();
+    }
+
+    function normalizarShortTipo(valor) {
+        return String(valor || '').trim().toUpperCase();
+    }
+
+    function renderFiltroTiposConcepto(tiposPreferidos) {
+        if (!contenedorFiltroTipos) return;
+
+        const tipos = (Array.isArray(tiposConceptoCache) ? tiposConceptoCache : [])
+            .filter((t) => normalizarShortTipo(t.shortname));
+        if (!tipos.length) {
+            contenedorFiltroTipos.innerHTML = '<span class="small text-muted">Sin tipos de concepto</span>';
+            return;
+        }
+
+        const preferidos = Array.isArray(tiposPreferidos)
+            ? tiposPreferidos.map(normalizarShortTipo).filter(Boolean)
+            : null;
+        const todosMarcados = !preferidos || preferidos.length === 0;
+
+        let html = `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="chkTipoConceptoTodos" ${todosMarcados ? 'checked' : ''}>
+                <label class="form-check-label fw-semibold" for="chkTipoConceptoTodos">Todos</label>
+            </div>
+            <span class="filtro-tipos-sep" aria-hidden="true"></span>
+        `;
+
+        tipos.forEach((t) => {
+            const sn = normalizarShortTipo(t.shortname);
+            const id = `chkTipoConcepto_${sn}`;
+            const marcado = todosMarcados || preferidos.includes(sn);
+            const etiqueta = String(t.text || sn).trim();
+            html += `
+                <div class="form-check">
+                    <input class="form-check-input chk-tipo-concepto" type="checkbox" id="${id}"
+                        data-shortname="${escHtml(sn)}" ${marcado ? 'checked' : ''}>
+                    <label class="form-check-label" for="${id}">${escHtml(etiqueta)}</label>
+                </div>
+            `;
+        });
+
+        contenedorFiltroTipos.innerHTML = html;
+
+        const chkTodos = document.getElementById('chkTipoConceptoTodos');
+        if (chkTodos) {
+            chkTodos.addEventListener('change', function () {
+                const marcar = this.checked;
+                contenedorFiltroTipos.querySelectorAll('.chk-tipo-concepto').forEach((chk) => {
+                    chk.checked = marcar;
+                });
+                aplicarFiltroTiposEnVista();
+                if (filtrosPersist) filtrosPersist.guardar();
+            });
+        }
+
+        contenedorFiltroTipos.querySelectorAll('.chk-tipo-concepto').forEach((chk) => {
+            chk.addEventListener('change', function () {
+                sincronizarCheckTodosTipos();
+                aplicarFiltroTiposEnVista();
+                if (filtrosPersist) filtrosPersist.guardar();
+            });
+        });
+    }
+
+    function sincronizarCheckTodosTipos() {
+        const chkTodos = document.getElementById('chkTipoConceptoTodos');
+        if (!chkTodos) return;
+        const checks = Array.from(contenedorFiltroTipos.querySelectorAll('.chk-tipo-concepto'));
+        if (!checks.length) return;
+        chkTodos.checked = checks.every((c) => c.checked);
+    }
+
+    function leerTiposConceptoSeleccionados() {
+        if (!contenedorFiltroTipos) return null;
+        const chkTodos = document.getElementById('chkTipoConceptoTodos');
+        if (chkTodos && chkTodos.checked) return null;
+
+        return Array.from(contenedorFiltroTipos.querySelectorAll('.chk-tipo-concepto:checked'))
+            .map((chk) => normalizarShortTipo(chk.getAttribute('data-shortname')))
+            .filter(Boolean);
+    }
+
+    function filtrarConceptosPorTipo(rows) {
+        const tiposSel = leerTiposConceptoSeleccionados();
+        if (tiposSel === null) return rows || [];
+        if (!tiposSel.length) return [];
+        const permitidos = new Set(tiposSel);
+        return (rows || []).filter((r) => permitidos.has(normalizarShortTipo(r.tiposhortname)));
+    }
+
+    function aplicarFiltroTiposEnVista() {
+        conceptosCache = filtrarConceptosPorTipo(conceptosCacheServidor);
+        renderListaConceptos(conceptosCache);
     }
 
     function mostrarPanelEdicion(visible) {
@@ -734,7 +869,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             </tr>`;
         }).join('');
 
-        document.getElementById('lblConteoConceptos').textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+        document.getElementById('lblConteoConceptos').textContent = (() => {
+            const totalSrv = conceptosCacheServidor.length;
+            if (totalSrv > 0 && rows.length !== totalSrv) {
+                return `${rows.length} registro${rows.length === 1 ? '' : 's'} de ${totalSrv}`;
+            }
+            return `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+        })();
 
         tbodyConceptos.querySelectorAll('.concepto-row').forEach((tr) => {
             tr.addEventListener('click', async function () {
@@ -758,6 +899,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = cboCia.value.trim();
         if (!cia) {
             conceptosCache = [];
+            conceptosCacheServidor = [];
             renderListaConceptos([]);
             return;
         }
@@ -775,10 +917,13 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }),
             });
             const data = await leerJson(res);
-            conceptosCache = data.rows || [];
+            conceptosCacheServidor = data.rows || [];
+            conceptosCache = filtrarConceptosPorTipo(conceptosCacheServidor);
             renderListaConceptos(conceptosCache);
         } catch (err) {
             console.error(err);
+            conceptosCacheServidor = [];
+            conceptosCache = [];
             tbodyConceptos.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
         }
     }
@@ -910,6 +1055,9 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (cboCia.value.trim()) {
         await cargarTiposConcepto(cboCia.value.trim());
+        if (guardado && Array.isArray(guardado.tipos) && guardado.tipos.length) {
+            renderFiltroTiposConcepto(guardado.tipos);
+        }
         await cargarListado();
     }
 

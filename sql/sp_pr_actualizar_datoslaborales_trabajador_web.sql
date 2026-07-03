@@ -9,6 +9,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @employeecategory   VARCHAR(20) = NULL,
     @entrydate          VARCHAR(10) = '',
     @reentrydate        VARCHAR(10) = '',
+    @ceasedate          VARCHAR(10) = '',
+    @ceasereason        VARCHAR(30) = NULL,
     @contractmodality   VARCHAR(20) = NULL,
     @ocupation          VARCHAR(20) = NULL,
     @specialstatus      VARCHAR(20) = NULL,
@@ -33,6 +35,7 @@ BEGIN
 
     DECLARE @fecha_ingreso DATETIME = NULL;
     DECLARE @fecha_reingreso DATETIME = NULL;
+    DECLARE @fecha_cese DATETIME = NULL;
     DECLARE @rembasica NUMERIC(18, 4) = NULL;
     DECLARE @costcentername VARCHAR(20) = NULL;
 
@@ -41,6 +44,21 @@ BEGIN
 
     IF RTRIM(ISNULL(@reentrydate, '')) <> '' AND ISDATE(@reentrydate) = 1
         SET @fecha_reingreso = CONVERT(DATETIME, @reentrydate, 120);
+
+    IF RTRIM(ISNULL(@ceasedate, '')) <> '' AND ISDATE(@ceasedate) = 1
+        SET @fecha_cese = CONVERT(DATETIME, @ceasedate, 120);
+
+    IF RTRIM(ISNULL(@ceasedate, '')) <> '' AND @fecha_cese IS NULL
+    BEGIN
+        RAISERROR('La fecha de cese indicada no es válida.', 16, 1);
+        RETURN;
+    END
+
+    IF @fecha_cese IS NOT NULL AND NULLIF(LTRIM(RTRIM(ISNULL(@ceasereason, ''))), '') IS NULL
+    BEGIN
+        RAISERROR('Indique el motivo de cese cuando registra una fecha de cese.', 16, 1);
+        RETURN;
+    END
 
     IF RTRIM(ISNULL(@sueldo, '')) <> ''
     BEGIN
@@ -66,6 +84,11 @@ BEGIN
         employeecategory = NULLIF(LTRIM(RTRIM(@employeecategory)), ''),
         entrydate = @fecha_ingreso,
         reentrydate = @fecha_reingreso,
+        ceasedate = @fecha_cese,
+        ceasereason = CASE
+            WHEN @fecha_cese IS NULL THEN NULL
+            ELSE NULLIF(LTRIM(RTRIM(@ceasereason)), '')
+        END,
         contractmodality = NULLIF(LTRIM(RTRIM(@contractmodality)), ''),
         ocupation = NULLIF(LTRIM(RTRIM(@ocupation)), ''),
         specialstatus = NULLIF(LTRIM(RTRIM(@specialstatus)), ''),

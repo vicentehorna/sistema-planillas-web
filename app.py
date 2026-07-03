@@ -4588,6 +4588,9 @@ def _cargar_selectores_laborales(cursor, cia):
     account_profiles = _selector_items_from_sp(
         cursor, 'EXEC sp_pr_selectoraccountprofile_web @cia=?', (cia,)
     )
+    cease_reasons = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorceasereason_web @cia=?', (cia,)
+    )
     cursor.execute('EXEC sp_pr_selectorplanillas_web @cia=?', (cia,))
     col_names = [str(c[0]).strip() for c in (cursor.description or [])]
     payroll_types = []
@@ -4608,6 +4611,7 @@ def _cargar_selectores_laborales(cursor, cia):
         cost_centers,
         payroll_types,
         account_profiles,
+        cease_reasons,
     )
 
 
@@ -4685,6 +4689,7 @@ def _render_trabajadores_editar(
     cost_centers=None,
     payroll_types=None,
     account_profiles=None,
+    cease_reasons=None,
 ):
     return render_template(
         'trabajadores_editar.html',
@@ -4709,6 +4714,7 @@ def _render_trabajadores_editar(
         cost_centers=cost_centers or [],
         payroll_types=payroll_types or [],
         account_profiles=account_profiles or [],
+        cease_reasons=cease_reasons or [],
     )
 
 
@@ -4739,6 +4745,8 @@ def _empleado_laborales_desde_form(form):
         'employeecategory': str(form.get('employeecategory') or '').strip(),
         'entrydate': str(form.get('entrydate') or '').strip(),
         'reentrydate': str(form.get('reentrydate') or '').strip(),
+        'ceasedate': str(form.get('ceasedate') or '').strip(),
+        'ceasereason': str(form.get('ceasereason') or '').strip(),
         'contractmodality': str(form.get('contractmodality') or '').strip(),
         'ocupation': str(form.get('ocupation') or '').strip(),
         'specialstatus': str(form.get('specialstatus') or '').strip(),
@@ -4756,6 +4764,7 @@ def _empleado_laborales_para_form(empleado):
     out = dict(empleado)
     out['entrydate'] = _sql_date_str_param(out.get('entrydate'))
     out['reentrydate'] = _sql_date_str_param(out.get('reentrydate'))
+    out['ceasedate'] = _sql_date_str_param(out.get('ceasedate'))
     sueldo = out.get('sueldo')
     if sueldo is not None and str(sueldo).strip() != '':
         try:
@@ -4845,7 +4854,8 @@ def trabajadores_editar(person_id):
             cursor.execute(
                 'EXEC sp_pr_actualizar_datoslaborales_trabajador_web '
                 '@cia=?, @person=?, @employeetype=?, @employeecategory=?, '
-                '@entrydate=?, @reentrydate=?, @contractmodality=?, @ocupation=?, '
+                '@entrydate=?, @reentrydate=?, @ceasedate=?, @ceasereason=?, '
+                '@contractmodality=?, @ocupation=?, '
                 '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
                 '@accountprofile=?, @sueldo=?, @xlastuser=?',
                 (
@@ -4855,6 +4865,8 @@ def trabajadores_editar(person_id):
                     datos['employeecategory'],
                     _sql_date_str_param(datos['entrydate']),
                     _sql_date_str_param(datos['reentrydate']),
+                    _sql_date_str_param(datos['ceasedate']),
+                    datos['ceasereason'] or None,
                     datos['contractmodality'],
                     datos['ocupation'],
                     datos['specialstatus'],
@@ -4989,6 +5001,7 @@ def trabajadores_editar(person_id):
             cost_centers=labor_selectors[6],
             payroll_types=labor_selectors[7],
             account_profiles=labor_selectors[8],
+            cease_reasons=labor_selectors[9],
         )
     except Exception as e:
         if conn:

@@ -1085,9 +1085,19 @@
 
         function guardar() {
             try {
+                const tipos = [];
+                const chkTodos = document.getElementById('chkTipoConceptoTodos');
+                const todos = chkTodos && chkTodos.checked;
+                if (!todos) {
+                    document.querySelectorAll('#contenedorFiltroTiposConcepto .chk-tipo-concepto:checked').forEach((chk) => {
+                        const sn = String(chk.getAttribute('data-shortname') || '').trim().toUpperCase();
+                        if (sn) tipos.push(sn);
+                    });
+                }
                 const estado = {
                     cia: val('cboCompania'),
                     busqueda: val('txtBuscarConcepto'),
+                    tipos: tipos,
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
@@ -1115,6 +1125,10 @@
             });
             const txt = document.getElementById('txtBuscarConcepto');
             if (txt) txt.addEventListener('input', guardar);
+            const contTipos = document.getElementById('contenedorFiltroTiposConcepto');
+            if (contTipos) {
+                contTipos.addEventListener('change', guardar);
+            }
         }
 
         return {

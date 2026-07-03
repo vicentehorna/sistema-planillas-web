@@ -320,6 +320,14 @@
         margin: 0 0.15rem;
     }
 
+    .modal-validacion-conceptos .table {
+        font-size: 0.82rem;
+    }
+
+    .modal-validacion-conceptos .resumen-empresa {
+        font-size: 0.8rem;
+    }
+
     @media (max-width: 991.98px) {
         .conceptos-layout {
             flex-direction: column;
@@ -361,6 +369,9 @@
                 <button type="submit" class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-search"></i> Consultar
                 </button>
+                <button type="button" class="btn btn-warning btn-sm px-4" id="btnValidarConceptosCias">
+                    <i class="bi bi-shield-check"></i> Validar
+                </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoConcepto">
                     <i class="bi bi-plus-lg"></i> Nuevo
                 </button>
@@ -389,6 +400,41 @@
         </div>
         <div id="lblConteoConceptos" class="small text-muted mt-2">0 registros</div>
     </aside>
+
+    <div class="modal fade modal-validacion-conceptos" id="modalValidacionConceptos" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Validación de conceptos entre empresas</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="validacionConceptosResumen" class="mb-3"></div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="width:6.5rem;">Incidencia</th>
+                                    <th>Empresa destino</th>
+                                    <th>Nemónico</th>
+                                    <th>Concepto</th>
+                                    <th>Campo</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyValidacionConceptos">
+                                <tr><td colspan="7" class="text-center text-muted py-3">Sin datos</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <section class="conceptos-panel-der">
         <div id="placeholderConcepto" class="conceptos-placeholder">
@@ -750,6 +796,126 @@ document.addEventListener('DOMContentLoaded', async function () {
         renderListaConceptos(conceptosCache);
     }
 
+    function leerParametrosFiltroConceptos() {
+        const cia = cboCia.value.trim();
+        const descripcion = (document.getElementById('txtBuscarConcepto')?.value || '').trim();
+        const chkTodos = document.getElementById('chkTipoConceptoTodos');
+        const todos_tipos = !chkTodos || chkTodos.checked;
+        const tipos = todos_tipos ? [] : (leerTiposConceptoSeleccionados() || []);
+        return { cia, descripcion, tipos, todos_tipos };
+    }
+
+    function renderResultadoValidacionConceptos(data) {
+        const contResumen = document.getElementById('validacionConceptosResumen');
+        const tbody = document.getElementById('tbodyValidacionConceptos');
+        const totalOrigen = Number(data.total_origen || 0);
+        const totalFaltantes = Number(data.total_faltantes || 0);
+        const totalDiferencias = Number(data.total_diferencias || 0);
+        const totalIncidencias = Number(data.total_incidencias || (totalFaltantes + totalDiferencias));
+        const ciaOrigen = escHtml(data.cia_origen || '');
+        const mensaje = String(data.mensaje || '').trim();
+        const hayIncidencias = totalIncidencias > 0;
+
+        let htmlResumen = `
+            <div class="alert ${hayIncidencias ? 'alert-warning' : 'alert-success'} py-2 mb-2">
+                <div><strong>Compañía origen:</strong> ${ciaOrigen}</div>
+                <div><strong>Conceptos evaluados:</strong> ${totalOrigen}</div>
+                <div><strong>Faltantes:</strong> ${totalFaltantes}</div>
+                <div><strong>Diferencias de configuración:</strong> ${totalDiferencias}</div>
+                <div><strong>Total incidencias:</strong> ${totalIncidencias}</div>
+        `;
+        if (mensaje) {
+            htmlResumen += `<div class="mt-1">${escHtml(mensaje)}</div>`;
+        }
+        htmlResumen += '</div>';
+
+        const resumen = Array.isArray(data.resumen) ? data.resumen : [];
+        if (resumen.length) {
+            htmlResumen += '<div class="d-flex flex-wrap gap-2 resumen-empresa">';
+            resumen.forEach((item) => {
+                const falt = Number(item.faltantes || 0);
+                const dif = Number(item.diferencias || 0);
+                const total = Number(item.total_incidencias || (falt + dif));
+                const badgeClass = total ? 'text-bg-warning' : 'text-bg-success';
+                const etiqueta = escHtml(item.company_destino || '');
+                const desc = escHtml(item.company_desc || '');
+                htmlResumen += `<span class="badge ${badgeClass}">${etiqueta}${desc && desc !== etiqueta ? ' — ' + desc : ''}: ${falt} falt. / ${dif} dif.</span>`;
+            });
+            htmlResumen += '</div>';
+        }
+        contResumen.innerHTML = htmlResumen;
+
+        const rows = Array.isArray(data.rows) ? data.rows : [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No hay incidencias: los conceptos coinciden en las demás empresas.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rows.map((row) => {
+            const tipo = String(row.tipo_validacion || '').toUpperCase();
+            const esFaltante = tipo === 'FALTANTE';
+            const badgeTipo = esFaltante
+                ? '<span class="badge text-bg-danger">Faltante</span>'
+                : '<span class="badge text-bg-warning text-dark">Diferencia</span>';
+            return `
+            <tr>
+                <td>${badgeTipo}</td>
+                <td>${escHtml(row.company_destino || '')}${row.company_desc ? ' <span class="text-muted">— ' + escHtml(row.company_desc) + '</span>' : ''}</td>
+                <td class="font-monospace">${escHtml(row.formulacode || '')}</td>
+                <td>${escHtml(row.description || '')}</td>
+                <td>${esFaltante ? '—' : escHtml(row.campo || '')}</td>
+                <td>${esFaltante ? '—' : escHtml(row.valor_origen || '')}</td>
+                <td>${esFaltante ? '—' : escHtml(row.valor_destino || '')}</td>
+            </tr>
+        `;
+        }).join('');
+    }
+
+    async function ejecutarValidacionConceptosCias() {
+        const params = leerParametrosFiltroConceptos();
+        if (!params.cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        if (!params.todos_tipos && !params.tipos.length) {
+            alert('Seleccione al menos un tipo de concepto para validar.');
+            return;
+        }
+
+        const btn = document.getElementById('btnValidarConceptosCias');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Validando...';
+
+        try {
+            const payload = {
+                cia: params.cia,
+                descripcion: params.descripcion,
+                todos_tipos: params.todos_tipos,
+            };
+            if (!params.todos_tipos) {
+                payload.tipos = params.tipos;
+            }
+
+            const res = await fetch('/api/conceptos/validar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            renderResultadoValidacionConceptos(data);
+            const modalEl = document.getElementById('modalValidacionConceptos');
+            if (modalEl && window.bootstrap) {
+                bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            }
+        } catch (err) {
+            alert(err.message || 'No se pudo completar la validación.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    }
+
     function mostrarPanelEdicion(visible) {
         placeholder.classList.toggle('d-none', visible);
         panelEdicion.classList.toggle('d-none', !visible);
@@ -1083,6 +1249,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     document.getElementById('btnNuevoConcepto').addEventListener('click', iniciarNuevoConcepto);
+    document.getElementById('btnValidarConceptosCias').addEventListener('click', ejecutarValidacionConceptosCias);
     document.getElementById('btnGuardarConcepto').addEventListener('click', guardarConcepto);
     document.getElementById('chkFlagIsMonetary').addEventListener('change', syncMonedaPorValorMonetario);
 });

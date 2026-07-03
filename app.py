@@ -6590,6 +6590,47 @@ def _filtro_afecto_reporte(value):
     return 'Y' if str(value or '').strip().upper() in ('Y', 'TRUE', '1', 'ON', 'S', 'SI') else 'T'
 
 
+def _tipos_concepto_csv_param(tipos):
+    """Lista de ShortName o cadena CSV → parámetro @tipos del SP (None = todos)."""
+    if tipos is None:
+        return None
+    if isinstance(tipos, str):
+        s = tipos.strip()
+        return s or None
+    if isinstance(tipos, (list, tuple)):
+        parts = []
+        for item in tipos:
+            sn = str(item or '').strip().upper()
+            if sn:
+                parts.append(sn)
+        return ','.join(parts) if parts else None
+    return None
+
+
+def _concepto_validacion_cias_dict(r):
+    return {
+        'tipo_validacion': _jsonable_value(r.get('tipo_validacion')),
+        'company_destino': _jsonable_value(r.get('company_destino')),
+        'company_desc': _jsonable_value(r.get('company_desc')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'description': _jsonable_value(r.get('description')),
+        'tiposhortname': _jsonable_value(r.get('tiposhortname')),
+        'campo': _jsonable_value(r.get('campo')),
+        'valor_origen': _jsonable_value(r.get('valor_origen')),
+        'valor_destino': _jsonable_value(r.get('valor_destino')),
+    }
+
+
+def _concepto_validacion_resumen_dict(r):
+    return {
+        'company_destino': _jsonable_value(r.get('company_destino')),
+        'company_desc': _jsonable_value(r.get('company_desc')),
+        'faltantes': int(r.get('faltantes') or 0),
+        'diferencias': int(r.get('diferencias') or 0),
+        'total_incidencias': int(r.get('total_incidencias') or 0),
+    }
+
+
 @app.route('/api/conceptos/listado', methods=['POST'])
 @login_required
 def api_conceptos_listado():
@@ -6792,6 +6833,99 @@ def api_conceptos_eliminar():
             if len(parts) > 1:
                 err = parts[-1].strip(" ()'\"")
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/validar-cias', methods=['POST'])
+@login_required
+def api_conceptos_validar_cias():
+    """sp_pr_validarconceptos_cias_web: conceptos filtrados ausentes o distintos en otras empresas."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    descripcion = str(body.get('descripcion') or body.get('busqueda') or body.get('q') or '').strip()
+    tipos_raw = body.get('tipos')
+    todos_tipos = body.get('todos_tipos')
+    if todos_tipos is None:
+        todos_tipos = tipos_raw is None
+    tipos = _tipos_concepto_csv_param(tipos_raw)
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not todos_tipos and isinstance(tipos_raw, list) and len(tipos_raw) == 0:
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia,
+            "total_origen": 0,
+            "total_faltantes": 0,
+            "total_diferencias": 0,
+            "total_incidencias": 0,
+            "empresas_con_incidencias": 0,
+            "resumen": [],
+            "rows": [],
+            "mensaje": "No hay tipos de concepto seleccionados para validar.",
+        })
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_validarconceptos_cias_web @company=?, @descripcion=?, @tipos=?",
+            (cia, descripcion or None, tipos),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=5)
+        total_origen = 0
+        resumen_rows = []
+        detalle_rows = []
+        for result in sets:
+            if not result:
+                continue
+            sample = result[0]
+            if 'total_origen' in sample:
+                total_origen = int(sample.get('total_origen') or 0)
+            elif 'faltantes' in sample and 'diferencias' in sample:
+                resumen_rows = result
+            elif 'tipo_validacion' in sample:
+                detalle_rows = result
+            elif 'formulacode' in sample:
+                detalle_rows = result
+
+        resumen = [_concepto_validacion_resumen_dict(r) for r in resumen_rows]
+        detalle = [_concepto_validacion_cias_dict(r) for r in detalle_rows]
+        total_faltantes = sum(1 for x in detalle if str(x.get('tipo_validacion') or '').upper() == 'FALTANTE')
+        total_diferencias = sum(1 for x in detalle if str(x.get('tipo_validacion') or '').upper() == 'DIFERENCIA')
+        total_incidencias = len(detalle)
+        empresas_con_incidencias = sum(1 for x in resumen if int(x.get('total_incidencias') or 0) > 0)
+
+        mensaje = None
+        if total_origen == 0:
+            mensaje = 'No hay conceptos que coincidan con los filtros indicados.'
+        elif total_incidencias == 0:
+            mensaje = (
+                f'Todos los conceptos filtrados ({total_origen}) coinciden en las demás empresas activas.'
+            )
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia,
+            "total_origen": total_origen,
+            "total_faltantes": total_faltantes,
+            "total_diferencias": total_diferencias,
+            "total_incidencias": total_incidencias,
+            "empresas_con_incidencias": empresas_con_incidencias,
+            "empresas_con_faltantes": empresas_con_incidencias,
+            "resumen": resumen,
+            "rows": detalle,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_validar_cias")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn:
             try:

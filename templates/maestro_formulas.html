@@ -295,6 +295,31 @@
         padding-right: 1.3rem;
     }
 
+    .table-formula-detalle .celda-conceptlist-btn {
+        font-size: 0.72rem;
+        line-height: 1.2;
+        min-height: 31px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .concept-multi-list {
+        max-height: 320px;
+        overflow-y: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.35rem 0.5rem;
+    }
+
+    .concept-multi-list .form-check {
+        margin-bottom: 0.15rem;
+    }
+
+    .concept-multi-list .form-check-label {
+        font-size: 0.78rem;
+    }
+
     .formulas-msg-guardado {
         flex: 0 0 auto;
         margin-top: 0.45rem;
@@ -487,6 +512,25 @@
         </div>
     </section>
 </div>
+
+<div class="modal fade" id="modalConceptosMulti" tabindex="-1" aria-labelledby="modalConceptosMultiLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalConceptosMultiLabel">Seleccionar conceptos (SumaConc)</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <input type="search" class="form-control form-control-sm mb-2" id="filtroConceptosMulti" placeholder="Buscar concepto…" autocomplete="off">
+                <div id="listaConceptosMulti" class="concept-multi-list"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="btnLimpiarConceptosMulti">Quitar todos</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAceptarConceptosMulti">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -507,6 +551,9 @@
     let lineasDetalle = [];
     let lineaSeleccionada = -1;
     let cacheConceptos = [];
+    let multiPickerIdx = -1;
+    let modalConceptosMulti = null;
+    let multiPickerSeleccion = new Set();
     let cacheProcesos = [];
     let cacheParameters = [];
     let cacheGrupos = [];
@@ -709,8 +756,93 @@
         return html;
     }
 
+    function idsConceptList(ln) {
+        if (ln.conceptlist) {
+            return String(ln.conceptlist).split('|').map((s) => s.trim()).filter(Boolean);
+        }
+        if (ln.concept) return [String(ln.concept).trim()];
+        return [];
+    }
+
+    function etiquetaConceptList(ln) {
+        const ids = idsConceptList(ln);
+        if (!ids.length) return 'Seleccionar conceptos…';
+        if (ids.length === 1) {
+            const c = (cacheConceptos || []).find((x) => x.id === ids[0]);
+            return c ? c.text : ids[0];
+        }
+        const nombres = ids.slice(0, 2).map((id) => {
+            const c = (cacheConceptos || []).find((x) => x.id === id);
+            return c ? (c.text.split(' - ')[0] || c.text) : id;
+        });
+        const extra = ids.length > 2 ? ` +${ids.length - 2}` : '';
+        return `${ids.length} conceptos: ${nombres.join(', ')}${extra}`;
+    }
+
+    function aplicarConceptosMulti(ids) {
+        if (multiPickerIdx < 0 || multiPickerIdx >= lineasDetalle.length) return;
+        const ln = lineasDetalle[multiPickerIdx];
+        const unicos = [...new Set((ids || []).map((s) => String(s).trim()).filter(Boolean))];
+        if (!unicos.length) {
+            ln.concept = null;
+            ln.conceptlist = null;
+        } else if (unicos.length === 1) {
+            ln.concept = unicos[0];
+            ln.conceptlist = null;
+        } else {
+            ln.concept = unicos[0];
+            ln.conceptlist = unicos.join('|');
+        }
+        const btn = tbodyDetalle.querySelector(`.celda-conceptlist-btn[data-idx="${multiPickerIdx}"]`);
+        if (btn) {
+            const label = etiquetaConceptList(ln);
+            btn.textContent = label;
+            btn.title = label;
+        }
+    }
+
+    function renderListaConceptosMulti(filtro, seleccionados) {
+        const lista = document.getElementById('listaConceptosMulti');
+        const q = String(filtro || '').trim().toLowerCase();
+        const items = (cacheConceptos || []).filter((it) => {
+            if (!q) return true;
+            return String(it.text || '').toLowerCase().includes(q) || String(it.id || '').toLowerCase().includes(q);
+        });
+        if (!items.length) {
+            lista.innerHTML = '<div class="text-muted small py-2">Sin conceptos</div>';
+            return;
+        }
+        lista.innerHTML = items.map((it) => {
+            const checked = seleccionados.has(it.id) ? ' checked' : '';
+            return `<div class="form-check">
+                <input class="form-check-input concept-multi-chk" type="checkbox" value="${escHtml(it.id)}" id="cmc_${escHtml(it.id)}"${checked}>
+                <label class="form-check-label" for="cmc_${escHtml(it.id)}">${escHtml(it.text)}</label>
+            </div>`;
+        }).join('');
+        lista.querySelectorAll('.concept-multi-chk').forEach((chk) => {
+            chk.addEventListener('change', function () {
+                if (this.checked) multiPickerSeleccion.add(this.value);
+                else multiPickerSeleccion.delete(this.value);
+            });
+        });
+    }
+
+    function abrirModalConceptosMulti(idx) {
+        multiPickerIdx = idx;
+        const ln = lineasDetalle[idx];
+        multiPickerSeleccion = new Set(idsConceptList(ln));
+        const filtro = document.getElementById('filtroConceptosMulti');
+        filtro.value = '';
+        renderListaConceptosMulti('', multiPickerSeleccion);
+        if (!modalConceptosMulti) {
+            modalConceptosMulti = new bootstrap.Modal(document.getElementById('modalConceptosMulti'));
+        }
+        modalConceptosMulti.show();
+        setTimeout(() => filtro.focus(), 200);
+    }
+
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'S', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
@@ -731,6 +863,10 @@
         }
         if (tipo === 'P') {
             return `<select class="form-select form-select-sm celda-parameter" data-idx="${idx}">${opcionesSelectApi(cacheParameters, ln.parameter)}</select>`;
+        }
+        if (tipo === 'S') {
+            const label = etiquetaConceptList(ln);
+            return `<button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start celda-conceptlist-btn" data-idx="${idx}" title="${escHtml(label)}">${escHtml(label)}</button>`;
         }
         if (tipoDetalleMuestraConcepto(tipo)) {
             return `<select class="form-select form-select-sm celda-concept" data-idx="${idx}">${opcionesSelectApi(cacheConceptos, ln.concept)}</select>`;
@@ -803,6 +939,14 @@
         bind('.celda-numberini', 'numberini', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-numberfin', 'numberfin', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-tipoliq', 'tipoliq');
+
+        tbodyDetalle.querySelectorAll('.celda-conceptlist-btn').forEach((btn) => {
+            btn.addEventListener('mousedown', (e) => e.stopPropagation());
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                abrirModalConceptosMulti(parseInt(this.getAttribute('data-idx'), 10));
+            });
+        });
     }
 
     function renderListaFormulas(rows) {
@@ -973,6 +1117,7 @@
                 tipo: ln.tipo || null,
                 operador: ln.operador || null,
                 concept: ln.concept || null,
+                conceptlist: ln.conceptlist || null,
                 grupo: ln.grupo || null,
                 valor: ln.valor != null && ln.valor !== '' ? ln.valor : null,
                 parameter: ln.parameter || null,
@@ -1046,6 +1191,23 @@
         renderDetalle();
     });
     document.getElementById('cboTipoHeader').addEventListener('change', syncTipoHeaderUI);
+
+    document.getElementById('filtroConceptosMulti').addEventListener('input', function () {
+        renderListaConceptosMulti(this.value, multiPickerSeleccion);
+    });
+
+    document.getElementById('btnLimpiarConceptosMulti').addEventListener('click', function () {
+        multiPickerSeleccion = new Set();
+        aplicarConceptosMulti([]);
+        if (modalConceptosMulti) modalConceptosMulti.hide();
+        multiPickerIdx = -1;
+    });
+
+    document.getElementById('btnAceptarConceptosMulti').addEventListener('click', function () {
+        aplicarConceptosMulti([...multiPickerSeleccion]);
+        if (modalConceptosMulti) modalConceptosMulti.hide();
+        multiPickerIdx = -1;
+    });
 
     cboCia.addEventListener('change', async function () {
         invalidarCacheSelectores();

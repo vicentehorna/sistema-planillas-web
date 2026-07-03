@@ -6702,6 +6702,7 @@ def _formula_detalle_dict(r):
         'numberini': _jsonable_value(r.get('numberini')),
         'numberfin': _jsonable_value(r.get('numberfin')),
         'tipoliq': _jsonable_value(r.get('tipoliq')),
+        'conceptlist': _jsonable_value(r.get('conceptlist')),
     }
 
 
@@ -6725,6 +6726,7 @@ def _formulas_detalle_to_xml(lineas):
             ('numberini', ln.get('numberini')),
             ('numberfin', ln.get('numberfin')),
             ('tipoliq', ln.get('tipoliq')),
+            ('conceptlist', ln.get('conceptlist')),
         ]
         for tag, val in fields:
             if val is None:

@@ -77,7 +77,8 @@ BEGIN
         fd.PeriodoFin AS periodofin,
         fd.NumberINI AS numberini,
         fd.NumberFIN AS numberfin,
-        fd.TipoLiq AS tipoliq
+        fd.TipoLiq AS tipoliq,
+        fd.ConceptList AS conceptlist
     FROM PR_FormulaDetail fd (NOLOCK)
         LEFT JOIN PR_Concept c (NOLOCK)
             ON fd.Concept = c.Concept

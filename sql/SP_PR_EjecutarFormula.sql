@@ -41,7 +41,7 @@ Begin
 	declare @query varchar(1024), @query1 varchar(1024), @query2 varchar(1024), @process varchar(20), @period_ini varchar(20), @period_begin varchar(20), @period_end varchar(20)
 	declare @concept varchar(20), @conceptcond varchar(20), @tipocond char(1), @periodoini varchar(20), @periodofin varchar(20), @formulaid varchar(20)
 	declare @ceasedate datetime, @fechaingreso datetime
-	declare @conceptcode varchar(50), @flag_cts char(1)
+	declare @conceptcode varchar(50), @flag_cts char(1), @conceptlist varchar(500)
 
 	set @flag_cts = case when isnull((select ShortName from pr_processtype where ProcessType = @processtype),'') = 'CTS' then 'Y' else 'N' end 
 	
@@ -118,14 +118,14 @@ Begin
 
 
 	Declare formula Cursor For
-		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq
+		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq, PR_FormulaDetail.ConceptList
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype
 		and ((@pos > 0 and PR_FormulaDetail.line <= @pos) or (@pos = 0))
 		order by line
 
 		OPEN formula 
-		FETCH NEXT FROM formula INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq
+		FETCH NEXT FROM formula INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist
 		WHILE @@FETCH_STATUS = 0 
 		BEGIN 
 			
@@ -189,10 +189,14 @@ Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
 					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+
+				set @conceptlist = case
+					when isnull(ltrim(rtrim(@conceptlist)), '') <> '' then ltrim(rtrim(@conceptlist))
+					else @conceptid
+				end
 			
-				set @importe = (select SUM(ISNULL(ConceptValueLo,ConceptValue))  from PR_EmployeePayRollConcept where Company = @cia and PayRollType = @payrolltype and Person = @person
-								and PRPeriod between @period_begin and @period_end 
-								and ProcessType = @process and Concept = @conceptid)
+				set @importe = dbo.f_getSumaConceptosProceso(
+					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptlist)
 				
 				set @query =  @query + convert(varchar(20),@importe) + @op 
 			End
@@ -373,7 +377,7 @@ Begin
 			
 		FETCH NEXT FROM formula
 	
-		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq
+		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist
 		END 
 		
 		CLOSE formula
@@ -385,7 +389,7 @@ Begin
 		set @query2 = ''
 
 		Declare formula2 Cursor For
-		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin
+		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.ConceptList
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype
 		and (@pos > 0 and PR_FormulaDetail.line > @pos)
@@ -393,7 +397,7 @@ Begin
 	
 	
 		OPEN formula2 
-		FETCH NEXT FROM formula2 INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin
+		FETCH NEXT FROM formula2 INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist
 		WHILE @@FETCH_STATUS = 0 
 		BEGIN 
 			
@@ -455,9 +459,13 @@ Begin
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
 					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
 
-				set @importe = isnull((select sum(ISNULL(ConceptValueLo,conceptvalue)) from PR_EmployeePayRollConcept where Company = @cia and PayRollType = @payrolltype and Person = @person
-								and PRPeriod between @period_begin and @period_end 
-								and ProcessType = @process and Concept = @conceptid),0)
+				set @conceptlist = case
+					when isnull(ltrim(rtrim(@conceptlist)), '') <> '' then ltrim(rtrim(@conceptlist))
+					else @conceptid
+				end
+
+				set @importe = dbo.f_getSumaConceptosProceso(
+					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptlist)
 
 				set @query2 =  @query2 + convert(varchar(20),@importe) + @op 
 			End
@@ -469,7 +477,7 @@ Begin
 			
 		FETCH NEXT FROM formula2
 	
-		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin
+		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist
 		END 
 		
 		CLOSE formula2

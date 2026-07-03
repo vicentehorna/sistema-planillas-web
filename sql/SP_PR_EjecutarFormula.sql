@@ -517,6 +517,12 @@ Begin
 		/*FIN SOLO EN CASO DE CONDICION ELSE*/
 		
 
+		IF LEN(ISNULL(@query, '')) >= 3 AND RIGHT(@query, 3) IN (' + ', ' - ', ' * ', ' / ')
+			SET @query = LEFT(@query, LEN(@query) - 3)
+
+		IF LEN(ISNULL(@query2, '')) >= 3 AND RIGHT(@query2, 3) IN (' + ', ' - ', ' * ', ' / ')
+			SET @query2 = LEFT(@query2, LEN(@query2) - 3)
+
 		IF LEN(ISNULL(@query,'')) > 0  set @query1  = 'insert into xx_valor(valor) select '  + @query 
 	
 		--if (ISNULL(@tipocond, 'N') = 'N') or (ISNULL(@tipocond, 'N') IN ('A', 'C') and ISNULL(@importecond,0) > 0) execute( @query1 )

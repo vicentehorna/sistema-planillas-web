@@ -251,6 +251,20 @@
         width: 2.35rem;
     }
 
+    .table-formula-detalle .celda-numberini,
+    .table-formula-detalle .celda-numberfin {
+        -moz-appearance: textfield;
+        appearance: textfield;
+    }
+
+    .table-formula-detalle .celda-numberini::-webkit-outer-spin-button,
+    .table-formula-detalle .celda-numberini::-webkit-inner-spin-button,
+    .table-formula-detalle .celda-numberfin::-webkit-outer-spin-button,
+    .table-formula-detalle .celda-numberfin::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+
     .table-formula-detalle th:nth-child(9),
     .table-formula-detalle td:nth-child(9) {
         width: 4.1rem;
@@ -897,9 +911,9 @@
                 <td><select class="form-select form-select-sm celda-operador" data-idx="${idx}">${opcionesHtml(OPERADORES, ln.operador, true)}</select></td>
                 <td>${showProc ? `<select class="form-select form-select-sm celda-process" data-idx="${idx}">${opcionesSelectApi(cacheProcesos, ln.process)}</select>` : '—'}</td>
                 <td>${showPer ? `<select class="form-select form-select-sm celda-periodoini" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodoini, true)}</select>` : '—'}</td>
-                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
+                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
                 <td>${showPer ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
-                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
+                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
                 <td>${showMin ? `<input type="number" class="form-control form-control-sm celda-valormin" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.valor != null ? ln.valor : '')}" title="Meses mínimos con importe > 0">` : '—'}</td>
                 <td>${showTlq ? `<select class="form-select form-select-sm celda-tipoliq" data-idx="${idx}">${opcionesHtml(TIPOS_LIQ, ln.tipoliq, true)}</select>` : '—'}</td>
             </tr>`;
@@ -924,7 +938,12 @@
                     let v = this.value;
                     if (parser) v = parser(v);
                     lineasDetalle[i][field] = v;
-                    if (field === 'tipo') renderDetalle();
+                    if (field === 'tipo') {
+                        if (v === 'M' && !lineasDetalle[i].operador) {
+                            lineasDetalle[i].operador = null;
+                        }
+                        renderDetalle();
+                    }
                 });
                 if (el.tagName === 'INPUT') {
                     el.addEventListener('input', function () {
@@ -1186,7 +1205,7 @@
     document.getElementById('btnNuevaFormula').addEventListener('click', nuevaFormula);
     document.getElementById('btnGuardarFormula').addEventListener('click', guardarFormula);
     document.getElementById('btnAgregarLinea').addEventListener('click', function () {
-        lineasDetalle.push({ tipo: 'C', operador: 'P' });
+        lineasDetalle.push({ tipo: 'C', operador: null });
         lineaSeleccionada = lineasDetalle.length - 1;
         renderDetalle();
     });

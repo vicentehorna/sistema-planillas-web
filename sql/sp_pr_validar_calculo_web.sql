@@ -30,10 +30,16 @@ BEGIN
 
     DECLARE @fecha_fin_mes DATE;
     DECLARE @period_ym CHAR(6);
+    DECLARE @proceso_shortname VARCHAR(50);
 
     SET @period_ym = LEFT(@period, 6);
     IF LEN(@period_ym) = 6 AND @period_ym NOT LIKE '%[^0-9]%'
         SET @fecha_fin_mes = EOMONTH(CONVERT(DATE, @period_ym + '01', 112));
+
+    SELECT @proceso_shortname = LTRIM(RTRIM(ISNULL(PT.ShortName, '')))
+    FROM PR_ProcessType PT (NOLOCK)
+    WHERE PT.Company = @cia
+      AND PT.ProcessType = @processtype;
 
     CREATE TABLE #errores (
         person      VARCHAR(20) NULL,
@@ -111,41 +117,44 @@ BEGIN
             SELECT 1 FROM #lista_rem_basica L WHERE L.person = E.Person
       );
 
-    ;WITH Totales AS (
+    IF @proceso_shortname NOT IN ('PROVISION_CTS', 'PROVISION_VACACIONES', 'PROVISION_GRATIF')
+    BEGIN
+        ;WITH Totales AS (
+            SELECT
+                EPC.Person,
+                SUM(CASE WHEN C.FormulaCode = 'TOTALINGRESO' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS total_ingresos,
+                SUM(CASE WHEN C.FormulaCode = 'TOTALEGRESOS' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS total_egresos,
+                SUM(CASE WHEN C.FormulaCode = 'NETO' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS neto
+            FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+                INNER JOIN PR_Concept C (NOLOCK)
+                    ON EPC.Concept = C.Concept
+                   AND C.Company = @cia
+            WHERE EPC.Company = @cia
+              AND EPC.PayRollType = @payrolltype
+              AND EPC.ProcessType = @processtype
+              AND EPC.PRPeriod = @period
+            GROUP BY EPC.Person
+        )
+        INSERT INTO #errores (person, name, observacion)
         SELECT
-            EPC.Person,
-            SUM(CASE WHEN C.FormulaCode = 'TOTALINGRESO' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS total_ingresos,
-            SUM(CASE WHEN C.FormulaCode = 'TOTALEGRESOS' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS total_egresos,
-            SUM(CASE WHEN C.FormulaCode = 'NETO' THEN ISNULL(EPC.ConceptValueLo, 0) ELSE 0 END) AS neto
-        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
-            INNER JOIN PR_Concept C (NOLOCK)
-                ON EPC.Concept = C.Concept
-               AND C.Company = @cia
-        WHERE EPC.Company = @cia
-          AND EPC.PayRollType = @payrolltype
-          AND EPC.ProcessType = @processtype
-          AND EPC.PRPeriod = @period
-        GROUP BY EPC.Person
-    )
-    INSERT INTO #errores (person, name, observacion)
-    SELECT
-        E.Person,
-        LTRIM(RTRIM(
-            ISNULL(P.LastName1, '') + ' ' +
-            ISNULL(P.LastName2, '') + ' ' +
-            ISNULL(P.Name1, '') + ' ' +
-            ISNULL(P.Name2, '')
-        )),
-        'Neto no coincide con Ingresos - Egresos'
-    FROM Totales T
-        INNER JOIN PR_Employee E (NOLOCK)
-            ON T.Person = E.Person
-           AND E.Company = @cia
-           AND E.PayRollType = @payrolltype
-           AND E.Status = 'N'
-        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
-        INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
-    WHERE ROUND(T.total_ingresos, 2) - ROUND(T.total_egresos, 2) <> ROUND(T.neto, 2);
+            E.Person,
+            LTRIM(RTRIM(
+                ISNULL(P.LastName1, '') + ' ' +
+                ISNULL(P.LastName2, '') + ' ' +
+                ISNULL(P.Name1, '') + ' ' +
+                ISNULL(P.Name2, '')
+            )),
+            'Neto no coincide con Ingresos - Egresos'
+        FROM Totales T
+            INNER JOIN PR_Employee E (NOLOCK)
+                ON T.Person = E.Person
+               AND E.Company = @cia
+               AND E.PayRollType = @payrolltype
+               AND E.Status = 'N'
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
+            INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+        WHERE ROUND(T.total_ingresos, 2) - ROUND(T.total_egresos, 2) <> ROUND(T.neto, 2);
+    END
 
     /* Código PDT: solo conceptos de Ingresos (I) y Descuentos (D) con movimiento en el periodo. */
     INSERT INTO #errores (person, name, observacion)

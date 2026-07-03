@@ -175,7 +175,7 @@
 
 <div class="card shadow-sm border-0 d-none" id="cardResultado">
     <div class="card-body">
-        <h4 class="text-center fw-bold mb-3">PLANILLA VERTICAL</h4>
+        <h4 class="text-center fw-bold mb-3" id="tituloPlanillaVertical"></h4>
         <div class="table-scroll-container">
             <table class="table table-bordered table-sm table-hover table-planilla-vertical align-middle">
                 <thead id="thead-vertical"></thead>
@@ -286,6 +286,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         return opt ? opt.textContent.trim() : '';
     }
 
+    const MESES_ES_TITULO = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    function tituloCasePalabras(text) {
+        return String(text || '').trim().toLowerCase().replace(/_/g, ' ')
+            .split(/\s+/).filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    }
+
+    function formatoProcesoTitulo(text) {
+        const raw = String(text || '').trim();
+        const upper = raw.toUpperCase();
+        if (upper.startsWith('PROVISION ')) {
+            const suf = raw.slice(10).trim().replace(/_/g, ' ');
+            if (!suf) return 'Provision';
+            if (suf.length <= 4) return `Provision de ${suf.toUpperCase()}`;
+            return `Provision de ${tituloCasePalabras(suf)}`;
+        }
+        return tituloCasePalabras(raw);
+    }
+
+    function mesAnioLegiblePlanillaVertical(periodRaw) {
+        const s = String(periodRaw || '').trim().replace(/[-/]/g, '');
+        if (s.length < 6 || !/^\d/.test(s)) return '';
+        const year = s.slice(0, 4);
+        const month = parseInt(s.slice(4, 6), 10);
+        if (month < 1 || month > 12) return year;
+        return `${MESES_ES_TITULO[month - 1]} ${year}`;
+    }
+
+    function formatTituloPlanillaVertical(tipoPlanilla, proceso, periodValue) {
+        const tipo = tituloCasePalabras(tipoPlanilla);
+        const proc = formatoProcesoTitulo(proceso);
+        const mesAnio = mesAnioLegiblePlanillaVertical(periodValue);
+        return mesAnio ? `Planilla ${tipo} - ${proc} ${mesAnio}` : `Planilla ${tipo} - ${proc}`;
+    }
+
+    function actualizarTituloPlanillaVertical(tipoPlanilla, proceso, periodValue) {
+        const titulo = formatTituloPlanillaVertical(tipoPlanilla, proceso, periodValue);
+        const el = document.getElementById('tituloPlanillaVertical');
+        if (el) el.textContent = titulo;
+        return titulo;
+    }
+
     function rangoMesActual() {
         const hoy = new Date();
         const y = hoy.getFullYear();
@@ -363,10 +410,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Planilla vertical', { views: [{ showGridLines: true }] });
 
+        const tituloReporte = meta.titulo || formatTituloPlanillaVertical(
+            meta.tipoPlanilla,
+            meta.proceso,
+            meta.periodoValor || meta.periodo
+        );
+
         let rowIdx = 1;
         ws.mergeCells(rowIdx, 1, rowIdx, ncols);
         const titleCell = ws.getCell(rowIdx, 1);
-        titleCell.value = 'PLANILLA VERTICAL';
+        titleCell.value = tituloReporte;
         titleCell.font = { bold: true, size: 14 };
         titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
         titleCell.fill = fill(F.title);
@@ -585,15 +638,22 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             document.getElementById('cardResultado').classList.remove('d-none');
+            const titulo = actualizarTituloPlanillaVertical(
+                selectedText('cboTipoPlanilla'),
+                selectedText('cboProceso'),
+                period
+            );
             renderizarTablaVertical(payload);
             lastVerticalExport = {
                 headers: payload.headers,
                 data: payload.data,
                 meta: {
+                    titulo,
                     compania: selectedText('cboCompania'),
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
                     proceso: selectedText('cboProceso'),
                     periodo: selectedText('cboPeriodo'),
+                    periodoValor: period,
                     bancoHaberes: selectedText('cboBancoHaberes'),
                     fechaIngreso: etiquetaFechaIngresoFiltro(fechaIngreso)
                 }

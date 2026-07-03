@@ -697,7 +697,7 @@
                     </ul>
                 </li>
 
-                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page') %}
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
                        class="sidebar-parent-link"
@@ -717,6 +717,11 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla Vertical">
                                 <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla Vertical</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'reporte_planilla_consolidada_page' else '' }}">
+                            <a href="{{ url_for('reporte_planilla_consolidada_page') }}" title="Planilla Consolidada">
+                                <i class="bi bi-layout-three-columns"></i><span class="sidebar-link-text">Planilla Consolidada</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">

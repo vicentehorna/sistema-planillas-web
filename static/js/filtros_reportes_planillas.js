@@ -6,6 +6,7 @@
     const STORAGE_KEY_RESUMEN_TOTAL = 'filtros_resumen_total';
     const STORAGE_KEY_PROMEDIO_LIQ = 'filtros_promedio_liq';
     const STORAGE_KEY_PLANILLA_VERTICAL = 'filtros_planilla_vertical';
+    const STORAGE_KEY_PLANILLA_CONSOLIDADA = 'filtros_planilla_consolidada';
     const STORAGE_KEY_VACACIONES_DETALLE = 'filtros_vacaciones_detalle';
     const STORAGE_KEY_SALDO_VACACIONES = 'filtros_saldo_vacaciones';
     const STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE = 'filtros_descansos_medicos_detalle';
@@ -257,6 +258,154 @@
 
         function registrarGuardadoEnCambio() {
             ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+            if (incluyeEmpleado) {
+                const t = document.getElementById('cboTrabajador');
+                if (t) t.addEventListener('change', guardar);
+            }
+            if (incluyeBancoHaberes) {
+                const b = document.getElementById('cboBancoHaberes');
+                if (b) b.addEventListener('change', guardar);
+            }
+            if (incluyeFechaIngreso) {
+                const chk = document.getElementById('chkFechaIngreso');
+                if (chk) chk.addEventListener('change', guardar);
+                ['txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+                    const el = document.getElementById(id);
+                    if (el) el.addEventListener('change', guardar);
+                });
+            }
+        }
+
+        return {
+            STORAGE_KEY: storageKey,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    function crearPersistenciaReporteConsolidada(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso) {
+        function guardar() {
+            try {
+                const estado = {
+                    payroll: val('cboTipoPlanilla'),
+                    proceso: val('cboProceso'),
+                    periodo: val('cboPeriodo'),
+                    timestamp: Date.now()
+                };
+                if (incluyeEmpleado) {
+                    estado.person = val('cboTrabajador');
+                }
+                if (incluyeBancoHaberes) {
+                    estado.salarybank = val('cboBancoHaberes');
+                }
+                if (incluyeFechaIngreso) {
+                    estado.fechaIngresoActivo = !!document.getElementById('chkFechaIngreso')?.checked;
+                    estado.fechaIngresoDesde = val('txtFechaIngresoDesde');
+                    estado.fechaIngresoHasta = val('txtFechaIngresoHasta');
+                }
+                localStorage.setItem(storageKey, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros reporte consolidada: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+
+            const { poblarSelect, poblarBancosHaberes } = opts;
+            const filtros = leer();
+            if (!filtros) return false;
+
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            if (!cboPt || !cboProc || !cboPer) return false;
+
+            await poblarSelect('/api/selectores/planillas-consolidada', cboPt);
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
+
+            if (incluyeBancoHaberes && typeof poblarBancosHaberes === 'function') {
+                await poblarBancosHaberes();
+                const cboBanco = document.getElementById('cboBancoHaberes');
+                if (cboBanco) {
+                    let salarybank = filtros.salarybank != null ? String(filtros.salarybank).trim() : '';
+                    if (salarybank === '0') salarybank = '';
+                    if (salarybank === '') {
+                        cboBanco.value = '';
+                    } else if (optionExists(cboBanco, salarybank)) {
+                        cboBanco.value = salarybank;
+                    } else {
+                        cboBanco.value = '';
+                    }
+                }
+            }
+
+            await poblarSelect(
+                `/api/selectores/procesos-consolidada?payroll_desc=${encodeURIComponent(payroll)}`,
+                cboProc
+            );
+
+            const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '';
+            if (!proceso || !optionExists(cboProc, proceso)) {
+                guardar();
+                return true;
+            }
+            cboProc.value = proceso;
+
+            await poblarSelect(
+                `/api/selectores/periodos-consolidada?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`,
+                cboPer
+            );
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            }
+
+            if (incluyeEmpleado) {
+                const cboTra = document.getElementById('cboTrabajador');
+                if (cboTra) {
+                    await poblarSelect('/api/selectores/trabajadores-consolidada', cboTra);
+                    const person = filtros.person != null ? String(filtros.person).trim() : '';
+                    if (person && optionExists(cboTra, person)) {
+                        cboTra.value = person;
+                    }
+                }
+            }
+
+            if (incluyeFechaIngreso) {
+                restaurarFechaIngresoDesdeFiltros(filtros);
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboTipoPlanilla', 'cboProceso', 'cboPeriodo'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });
@@ -2435,6 +2584,9 @@
         },
         planillaVertical: function () {
             return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true);
+        },
+        planillaConsolidada: function () {
+            return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true);
         },
         vacacionesDetalle: function () {
             return crearPersistenciaVacacionesDetalle();

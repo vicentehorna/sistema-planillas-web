@@ -3882,6 +3882,7 @@ _FORMATO_LIQ_CTS_FORMULACODES = (
     'C_CTSMESES',
     'DIAS_CTS_TRUNCO',
     'XFALTASCTS',
+    'CTSXMES',
 )
 
 _FORMATO_LIQ_GRATI_FORMULACODES = (
@@ -4152,13 +4153,26 @@ def _build_formato_liquidacion_aportaciones(liq, formula_values):
 
 
 def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
-    return _build_formato_liquidacion_trunca(
+    resultado = _build_formato_liquidacion_trunca(
         total_remuneracion_cts,
         formula_values,
         'C_CTSMESES',
         'DIAS_CTS_TRUNCO',
         'XFALTASCTS',
     )
+    formula_values = formula_values or {}
+    x_mes = _formato_liquidacion_fc_valor(formula_values, 'CTSXMES')
+    resultado['x_mes_fmt'] = _formato_liquidacion_moneda(x_mes)
+    dias = _formato_liquidacion_fc_valor(formula_values, 'DIAS_CTS_TRUNCO')
+    try:
+        base = float(total_remuneracion_cts or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+    x_dia = (base / 360.0) * dias if base else 0.0
+    total = x_mes + x_dia
+    resultado['total'] = total
+    resultado['total_fmt'] = _formato_liquidacion_moneda(total)
+    return resultado
 
 
 def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):

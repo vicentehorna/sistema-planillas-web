@@ -499,6 +499,7 @@
                                     <th>#</th>
                                     <th>Per. fin</th>
                                     <th>#</th>
+                                    <th>Mín.</th>
                                     <th>T.Liq</th>
                                 </tr>
                             </thead>
@@ -627,6 +628,7 @@
         { v: 'G', t: 'Grupo' },
         { v: 'P', t: 'Parámetro' },
         { v: 'S', t: 'SumaConc' },
+        { v: 'M', t: 'Promedio Vac' },
         { v: 'X', t: 'CuentaLiq' },
         { v: 'Y', t: 'CuentaConcepto' },
         { v: 'Z', t: 'SumaProv' },
@@ -842,11 +844,15 @@
     }
 
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
-        return tipo === 'S' || tipo === 'Z';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M';
+    }
+
+    function tipoDetalleMuestraMinimo(tipo) {
+        return tipo === 'M';
     }
 
     function tipoDetalleMuestraTipoLiq(tipo) {
@@ -876,13 +882,14 @@
 
     function renderDetalle() {
         if (!lineasDetalle.length) {
-            tbodyDetalle.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
+            tbodyDetalle.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
             return;
         }
         tbodyDetalle.innerHTML = lineasDetalle.map((ln, idx) => {
             const activo = idx === lineaSeleccionada ? ' active' : '';
             const showProc = tipoDetalleMuestraSuma(ln.tipo);
             const showPer = showProc;
+            const showMin = tipoDetalleMuestraMinimo(ln.tipo);
             const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
             return `<tr class="linea-detalle${activo}" data-idx="${idx}">
                 <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
@@ -893,6 +900,7 @@
                 <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
                 <td>${showPer ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
                 <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="0" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
+                <td>${showMin ? `<input type="number" class="form-control form-control-sm celda-valormin" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.valor != null ? ln.valor : '')}" title="Meses mínimos con importe > 0">` : '—'}</td>
                 <td>${showTlq ? `<select class="form-select form-select-sm celda-tipoliq" data-idx="${idx}">${opcionesHtml(TIPOS_LIQ, ln.tipoliq, true)}</select>` : '—'}</td>
             </tr>`;
         }).join('');
@@ -938,6 +946,7 @@
         bind('.celda-periodofin', 'periodofin');
         bind('.celda-numberini', 'numberini', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-numberfin', 'numberfin', (v) => (v === '' ? null : parseInt(v, 10)));
+        bind('.celda-valormin', 'valor', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-tipoliq', 'tipoliq');
 
         tbodyDetalle.querySelectorAll('.celda-conceptlist-btn').forEach((btn) => {
@@ -1019,7 +1028,7 @@
         const payrolltype = cboPlanilla.value.trim();
         mostrarPanelEdicion(true);
         document.getElementById('tituloEdicionFormula').textContent = row.concepto || 'Cargando...';
-        tbodyDetalle.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
+        tbodyDetalle.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
 
         try {
             const [, data] = await Promise.all([

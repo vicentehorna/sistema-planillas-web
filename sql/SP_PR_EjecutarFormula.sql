@@ -201,6 +201,22 @@ Begin
 				set @query =  @query + convert(varchar(20),@importe) + @op 
 			End
 
+			IF @tipo = 'M'
+			Begin
+				set @period_begin =   
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+
+				set @period_end = 
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+
+				set @importe = dbo.f_getPromedioVac(
+					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptid, @numero)
+
+				set @query =  @query + convert(varchar(20),@importe) + @op 
+			End
+
 			IF @tipo = 'G' set @query = @query + case when @grupo = 'O' then '(' else convert(varchar(20),0) + ')' end + @op
 
 			IF @tipo = 'V' set @query = @query + convert(varchar(20),@numero) + @op
@@ -466,6 +482,22 @@ Begin
 
 				set @importe = dbo.f_getSumaConceptosProceso(
 					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptlist)
+
+				set @query2 =  @query2 + convert(varchar(20),@importe) + @op 
+			End
+
+			IF @tipo = 'M'
+			Begin
+				set @period_begin =   
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+
+				set @period_end = 
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+
+				set @importe = dbo.f_getPromedioVac(
+					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptid, @numero)
 
 				set @query2 =  @query2 + convert(varchar(20),@importe) + @op 
 			End

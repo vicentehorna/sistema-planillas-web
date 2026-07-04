@@ -645,6 +645,7 @@
         { v: 'G', t: 'Grupo' },
         { v: 'P', t: 'Parámetro' },
         { v: 'S', t: 'SumaConc' },
+        { v: 'I', t: 'SCIngreso' },
         { v: 'M', t: 'Promedio Vac' },
         { v: 'X', t: 'CuentaLiq' },
         { v: 'Y', t: 'CuentaConcepto' },
@@ -861,11 +862,19 @@
     }
 
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'I', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I';
+    }
+
+    function tipoDetalleMuestraPerIni(tipo) {
         return tipo === 'S' || tipo === 'Z' || tipo === 'M';
+    }
+
+    function tipoDetalleMuestraPerFin(tipo) {
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I';
     }
 
     function tipoDetalleMuestraMinimo(tipo) {
@@ -909,7 +918,8 @@
         tbodyDetalle.innerHTML = lineasDetalle.map((ln, idx) => {
             const activo = idx === lineaSeleccionada ? ' active' : '';
             const showProc = tipoDetalleMuestraSuma(ln.tipo);
-            const showPer = showProc;
+            const showPerIni = tipoDetalleMuestraPerIni(ln.tipo);
+            const showPerFin = tipoDetalleMuestraPerFin(ln.tipo);
             const showMin = tipoDetalleMuestraMinimo(ln.tipo);
             const showDiv = tipoDetalleMuestraDivisor(ln.tipo);
             const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
@@ -918,10 +928,10 @@
                 <td>${renderElementoCelda(ln, idx)}</td>
                 <td><select class="form-select form-select-sm celda-operador" data-idx="${idx}">${opcionesHtml(OPERADORES, ln.operador, true)}</select></td>
                 <td>${showProc ? `<select class="form-select form-select-sm celda-process" data-idx="${idx}">${opcionesSelectApi(cacheProcesos, ln.process)}</select>` : '—'}</td>
-                <td>${showPer ? `<select class="form-select form-select-sm celda-periodoini" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodoini, true)}</select>` : '—'}</td>
-                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
-                <td>${showPer ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
-                <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
+                <td>${showPerIni ? `<select class="form-select form-select-sm celda-periodoini" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodoini, true)}</select>` : '—'}</td>
+                <td>${showPerIni ? `<input type="number" class="form-control form-control-sm celda-numberini" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberini != null ? ln.numberini : '')}">` : '—'}</td>
+                <td>${showPerFin ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
+                <td>${showPerFin ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
                 <td>${showMin ? `<input type="number" class="form-control form-control-sm celda-valormin" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.valor != null ? ln.valor : '')}" title="Meses mínimos con importe > 0">` : '—'}</td>
                 <td>${showDiv ? `<input type="number" class="form-control form-control-sm celda-divisor" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.divisor != null ? ln.divisor : '')}" title="Divisor fijo (vacío = meses del rango desde ingreso)">` : '—'}</td>
                 <td>${showTlq ? `<select class="form-select form-select-sm celda-tipoliq" data-idx="${idx}">${opcionesHtml(TIPOS_LIQ, ln.tipoliq, true)}</select>` : '—'}</td>
@@ -950,6 +960,13 @@
                     if (field === 'tipo') {
                         if (v === 'M' && !lineasDetalle[i].operador) {
                             lineasDetalle[i].operador = null;
+                        }
+                        if (v === 'I') {
+                            lineasDetalle[i].periodoini = null;
+                            lineasDetalle[i].numberini = null;
+                            if (!lineasDetalle[i].operador) {
+                                lineasDetalle[i].operador = null;
+                            }
                         }
                         renderDetalle();
                     }

@@ -5095,6 +5095,12 @@ def procesar_planilla_page():
     return render_template('procesar_planilla.html')
 
 
+@app.route('/procesar_planilla_masivo')
+@login_required
+def procesar_planilla_masivo_page():
+    return render_template('procesar_planilla_masivo.html')
+
+
 @app.route('/aperturar-periodos')
 @login_required
 def aperturar_periodos_page():
@@ -14776,6 +14782,385 @@ def ejecutar_calculo_streaming():
             )
         except Exception as e:
             logging.exception('ejecutar_calculo_streaming')
+            yield f'data: {json.dumps({"error": str(e)})}\n\n'
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return Response(
+        stream_with_context(generar_progreso()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+def _companies_csv_from_list(companies):
+    if not companies:
+        return ''
+    if isinstance(companies, str):
+        return ','.join(
+            c.strip().upper()
+            for c in companies.split(',')
+            if c and str(c).strip()
+        )
+    parts = []
+    for item in companies:
+        if isinstance(item, dict):
+            code = str(item.get('company') or item.get('cia') or '').strip().upper()
+        else:
+            code = str(item or '').strip().upper()
+        if code and code not in parts:
+            parts.append(code)
+    return ','.join(parts)
+
+
+@app.route('/api/procesar-planilla-masivo/validar-periodo', methods=['POST'])
+@login_required
+def api_procesar_planilla_masivo_validar_periodo():
+    """sp_pr_validar_periodo_masivo_web: periodo abierto por empresa."""
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype_desc') or '').strip()
+    proceso_desc = str(body.get('proceso_desc') or body.get('processtype_desc') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    companies = _companies_csv_from_list(body.get('companies') or [])
+    if not payroll_desc or not proceso_desc or not period:
+        return jsonify({'error': 'Faltan tipo de planilla, proceso o periodo.'}), 400
+    if not companies:
+        return jsonify({'error': 'Seleccione al menos una empresa.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_validar_periodo_masivo_web '
+            '@payroll_desc=?, @proceso_desc=?, @period=?, @companies=?',
+            (payroll_desc, proceso_desc, period, companies),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = []
+        for r in rows:
+            estado = str(r.get('estado') or '').strip().upper()
+            items.append({
+                'company': str(r.get('company') or '').strip(),
+                'company_desc': str(r.get('company_desc') or '').strip(),
+                'payrolltype': str(r.get('payrolltype') or '').strip(),
+                'processtype': str(r.get('processtype') or '').strip(),
+                'estado': estado,
+                'mensaje': str(r.get('mensaje') or '').strip(),
+            })
+        invalidas = [x for x in items if x.get('estado') != 'OK']
+        return jsonify({
+            'validacion': items,
+            'valido': len(invalidas) == 0,
+            'invalidas': invalidas,
+        })
+    except Exception as e:
+        logging.exception('api_procesar_planilla_masivo_validar_periodo')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/procesar-planilla-masivo/trabajadores', methods=['POST'])
+@login_required
+def api_procesar_planilla_masivo_trabajadores():
+    """Valida periodo y lista trabajadores de varias empresas."""
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype_desc') or '').strip()
+    proceso_desc = str(body.get('proceso_desc') or body.get('processtype_desc') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    cesados = str(body.get('cesados') or 'T').strip().upper()
+    if cesados not in ('T', 'Y', 'N'):
+        cesados = 'T'
+    companies = _companies_csv_from_list(body.get('companies') or [])
+    if not payroll_desc or not proceso_desc or not period:
+        return jsonify({'error': 'Faltan tipo de planilla, proceso o periodo.'}), 400
+    if not companies:
+        return jsonify({'error': 'Seleccione al menos una empresa.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_validar_periodo_masivo_web '
+            '@payroll_desc=?, @proceso_desc=?, @period=?, @companies=?',
+            (payroll_desc, proceso_desc, period, companies),
+        )
+        validacion = _dicts_first_nonempty_resultset(cursor)
+        items_val = []
+        for r in validacion:
+            estado = str(r.get('estado') or '').strip().upper()
+            items_val.append({
+                'company': str(r.get('company') or '').strip(),
+                'company_desc': str(r.get('company_desc') or '').strip(),
+                'payrolltype': str(r.get('payrolltype') or '').strip(),
+                'processtype': str(r.get('processtype') or '').strip(),
+                'estado': estado,
+                'mensaje': str(r.get('mensaje') or '').strip(),
+            })
+        validas = [x for x in items_val if x.get('estado') == 'OK']
+        invalidas = [x for x in items_val if x.get('estado') != 'OK']
+        companies_ok = _companies_csv_from_list([x.get('company') for x in validas])
+
+        advertencia = ''
+        if invalidas:
+            detalle = '; '.join(
+                f"{x.get('company_desc') or x.get('company')}: {x.get('mensaje') or x.get('estado')}"
+                for x in invalidas
+            )
+            advertencia = (
+                'Las siguientes empresas no tienen el proceso y periodo abierto '
+                'y no se incluirán en la consulta: ' + detalle
+            )
+
+        trabajadores = []
+        if companies_ok:
+            cursor.execute(
+                'EXEC sp_pr_calcularplanillas_masivo_web '
+                '@payroll_desc=?, @proceso_desc=?, @period=?, @cesados=?, @companies=?',
+                (payroll_desc, proceso_desc, period, cesados, companies_ok),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            for r in rows:
+                person = str(r.get('person') or '').strip()
+                company = str(r.get('company') or '').strip()
+                if not person or not company:
+                    continue
+                trabajadores.append({
+                    'company': company,
+                    'company_desc': str(r.get('company_desc') or company).strip(),
+                    'payrolltype': str(r.get('payrolltype') or '').strip(),
+                    'processtype': str(r.get('processtype') or '').strip(),
+                    'person': person,
+                    'name': str(r.get('name') or '').strip(),
+                    'entrydate': _fecha_tabla_json(r.get('entrydate')),
+                    'ceasedate': _fecha_tabla_json(r.get('ceasedate')),
+                    'calculationdate': _fecha_hora_tabla_json(r.get('calculationdate')),
+                })
+
+        return jsonify({
+            'validacion': items_val,
+            'validas': validas,
+            'valido': len(invalidas) == 0,
+            'invalidas': invalidas,
+            'advertencia': advertencia,
+            'trabajadores': trabajadores,
+        })
+    except Exception as e:
+        logging.exception('api_procesar_planilla_masivo_trabajadores')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/ejecutar_calculo_masivo_streaming', methods=['POST'])
+@login_required
+def ejecutar_calculo_masivo_streaming():
+    """Cálculo masivo multi-empresa con progreso SSE."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    period = _normalize_pr_period(body.get('period'))
+    items = body.get('trabajadores') or body.get('items') or []
+
+    if not isinstance(items, list) or not items:
+        return jsonify({'error': 'Debe enviar la lista de trabajadores a procesar.'}), 400
+    if not period:
+        return jsonify({'error': 'Falta el periodo.'}), 400
+
+    try:
+        user_id = current_user.id
+    except AttributeError:
+        return jsonify({'error': 'Usuario no identificado.'}), 401
+
+    lista = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        company = str(raw.get('company') or raw.get('cia') or '').strip()
+        person = str(raw.get('person') or '').strip()
+        payrolltype = str(raw.get('payrolltype') or raw.get('payroll_type') or '').strip()
+        processtype = str(raw.get('processtype') or raw.get('proceso') or '').strip()
+        if company and person and payrolltype and processtype:
+            lista.append({
+                'company': company,
+                'person': person,
+                'payrolltype': payrolltype,
+                'processtype': processtype,
+            })
+
+    total = len(lista)
+    if total == 0:
+        return jsonify({'error': 'No hay trabajadores válidos en la lista.'}), 400
+
+    from database import get_active_database
+    try:
+        client_db = get_active_database(required=True)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    tc = 3.0
+
+    def generar_progreso():
+        conn = None
+        t_inicio = time.perf_counter()
+        try:
+            conn = get_db_connection(database=client_db)
+            cursor = conn.cursor()
+            _set_cursor_timeout_payroll(cursor)
+
+            exitos = 0
+            errores = []
+            empresas_ok = set()
+            proc_cache = {}
+
+            for index, item in enumerate(lista):
+                cia = item['company']
+                pid = item['person']
+                payroll_type = item['payrolltype']
+                processtype = item['processtype']
+                cache_key = (cia, processtype)
+
+                if cache_key not in proc_cache:
+                    sp_name, proceso_desc = _resolve_payroll_calc_procedure(cursor, cia, processtype)
+                    proc_cache[cache_key] = (sp_name, proceso_desc)
+                else:
+                    sp_name, proceso_desc = proc_cache[cache_key]
+
+                if not sp_name:
+                    msg = (
+                        f'El proceso "{proceso_desc}" no tiene procedimiento de cálculo '
+                        f'en {cia}.'
+                    )
+                    errores.append(f'Error en {cia}/{pid}: {msg}')
+                    evento = {
+                        'progreso': int(((index + 1) / total) * 100),
+                        'actual': index + 1,
+                        'total': total,
+                        'detalle': msg,
+                        'company': cia,
+                        'person': pid,
+                    }
+                    yield f'data: {json.dumps(evento)}\n\n'
+                    continue
+
+                call_sql = f'{{CALL {sp_name} (?, ?, ?, ?, ?, ?, ?)}}'
+                try:
+                    cursor.execute(
+                        call_sql,
+                        (cia, payroll_type, processtype, period, pid, user_id, tc),
+                    )
+                    _drain_pyodbc_cursor(cursor)
+                    conn.commit()
+                    exitos += 1
+                    empresas_ok.add((cia, payroll_type, processtype))
+                    evento = {
+                        'progreso': int(((index + 1) / total) * 100),
+                        'actual': index + 1,
+                        'total': total,
+                        'company': cia,
+                        'person': pid,
+                    }
+                except Exception as e_individual:
+                    if _is_transient_sql_error(e_individual):
+                        try:
+                            try:
+                                conn.close()
+                            except Exception:
+                                pass
+                            conn = get_db_connection(database=client_db)
+                            cursor = conn.cursor()
+                            _set_cursor_timeout_payroll(cursor)
+                            cursor.execute(
+                                call_sql,
+                                (cia, payroll_type, processtype, period, pid, user_id, tc),
+                            )
+                            _drain_pyodbc_cursor(cursor)
+                            conn.commit()
+                            exitos += 1
+                            empresas_ok.add((cia, payroll_type, processtype))
+                            evento = {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'company': cia,
+                                'person': pid,
+                            }
+                        except Exception as e_retry:
+                            try:
+                                conn.rollback()
+                            except Exception:
+                                pass
+                            msg = str(e_retry)
+                            errores.append(f'Error en {cia}/{pid}: {msg}')
+                            evento = {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'detalle': msg,
+                                'company': cia,
+                                'person': pid,
+                            }
+                    else:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        msg = str(e_individual)
+                        errores.append(f'Error en {cia}/{pid}: {msg}')
+                        evento = {
+                            'progreso': int(((index + 1) / total) * 100),
+                            'actual': index + 1,
+                            'total': total,
+                            'detalle': msg,
+                            'company': cia,
+                            'person': pid,
+                        }
+
+                yield f'data: {json.dumps(evento)}\n\n'
+
+            validaciones = []
+            if exitos > 0:
+                for cia, payroll_type, processtype in sorted(empresas_ok):
+                    try:
+                        msgs = _validar_calculo_planilla_mensajes(
+                            cursor, cia, payroll_type, processtype, period
+                        )
+                        for m in msgs:
+                            validaciones.append(f'[{cia}] {m}')
+                    except Exception:
+                        logging.exception(
+                            'validar_calculo_masivo empresa %s', cia
+                        )
+
+            yield (
+                'data: '
+                + json.dumps({
+                    'done': True,
+                    'exitos': exitos,
+                    'errores': len(errores),
+                    'detalles': errores,
+                    'validaciones': validaciones,
+                    'database': client_db,
+                    'tiempo_ms': round((time.perf_counter() - t_inicio) * 1000),
+                })
+                + '\n\n'
+            )
+        except Exception as e:
+            logging.exception('ejecutar_calculo_masivo_streaming')
             yield f'data: {json.dumps({"error": str(e)})}\n\n'
         finally:
             if conn:

@@ -1,0 +1,619 @@
+{% extends "layout.html" %}
+
+{% block title %}Procesar planilla masivo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .masivo-panel-empresas {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+
+    .masivo-panel-empresas .list-group-item {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.82rem;
+    }
+
+    .table-scroll-container {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-planilla-masivo {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-planilla-masivo th,
+    .table-planilla-masivo td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-planilla-masivo thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    #cardEmpresasExcluidas ul,
+    #cardValidacionesCalculo ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body pt-3">
+        <form id="frmProcesarMasivo" class="row g-3">
+            <div class="col-md-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnCalcular" disabled>
+                    <i class="bi bi-calculator"></i> Calcular planilla masivo
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Empresas: <span id="lblEmpresasSel">0</span>
+                    · Trabajadores: <span id="lblTrabajadores">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardEmpresasExcluidas">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Empresas excluidas de la consulta</strong>
+            <p id="textoEmpresasExcluidas" class="mb-2 small"></p>
+            <ul id="listaEmpresasExcluidas" class="mt-0 mb-0"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesCalculo">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Validaciones del cálculo</strong>
+            <ul id="listaValidacionesCalculo" class="mt-2 mb-0"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                <span class="small fw-bold">Empresas</span>
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkTodasEmpresas" checked>
+                    <label class="form-check-label small" for="chkTodasEmpresas">Todas</label>
+                </div>
+            </div>
+            <div class="card-body p-2">
+                <div id="panelEmpresas" class="masivo-panel-empresas list-group list-group-flush">
+                    <div class="text-center text-muted small py-3">Cargando...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body pt-3">
+                <div id="container-progreso" class="mb-3 d-none" aria-live="polite">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span id="progreso-label" class="small fw-bold text-muted">Procesando trabajadores…</span>
+                        <span id="progreso-porcentaje" class="small fw-bold text-muted">0%</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div id="barra-progreso" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                             role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                    </div>
+                    <div id="progreso-detalle-error" class="small text-danger mt-2 d-none"></div>
+                </div>
+                <div class="table-scroll-container">
+                    <table class="table table-bordered table-sm table-hover table-planilla-masivo align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="width: 4.5rem;">Empresa</th>
+                                <th style="width: 7rem;">Código</th>
+                                <th>Nombre del trabajador</th>
+                                <th style="width: 7rem;">F. ingreso</th>
+                                <th style="width: 7rem;">F. cese</th>
+                                <th style="width: 8.5rem;">Fecha cálculo</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyTrabajadores">
+                            <tr><td colspan="6" class="text-center text-muted py-3">Seleccione filtros y consulte.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
+    const URL_PROCESOS = {{ url_for('api_procesos_consolidada') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_periodos_consolidada') | tojson }};
+    const URL_COMPANIAS = {{ url_for('api_companias') | tojson }};
+    const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_masivo_trabajadores') | tojson }};
+    const URL_EJECUTAR = {{ url_for('ejecutar_calculo_masivo_streaming') | tojson }};
+
+    // Etapa de implementación: quitar en producción.
+    const IMPL_MOSTRAR_TIEMPO_PROCESO = true;
+
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboProc = document.getElementById('cboProceso');
+    const cboPer = document.getElementById('cboPeriodo');
+    const cboCesados = document.getElementById('cboCesados');
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodas = document.getElementById('chkTodasEmpresas');
+    const tbody = document.getElementById('tbodyTrabajadores');
+    const btnCalcular = document.getElementById('btnCalcular');
+    let listaTrabajadores = [];
+    let empresasData = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function actualizarContadores() {
+        document.getElementById('lblEmpresasSel').textContent = String(empresasSeleccionadas().length);
+        document.getElementById('lblTrabajadores').textContent = String(listaTrabajadores.length);
+        btnCalcular.disabled = listaTrabajadores.length === 0;
+    }
+
+    function sincronizarChkTodas() {
+        const checks = panelEmpresas.querySelectorAll('.chk-empresa');
+        if (!checks.length) {
+            chkTodas.checked = false;
+            chkTodas.indeterminate = false;
+            return;
+        }
+        const marcados = panelEmpresas.querySelectorAll('.chk-empresa:checked').length;
+        chkTodas.checked = marcados === checks.length;
+        chkTodas.indeterminate = marcados > 0 && marcados < checks.length;
+        actualizarContadores();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-3">Sin empresas activas.</div>';
+            sincronizarChkTodas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || e.company || '').trim();
+            const text = String(e.text || e.description || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2">
+                <input class="form-check-input mt-1 chk-empresa" type="checkbox" value="${esc(code)}" checked>
+                <span>${esc(text)}</span>
+            </label>`;
+        }).join('');
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+            el.addEventListener('change', sincronizarChkTodas);
+        });
+        sincronizarChkTodas();
+    }
+
+    async function cargarCompanias() {
+        try {
+            const res = await fetch(URL_COMPANIAS);
+            const data = await res.json();
+            renderEmpresas(Array.isArray(data) ? data : []);
+        } catch (e) {
+            console.error(e);
+            panelEmpresas.innerHTML = '<div class="text-danger small py-3">Error al cargar empresas.</div>';
+        }
+    }
+
+    async function cargarPlanillas() {
+        cboPt.innerHTML = '<option value="">Seleccione...</option>';
+        cboProc.innerHTML = '<option value="">Seleccione...</option>';
+        cboProc.disabled = true;
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+        try {
+            const res = await fetch(URL_PLANILLAS);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text;
+                cboPt.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarProcesos() {
+        const payroll = cboPt.value.trim();
+        cboProc.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+        if (!payroll) {
+            cboProc.disabled = true;
+            return;
+        }
+        cboProc.disabled = false;
+        try {
+            const res = await fetch(`${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text;
+                cboProc.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarPeriodos() {
+        const payroll = cboPt.value.trim();
+        const proceso = cboProc.value.trim();
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        if (!payroll || !proceso) {
+            cboPer.disabled = true;
+            return;
+        }
+        cboPer.disabled = false;
+        try {
+            const res = await fetch(
+                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`
+            );
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text || item.id;
+                cboPer.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function ocultarAdvertenciaEmpresas() {
+        document.getElementById('cardEmpresasExcluidas').classList.add('d-none');
+        document.getElementById('textoEmpresasExcluidas').textContent = '';
+        document.getElementById('listaEmpresasExcluidas').innerHTML = '';
+    }
+
+    function renderAdvertenciaEmpresas(invalidas, advertencia) {
+        const card = document.getElementById('cardEmpresasExcluidas');
+        const texto = document.getElementById('textoEmpresasExcluidas');
+        const lista = document.getElementById('listaEmpresasExcluidas');
+        if (!invalidas || !invalidas.length) {
+            ocultarAdvertenciaEmpresas();
+            return;
+        }
+        texto.textContent = advertencia || (
+            'Las siguientes empresas no tienen el proceso y periodo abierto '
+            + 'y no se incluirán en la consulta:'
+        );
+        lista.innerHTML = invalidas.map((x) => {
+            const nom = x.company_desc || x.company || '';
+            const m = x.mensaje || x.estado || '';
+            return `<li><strong>${esc(nom)}</strong>: ${esc(m)}</li>`;
+        }).join('');
+        card.classList.remove('d-none');
+    }
+
+    function ocultarValidaciones() {
+        document.getElementById('cardValidacionesCalculo').classList.add('d-none');
+        document.getElementById('listaValidacionesCalculo').innerHTML = '';
+    }
+
+    function renderValidaciones(items) {
+        const card = document.getElementById('cardValidacionesCalculo');
+        const lista = document.getElementById('listaValidacionesCalculo');
+        if (!items || !items.length) {
+            ocultarValidaciones();
+            return;
+        }
+        lista.innerHTML = items.map((m) => `<li>${esc(m)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
+    function renderTrabajadores(rows) {
+        listaTrabajadores = Array.isArray(rows) ? rows.slice() : [];
+        if (!listaTrabajadores.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin trabajadores para las empresas seleccionadas.</td></tr>';
+            actualizarContadores();
+            return;
+        }
+        tbody.innerHTML = listaTrabajadores.map((t) => `<tr>
+            <td>${esc(t.company_desc || t.company)}</td>
+            <td class="font-monospace">${esc(t.person)}</td>
+            <td>${esc(t.name)}</td>
+            <td>${esc(t.entrydate)}</td>
+            <td>${esc(t.ceasedate)}</td>
+            <td>${esc(t.calculationdate)}</td>
+        </tr>`).join('');
+        actualizarContadores();
+    }
+
+    async function consultar() {
+        const payroll_desc = cboPt.value.trim();
+        const proceso_desc = cboProc.value.trim();
+        const period = cboPer.value.trim();
+        const companies = empresasSeleccionadas();
+        const cesados = String(cboCesados.value || 'T').trim().toUpperCase();
+
+        if (!payroll_desc || !proceso_desc || !period) {
+            alert('Seleccione tipo de planilla, proceso y periodo.');
+            return;
+        }
+        if (!companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
+
+        ocultarValidaciones();
+        ocultarAdvertenciaEmpresas();
+        listaTrabajadores = [];
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Consultando...</td></tr>';
+        btnCalcular.disabled = true;
+
+        try {
+            const res = await fetch(URL_TRABAJADORES, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payroll_desc,
+                    proceso_desc,
+                    period,
+                    cesados,
+                    companies,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'No se pudo consultar.');
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr>';
+                actualizarContadores();
+                return;
+            }
+            renderAdvertenciaEmpresas(data.invalidas || [], data.advertencia || '');
+            const trabajadores = data.trabajadores || [];
+            if (!trabajadores.length && (data.invalidas || []).length && !(data.validas || []).length) {
+                listaTrabajadores = [];
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Ninguna empresa seleccionada tiene el proceso y periodo abierto.</td></tr>';
+                actualizarContadores();
+            } else {
+                renderTrabajadores(trabajadores);
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error al consultar.</td></tr>';
+            actualizarContadores();
+        }
+    }
+
+    function formatearTiempoProceso(ms) {
+        const totalSeg = ms / 1000;
+        if (totalSeg < 60) {
+            return `${totalSeg.toFixed(1)} s`;
+        }
+        const min = Math.floor(totalSeg / 60);
+        const seg = Math.round(totalSeg % 60);
+        return seg > 0 ? `${min} min ${seg} s` : `${min} min`;
+    }
+
+    function resetBarra() {
+        const barra = document.getElementById('barra-progreso');
+        const pct = document.getElementById('progreso-porcentaje');
+        const label = document.getElementById('progreso-label');
+        const err = document.getElementById('progreso-detalle-error');
+        if (barra) {
+            barra.style.width = '0%';
+            barra.setAttribute('aria-valuenow', '0');
+            barra.classList.add('progress-bar-animated', 'progress-bar-striped');
+        }
+        if (pct) pct.textContent = '0%';
+        if (label) label.textContent = 'Procesando trabajadores…';
+        if (err) { err.textContent = ''; err.classList.add('d-none'); }
+    }
+
+    function ocultarBarraProgreso() {
+        const container = document.getElementById('container-progreso');
+        if (container) container.classList.add('d-none');
+        resetBarra();
+    }
+
+    async function consumirStreaming(response) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalData = null;
+        const barra = document.getElementById('barra-progreso');
+        const label = document.getElementById('progreso-label');
+        const pct = document.getElementById('progreso-porcentaje');
+        const detalleErr = document.getElementById('progreso-detalle-error');
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            let sep = buffer.indexOf('\n\n');
+            while (sep !== -1) {
+                const bloque = buffer.slice(0, sep);
+                buffer = buffer.slice(sep + 2);
+                const linea = bloque.split('\n').find((l) => l.startsWith('data: '));
+                if (linea) {
+                    let data = null;
+                    try { data = JSON.parse(linea.slice(6)); } catch (ignore) {}
+                    if (data) {
+                        if (data.error) throw new Error(data.error);
+                        if (data.done) finalData = data;
+                        else if (typeof data.actual === 'number' && data.total > 0) {
+                            const p = Math.round((data.actual / data.total) * 100);
+                            barra.style.width = p + '%';
+                            barra.setAttribute('aria-valuenow', String(p));
+                            pct.textContent = p + '%';
+                            label.textContent = `Procesando: ${data.actual} de ${data.total}`;
+                            if (detalleErr && data.detalle) {
+                                detalleErr.textContent = String(data.detalle);
+                                detalleErr.classList.remove('d-none');
+                            }
+                        }
+                    }
+                }
+                sep = buffer.indexOf('\n\n');
+            }
+        }
+        return finalData;
+    }
+
+    async function calcularMasivo() {
+        if (!listaTrabajadores.length) {
+            alert('Consulte primero para cargar trabajadores.');
+            return;
+        }
+        const period = cboPer.value.trim();
+        if (!period) {
+            alert('Seleccione un periodo.');
+            return;
+        }
+        if (!confirm(`¿Procesar ${listaTrabajadores.length} trabajador(es) de ${empresasSeleccionadas().length} empresa(s)?`)) {
+            return;
+        }
+
+        const container = document.getElementById('container-progreso');
+        resetBarra();
+        ocultarValidaciones();
+        container.classList.remove('d-none');
+        btnCalcular.disabled = true;
+        document.getElementById('btnConsultar').disabled = true;
+        const tInicioProceso = performance.now();
+
+        try {
+            const response = await fetch(URL_EJECUTAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    period,
+                    trabajadores: listaTrabajadores.map((t) => ({
+                        company: t.company,
+                        person: t.person,
+                        payrolltype: t.payrolltype,
+                        processtype: t.processtype,
+                    })),
+                }),
+            });
+            if (!response.ok) {
+                let msg = 'No se pudo iniciar el cálculo.';
+                try {
+                    const err = await response.json();
+                    if (err.error) msg = err.error;
+                } catch (ignore) {}
+                alert(msg);
+                return;
+            }
+            const resultado = await consumirStreaming(response);
+            if (resultado) {
+                renderValidaciones(resultado.validaciones || []);
+                let msg = `Proceso finalizado.\nÉxitos: ${resultado.exitos || 0}\nErrores: ${resultado.errores || 0}`;
+                if (IMPL_MOSTRAR_TIEMPO_PROCESO) {
+                    const tiempoMs = typeof resultado.tiempo_ms === 'number'
+                        ? resultado.tiempo_ms
+                        : (performance.now() - tInicioProceso);
+                    msg += `\nTiempo de procesamiento: ${formatearTiempoProceso(tiempoMs)}`;
+                }
+                if (resultado.errores > 0 && Array.isArray(resultado.detalles)) {
+                    msg += '\n\n' + resultado.detalles.slice(0, 8).join('\n');
+                }
+                alert(msg);
+            }
+            await consultar();
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'Error durante el cálculo.');
+        } finally {
+            ocultarBarraProgreso();
+            document.getElementById('btnConsultar').disabled = false;
+            actualizarContadores();
+        }
+    }
+
+    chkTodas.addEventListener('change', function () {
+        const marcar = chkTodas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+            el.checked = marcar;
+        });
+        sincronizarChkTodas();
+    });
+
+    cboPt.addEventListener('change', () => { cargarProcesos(); listaTrabajadores = []; renderTrabajadores([]); });
+    cboProc.addEventListener('change', () => { cargarPeriodos(); listaTrabajadores = []; renderTrabajadores([]); });
+    cboPer.addEventListener('change', () => { listaTrabajadores = []; renderTrabajadores([]); });
+
+    document.getElementById('frmProcesarMasivo').addEventListener('submit', function (e) {
+        e.preventDefault();
+        consultar();
+    });
+    btnCalcular.addEventListener('click', calcularMasivo);
+
+    cargarCompanias();
+    cargarPlanillas();
+    actualizarContadores();
+});
+</script>
+{% endblock %}

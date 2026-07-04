@@ -32,5 +32,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 4. Copiar el resto del proyecto
 COPY . .
 
-# 5. Comando para ejecutar la app
-CMD ["gunicorn", "--bind", "0.0.0.0:10000", "--workers", "2", "--timeout", "200", "--graceful-timeout", "30", "app:app"]
+# 5. Comando para ejecutar la app (timeout alto para cálculo masivo SSE)
+RUN chmod +x start.sh
+CMD ["./start.sh"]

@@ -78,6 +78,12 @@ BEGIN
                AND @proc IS NOT NULL
                AND EXISTS (
                     SELECT 1
+                    FROM SY_Company sc (NOLOCK)
+                    WHERE sc.Company = @piece
+                      AND UPPER(LTRIM(RTRIM(ISNULL(sc.[status], '')))) = 'A'
+               )
+               AND EXISTS (
+                    SELECT 1
                     FROM PR_ProcessControl PC (NOLOCK)
                     WHERE PC.Company = @piece
                       AND PC.PayRollType = @pt
@@ -109,6 +115,7 @@ BEGIN
     FROM @empresas e
         INNER JOIN SY_Company sc (NOLOCK)
             ON sc.Company = e.company
+           AND UPPER(LTRIM(RTRIM(ISNULL(sc.[status], '')))) = 'A'
         INNER JOIN PR_EMPLOYEE (NOLOCK)
             ON PR_EMPLOYEE.COMPANY = e.company
            AND PR_EMPLOYEE.PAYROLLTYPE = e.payrolltype

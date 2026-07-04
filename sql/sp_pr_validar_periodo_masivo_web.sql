@@ -58,7 +58,7 @@ BEGIN
     FROM @empresas e
         INNER JOIN SY_Company sc (NOLOCK)
             ON sc.Company = e.company
-           AND sc.status = 'A'
+           AND UPPER(LTRIM(RTRIM(ISNULL(sc.[status], '')))) = 'A'
         OUTER APPLY (
             SELECT TOP 1 PayRollType
             FROM PR_PayRollType (NOLOCK)

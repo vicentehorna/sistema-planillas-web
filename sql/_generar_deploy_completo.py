@@ -30,7 +30,7 @@ NOTA_ERP = """\
 def main():
     all_files = sorted(
         p.name for p in SQL_DIR.glob("*.sql")
-        if p.name not in EXCLUDE_FROM_DEPLOY
+        if p.name not in EXCLUDE_FROM_DEPLOY and not p.name.startswith("_tmp")
     )
     ordered = []
     seen = set()

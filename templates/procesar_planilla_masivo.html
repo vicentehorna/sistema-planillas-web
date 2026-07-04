@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
     const URL_PROCESOS = {{ url_for('api_procesos_consolidada') | tojson }};
     const URL_PERIODOS = {{ url_for('api_periodos_consolidada') | tojson }};
-    const URL_COMPANIAS = {{ url_for('api_companias') | tojson }};
+    const URL_COMPANIAS = {{ url_for('api_procesar_planilla_masivo_companias') | tojson }};
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_masivo_trabajadores') | tojson }};
     const URL_EJECUTAR = {{ url_for('ejecutar_calculo_masivo_streaming') | tojson }};
 

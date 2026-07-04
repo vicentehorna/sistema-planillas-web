@@ -14821,6 +14821,29 @@ def _companies_csv_from_list(companies):
     return ','.join(parts)
 
 
+@app.route('/api/procesar-planilla-masivo/companias', methods=['GET'])
+@login_required
+def api_procesar_planilla_masivo_companias():
+    """Empresas activas (SY_Company.status = 'A') para el panel de planilla masivo."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorcompanias_web")
+        rows = cursor.fetchall()
+        data = [{"id": r.Company, "text": r.description} for r in rows]
+        return jsonify(data)
+    except Exception:
+        logging.exception('api_procesar_planilla_masivo_companias')
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/procesar-planilla-masivo/validar-periodo', methods=['POST'])
 @login_required
 def api_procesar_planilla_masivo_validar_periodo():

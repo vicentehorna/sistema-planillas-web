@@ -78,7 +78,8 @@ BEGIN
         fd.NumberINI AS numberini,
         fd.NumberFIN AS numberfin,
         fd.TipoLiq AS tipoliq,
-        fd.ConceptList AS conceptlist
+        fd.ConceptList AS conceptlist,
+        fd.Divisor AS divisor
     FROM PR_FormulaDetail fd (NOLOCK)
         LEFT JOIN PR_Concept c (NOLOCK)
             ON fd.Concept = c.Concept

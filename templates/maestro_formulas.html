@@ -266,7 +266,9 @@
     }
 
     .table-formula-detalle th:nth-child(9),
-    .table-formula-detalle td:nth-child(9) {
+    .table-formula-detalle td:nth-child(9),
+    .table-formula-detalle th:nth-child(10),
+    .table-formula-detalle td:nth-child(10) {
         width: 4.1rem;
     }
 
@@ -514,6 +516,7 @@
                                     <th>Per. fin</th>
                                     <th>#</th>
                                     <th>Mín.</th>
+                                    <th>Div.</th>
                                     <th>T.Liq</th>
                                 </tr>
                             </thead>
@@ -869,6 +872,10 @@
         return tipo === 'M';
     }
 
+    function tipoDetalleMuestraDivisor(tipo) {
+        return tipo === 'M';
+    }
+
     function tipoDetalleMuestraTipoLiq(tipo) {
         return tipo === 'X' || tipo === 'Y' || tipo === 'T';
     }
@@ -896,7 +903,7 @@
 
     function renderDetalle() {
         if (!lineasDetalle.length) {
-            tbodyDetalle.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
+            tbodyDetalle.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
             return;
         }
         tbodyDetalle.innerHTML = lineasDetalle.map((ln, idx) => {
@@ -904,6 +911,7 @@
             const showProc = tipoDetalleMuestraSuma(ln.tipo);
             const showPer = showProc;
             const showMin = tipoDetalleMuestraMinimo(ln.tipo);
+            const showDiv = tipoDetalleMuestraDivisor(ln.tipo);
             const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
             return `<tr class="linea-detalle${activo}" data-idx="${idx}">
                 <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
@@ -915,6 +923,7 @@
                 <td>${showPer ? `<select class="form-select form-select-sm celda-periodofin" data-idx="${idx}">${opcionesHtml(PERIODOS, ln.periodofin, true)}</select>` : '—'}</td>
                 <td>${showPer ? `<input type="number" class="form-control form-control-sm celda-numberfin" data-idx="${idx}" min="-99" max="99" value="${escHtml(ln.numberfin != null ? ln.numberfin : '')}">` : '—'}</td>
                 <td>${showMin ? `<input type="number" class="form-control form-control-sm celda-valormin" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.valor != null ? ln.valor : '')}" title="Meses mínimos con importe > 0">` : '—'}</td>
+                <td>${showDiv ? `<input type="number" class="form-control form-control-sm celda-divisor" data-idx="${idx}" min="0" max="99" step="1" value="${escHtml(ln.divisor != null ? ln.divisor : '')}" title="Divisor fijo (vacío = meses del rango desde ingreso)">` : '—'}</td>
                 <td>${showTlq ? `<select class="form-select form-select-sm celda-tipoliq" data-idx="${idx}">${opcionesHtml(TIPOS_LIQ, ln.tipoliq, true)}</select>` : '—'}</td>
             </tr>`;
         }).join('');
@@ -966,6 +975,7 @@
         bind('.celda-numberini', 'numberini', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-numberfin', 'numberfin', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-valormin', 'valor', (v) => (v === '' ? null : parseInt(v, 10)));
+        bind('.celda-divisor', 'divisor', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-tipoliq', 'tipoliq');
 
         tbodyDetalle.querySelectorAll('.celda-conceptlist-btn').forEach((btn) => {
@@ -1047,7 +1057,7 @@
         const payrolltype = cboPlanilla.value.trim();
         mostrarPanelEdicion(true);
         document.getElementById('tituloEdicionFormula').textContent = row.concepto || 'Cargando...';
-        tbodyDetalle.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
+        tbodyDetalle.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
 
         try {
             const [, data] = await Promise.all([
@@ -1148,6 +1158,7 @@
                 conceptlist: ln.conceptlist || null,
                 grupo: ln.grupo || null,
                 valor: ln.valor != null && ln.valor !== '' ? ln.valor : null,
+                divisor: ln.divisor != null && ln.divisor !== '' ? ln.divisor : null,
                 parameter: ln.parameter || null,
                 process: ln.process || null,
                 periodoini: ln.periodoini || null,

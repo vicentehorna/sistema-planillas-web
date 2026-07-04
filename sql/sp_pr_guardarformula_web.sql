@@ -159,7 +159,7 @@ BEGIN
                 INSERT INTO PR_FormulaDetail (
                     FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
                     XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-                    NumberINI, NumberFIN, TipoLiq, ConceptList
+                    NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
                 )
                 SELECT
                     @formulaheader,
@@ -179,7 +179,8 @@ BEGIN
                     NULLIF(x.value('(numberini)[1]', 'decimal(18,0)'), 0),
                     NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
                     NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), '')
+                    NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
+                    NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
                 FROM @xml.nodes('/root/l') AS T(x);
             END;
         END;

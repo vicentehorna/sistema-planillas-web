@@ -1,7 +1,7 @@
 /*
     Valida conceptos filtrados de una compañía frente a las demás empresas activas:
       - FALTANTE: no existe el nemónico (FormulaCode) en destino
-      - DIFERENCIA: existe pero algún atributo no coincide con la compañía origen
+      - DIFERENCIA: existe pero PDT, Insertar en, Afecto 5ta o Afecto AFP no coinciden
 
     Filtros (mismos criterios que el listado web):
       @company, @descripcion, @tipos (códigos cortos separados por coma)
@@ -56,23 +56,10 @@ BEGIN
         LTRIM(RTRIM(C.FormulaCode)) AS formulacode,
         ISNULL(C.Description, '') AS description,
         ISNULL(T.ShortName, '') AS tiposhortname,
-        ISNULL(T.Description, '') AS tipodescription,
-        ISNULL(C.PrintText, '') AS printtext,
-        ISNULL(UPPER(LTRIM(RTRIM(T.ShortName))), '') AS concepttype_short,
-        ISNULL(UPPER(LTRIM(RTRIM(C.ConceptCurrency))), 'LO') AS conceptcurrency,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FlagIsMonetary))), 'N') AS flagismonetary,
-        ISNULL(UPPER(LTRIM(RTRIM(C.Flagassign))), 'N') AS flagassign,
-        ISNULL(CAST(C.ConceptOrder AS VARCHAR(11)), '') AS conceptorder,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FlagPayrollTicket))), 'N') AS flagpayrollticket,
-        ISNULL(CAST(C.reporden AS VARCHAR(11)), '') AS reporden,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagconceptdeclare))), 'N') AS flagconceptdeclare,
         ISNULL(LTRIM(RTRIM(C.pdt)), '') AS pdt,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FLAGCONTRACT))), 'N') AS flagcontract,
-        ISNULL(UPPER(LTRIM(RTRIM(C.Status))), 'A') AS status,
         ISNULL(UPPER(LTRIM(RTRIM(C.flaginsertar))), 'N') AS flaginsertar,
         ISNULL(UPPER(LTRIM(RTRIM(C.flagafecto5ta))), 'N') AS flagafecto5ta,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoAFP))), 'N') AS flagafectoafp,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoUtilidad))), 'N') AS flagafectoutilidad
+        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoAFP))), 'N') AS flagafectoafp
     INTO #origen
     FROM PR_Concept C (NOLOCK)
         LEFT JOIN PR_ConceptType T (NOLOCK)
@@ -138,48 +125,20 @@ BEGIN
         o.formulacode,
         o.description,
         o.tiposhortname,
-        o.description AS o_description,
-        ISNULL(C.Description, '') AS d_description,
-        o.printtext AS o_printtext,
-        ISNULL(C.PrintText, '') AS d_printtext,
-        o.concepttype_short AS o_concepttype_short,
-        ISNULL(UPPER(LTRIM(RTRIM(T2.ShortName))), '') AS d_concepttype_short,
-        o.conceptcurrency AS o_conceptcurrency,
-        ISNULL(UPPER(LTRIM(RTRIM(C.ConceptCurrency))), 'LO') AS d_conceptcurrency,
-        o.flagismonetary AS o_flagismonetary,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FlagIsMonetary))), 'N') AS d_flagismonetary,
-        o.flagassign AS o_flagassign,
-        ISNULL(UPPER(LTRIM(RTRIM(C.Flagassign))), 'N') AS d_flagassign,
-        o.conceptorder AS o_conceptorder,
-        ISNULL(CAST(C.ConceptOrder AS VARCHAR(11)), '') AS d_conceptorder,
-        o.flagpayrollticket AS o_flagpayrollticket,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FlagPayrollTicket))), 'N') AS d_flagpayrollticket,
-        o.reporden AS o_reporden,
-        ISNULL(CAST(C.reporden AS VARCHAR(11)), '') AS d_reporden,
-        o.flagconceptdeclare AS o_flagconceptdeclare,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagconceptdeclare))), 'N') AS d_flagconceptdeclare,
         o.pdt AS o_pdt,
         ISNULL(LTRIM(RTRIM(C.pdt)), '') AS d_pdt,
-        o.flagcontract AS o_flagcontract,
-        ISNULL(UPPER(LTRIM(RTRIM(C.FLAGCONTRACT))), 'N') AS d_flagcontract,
-        o.status AS o_status,
-        ISNULL(UPPER(LTRIM(RTRIM(C.Status))), 'A') AS d_status,
         o.flaginsertar AS o_flaginsertar,
         ISNULL(UPPER(LTRIM(RTRIM(C.flaginsertar))), 'N') AS d_flaginsertar,
         o.flagafecto5ta AS o_flagafecto5ta,
         ISNULL(UPPER(LTRIM(RTRIM(C.flagafecto5ta))), 'N') AS d_flagafecto5ta,
         o.flagafectoafp AS o_flagafectoafp,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoAFP))), 'N') AS d_flagafectoafp,
-        o.flagafectoutilidad AS o_flagafectoutilidad,
-        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoUtilidad))), 'N') AS d_flagafectoutilidad
+        ISNULL(UPPER(LTRIM(RTRIM(C.flagafectoAFP))), 'N') AS d_flagafectoafp
     INTO #pares
     FROM SY_Company sc (NOLOCK)
         CROSS JOIN #origen o
         INNER JOIN PR_Concept C (NOLOCK)
             ON C.Company = sc.Company
            AND LTRIM(RTRIM(C.FormulaCode)) = o.formulacode
-        LEFT JOIN PR_ConceptType T2 (NOLOCK)
-            ON C.ConceptType = T2.ConceptType
     WHERE sc.status = 'A'
       AND sc.Company <> @company;
 
@@ -187,39 +146,13 @@ BEGIN
         tipo_validacion, company_destino, company_desc, formulacode,
         description, tiposhortname, campo, valor_origen, valor_destino
     )
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Descripción', o_description, d_description FROM #pares WHERE o_description <> d_description
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Impresión', o_printtext, d_printtext FROM #pares WHERE o_printtext <> d_printtext
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Tipo concepto', o_concepttype_short, d_concepttype_short FROM #pares WHERE o_concepttype_short <> d_concepttype_short
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Moneda', o_conceptcurrency, d_conceptcurrency FROM #pares WHERE o_conceptcurrency <> d_conceptcurrency
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Es importe', o_flagismonetary, d_flagismonetary FROM #pares WHERE o_flagismonetary <> d_flagismonetary
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Asignación', o_flagassign, d_flagassign FROM #pares WHERE o_flagassign <> d_flagassign
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Orden boleta', o_conceptorder, d_conceptorder FROM #pares WHERE o_conceptorder <> d_conceptorder
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Orden planilla', o_reporden, d_reporden FROM #pares WHERE o_reporden <> d_reporden
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Boleta', o_flagpayrollticket, d_flagpayrollticket FROM #pares WHERE o_flagpayrollticket <> d_flagpayrollticket
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Declara concepto', o_flagconceptdeclare, d_flagconceptdeclare FROM #pares WHERE o_flagconceptdeclare <> d_flagconceptdeclare
-    UNION ALL
     SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'PDT', o_pdt, d_pdt FROM #pares WHERE o_pdt <> d_pdt
     UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Contrato', o_flagcontract, d_flagcontract FROM #pares WHERE o_flagcontract <> d_flagcontract
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Estado', o_status, d_status FROM #pares WHERE o_status <> d_status
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Insertar', o_flaginsertar, d_flaginsertar FROM #pares WHERE o_flaginsertar <> d_flaginsertar
+    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Insertar en', o_flaginsertar, d_flaginsertar FROM #pares WHERE o_flaginsertar <> d_flaginsertar
     UNION ALL
     SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Afecto 5ta', o_flagafecto5ta, d_flagafecto5ta FROM #pares WHERE o_flagafecto5ta <> d_flagafecto5ta
     UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Afecto AFP', o_flagafectoafp, d_flagafectoafp FROM #pares WHERE o_flagafectoafp <> d_flagafectoafp
-    UNION ALL
-    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Afecto utilidad', o_flagafectoutilidad, d_flagafectoutilidad FROM #pares WHERE o_flagafectoutilidad <> d_flagafectoutilidad;
+    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Afecto AFP', o_flagafectoafp, d_flagafectoafp FROM #pares WHERE o_flagafectoafp <> d_flagafectoafp;
 
     SELECT COUNT(*) AS total_origen FROM #origen;
 

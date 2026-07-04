@@ -184,11 +184,11 @@ Begin
 			
 				set @period_begin =   
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberini, 0)) 
 
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @conceptlist = case
 					when isnull(ltrim(rtrim(@conceptlist)), '') <> '' then ltrim(rtrim(@conceptlist))
@@ -205,7 +205,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosIngreso(
 					@cia, @person, @payrolltype, @process, @period_end, @conceptid, @fechaingreso)
@@ -217,7 +217,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosCTS(
 					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid)
@@ -229,7 +229,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosGrati(
 					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid)
@@ -241,11 +241,11 @@ Begin
 			Begin
 				set @period_begin =   
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberini, 0)) 
 
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getPromedioVac(
 					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptid, @numero, @divisor, @fechaingreso)
@@ -412,11 +412,11 @@ Begin
 
 				set @period_begin =   
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberini, 0)) 
 
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = ISNULL((select count(*) from ((select distinct PRPeriod from PR_EmployeePayRollConcept where Company = @cia and PayRollType = @payrolltype and Person = @person
 								and PRPeriod between @period_begin and @period_end 
@@ -505,11 +505,11 @@ Begin
 
 				set @period_begin =   
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberini, 0)) 
 
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @conceptlist = case
 					when isnull(ltrim(rtrim(@conceptlist)), '') <> '' then ltrim(rtrim(@conceptlist))
@@ -526,7 +526,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosIngreso(
 					@cia, @person, @payrolltype, @process, @period_end, @conceptid, @fechaingreso)
@@ -538,7 +538,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosCTS(
 					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid)
@@ -550,7 +550,7 @@ Begin
 			Begin
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getSumaConceptosGrati(
 					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid)
@@ -562,11 +562,11 @@ Begin
 			Begin
 				set @period_begin =   
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + @numberini) 
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodoini = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberini, 0)) 
 
 				set @period_end = 
 					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
-					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + @numberfin)
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getPromedioVac(
 					@cia, @person, @payrolltype, @process, @period_begin, @period_end, @conceptid, @numero, @divisor, @fechaingreso)

@@ -646,6 +646,7 @@
         { v: 'P', t: 'Parámetro' },
         { v: 'S', t: 'SumaConc' },
         { v: 'I', t: 'SCIngreso' },
+        { v: 'B', t: 'SC_CTS' },
         { v: 'M', t: 'Promedio Vac' },
         { v: 'X', t: 'CuentaLiq' },
         { v: 'Y', t: 'CuentaConcepto' },
@@ -862,11 +863,11 @@
     }
 
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'I', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'B', 'I', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I' || tipo === 'B';
     }
 
     function tipoDetalleMuestraPerIni(tipo) {
@@ -874,7 +875,7 @@
     }
 
     function tipoDetalleMuestraPerFin(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I' || tipo === 'B';
     }
 
     function tipoDetalleMuestraMinimo(tipo) {
@@ -961,7 +962,7 @@
                         if (v === 'M' && !lineasDetalle[i].operador) {
                             lineasDetalle[i].operador = null;
                         }
-                        if (v === 'I') {
+                        if (v === 'I' || v === 'B') {
                             lineasDetalle[i].periodoini = null;
                             lineasDetalle[i].numberini = null;
                             if (!lineasDetalle[i].operador) {

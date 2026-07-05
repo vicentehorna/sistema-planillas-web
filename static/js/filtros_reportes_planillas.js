@@ -176,7 +176,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes } = opts;
+            const { poblarSelect, poblarBancosHaberes, cargarTrabajadores } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -189,6 +189,23 @@
             const cia = String(filtros.cia).trim();
             if (!optionExists(cboCia, cia)) return false;
             cboCia.value = cia;
+
+            async function cargarEmpleadoSelect() {
+                if (!incluyeEmpleado) return;
+                const cboTra = document.getElementById('cboTrabajador');
+                if (!cboTra) return;
+                const ciaActual = String(cboCia.value || cia || '').trim();
+                if (!ciaActual) return;
+                if (typeof cargarTrabajadores === 'function') {
+                    await cargarTrabajadores();
+                } else {
+                    await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(ciaActual)}`, cboTra);
+                }
+                const person = filtros.person != null ? String(filtros.person).trim() : '';
+                if (person && optionExists(cboTra, person)) {
+                    cboTra.value = person;
+                }
+            }
 
             if (incluyeBancoHaberes && typeof poblarBancosHaberes === 'function') {
                 await poblarBancosHaberes(cia);
@@ -210,6 +227,7 @@
 
             const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
             if (!payroll || !optionExists(cboPt, payroll)) {
+                await cargarEmpleadoSelect();
                 guardar();
                 return true;
             }
@@ -222,6 +240,7 @@
 
             const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '';
             if (!proceso || !optionExists(cboProc, proceso)) {
+                await cargarEmpleadoSelect();
                 guardar();
                 return true;
             }
@@ -237,16 +256,7 @@
                 cboPer.value = periodo;
             }
 
-            if (incluyeEmpleado) {
-                const cboTra = document.getElementById('cboTrabajador');
-                if (cboTra) {
-                    await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTra);
-                    const person = filtros.person != null ? String(filtros.person).trim() : '';
-                    if (person && optionExists(cboTra, person)) {
-                        cboTra.value = person;
-                    }
-                }
-            }
+            await cargarEmpleadoSelect();
 
             if (incluyeFechaIngreso) {
                 restaurarFechaIngresoDesdeFiltros(filtros);

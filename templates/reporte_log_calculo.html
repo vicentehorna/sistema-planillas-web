@@ -440,13 +440,24 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboTrabajador = document.getElementById('cboTrabajador');
 
+    async function cargarTrabajadores() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            cboTrabajador.innerHTML = '<option value="">Seleccione...</option>';
+            cboTrabajador.disabled = true;
+            return;
+        }
+        await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
+        etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+    }
+
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarTrabajadores });
         etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
     }
 
@@ -455,9 +466,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(ciaNorm)}`, cboTrabajador);
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+            await cargarTrabajadores();
         }
+    } else if (cboTrabajador.disabled) {
+        await cargarTrabajadores();
     }
 
     {
@@ -482,8 +494,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+            await cargarTrabajadores();
         } else {
             cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanilla.disabled = true;

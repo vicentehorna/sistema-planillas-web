@@ -97,7 +97,7 @@ BEGIN
         INSERT INTO PR_FormulaHeader (
             FormulaHeader, Company, Payrolltype, Proccestype, Concept, Description,
             orden, XLastUser, XLastDate, period, person, Tipo, ConceptCond,
-            GrupoFormula, flagtruncate, formulacode
+            GrupoFormula, flagtruncate, formulacode, parametroformula
         )
         SELECT
             @id,
@@ -113,9 +113,10 @@ BEGIN
             person,
             tipo,
             (SELECT Concept FROM PR_Concept T WHERE T.FormulaCode = C.FormulaCode AND T.Company = @company),
-            GrupoFormula,
+            PR_FormulaHeader.GrupoFormula,
             flagtruncate,
-            PR_FormulaHeader.formulacode
+            PR_FormulaHeader.formulacode,
+            PR_FormulaHeader.parametroformula
         FROM PR_FormulaHeader
         INNER JOIN PR_PayRollType
             ON PR_FormulaHeader.Payrolltype = PR_PayRollType.PayRollType
@@ -129,7 +130,7 @@ BEGIN
         INSERT INTO PR_FormulaDetail (
             FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
             XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-            NumberINI, NumberFIN, TipoLiq
+            NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
         )
         SELECT
             @id,
@@ -137,7 +138,7 @@ BEGIN
             @company,
             tipo,
             Operador,
-            (SELECT Concept FROM PR_Concept WHERE FormulaCode = C.formulacode AND Company = @company),
+            (SELECT Concept FROM PR_Concept WHERE FormulaCode = C.FormulaCode AND Company = @company),
             grupo,
             valor,
             'MASIVO',
@@ -148,15 +149,17 @@ BEGIN
             PeriodoFin,
             NumberINI,
             NumberFIN,
-            TipoLiq
-        FROM PR_FormulaDetail
+            TipoLiq,
+            dbo.f_map_conceptlist_cia(fd.ConceptList, @cia, @company),
+            fd.Divisor
+        FROM PR_FormulaDetail fd
         LEFT JOIN PR_Concept C
-            ON PR_FormulaDetail.Concept = C.Concept
+            ON fd.Concept = C.Concept
         LEFT JOIN PR_Parameter P
-            ON PR_FormulaDetail.parameter = P.parameter
+            ON fd.parameter = P.parameter
         LEFT JOIN PR_ProcessType
-            ON PR_FormulaDetail.process = PR_ProcessType.ProcessType
-        WHERE PR_FormulaDetail.FormulaHeader = @formulaheader;
+            ON fd.process = PR_ProcessType.ProcessType
+        WHERE fd.FormulaHeader = @formulaheader;
 
         END
 

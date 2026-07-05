@@ -47,7 +47,6 @@ BEGIN
             ON c.ConceptType = ct.ConceptType
         LEFT JOIN PR_GrupoFormula gf (NOLOCK)
             ON fh.GrupoFormula = gf.GrupoFormula
-           AND fh.Company = gf.Company
         LEFT JOIN PR_Concept cc (NOLOCK)
             ON fh.ConceptCond = cc.Concept
            AND fh.Company = cc.Company

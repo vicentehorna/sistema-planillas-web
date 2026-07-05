@@ -15,7 +15,6 @@ BEGIN
         gf.name AS text,
         gf.grouporder
     FROM PR_GrupoFormula gf (NOLOCK)
-    WHERE gf.Company = @company
     ORDER BY gf.grouporder ASC, gf.name ASC;
 END
 GO

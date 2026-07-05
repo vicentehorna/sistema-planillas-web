@@ -50,7 +50,6 @@ BEGIN
            AND fh.Company = cc.Company
         LEFT JOIN PR_GrupoFormula gf (NOLOCK)
             ON fh.GrupoFormula = gf.GrupoFormula
-           AND fh.Company = gf.Company
         LEFT JOIN PR_ParametroFormula pf (NOLOCK)
             ON fh.parametroformula = pf.ParametroFormula
     WHERE fh.Company = @company

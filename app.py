@@ -6986,6 +6986,51 @@ def api_formulas_guardar():
                 pass
 
 
+@app.route('/api/formulas/eliminar', methods=['POST'])
+@login_required
+def api_formulas_eliminar():
+    """sp_pr_eliminarformula_web: elimina fórmula completa (cabecera + detalle)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    formulaheader = str(body.get('formulaheader') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not formulaheader:
+        return jsonify({"error": "Seleccione una fórmula."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarformula_web @company=?, @formulaheader=?",
+            (cia, formulaheader),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "formulaheader": _jsonable_value(row.get('formulaheader')) or formulaheader,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Fórmula eliminada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_formulas_eliminar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/formulas/replicar', methods=['POST'])
 @login_required
 def api_formulas_replicar():

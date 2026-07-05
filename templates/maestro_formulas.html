@@ -60,6 +60,15 @@
         background: #cfe2ff;
     }
 
+    .table-formulas-lista .col-acciones {
+        width: 2.5rem;
+        text-align: center;
+    }
+
+    .table-formulas-lista .btn-eliminar-formula {
+        line-height: 1;
+    }
+
     .formulas-panel-detalle {
         flex: 1 1 auto;
         min-height: 0;
@@ -418,10 +427,11 @@
                             <th style="width:3rem;">Ord.</th>
                             <th>Condición</th>
                             <th>Últ. cambio</th>
+                            <th class="col-acciones">Acción</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyFormulas">
-                        <tr><td colspan="6" class="text-center text-muted py-2">Seleccione filtros y busque</td></tr>
+                        <tr><td colspan="7" class="text-center text-muted py-2">Seleccione filtros y busque</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1008,7 +1018,7 @@
 
     function renderListaFormulas(rows) {
         if (!rows.length) {
-            tbodyFormulas.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin registros</td></tr>';
+            tbodyFormulas.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoFormulas').textContent = '0 registros';
             return;
         }
@@ -1020,8 +1030,13 @@
                 <td>${escHtml(r.tipo)}</td>
                 <td title="${escHtml(r.concepto)}">${escHtml(r.concepto)}</td>
                 <td>${escHtml(r.orden)}</td>
-                <td>${escHtml(r.condicion || r.formulacode || '')}</td>
+                <td>${escHtml(r.condicion || '')}</td>
                 <td>${escHtml(fmtFecha(r.ultimafecha))}</td>
+                <td class="col-acciones">
+                    <button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-formula" title="Eliminar fórmula">
+                        <i class="bi bi-trash-fill text-danger"></i>
+                    </button>
+                </td>
             </tr>`;
         }).join('');
 
@@ -1034,7 +1049,52 @@
                 const row = formulasCache.find((x) => x.formulaheader === fh);
                 if (row) await seleccionarFormula(row);
             });
+            const btnEliminar = tr.querySelector('.btn-eliminar-formula');
+            if (btnEliminar) {
+                btnEliminar.addEventListener('click', async function (evt) {
+                    evt.stopPropagation();
+                    const fh = tr.getAttribute('data-fh');
+                    const row = formulasCache.find((x) => x.formulaheader === fh);
+                    if (row) await eliminarFormula(row);
+                });
+            }
         });
+    }
+
+    async function eliminarFormula(row) {
+        const nombre = row.concepto || row.formulacode || row.formulaheader || 'fórmula';
+        if (!confirm(`¿Eliminar la fórmula "${nombre}"?\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`)) {
+            return;
+        }
+
+        const cia = cboCia.value.trim();
+        if (!cia || !row.formulaheader) {
+            alert('Datos incompletos para eliminar.');
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/formulas/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    formulaheader: row.formulaheader,
+                }),
+            });
+            const data = await leerJson(res);
+            if (formulaSeleccionada && formulaSeleccionada.formulaheader === row.formulaheader) {
+                formulaSeleccionada = null;
+                mostrarPanelEdicion(false);
+            }
+            await cargarListado();
+            const msg = document.getElementById('msgGuardadoFormula');
+            msg.textContent = data.mensaje || 'Fórmula eliminada correctamente.';
+            msg.classList.remove('d-none');
+            setTimeout(() => msg.classList.add('d-none'), 5000);
+        } catch (err) {
+            alert(err.message || 'No se pudo eliminar la fórmula.');
+        }
     }
 
     async function cargarListado() {
@@ -1049,7 +1109,7 @@
             return;
         }
 
-        tbodyFormulas.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
+        tbodyFormulas.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Cargando...</td></tr>';
 
         try {
             const res = await fetch('/api/formulas/listado', {
@@ -1063,7 +1123,7 @@
             ensureSelectoresCache(cia, payrolltype).catch((e) => console.error(e));
         } catch (err) {
             formulasCache = [];
-            tbodyFormulas.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+            tbodyFormulas.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
         }
     }
 

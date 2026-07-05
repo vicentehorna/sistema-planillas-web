@@ -1152,6 +1152,29 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             await cargarListado();
             mostrarMensajeGuardado(data.mensaje || 'Concepto eliminado correctamente.');
+
+            const formulacode = String(row.formulacode || '').trim();
+            if (formulacode) {
+                const eliminarEnCias = confirm(
+                    `¿Desea eliminar este concepto (${formulacode}) también de las demás empresas?`
+                );
+                if (eliminarEnCias) {
+                    try {
+                        const resCias = await fetch('/api/conceptos/eliminar-cias', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                cia: cboCia.value.trim(),
+                                formulacode,
+                            }),
+                        });
+                        const dataCias = await leerJson(resCias);
+                        alert(dataCias.mensaje || 'Eliminación en las demás empresas completada.');
+                    } catch (err) {
+                        alert(err.message || 'No se pudo eliminar el concepto en las demás empresas.');
+                    }
+                }
+            }
         } catch (err) {
             alert(err.message);
         }

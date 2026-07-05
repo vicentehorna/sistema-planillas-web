@@ -7415,6 +7415,117 @@ def api_conceptos_eliminar():
                 pass
 
 
+@app.route('/api/conceptos/eliminar-cias', methods=['POST'])
+@login_required
+def api_conceptos_eliminar_cias():
+    """Elimina un concepto por nemónico en las demás empresas activas (sp_pr_eliminarconcepto_web)."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia') or body.get('company') or '').strip()
+    formulacode = str(body.get('formulacode') or '').strip()
+
+    if not cia_origen or not formulacode:
+        return jsonify({"error": "Indique compañía origen y nemónico."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT LTRIM(RTRIM(Company)) AS company
+            FROM SY_Company (NOLOCK)
+            WHERE ISNULL(status, 'A') = 'A'
+              AND LTRIM(RTRIM(Company)) <> ?
+            ORDER BY Company
+            """,
+            (cia_origen,),
+        )
+        destinos = [
+            str(r[0]).strip()
+            for r in cursor.fetchall()
+            if r and r[0]
+        ]
+
+        eliminados = []
+        no_existia = []
+        errores = []
+
+        for dest in destinos:
+            cursor.execute(
+                """
+                SELECT Concept
+                FROM PR_Concept (NOLOCK)
+                WHERE Company = ?
+                  AND LTRIM(RTRIM(FormulaCode)) = ?
+                """,
+                (dest, formulacode),
+            )
+            row = cursor.fetchone()
+            if not row:
+                no_existia.append(dest)
+                continue
+
+            concept_dest = str(row[0]).strip()
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_eliminarconcepto_web @company=?, @concept=?",
+                    (dest, concept_dest),
+                )
+                _dicts_first_nonempty_resultset(cursor)
+                conn.commit()
+                eliminados.append(dest)
+            except Exception as ex:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                err = str(ex)
+                if 'RAISERROR' in err or '50000' in err:
+                    parts = err.split(']')
+                    if len(parts) > 1:
+                        err = parts[-1].strip(" ()'\"")
+                errores.append({"company": dest, "error": err})
+
+        partes = []
+        if eliminados:
+            partes.append(f"Eliminado en {len(eliminados)} empresa(s): {', '.join(eliminados)}.")
+        if no_existia:
+            partes.append(f"No existía en: {', '.join(no_existia)}.")
+        if errores:
+            det_err = '; '.join(
+                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+            )
+            if len(errores) > 5:
+                det_err += f" (+{len(errores) - 5} más)"
+            partes.append(f"No se pudo eliminar en {len(errores)} empresa(s): {det_err}")
+        if not partes:
+            partes.append('No hay otras empresas activas.')
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "formulacode": formulacode,
+            "eliminados": eliminados,
+            "no_existia": no_existia,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_eliminar_cias")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/conceptos/validar-cias', methods=['POST'])
 @login_required
 def api_conceptos_validar_cias():

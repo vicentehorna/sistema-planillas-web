@@ -60,13 +60,18 @@
         background: #cfe2ff;
     }
 
-    .table-formulas-lista .col-acciones {
-        width: 2.5rem;
+    .table-formulas-lista .col-check {
+        width: 2.25rem;
         text-align: center;
+        vertical-align: middle;
     }
 
-    .table-formulas-lista .btn-eliminar-formula {
-        line-height: 1;
+    .table-formulas-lista .col-check input[type="checkbox"] {
+        cursor: pointer;
+    }
+
+    .formulas-lista-acciones .btn {
+        font-size: 0.78rem;
     }
 
     .formulas-panel-detalle {
@@ -413,21 +418,31 @@
 <div class="formulas-workspace">
     <section class="formulas-panel-lista card shadow-sm border-0">
         <div class="card-body py-2">
-            <div class="d-flex justify-content-between align-items-center mb-1">
+            <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
                 <span class="formulas-seccion-titulo">Listado de fórmulas</span>
-                <span id="lblConteoFormulas" class="text-muted formulas-conteo">0 registros</span>
+                <div class="d-flex align-items-center gap-2 formulas-lista-acciones">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnReplicarFormulas" disabled>
+                        <i class="bi bi-copy"></i> Replicar
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="btnEliminarFormulas" disabled>
+                        <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                    <span id="lblConteoFormulas" class="text-muted formulas-conteo">0 registros</span>
+                </div>
             </div>
             <div class="formulas-grilla">
                 <table class="table table-bordered table-sm table-hover table-formulas-lista align-middle mb-0">
                     <thead>
                         <tr>
+                            <th class="col-check">
+                                <input type="checkbox" id="chkSelTodasFormulas" title="Seleccionar todas" aria-label="Seleccionar todas">
+                            </th>
                             <th>Grupo</th>
                             <th>Tipo</th>
                             <th>Concepto</th>
                             <th style="width:3rem;">Ord.</th>
                             <th>Condición</th>
                             <th>Últ. cambio</th>
-                            <th class="col-acciones">Acción</th>
                         </tr>
                     </thead>
                     <tbody id="tbodyFormulas">
@@ -575,6 +590,7 @@
     const tbodyDetalle = document.getElementById('tbodyDetalleFormula');
 
     let formulasCache = [];
+    let formulasMarcadas = new Set();
     let formulaSeleccionada = null;
     let lineasDetalle = [];
     let lineaSeleccionada = -1;
@@ -1016,62 +1032,171 @@
         });
     }
 
+    function actualizarBotonesLista() {
+        const n = formulasMarcadas.size;
+        const btnRep = document.getElementById('btnReplicarFormulas');
+        const btnDel = document.getElementById('btnEliminarFormulas');
+        if (btnRep) btnRep.disabled = n === 0;
+        if (btnDel) btnDel.disabled = n === 0;
+    }
+
+    function sincronizarChkTodas() {
+        const chkTodas = document.getElementById('chkSelTodasFormulas');
+        if (!chkTodas) return;
+        const visibles = formulasCache.map((r) => r.formulaheader).filter(Boolean);
+        if (!visibles.length) {
+            chkTodas.checked = false;
+            chkTodas.indeterminate = false;
+            return;
+        }
+        const marcadas = visibles.filter((fh) => formulasMarcadas.has(fh)).length;
+        chkTodas.checked = marcadas === visibles.length;
+        chkTodas.indeterminate = marcadas > 0 && marcadas < visibles.length;
+    }
+
     function renderListaFormulas(rows) {
         if (!rows.length) {
             tbodyFormulas.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoFormulas').textContent = '0 registros';
+            sincronizarChkTodas();
+            actualizarBotonesLista();
             return;
         }
 
         tbodyFormulas.innerHTML = rows.map((r) => {
             const activo = formulaSeleccionada && formulaSeleccionada.formulaheader === r.formulaheader;
+            const marcada = formulasMarcadas.has(r.formulaheader);
             return `<tr class="formula-row ${activo ? 'active' : ''}" data-fh="${escHtml(r.formulaheader)}">
+                <td class="col-check">
+                    <input type="checkbox" class="chk-formula" data-fh="${escHtml(r.formulaheader)}"${marcada ? ' checked' : ''} aria-label="Seleccionar fórmula">
+                </td>
                 <td>${escHtml(r.grupo)}</td>
                 <td>${escHtml(r.tipo)}</td>
                 <td title="${escHtml(r.concepto)}">${escHtml(r.concepto)}</td>
                 <td>${escHtml(r.orden)}</td>
                 <td>${escHtml(r.condicion || '')}</td>
                 <td>${escHtml(fmtFecha(r.ultimafecha))}</td>
-                <td class="col-acciones">
-                    <button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-formula" title="Eliminar fórmula">
-                        <i class="bi bi-trash-fill text-danger"></i>
-                    </button>
-                </td>
             </tr>`;
         }).join('');
 
         document.getElementById('lblConteoFormulas').textContent =
             `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
 
+        tbodyFormulas.querySelectorAll('.chk-formula').forEach((chk) => {
+            chk.addEventListener('click', (evt) => evt.stopPropagation());
+            chk.addEventListener('change', function () {
+                const fh = this.getAttribute('data-fh');
+                if (this.checked) formulasMarcadas.add(fh);
+                else formulasMarcadas.delete(fh);
+                sincronizarChkTodas();
+                actualizarBotonesLista();
+            });
+        });
+
         tbodyFormulas.querySelectorAll('.formula-row').forEach((tr) => {
-            tr.addEventListener('click', async function () {
+            tr.addEventListener('click', async function (evt) {
+                if (evt.target.closest('.col-check')) return;
                 const fh = this.getAttribute('data-fh');
                 const row = formulasCache.find((x) => x.formulaheader === fh);
                 if (row) await seleccionarFormula(row);
             });
-            const btnEliminar = tr.querySelector('.btn-eliminar-formula');
-            if (btnEliminar) {
-                btnEliminar.addEventListener('click', async function (evt) {
-                    evt.stopPropagation();
-                    const fh = tr.getAttribute('data-fh');
-                    const row = formulasCache.find((x) => x.formulaheader === fh);
-                    if (row) await eliminarFormula(row);
-                });
-            }
         });
+
+        sincronizarChkTodas();
+        actualizarBotonesLista();
     }
 
-    async function eliminarFormula(row) {
-        const nombre = row.concepto || row.formulacode || row.formulaheader || 'fórmula';
-        if (!confirm(`¿Eliminar la fórmula "${nombre}"?\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`)) {
+    function obtenerFormulasSeleccionadas() {
+        return formulasCache.filter((r) => formulasMarcadas.has(r.formulaheader));
+    }
+
+    async function replicarFormulasSeleccionadas() {
+        const seleccionadas = obtenerFormulasSeleccionadas();
+        if (!seleccionadas.length) {
+            alert('Seleccione al menos una fórmula.');
             return;
         }
 
         const cia = cboCia.value.trim();
-        if (!cia || !row.formulaheader) {
-            alert('Datos incompletos para eliminar.');
+        if (!cia) {
+            alert('Seleccione una compañía origen.');
             return;
         }
+
+        const n = seleccionadas.length;
+        const msg = n === 1
+            ? 'Se va a replicar 1 fórmula seleccionada en las demás empresas, ¿desea continuar?'
+            : `Se van a replicar ${n} fórmulas seleccionadas en las demás empresas, ¿desea continuar?`;
+        if (!confirm(msg)) return;
+
+        const btn = document.getElementById('btnReplicarFormulas');
+        const txt = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+        try {
+            const res = await fetch('/api/formulas/replicar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    formulas: seleccionadas.map((r) => ({
+                        formulaheader: r.formulaheader,
+                        formulacode: r.formulacode || null,
+                        concept: r.concept || null,
+                    })),
+                }),
+            });
+            const data = await leerJson(res);
+            let texto = data.mensaje || `Se replicaron ${data.replicadas || 0} fórmula(s).`;
+            if (data.advertencias && data.advertencias.length) {
+                const det = data.advertencias.slice(0, 8).map((a) =>
+                    `• ${a.concepto || a.formulacode || a.formulaheader}: ${a.mensaje || a.error || ''}`
+                ).join('\n');
+                texto += `\n\nAdvertencias (${data.advertencias.length}):\n${det}`;
+                if (data.advertencias.length > 8) texto += '\n…';
+            }
+            if (data.errores && data.errores.length) {
+                const det = data.errores.slice(0, 8).map((e) =>
+                    `• ${e.formulaheader || ''}: ${e.error || ''}`
+                ).join('\n');
+                texto += `\n\nErrores (${data.errores.length}):\n${det}`;
+                if (data.errores.length > 8) texto += '\n…';
+            }
+            alert(texto);
+        } catch (err) {
+            alert(err.message || 'No se pudo replicar.');
+        } finally {
+            btn.innerHTML = txt;
+            actualizarBotonesLista();
+        }
+    }
+
+    async function eliminarFormulasSeleccionadas() {
+        const seleccionadas = obtenerFormulasSeleccionadas();
+        if (!seleccionadas.length) {
+            alert('Seleccione al menos una fórmula.');
+            return;
+        }
+
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+
+        const n = seleccionadas.length;
+        const lista = seleccionadas.slice(0, 5).map((r) => `• ${r.concepto || r.formulacode || r.formulaheader}`).join('\n');
+        const extra = n > 5 ? `\n… y ${n - 5} más` : '';
+        const msg = n === 1
+            ? `¿Eliminar la fórmula seleccionada?\n\n${lista}\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`
+            : `¿Eliminar las ${n} fórmulas seleccionadas?\n\n${lista}${extra}\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`;
+        if (!confirm(msg)) return;
+
+        const btn = document.getElementById('btnEliminarFormulas');
+        const txt = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
 
         try {
             const res = await fetch('/api/formulas/eliminar', {
@@ -1079,21 +1204,36 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia,
-                    formulaheader: row.formulaheader,
+                    formulaheaders: seleccionadas.map((r) => r.formulaheader),
                 }),
             });
             const data = await leerJson(res);
-            if (formulaSeleccionada && formulaSeleccionada.formulaheader === row.formulaheader) {
-                formulaSeleccionada = null;
-                mostrarPanelEdicion(false);
+            const eliminadas = new Set((data.eliminadas || []).map(String));
+            seleccionadas.forEach((r) => {
+                if (eliminadas.has(String(r.formulaheader)) || data.ok) {
+                    formulasMarcadas.delete(r.formulaheader);
+                }
+            });
+            if (formulaSeleccionada && seleccionadas.some((r) => r.formulaheader === formulaSeleccionada.formulaheader)) {
+                const fhSel = String(formulaSeleccionada.formulaheader);
+                if (eliminadas.has(fhSel)) {
+                    formulaSeleccionada = null;
+                    mostrarPanelEdicion(false);
+                }
             }
             await cargarListado();
-            const msg = document.getElementById('msgGuardadoFormula');
-            msg.textContent = data.mensaje || 'Fórmula eliminada correctamente.';
-            msg.classList.remove('d-none');
-            setTimeout(() => msg.classList.add('d-none'), 5000);
+            const msgEl = document.getElementById('msgGuardadoFormula');
+            msgEl.textContent = data.mensaje || 'Fórmulas eliminadas correctamente.';
+            msgEl.classList.remove('d-none');
+            setTimeout(() => msgEl.classList.add('d-none'), 5000);
+            if (data.errores && data.errores.length) {
+                alert(`Algunas fórmulas no se eliminaron:\n${data.errores.map((e) => `• ${e.formulaheader}: ${e.error}`).join('\n')}`);
+            }
         } catch (err) {
-            alert(err.message || 'No se pudo eliminar la fórmula.');
+            alert(err.message || 'No se pudo eliminar.');
+        } finally {
+            btn.innerHTML = txt;
+            actualizarBotonesLista();
         }
     }
 
@@ -1105,6 +1245,7 @@
 
         if (!cia || !payrolltype || !processtype) {
             formulasCache = [];
+            formulasMarcadas.clear();
             renderListaFormulas([]);
             return;
         }
@@ -1119,6 +1260,8 @@
             });
             const data = await leerJson(res);
             formulasCache = data.rows || [];
+            const ids = new Set(formulasCache.map((r) => r.formulaheader));
+            formulasMarcadas.forEach((fh) => { if (!ids.has(fh)) formulasMarcadas.delete(fh); });
             renderListaFormulas(formulasCache);
             ensureSelectoresCache(cia, payrolltype).catch((e) => console.error(e));
         } catch (err) {
@@ -1294,6 +1437,16 @@
 
     document.getElementById('btnNuevaFormula').addEventListener('click', nuevaFormula);
     document.getElementById('btnGuardarFormula').addEventListener('click', guardarFormula);
+    document.getElementById('btnReplicarFormulas').addEventListener('click', replicarFormulasSeleccionadas);
+    document.getElementById('btnEliminarFormulas').addEventListener('click', eliminarFormulasSeleccionadas);
+    document.getElementById('chkSelTodasFormulas').addEventListener('change', function () {
+        if (this.checked) {
+            formulasCache.forEach((r) => { if (r.formulaheader) formulasMarcadas.add(r.formulaheader); });
+        } else {
+            formulasMarcadas.clear();
+        }
+        renderListaFormulas(formulasCache);
+    });
     document.getElementById('btnAgregarLinea').addEventListener('click', function () {
         lineasDetalle.push({ tipo: 'C', operador: null });
         lineaSeleccionada = lineasDetalle.length - 1;

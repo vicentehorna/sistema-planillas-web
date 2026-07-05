@@ -34,21 +34,42 @@ BEGIN
     WHERE PR_FormulaHeader.Company = @cia
       AND PR_FormulaHeader.FormulaHeader = @formulaheader;
 
+    IF @formulacode IS NULL OR LTRIM(RTRIM(@formulacode)) = ''
+    BEGIN
+        SELECT @formulacode = LTRIM(RTRIM(ISNULL(c.FormulaCode, fh.formulacode)))
+        FROM PR_FormulaHeader fh
+        LEFT JOIN PR_Concept c
+            ON fh.Concept = c.Concept AND fh.Company = c.Company
+        WHERE fh.Company = @cia
+          AND fh.FormulaHeader = @formulaheader;
+    END
+
     DECLARE empresas CURSOR LOCAL FAST_FORWARD FOR
         SELECT Company
         FROM SY_Company
-        WHERE Company <> @cia;
+        WHERE Company <> @cia
+          AND ISNULL(status, 'A') = 'A';
 
     OPEN empresas;
     FETCH NEXT FROM empresas INTO @company;
 
     WHILE @@FETCH_STATUS = 0
     BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM PR_Concept
+            WHERE Company = @company
+              AND LTRIM(RTRIM(FormulaCode)) = LTRIM(RTRIM(@formulacode))
+        )
+        BEGIN
         SET @idformula = ISNULL((
             SELECT fh.FormulaHeader
             FROM PR_FormulaHeader fh
+            INNER JOIN PR_Concept c_dest
+                ON fh.Concept = c_dest.Concept
+               AND fh.Company = c_dest.Company
+               AND LTRIM(RTRIM(c_dest.FormulaCode)) = LTRIM(RTRIM(@formulacode))
             WHERE fh.Company = @company
-              AND fh.formulacode = @formulacode
               AND EXISTS (
                     SELECT 1
                     FROM PR_ProcessType pt
@@ -83,7 +104,7 @@ BEGIN
             @company,
             (SELECT Payrolltype FROM PR_PayRollType T WHERE T.Company = @company AND T.ShortName = PR_PayRollType.ShortName),
             (SELECT ProcessType FROM PR_ProcessType M WHERE M.Company = @company AND M.ShortName = PR_ProcessType.ShortName),
-            (SELECT Concept FROM PR_Concept WHERE FormulaCode = PR_FormulaHeader.formulacode AND Company = @company),
+            (SELECT Concept FROM PR_Concept WHERE LTRIM(RTRIM(FormulaCode)) = LTRIM(RTRIM(@formulacode)) AND Company = @company),
             PR_FormulaHeader.Description,
             orden,
             'MASIVO',
@@ -136,6 +157,8 @@ BEGIN
         LEFT JOIN PR_ProcessType
             ON PR_FormulaDetail.process = PR_ProcessType.ProcessType
         WHERE PR_FormulaDetail.FormulaHeader = @formulaheader;
+
+        END
 
         FETCH NEXT FROM empresas INTO @company;
     END

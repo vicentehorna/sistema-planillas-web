@@ -6989,31 +6989,69 @@ def api_formulas_guardar():
 @app.route('/api/formulas/eliminar', methods=['POST'])
 @login_required
 def api_formulas_eliminar():
-    """sp_pr_eliminarformula_web: elimina fórmula completa (cabecera + detalle)."""
+    """sp_pr_eliminarformula_web: elimina fórmula(s) completa(s) (cabecera + detalle)."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     formulaheader = str(body.get('formulaheader') or '').strip()
+    formulaheaders = body.get('formulaheaders') or []
+
+    if not formulaheaders and formulaheader:
+        formulaheaders = [formulaheader]
+    formulaheaders = [
+        str(fh or '').strip()
+        for fh in formulaheaders
+        if str(fh or '').strip()
+    ]
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
-    if not formulaheader:
-        return jsonify({"error": "Seleccione una fórmula."}), 400
+    if not formulaheaders:
+        return jsonify({"error": "Seleccione al menos una fórmula."}), 400
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "EXEC sp_pr_eliminarformula_web @company=?, @formulaheader=?",
-            (cia, formulaheader),
-        )
-        rows = _dicts_first_nonempty_resultset(cursor)
+        eliminadas = []
+        errores = []
+        for fh in formulaheaders:
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_eliminarformula_web @company=?, @formulaheader=?",
+                    (cia, fh),
+                )
+                rows = _dicts_first_nonempty_resultset(cursor)
+                while cursor.nextset():
+                    pass
+                row = rows[0] if rows else {}
+                eliminadas.append(_jsonable_value(row.get('formulaheader')) or fh)
+            except Exception as ex:
+                errores.append({"formulaheader": fh, "error": str(ex)})
+
         conn.commit()
-        row = rows[0] if rows else {}
+        n_ok = len(eliminadas)
+        n_err = len(errores)
+        if n_ok == 0:
+            return jsonify({
+                "ok": False,
+                "eliminadas": [],
+                "errores": errores,
+                "error": errores[0]['error'] if errores else "No se pudo eliminar.",
+            }), 400
+
+        mensaje = (
+            f"Se eliminó 1 fórmula correctamente."
+            if n_ok == 1 and n_err == 0
+            else f"Se eliminaron {n_ok} fórmula(s) correctamente."
+        )
+        if n_err:
+            mensaje += f" {n_err} con error."
+
         return jsonify({
             "ok": True,
-            "formulaheader": _jsonable_value(row.get('formulaheader')) or formulaheader,
-            "mensaje": _jsonable_value(row.get('mensaje')) or 'Fórmula eliminada correctamente.',
+            "eliminadas": eliminadas,
+            "errores": errores,
+            "mensaje": mensaje,
         })
     except Exception as e:
         logging.exception("api_formulas_eliminar")
@@ -7050,11 +7088,91 @@ def api_formulas_replicar():
         cursor = conn.cursor()
         ok = 0
         errores = []
+        advertencias = []
+
+        cursor.execute(
+            """
+            SELECT LTRIM(RTRIM(Company)) AS company
+            FROM SY_Company (NOLOCK)
+            WHERE ISNULL(status, 'A') = 'A'
+              AND LTRIM(RTRIM(Company)) <> ?
+            ORDER BY Company
+            """,
+            (cia,),
+        )
+        destinos = [
+            str(r[0]).strip()
+            for r in cursor.fetchall()
+            if r and r[0]
+        ]
+
         for item in formulas:
             fh = str((item or {}).get('formulaheader') or '').strip()
             fc = str((item or {}).get('formulacode') or '').strip()
+            concept = str((item or {}).get('concept') or '').strip()
             if not fh:
                 continue
+
+            if not fc and concept:
+                cursor.execute(
+                    """
+                    SELECT LTRIM(RTRIM(ISNULL(FormulaCode, '')))
+                    FROM PR_Concept (NOLOCK)
+                    WHERE Company = ? AND Concept = ?
+                    """,
+                    (cia, concept),
+                )
+                row_fc = cursor.fetchone()
+                fc = str(row_fc[0]).strip() if row_fc and row_fc[0] else ''
+
+            if not fc:
+                cursor.execute(
+                    """
+                    SELECT LTRIM(RTRIM(ISNULL(fh.formulacode, ''))),
+                           LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))),
+                           ISNULL(c.Description, '')
+                    FROM PR_FormulaHeader fh (NOLOCK)
+                    LEFT JOIN PR_Concept c (NOLOCK)
+                        ON fh.Concept = c.Concept AND fh.Company = c.Company
+                    WHERE fh.Company = ? AND fh.FormulaHeader = ?
+                    """,
+                    (cia, fh),
+                )
+                row_meta = cursor.fetchone()
+                if row_meta:
+                    fc = str(row_meta[0] or row_meta[1] or '').strip()
+                    concepto_desc = str(row_meta[2] or '').strip()
+                else:
+                    concepto_desc = fh
+            else:
+                concepto_desc = fc
+
+            faltantes = []
+            for dest in destinos:
+                cursor.execute(
+                    """
+                    SELECT 1
+                    FROM PR_Concept (NOLOCK)
+                    WHERE Company = ?
+                      AND LTRIM(RTRIM(FormulaCode)) = ?
+                    """,
+                    (dest, fc),
+                )
+                if not cursor.fetchone():
+                    faltantes.append(dest)
+
+            if faltantes:
+                advertencias.append({
+                    "formulaheader": fh,
+                    "formulacode": fc,
+                    "concepto": concepto_desc,
+                    "mensaje": (
+                        f"Concepto no existe en: {', '.join(faltantes)}. "
+                        "Se replicará solo en empresas donde exista el concepto."
+                    ),
+                    "empresas_faltantes": faltantes,
+                })
+
             try:
                 cursor.execute(
                     "EXEC sp_pr_replicar_formula_cia @cia=?, @formulacode=?, @formulaheader=?",
@@ -7064,15 +7182,25 @@ def api_formulas_replicar():
                     pass
                 ok += 1
             except Exception as ex:
-                errores.append({"formulaheader": fh, "error": str(ex)})
+                errores.append({
+                    "formulaheader": fh,
+                    "formulacode": fc,
+                    "concepto": concepto_desc,
+                    "error": str(ex),
+                })
 
         conn.commit()
+        n = len([i for i in formulas if str((i or {}).get('formulaheader') or '').strip()])
         return jsonify({
             "ok": True,
             "replicadas": ok,
+            "procesadas": n,
+            "advertencias": advertencias,
             "errores": errores,
-            "mensaje": f"Se replicaron {ok} fórmula(s)." + (
+            "mensaje": f"Se replicaron {ok} fórmula(s) en las demás empresas." + (
                 f" {len(errores)} con error." if errores else ''
+            ) + (
+                f" {len(advertencias)} con advertencias de concepto." if advertencias else ''
             ),
         })
     except Exception as e:

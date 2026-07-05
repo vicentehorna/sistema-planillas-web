@@ -3000,14 +3000,11 @@ def _resolve_payroll_calc_procedure(cursor, cia, processtype):
 
 def _drain_pyodbc_cursor(cursor):
     """Consume resultsets pendientes tras EXEC/CALL (evita errores en la siguiente ejecución)."""
-    try:
-        while True:
-            if cursor.description:
-                cursor.fetchall()
-            if not cursor.nextset():
-                break
-    except Exception:
-        logging.debug("drenado de cursor", exc_info=True)
+    while True:
+        if cursor.description:
+            cursor.fetchall()
+        if not cursor.nextset():
+            break
 
 
 def _is_comm_link_failure(err):
@@ -7502,6 +7499,98 @@ def api_conceptos_validar_cias():
         })
     except Exception as e:
         logging.exception("api_conceptos_validar_cias")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/replicar-cias', methods=['POST'])
+@login_required
+def api_conceptos_replicar_cias():
+    """Replica un concepto por nemónico a las demás empresas activas (sp_pr_replicar_nuevo_concepto_nemonico)."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia') or body.get('company') or '').strip()
+    formulacode = str(body.get('formulacode') or '').strip()
+
+    if not cia_origen or not formulacode:
+        return jsonify({"error": "Indique compañía origen y nemónico."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT LTRIM(RTRIM(Company)) AS company
+            FROM SY_Company (NOLOCK)
+            WHERE ISNULL(status, 'A') = 'A'
+              AND LTRIM(RTRIM(Company)) <> ?
+            ORDER BY Company
+            """,
+            (cia_origen,),
+        )
+        destinos = [
+            str(r[0]).strip()
+            for r in cursor.fetchall()
+            if r and r[0]
+        ]
+
+        creados = []
+        omitidos = []
+        errores = []
+
+        for dest in destinos:
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_replicar_nuevo_concepto_nemonico @cia=?, @formulacode=?, @cia_origen=?",
+                    (dest, formulacode, cia_origen),
+                )
+                rows = _dicts_first_nonempty_resultset(cursor)
+                msg = str((rows[0] or {}).get('mensaje') or '').lower() if rows else ''
+                if 'ya existe' in msg:
+                    omitidos.append(dest)
+                else:
+                    creados.append(dest)
+            except Exception as ex:
+                errores.append({"company": dest, "error": str(ex)})
+
+        conn.commit()
+
+        partes = []
+        if creados:
+            partes.append(f"Replicado en {len(creados)} empresa(s): {', '.join(creados)}.")
+        if omitidos:
+            partes.append(f"Ya existía en {len(omitidos)} empresa(s): {', '.join(omitidos)}.")
+        if errores:
+            det_err = '; '.join(
+                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+            )
+            if len(errores) > 5:
+                det_err += f" (+{len(errores) - 5} más)"
+            partes.append(f"{len(errores)} error(es): {det_err}.")
+        if not partes:
+            partes.append('No hay otras empresas activas para replicar.')
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "formulacode": formulacode,
+            "creados": creados,
+            "omitidos": omitidos,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_replicar_cias")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

@@ -1157,6 +1157,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function replicarConceptoEnCias(cia, formulacode) {
+        const res = await fetch('/api/conceptos/replicar-cias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, formulacode }),
+        });
+        const data = await leerJson(res);
+        alert(data.mensaje || 'Replicación completada.');
+        return data;
+    }
+
     async function guardarConcepto() {
         const payload = payloadFormulario();
         if (!payload.cia) {
@@ -1167,6 +1178,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Complete concepto, nemónico y tipo.');
             return;
         }
+
+        const esNuevo = String(payload.modo || '').toUpperCase() === 'I';
 
         try {
             const res = await fetch('/api/conceptos/guardar', {
@@ -1184,6 +1197,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                 await seleccionarConcepto({ concept: conceptId });
             }
             mostrarMensajeGuardado(data.mensaje || 'Registro actualizado correctamente.');
+
+            const modoRespuesta = String(data.modo || payload.modo || '').toUpperCase();
+            if (esNuevo || modoRespuesta === 'I') {
+                const etiqueta = payload.formulacode || payload.description || 'nuevo concepto';
+                const replicar = confirm(
+                    `¿Desea replicar este concepto (${etiqueta}) en las demás empresas?`
+                );
+                if (replicar) {
+                    try {
+                        await replicarConceptoEnCias(payload.cia, payload.formulacode);
+                    } catch (err) {
+                        alert(err.message || 'No se pudo replicar el concepto.');
+                    }
+                }
+            }
         } catch (err) {
             alert(err.message);
         }

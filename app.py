@@ -7109,43 +7109,32 @@ def api_formulas_replicar():
         for item in formulas:
             fh = str((item or {}).get('formulaheader') or '').strip()
             fc = str((item or {}).get('formulacode') or '').strip()
-            concept = str((item or {}).get('concept') or '').strip()
             if not fh:
                 continue
 
-            if not fc and concept:
-                cursor.execute(
-                    """
-                    SELECT LTRIM(RTRIM(ISNULL(FormulaCode, '')))
-                    FROM PR_Concept (NOLOCK)
-                    WHERE Company = ? AND Concept = ?
-                    """,
-                    (cia, concept),
-                )
-                row_fc = cursor.fetchone()
-                fc = str(row_fc[0]).strip() if row_fc and row_fc[0] else ''
-
-            if not fc:
-                cursor.execute(
-                    """
-                    SELECT LTRIM(RTRIM(ISNULL(fh.formulacode, ''))),
-                           LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))),
-                           ISNULL(c.Description, '')
-                    FROM PR_FormulaHeader fh (NOLOCK)
-                    LEFT JOIN PR_Concept c (NOLOCK)
-                        ON fh.Concept = c.Concept AND fh.Company = c.Company
-                    WHERE fh.Company = ? AND fh.FormulaHeader = ?
-                    """,
-                    (cia, fh),
-                )
-                row_meta = cursor.fetchone()
-                if row_meta:
-                    fc = str(row_meta[0] or row_meta[1] or '').strip()
-                    concepto_desc = str(row_meta[2] or '').strip()
-                else:
-                    concepto_desc = fh
+            cursor.execute(
+                """
+                SELECT LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))),
+                       ISNULL(c.Description, ''),
+                       LTRIM(RTRIM(ISNULL(fh.formulacode, '')))
+                FROM PR_FormulaHeader fh (NOLOCK)
+                LEFT JOIN PR_Concept c (NOLOCK)
+                    ON fh.Concept = c.Concept AND fh.Company = c.Company
+                WHERE fh.Company = ? AND fh.FormulaHeader = ?
+                """,
+                (cia, fh),
+            )
+            row_meta = cursor.fetchone()
+            if row_meta:
+                fc_concepto = str(row_meta[0] or '').strip()
+                concepto_desc = str(row_meta[1] or '').strip()
+                fc_cabecera = str(row_meta[2] or '').strip()
+                fc = fc_concepto or fc_cabecera or fc
             else:
-                concepto_desc = fc
+                concepto_desc = fh
+
+            if not concepto_desc:
+                concepto_desc = fc or fh
 
             faltantes = []
             for dest in destinos:

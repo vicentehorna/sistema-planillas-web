@@ -32,7 +32,7 @@ BEGIN
         ct.Description AS tipo,
         cc.Description AS condicion,
         gf.name AS grupo,
-        fh.formulacode,
+        LTRIM(RTRIM(ISNULL(c.FormulaCode, fh.formulacode))) AS formulacode,
         'N' AS flag,
         (
             SELECT MAX(fd.XLastDate)

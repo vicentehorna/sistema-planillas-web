@@ -34,15 +34,23 @@ BEGIN
     WHERE PR_FormulaHeader.Company = @cia
       AND PR_FormulaHeader.FormulaHeader = @formulaheader;
 
-    IF @formulacode IS NULL OR LTRIM(RTRIM(@formulacode)) = ''
+    -- FormulaCode autoritativo: el del concepto de la fórmula origen (no fh.formulacode, puede estar desactualizado).
+    SELECT @formulacode = LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))
+    FROM PR_FormulaHeader fh
+    INNER JOIN PR_Concept c
+        ON fh.Concept = c.Concept AND fh.Company = c.Company
+    WHERE fh.Company = @cia
+      AND fh.FormulaHeader = @formulaheader;
+
+    IF @formulacode IS NULL OR @formulacode = ''
     BEGIN
-        SELECT @formulacode = LTRIM(RTRIM(ISNULL(c.FormulaCode, fh.formulacode)))
+        SELECT @formulacode = LTRIM(RTRIM(ISNULL(fh.formulacode, '')))
         FROM PR_FormulaHeader fh
-        LEFT JOIN PR_Concept c
-            ON fh.Concept = c.Concept AND fh.Company = c.Company
         WHERE fh.Company = @cia
           AND fh.FormulaHeader = @formulaheader;
     END
+
+    SET @formulacode = NULLIF(LTRIM(RTRIM(@formulacode)), '');
 
     DECLARE empresas CURSOR LOCAL FAST_FORWARD FOR
         SELECT Company
@@ -115,7 +123,7 @@ BEGIN
             (SELECT Concept FROM PR_Concept T WHERE T.FormulaCode = C.FormulaCode AND T.Company = @company),
             PR_FormulaHeader.GrupoFormula,
             flagtruncate,
-            PR_FormulaHeader.formulacode,
+            @formulacode,
             PR_FormulaHeader.parametroformula
         FROM PR_FormulaHeader
         INNER JOIN PR_PayRollType

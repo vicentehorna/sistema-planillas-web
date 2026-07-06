@@ -3901,6 +3901,7 @@ _FORMATO_LIQ_VACA_FORMULACODES = (
     'XFALTASVACA',
     'DIASFALTAVACLIQ',
     'DEVOLUCION_QUINTA',
+    'LIQINGRESOAFECTO',
 )
 
 _FORMATO_LIQ_DESCUENTOS_DEF = (
@@ -4239,6 +4240,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     dias_txt = _formato_liquidacion_cantidad(dias)
     dias_falta = _formato_liquidacion_fc_valor(formula_values, 'XFALTASVACA', 'DIASFALTAVACLIQ')
     devolucion_quinta = _formato_liquidacion_fc_valor(formula_values, 'DEVOLUCION_QUINTA')
+    otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
 
     return {
         'base_fmt': base_fmt,
@@ -4256,6 +4258,8 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'dias_falta_txt': _formato_liquidacion_cantidad(dias_falta),
         'devolucion_quinta': devolucion_quinta,
         'devolucion_quinta_fmt': _formato_liquidacion_moneda(devolucion_quinta),
+        'otros_ingresos_afectos': otros_ingresos_afectos,
+        'otros_ingresos_afectos_fmt': _formato_liquidacion_moneda(otros_ingresos_afectos),
     }
 
 
@@ -4310,6 +4314,7 @@ def generar_pdf_formato_liquidacion(params):
         + float(vaca_calc.get('total') or 0)
         + float(grati_calc.get('bono_9') or 0)
         + float(vaca_calc.get('devolucion_quinta') or 0)
+        + float(vaca_calc.get('otros_ingresos_afectos') or 0)
     )
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)

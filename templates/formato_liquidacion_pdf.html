@@ -231,6 +231,11 @@
             font-size: 8px;
             border-color: #1a4b84;
         }
+        table.fmt th.th-seccion {
+            text-align: left;
+            text-transform: uppercase;
+            font-size: 9px;
+        }
         table.fmt td.concepto {
             text-align: left;
         }
@@ -634,6 +639,18 @@
                 </table>
             </div>
 
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="2">Otros Ingresos Afectos</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.otros_ingresos_afectos_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
+
             <table class="neto-table">
                 <tr>
                     <td class="neto-label-cell">Total ingresos</td>
@@ -643,11 +660,10 @@
         </div>
 
         <div class="seccion">
-            <div class="seccion-titulo">Descuentos</div>
             <table class="fmt">
                 <thead>
                     <tr>
-                        <th></th>
+                        <th class="th-seccion">Descuentos</th>
                         <th class="monto">%</th>
                         <th class="monto">Base afecta</th>
                         <th class="monto">Importe</th>
@@ -680,11 +696,10 @@
         </table>
 
         <div class="seccion">
-            <div class="seccion-titulo">Aportaciones</div>
             <table class="fmt">
                 <thead>
                     <tr>
-                        <th></th>
+                        <th class="th-seccion">Aportaciones</th>
                         <th class="monto">%</th>
                         <th class="monto">Base afecta</th>
                         <th class="monto">Importe</th>

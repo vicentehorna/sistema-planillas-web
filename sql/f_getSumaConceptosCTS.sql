@@ -4,6 +4,7 @@
       - Mayo a Octubre  -> inicio Mayo del mismo año
       - Noviembre a Abril -> inicio Noviembre (año anterior si ene-abr)
     Si @period_end es anterior al periodo de inicio del ciclo, devuelve 0.
+    Respeta fecha de ingreso/reingreso: no suma periodos anteriores al mes de alta.
 */
 CREATE OR ALTER FUNCTION [dbo].[f_getSumaConceptosCTS](
     @cia           VARCHAR(20),
@@ -23,6 +24,10 @@ BEGIN
     DECLARE @mes_periodo      INT;
     DECLARE @order_ini        INT;
     DECLARE @order_fin        INT;
+    DECLARE @fechaingreso     DATETIME;
+    DECLARE @hire_yyyymm      CHAR(6);
+    DECLARE @period_hire      VARCHAR(20);
+    DECLARE @order_hire       INT;
 
     IF ISNULL(LTRIM(RTRIM(@concept)), '') = ''
         RETURN 0;
@@ -54,6 +59,37 @@ BEGIN
     WHERE Company = @cia
       AND PayRollType = @payrolltype
       AND PRPeriod = @period_begin;
+
+    SELECT @fechaingreso = ISNULL(e.ReEntryDate, e.EntryDate)
+    FROM PR_Employee e (NOLOCK)
+    WHERE e.Company = @cia
+      AND e.Person = @person;
+
+    IF @fechaingreso IS NOT NULL
+    BEGIN
+        SET @hire_yyyymm = LEFT(CONVERT(VARCHAR(8), CONVERT(DATE, @fechaingreso), 112), 6);
+
+        SELECT @period_hire = MIN(p.PRPeriod)
+        FROM PR_Period p (NOLOCK)
+        WHERE p.Company = @cia
+          AND p.PayRollType = @payrolltype
+          AND LEFT(p.PRPeriod, 6) >= @hire_yyyymm;
+
+        IF @period_hire IS NOT NULL
+        BEGIN
+            SELECT @order_hire = PeriodOrder
+            FROM PR_Period (NOLOCK)
+            WHERE Company = @cia
+              AND PayRollType = @payrolltype
+              AND PRPeriod = @period_hire;
+
+            IF ISNULL(@order_hire, 0) > ISNULL(@order_ini, 0)
+            BEGIN
+                SET @period_begin = @period_hire;
+                SET @order_ini = @order_hire;
+            END
+        END
+    END
 
     SELECT @order_fin = PeriodOrder
     FROM PR_Period (NOLOCK)

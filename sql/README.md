@@ -74,6 +74,14 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_obtener_bancario_trabajador_web.sql` | Datos bancarios |
 | `sp_pr_actualizar_bancario_trabajador_web.sql` | Actualizar bancarios |
 
+## Usuarios por empresa
+
+| Archivo | Procedimiento |
+|---------|---------------|
+| `sp_pr_listarusercompany_usuarios_web.sql` | Listado usuarios perfil EMPWEB |
+| `sp_pr_listarusercompany_empresas_web.sql` | Empresas con asignación por usuario |
+| `sp_pr_guardarusercompany_web.sql` | Guardar asignaciones (`SY_UserCompany`) |
+
 ## Notas
 
 - **`sp_pr_reporteplamevertical_web`**: requiere tablas de trabajo `xx_plamevertical2` y `xx_reporteplanilla` en la base de datos.
@@ -83,7 +91,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 
 | Script | Base de datos | Descripción |
 |--------|---------------|-------------|
-| `deploy_planillas_web_completo.sql` | Cada cliente (`hm_aci`, `hm_ultra`, …) | ALTER + todos los SP web (97 archivos). Regenerar con `python sql/_generar_deploy_completo.py`. |
+| `deploy_planillas_web_completo.sql` | Cada cliente (`hm_aci`, `hm_ultra`, …) | ALTER + todos los SP web (200 archivos). Regenerar con `python sql/_generar_deploy_completo.py`. |
 | `deploy_hm_planillas_enrutador.sql` | Solo `hm_planillas` | Tabla `USUARIOS_ROUTER` (usuario → base de datos). |
 
 Pasos típicos para una base cliente nueva:

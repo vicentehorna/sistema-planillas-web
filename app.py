@@ -3880,6 +3880,7 @@ _FORMATO_LIQ_CTS_FORMULACODES = (
     'DIAS_CTS_TRUNCO',
     'XFALTASCTS',
     'CTSXMES',
+    'CTSXDIA',
 )
 
 _FORMATO_LIQ_GRATI_FORMULACODES = (
@@ -4160,13 +4161,9 @@ def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
     )
     formula_values = formula_values or {}
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'CTSXMES')
+    x_dia = _formato_liquidacion_fc_valor(formula_values, 'CTSXDIA')
     resultado['x_mes_fmt'] = _formato_liquidacion_moneda(x_mes)
-    dias = _formato_liquidacion_fc_valor(formula_values, 'DIAS_CTS_TRUNCO')
-    try:
-        base = float(total_remuneracion_cts or 0)
-    except (TypeError, ValueError):
-        base = 0.0
-    x_dia = (base / 360.0) * dias if base else 0.0
+    resultado['x_dia_fmt'] = _formato_liquidacion_moneda(x_dia)
     total = x_mes + x_dia
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
@@ -5481,6 +5478,137 @@ def tipos_planilla_page():
 @login_required
 def unidades_page():
     return render_template('maestro_unidades.html')
+
+
+@app.route('/usuarios-empresa')
+@login_required
+def usuarios_empresa_page():
+    return render_template('maestro_usuarios_empresa.html')
+
+
+def _usercompany_usuario_dict(r):
+    return {
+        'userid': _jsonable_value(r.get('userid')),
+        'nombre': _jsonable_value(r.get('nombre')),
+        'empresas_asignadas': int(r.get('empresas_asignadas') or 0),
+    }
+
+
+def _usercompany_empresa_dict(r):
+    return {
+        'company': _jsonable_value(r.get('company')),
+        'description': _jsonable_value(r.get('description')),
+        'asignado': int(r.get('asignado') or 0),
+    }
+
+
+@app.route('/api/usuarios-empresa/usuarios', methods=['POST'])
+@login_required
+def api_usuarios_empresa_usuarios():
+    """sp_pr_listarusercompany_usuarios_web: listado de usuarios."""
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarusercompany_usuarios_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_usercompany_usuario_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_usuarios_empresa_usuarios")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/usuarios-empresa/empresas', methods=['POST'])
+@login_required
+def api_usuarios_empresa_empresas():
+    """sp_pr_listarusercompany_empresas_web: empresas con asignación por usuario."""
+    body = request.get_json(silent=True) or {}
+    userid = str(body.get('userid') or '').strip()
+
+    if not userid:
+        return jsonify({"error": "Seleccione un usuario."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarusercompany_empresas_web @userid=?",
+            (userid,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_usercompany_empresa_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_usuarios_empresa_empresas")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/usuarios-empresa/guardar', methods=['POST'])
+@login_required
+def api_usuarios_empresa_guardar():
+    """sp_pr_guardarusercompany_web: guarda empresas asignadas a un usuario."""
+    body = request.get_json(silent=True) or {}
+    userid = str(body.get('userid') or '').strip()
+    empresas_raw = body.get('empresas')
+
+    if not userid:
+        return jsonify({"error": "Seleccione un usuario."}), 400
+
+    if isinstance(empresas_raw, list):
+        empresas = ','.join(str(e).strip() for e in empresas_raw if str(e).strip())
+    else:
+        empresas = str(empresas_raw or '').strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarusercompany_web @userid=?, @empresas=?, @xlastuser=?",
+            (userid, empresas or None, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        detalle = rows[0] if rows else {'userid': userid, 'empresas_asignadas': 0}
+        return jsonify({
+            "ok": True,
+            "userid": _jsonable_value(detalle.get('userid')),
+            "empresas_asignadas": int(detalle.get('empresas_asignadas') or 0),
+        })
+    except Exception as e:
+        logging.exception("api_usuarios_empresa_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _bankaccount_lista_dict(r):

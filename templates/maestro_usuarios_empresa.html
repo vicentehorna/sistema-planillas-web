@@ -123,9 +123,8 @@
         text-align: center;
     }
 
-    .table-ue-empresas .col-codigo {
-        width: 4.5rem;
-        font-weight: 600;
+    .table-ue-empresas .col-nombre-empresa {
+        min-width: 12rem;
     }
 
     .ue-msg-guardado {
@@ -226,13 +225,12 @@
                                 <th class="col-check">
                                     <input type="checkbox" class="form-check-input" id="chkTodasEmpresas" title="Marcar / desmarcar todas">
                                 </th>
-                                <th class="col-codigo">Código</th>
-                                <th>Descripción</th>
+                                <th>Empresa</th>
                             </tr>
                         </thead>
                         <tbody id="tbodyEmpresas">
                             <tr>
-                                <td colspan="3" class="text-center text-muted py-3">Cargando...</td>
+                                <td colspan="2" class="text-center text-muted py-3">Cargando...</td>
                             </tr>
                         </tbody>
                     </table>
@@ -348,7 +346,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function cargarEmpresas(userid) {
         var tbody = document.getElementById('tbodyEmpresas');
-        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">Cargando...</td></tr>';
         document.getElementById('placeholderEmpresas').classList.add('d-none');
         document.getElementById('panelEmpresas').classList.remove('d-none');
         document.getElementById('lblUsuarioSeleccionado').textContent = userid;
@@ -370,21 +368,20 @@ document.addEventListener('DOMContentLoaded', function () {
                 .map(function (r) { return r.company; });
 
             if (!rows.length) {
-                tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay empresas activas.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">No hay empresas activas.</td></tr>';
             } else {
                 tbody.innerHTML = rows.map(function (r) {
                     var checked = Number(r.asignado) === 1 ? ' checked' : '';
                     return '<tr data-company="' + escHtml(r.company) + '">' +
                         '<td class="col-check"><input type="checkbox" class="form-check-input chk-empresa" value="' + escHtml(r.company) + '"' + checked + '></td>' +
-                        '<td class="col-codigo">' + escHtml(r.company) + '</td>' +
-                        '<td>' + escHtml(r.description) + '</td>' +
+                        '<td class="col-nombre-empresa">' + escHtml(r.description) + '</td>' +
                         '</tr>';
                 }).join('');
             }
             actualizarConteoEmpresas();
             sincronizarChkTodas();
         } catch (err) {
-            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-danger py-3">' + escHtml(err.message) + '</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="2" class="text-center text-danger py-3">' + escHtml(err.message) + '</td></tr>';
         }
     }
 

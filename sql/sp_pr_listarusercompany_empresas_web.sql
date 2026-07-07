@@ -30,6 +30,8 @@ BEGIN
         END AS asignado
     FROM SY_Company c (NOLOCK)
     WHERE UPPER(LTRIM(RTRIM(ISNULL(c.[status], '')))) = 'A'
-    ORDER BY c.Company ASC;
+    ORDER BY
+        LTRIM(RTRIM(ISNULL(c.Description, ''))) ASC,
+        c.Company ASC;
 END
 GO

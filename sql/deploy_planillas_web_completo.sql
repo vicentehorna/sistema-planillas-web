@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-07-07 11:18
+  Generado: 2026-07-07 14:37
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -15933,7 +15933,9 @@ BEGIN
         END AS asignado
     FROM SY_Company c (NOLOCK)
     WHERE UPPER(LTRIM(RTRIM(ISNULL(c.[status], '')))) = 'A'
-    ORDER BY c.Company ASC;
+    ORDER BY
+        LTRIM(RTRIM(ISNULL(c.Description, ''))) ASC,
+        c.Company ASC;
 END
 GO
 

@@ -2942,6 +2942,42 @@ def _dicts_collect_nonempty_resultsets(cursor, max_sets=10):
     return result
 
 
+def _cursor_fetch_resultset_dicts(cursor):
+    """Convierte el resultset actual del cursor en filas dict (claves en minúsculas)."""
+    if not cursor.description:
+        return []
+    cols = [str(c[0]).strip() for c in cursor.description]
+    out = []
+    for row in cursor.fetchall():
+        rd = {}
+        for i, cname in enumerate(cols):
+            key = (cname or f"col{i}").lower()
+            rd[key] = row[i]
+        out.append(rd)
+    return out
+
+
+def _formula_obtener_sets_from_cursor(cursor):
+    """
+    Lee cabecera y detalle de sp_pr_obtenerformula_web.
+    ODBC 18 (Linux) puede devolver lotes vacíos antes del SELECT; no limitar
+    por max_sets ni asumir que el primer lote con filas es la cabecera.
+    """
+    cabecera_rows = []
+    detalle_rows = []
+    while True:
+        rows = _cursor_fetch_resultset_dicts(cursor)
+        if rows:
+            sample = rows[0]
+            if 'proccestype' in sample or 'conceptcond' in sample or 'grupoformula' in sample:
+                cabecera_rows = rows
+            elif 'line' in sample and ('operador' in sample or 'tipoliq' in sample):
+                detalle_rows = rows
+        if not cursor.nextset():
+            break
+    return cabecera_rows, detalle_rows
+
+
 def _sanitize_dynamic_procedure_name(name):
     """
     Valida ProcedureName leído de PR_ProcessType antes de usarlo en {{CALL ...}}.
@@ -6948,11 +6984,11 @@ def api_formulas_obtener():
             "EXEC sp_pr_obtenerformula_web @company=?, @formulaheader=?",
             (cia, formulaheader),
         )
-        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=2)
-        cabecera = _formula_cabecera_dict(sets[0][0] if sets and sets[0] else None)
+        cab_rows, det_rows = _formula_obtener_sets_from_cursor(cursor)
+        cabecera = _formula_cabecera_dict(cab_rows[0] if cab_rows else None)
         if not cabecera:
             return jsonify({"error": "Fórmula no encontrada."}), 404
-        detalle = [_formula_detalle_dict(r) for r in (sets[1] if len(sets) > 1 else [])]
+        detalle = [_formula_detalle_dict(r) for r in det_rows]
         return jsonify({"cabecera": cabecera, "detalle": detalle})
     except Exception as e:
         logging.exception("api_formulas_obtener")

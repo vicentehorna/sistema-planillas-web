@@ -117,7 +117,7 @@ BEGIN
             SELECT 1 FROM #lista_rem_basica L WHERE L.person = E.Person
       );
 
-    IF @proceso_shortname NOT IN ('PROVISION_CTS', 'PROVISION_VACACIONES', 'PROVISION_GRATIF')
+    IF @proceso_shortname = 'FIN_DE_MES'
     BEGIN
         ;WITH Totales AS (
             SELECT

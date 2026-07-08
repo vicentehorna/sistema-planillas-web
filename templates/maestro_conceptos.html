@@ -1191,6 +1191,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         return data;
     }
 
+    async function actualizarConceptoEnCias(payload) {
+        const res = await fetch('/api/conceptos/guardar-cias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await leerJson(res);
+        alert(data.mensaje || 'Actualización en las demás empresas completada.');
+        return data;
+    }
+
     async function guardarConcepto() {
         const payload = payloadFormulario();
         if (!payload.cia) {
@@ -1203,6 +1214,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
 
         const esNuevo = String(payload.modo || '').toUpperCase() === 'I';
+        const formulacodeOrigen = String(
+            (conceptoSeleccionado && conceptoSeleccionado.formulacode) || payload.formulacode || ''
+        ).trim();
 
         try {
             const res = await fetch('/api/conceptos/guardar', {
@@ -1232,6 +1246,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                         await replicarConceptoEnCias(payload.cia, payload.formulacode);
                     } catch (err) {
                         alert(err.message || 'No se pudo replicar el concepto.');
+                    }
+                }
+            } else {
+                const etiqueta = payload.formulacode || payload.description || 'concepto';
+                const aplicar = confirm(
+                    `¿Desea aplicar los mismos cambios al concepto (${etiqueta}) en todas las demás empresas?`
+                );
+                if (aplicar) {
+                    try {
+                        await actualizarConceptoEnCias({
+                            ...payload,
+                            formulacode_origen: formulacodeOrigen,
+                        });
+                    } catch (err) {
+                        alert(err.message || 'No se pudo actualizar el concepto en las demás empresas.');
                     }
                 }
             }

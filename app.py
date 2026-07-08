@@ -6777,6 +6777,141 @@ def _normalize_flag_yn(value, default='N'):
     return s if s in ('Y', 'N') else default
 
 
+def _concepto_error_sp_message(ex):
+    err = str(ex)
+    if 'RAISERROR' in err or '50000' in err:
+        parts = err.split(']')
+        if len(parts) > 1:
+            err = parts[-1].strip(" ()'\"")
+    return err
+
+
+def _concepto_destinos_activos(cursor, cia_origen):
+    cursor.execute(
+        """
+        SELECT LTRIM(RTRIM(Company)) AS company
+        FROM SY_Company (NOLOCK)
+        WHERE ISNULL(status, 'A') = 'A'
+          AND LTRIM(RTRIM(Company)) <> ?
+        ORDER BY Company
+        """,
+        (cia_origen,),
+    )
+    return [
+        str(r[0]).strip()
+        for r in cursor.fetchall()
+        if r and r[0]
+    ]
+
+
+def _concepto_resolve_type_for_company(cursor, cia_origen, concepttype_origen, cia_dest):
+    concepttype_origen = str(concepttype_origen or '').strip()
+    cia_origen = str(cia_origen or '').strip()
+    cia_dest = str(cia_dest or '').strip()
+    if not concepttype_origen or not cia_dest:
+        return None
+
+    cursor.execute(
+        """
+        SELECT LTRIM(RTRIM(ISNULL(CTs.ShortName, '')))
+        FROM PR_ConceptType CTs (NOLOCK)
+        WHERE CTs.ConceptType = ?
+          AND (
+                CTs.Company = ?
+             OR LTRIM(RTRIM(ISNULL(CTs.Company, ''))) = ''
+          )
+        """,
+        (concepttype_origen, cia_origen),
+    )
+    row = cursor.fetchone()
+    shortname = str(row[0]).strip() if row and row[0] else ''
+    if not shortname:
+        cursor.execute(
+            "SELECT ConceptType FROM PR_ConceptType (NOLOCK) WHERE ConceptType = ?",
+            (concepttype_origen,),
+        )
+        chk = cursor.fetchone()
+        return str(chk[0]).strip() if chk and chk[0] else None
+
+    cursor.execute(
+        """
+        SELECT TOP 1 CTd.ConceptType
+        FROM PR_ConceptType CTd (NOLOCK)
+        WHERE CTd.Company = ?
+          AND LTRIM(RTRIM(ISNULL(CTd.ShortName, ''))) = ?
+        ORDER BY CTd.ConceptType
+        """,
+        (cia_dest, shortname),
+    )
+    row2 = cursor.fetchone()
+    return str(row2[0]).strip() if row2 and row2[0] else None
+
+
+def _concepto_guardar_sp_params(body, *, company=None, concept=None, modo=None, concepttype=None):
+    cia = str(company or body.get('cia') or body.get('company') or '').strip()
+    concept_id = str(concept if concept is not None else body.get('concept') or '').strip()
+    modo_val = str(modo or body.get('modo') or ('U' if concept_id else 'I')).strip().upper()
+    description = str(body.get('description') or '').strip()
+    formulacode = str(body.get('formulacode') or '').strip()
+    concepttype_val = str(concepttype or body.get('concepttype') or '').strip()
+
+    conceptorder = body.get('conceptorder')
+    reporden = body.get('reporden')
+    try:
+        conceptorder = int(conceptorder) if conceptorder not in (None, '') else None
+    except Exception:
+        conceptorder = None
+    try:
+        reporden = int(reporden) if reporden not in (None, '') else None
+    except Exception:
+        reporden = None
+
+    return (
+        modo_val,
+        cia,
+        concept_id or None,
+        description,
+        formulacode,
+        concepttype_val,
+        str(body.get('conceptcurrency') or 'LO').strip().upper()[:2],
+        _normalize_flag_yn(body.get('flagismonetary'), 'Y'),
+        str(body.get('printtext') or description).strip(),
+        conceptorder,
+        str(body.get('status') or 'A').strip().upper()[:1],
+        _normalize_flag_yn(body.get('flagassign')),
+        _normalize_flag_yn(body.get('flagpayrollticket')),
+        _normalize_flag_yn(body.get('flagcontract')),
+        str(body.get('pdt') or '').strip() or None,
+        _normalize_flag_yn(body.get('flagconceptdeclare')),
+        reporden,
+        str(body.get('flaginsertar') or 'N').strip().upper()[:1] or 'N',
+        _normalize_flag_yn(body.get('flagafectoafp')),
+        _normalize_flag_yn(body.get('flagafecto5ta')),
+        _normalize_flag_yn(body.get('flagafectoutilidad')),
+        _xlastuser_id(),
+    )
+
+
+def _concepto_guardar_ejecutar(cursor, body, *, company=None, concept=None, modo=None, concepttype=None):
+    params = _concepto_guardar_sp_params(
+        body,
+        company=company,
+        concept=concept,
+        modo=modo,
+        concepttype=concepttype,
+    )
+    cursor.execute(
+        "EXEC sp_pr_guardarconcepto_web "
+        "@modo=?, @company=?, @concept=?, @description=?, @formulacode=?, @concepttype=?, "
+        "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
+        "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
+        "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, @xlastuser=?",
+        params,
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    return rows[0] if rows else {}
+
+
 def _filtro_afecto_reporte(value):
     """'Y' = solo afectos; cualquier otro valor = todos."""
     return 'Y' if str(value or '').strip().upper() in ('Y', 'TRUE', '1', 'ON', 'S', 'SI') else 'T'
@@ -7462,55 +7597,12 @@ def api_conceptos_guardar():
     if not description or not formulacode or not concepttype:
         return jsonify({"error": "Complete concepto, nemónico y tipo."}), 400
 
-    conceptorder = body.get('conceptorder')
-    reporden = body.get('reporden')
-    try:
-        conceptorder = int(conceptorder) if conceptorder not in (None, '') else None
-    except Exception:
-        conceptorder = None
-    try:
-        reporden = int(reporden) if reporden not in (None, '') else None
-    except Exception:
-        reporden = None
-
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "EXEC sp_pr_guardarconcepto_web "
-            "@modo=?, @company=?, @concept=?, @description=?, @formulacode=?, @concepttype=?, "
-            "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
-            "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
-            "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, @xlastuser=?",
-            (
-                modo,
-                cia,
-                concept or None,
-                description,
-                formulacode,
-                concepttype,
-                str(body.get('conceptcurrency') or 'LO').strip().upper()[:2],
-                _normalize_flag_yn(body.get('flagismonetary'), 'Y'),
-                str(body.get('printtext') or description).strip(),
-                conceptorder,
-                str(body.get('status') or 'A').strip().upper()[:1],
-                _normalize_flag_yn(body.get('flagassign')),
-                _normalize_flag_yn(body.get('flagpayrollticket')),
-                _normalize_flag_yn(body.get('flagcontract')),
-                str(body.get('pdt') or '').strip() or None,
-                _normalize_flag_yn(body.get('flagconceptdeclare')),
-                reporden,
-                str(body.get('flaginsertar') or 'N').strip().upper()[:1] or 'N',
-                _normalize_flag_yn(body.get('flagafectoafp')),
-                _normalize_flag_yn(body.get('flagafecto5ta')),
-                _normalize_flag_yn(body.get('flagafectoutilidad')),
-                _xlastuser_id(),
-            ),
-        )
-        rows = _dicts_first_nonempty_resultset(cursor)
+        row = _concepto_guardar_ejecutar(cursor, body, company=cia, concept=concept, modo=modo)
         conn.commit()
-        row = rows[0] if rows else {}
         concept_id = str(row.get('concept') or concept or '').strip()
         return jsonify({
             "ok": True,
@@ -7525,7 +7617,122 @@ def api_conceptos_guardar():
                 conn.rollback()
             except Exception:
                 pass
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/conceptos/guardar-cias', methods=['POST'])
+@login_required
+def api_conceptos_guardar_cias():
+    """Aplica la misma edición de concepto por nemónico en las demás empresas activas."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia') or body.get('company') or '').strip()
+    formulacode = str(body.get('formulacode') or '').strip()
+    formulacode_origen = str(
+        body.get('formulacode_origen') or body.get('formulacode_buscar') or formulacode
+    ).strip()
+    concepttype = str(body.get('concepttype') or '').strip()
+    description = str(body.get('description') or '').strip()
+
+    if not cia_origen:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not formulacode_origen or not formulacode or not concepttype or not description:
+        return jsonify({"error": "Complete concepto, nemónico y tipo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        destinos = _concepto_destinos_activos(cursor, cia_origen)
+
+        actualizados = []
+        no_existia = []
+        errores = []
+
+        for dest in destinos:
+            cursor.execute(
+                """
+                SELECT Concept
+                FROM PR_Concept (NOLOCK)
+                WHERE Company = ?
+                  AND LTRIM(RTRIM(FormulaCode)) = ?
+                """,
+                (dest, formulacode_origen),
+            )
+            row = cursor.fetchone()
+            if not row:
+                no_existia.append(dest)
+                continue
+
+            concept_dest = str(row[0]).strip()
+            concepttype_dest = _concepto_resolve_type_for_company(
+                cursor, cia_origen, concepttype, dest
+            )
+            if not concepttype_dest:
+                errores.append({
+                    "company": dest,
+                    "error": "No se encontró el tipo de concepto equivalente en la empresa.",
+                })
+                continue
+
+            try:
+                _concepto_guardar_ejecutar(
+                    cursor,
+                    body,
+                    company=dest,
+                    concept=concept_dest,
+                    modo='U',
+                    concepttype=concepttype_dest,
+                )
+                conn.commit()
+                actualizados.append(dest)
+            except Exception as ex:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                errores.append({"company": dest, "error": _concepto_error_sp_message(ex)})
+
+        partes = []
+        if actualizados:
+            partes.append(
+                f"Actualizado en {len(actualizados)} empresa(s): {', '.join(actualizados)}."
+            )
+        if no_existia:
+            partes.append(f"No existía en: {', '.join(no_existia)}.")
+        if errores:
+            det_err = '; '.join(
+                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+            )
+            if len(errores) > 5:
+                det_err += f" (+{len(errores) - 5} más)"
+            partes.append(f"No se pudo actualizar en {len(errores)} empresa(s): {det_err}")
+        if not partes:
+            partes.append('No hay otras empresas activas.')
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "formulacode": formulacode,
+            "formulacode_origen": formulacode_origen,
+            "actualizados": actualizados,
+            "no_existia": no_existia,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_conceptos_guardar_cias")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
     finally:
         if conn:
             try:

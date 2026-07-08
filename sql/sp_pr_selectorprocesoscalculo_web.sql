@@ -1,6 +1,6 @@
 /*
     Selector de procesos de cálculo por compañía y tipo de planilla.
-    Filtra procesos habilitados en PR_WindowProcess y shortname de cálculo.
+    Usa PR_PayRollTypeProcess y filtra por shortname de cálculo.
     Usado por: POST /api/procesar-planilla/procesos-calculo (procesar_planilla.html).
 
     processtype, payrolltype, company, description
@@ -24,8 +24,6 @@ BEGIN
         INNER JOIN PR_ProcessType PT (NOLOCK)
             ON PTP.ProcessType = PT.ProcessType
            AND PTP.Company = PT.Company
-        INNER JOIN PR_WindowProcess WP (NOLOCK)
-            ON WP.ProcessType = PT.ProcessType
     WHERE PTP.Company = @cia
       AND PTP.PayRollType = @payrolltype
       AND PT.ShortName IN (

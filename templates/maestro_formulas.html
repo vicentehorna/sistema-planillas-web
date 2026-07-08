@@ -675,6 +675,7 @@
         { v: 'B', t: 'SC_CTS' },
         { v: 'R', t: 'SC_GRATI' },
         { v: 'M', t: 'Promedio Vac' },
+        { v: 'H', t: 'Promedio Grati' },
         { v: 'X', t: 'CuentaLiq' },
         { v: 'Y', t: 'CuentaConcepto' },
         { v: 'Z', t: 'SumaProv' },
@@ -890,11 +891,11 @@
     }
 
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'B', 'I', 'R', 'M', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'B', 'I', 'R', 'M', 'H', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I' || tipo === 'B' || tipo === 'R';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'I' || tipo === 'B' || tipo === 'R';
     }
 
     function tipoDetalleMuestraPerIni(tipo) {
@@ -902,15 +903,15 @@
     }
 
     function tipoDetalleMuestraPerFin(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'I' || tipo === 'B' || tipo === 'R';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'I' || tipo === 'B' || tipo === 'R';
     }
 
     function tipoDetalleMuestraMinimo(tipo) {
-        return tipo === 'M';
+        return tipo === 'M' || tipo === 'H';
     }
 
     function tipoDetalleMuestraDivisor(tipo) {
-        return tipo === 'M';
+        return tipo === 'M' || tipo === 'H';
     }
 
     function tipoDetalleMuestraTipoLiq(tipo) {
@@ -986,10 +987,10 @@
                     if (parser) v = parser(v);
                     lineasDetalle[i][field] = v;
                     if (field === 'tipo') {
-                        if (v === 'M' && !lineasDetalle[i].operador) {
+                        if ((v === 'M' || v === 'H') && !lineasDetalle[i].operador) {
                             lineasDetalle[i].operador = null;
                         }
-                        if (v === 'I' || v === 'B' || v === 'R') {
+                        if (v === 'I' || v === 'B' || v === 'R' || v === 'H') {
                             lineasDetalle[i].periodoini = null;
                             lineasDetalle[i].numberini = null;
                             if (!lineasDetalle[i].operador) {

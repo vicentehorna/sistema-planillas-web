@@ -179,6 +179,16 @@
     </div>
 </div>
 
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesPreCalculo">
+    <div class="card-body py-2">
+        <div class="alert alert-danger mb-0 py-2">
+            <strong>Validaciones previas al cálculo</strong>
+            <span class="d-block small mt-1">Corrija estas configuraciones antes de calcular la planilla mensual.</span>
+            <ul id="listaValidacionesPreCalculo"></ul>
+        </div>
+    </div>
+</div>
+
 <div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesCalculo">
     <div class="card-body py-2">
         <div class="alert alert-warning mb-0 py-2">
@@ -291,6 +301,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_trabajadores') | tojson }};
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
     const URL_VALIDAR_CALCULO = {{ url_for('api_procesar_planilla_validar_calculo') | tojson }};
+    const URL_VALIDAR_PRE_CALCULO = {{ url_for('api_procesar_planilla_validar_pre_calculo') | tojson }};
     const URL_ELIMINAR_CALCULO = {{ url_for('api_procesar_planilla_eliminar_calculo') | tojson }};
     const URL_RESUMEN_CALCULO = {{ url_for('api_procesar_planilla_resumen_calculo') | tojson }};
 
@@ -612,6 +623,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const restoreIds = opciones.seleccionPersonas;
         if (!restoreIds) {
             ocultarValidacionesCalculo();
+            ocultarValidacionesPreCalculo();
         }
         const cia = cboCia.value.trim();
         const payrolltype = cboPt.value.trim();
@@ -676,6 +688,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             sincronizarCheckAll();
             actualizarContadores();
             if (filtrosPersist) filtrosPersist.guardar();
+            await consultarValidacionesPreCalculo();
         } catch (e) {
             console.error(e);
             alert('Error de red o del servidor.');
@@ -730,6 +743,53 @@ document.addEventListener('DOMContentLoaded', async function () {
     function ocultarValidacionesCalculo() {
         document.getElementById('cardValidacionesCalculo').classList.add('d-none');
         document.getElementById('listaValidacionesCalculo').innerHTML = '';
+    }
+
+    function renderizarValidacionesPreCalculo(validaciones) {
+        const card = document.getElementById('cardValidacionesPreCalculo');
+        const lista = document.getElementById('listaValidacionesPreCalculo');
+        const items = Array.isArray(validaciones) ? validaciones : [];
+        if (!items.length) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+        lista.innerHTML = items.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
+    function ocultarValidacionesPreCalculo() {
+        document.getElementById('cardValidacionesPreCalculo').classList.add('d-none');
+        document.getElementById('listaValidacionesPreCalculo').innerHTML = '';
+    }
+
+    async function consultarValidacionesPreCalculo() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPt.value.trim();
+        const processtype = cboProc.value.trim();
+        if (!cia || !payrolltype || !processtype) {
+            ocultarValidacionesPreCalculo();
+            return [];
+        }
+        try {
+            const res = await fetch(URL_VALIDAR_PRE_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, processtype })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                ocultarValidacionesPreCalculo();
+                return [];
+            }
+            const items = Array.isArray(data.validaciones) ? data.validaciones : [];
+            renderizarValidacionesPreCalculo(items);
+            return items;
+        } catch (e) {
+            console.error(e);
+            ocultarValidacionesPreCalculo();
+            return [];
+        }
     }
 
     async function consultarValidacionesCalculo() {
@@ -834,6 +894,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                     }
                     if (data) {
                         if (data.error) {
+                            if (Array.isArray(data.validaciones_pre) && data.validaciones_pre.length) {
+                                renderizarValidacionesPreCalculo(data.validaciones_pre);
+                            }
                             throw new Error(data.error);
                         }
                         if (data.done) {
@@ -890,6 +953,16 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
+        const preValidaciones = await consultarValidacionesPreCalculo();
+        if (preValidaciones.length) {
+            alert(
+                'No se puede calcular la planilla. Hay conceptos configurados en más de una vía '
+                + '(Insertar en mensual, procedimiento de cálculo o fórmulas del proceso). '
+                + 'Revise las validaciones previas al cálculo.'
+            );
+            return;
+        }
+
         const container = document.getElementById('container-progreso');
         const barra = document.getElementById('barra-progreso');
         const label = document.getElementById('progreso-label');
@@ -922,6 +995,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 try {
                     const errJson = await response.json();
                     if (errJson && errJson.error) errMsg = errJson.error;
+                    if (errJson && Array.isArray(errJson.validaciones_pre) && errJson.validaciones_pre.length) {
+                        renderizarValidacionesPreCalculo(errJson.validaciones_pre);
+                    }
                 } catch (ignore) {}
                 alert(errMsg);
                 return;

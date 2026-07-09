@@ -14927,14 +14927,8 @@ def _fecha_tabla_json(val):
     return str(val).strip()
 
 
-def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, period):
-    """sp_pr_validar_calculo_web → lista de mensajes para el panel de validaciones."""
-    cursor.execute(
-        "EXEC sp_pr_validar_calculo_web "
-        "@cia=?, @payrolltype=?, @processtype=?, @period=?",
-        (cia, payrolltype, processtype, period),
-    )
-    rows = _dicts_first_nonempty_resultset(cursor)
+def _validacion_planilla_rows_to_mensajes(rows):
+    """Filas person/name/observacion de SP de validación → mensajes legibles."""
     mensajes = []
     for r in rows:
         person = str(r.get('person') or '').strip()
@@ -14948,6 +14942,28 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
         else:
             mensajes.append(obs)
     return mensajes
+
+
+def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype):
+    """sp_pr_validar_pre_calculo_web → duplicidad de vías de concepto (FIN_DE_MES)."""
+    cursor.execute(
+        "EXEC sp_pr_validar_pre_calculo_web "
+        "@cia=?, @payrolltype=?, @processtype=?",
+        (cia, payrolltype, processtype),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    return _validacion_planilla_rows_to_mensajes(rows)
+
+
+def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, period):
+    """sp_pr_validar_calculo_web → lista de mensajes para el panel de validaciones."""
+    cursor.execute(
+        "EXEC sp_pr_validar_calculo_web "
+        "@cia=?, @payrolltype=?, @processtype=?, @period=?",
+        (cia, payrolltype, processtype, period),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    return _validacion_planilla_rows_to_mensajes(rows)
 
 
 @app.route('/api/procesar-planilla/trabajadores-calculo', methods=['POST'])
@@ -14993,6 +15009,40 @@ def api_procesar_planilla_trabajadores():
         return jsonify(trabajadores)
     except Exception as e:
         logging.exception("api_procesar_planilla_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/procesar-planilla/validar-pre-calculo', methods=['POST'])
+@login_required
+def api_procesar_planilla_validar_pre_calculo():
+    """sp_pr_validar_pre_calculo_web: duplicidad de conceptos antes del cálculo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    if not cia or not payrolltype or not processtype:
+        return jsonify({"error": "Faltan compañía, tipo de planilla o proceso."}), 400
+    conn = None
+    try:
+        from database import get_active_database
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        validaciones = _validar_pre_calculo_planilla_mensajes(
+            cursor, cia, payrolltype, processtype
+        )
+        return jsonify({
+            "validaciones": validaciones,
+            "total": len(validaciones),
+            "database": get_active_database(),
+        })
+    except Exception as e:
+        logging.exception("api_procesar_planilla_validar_pre_calculo")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -15261,6 +15311,25 @@ def ejecutar_calculo_planilla():
 
         _drain_pyodbc_cursor(cursor)
 
+        try:
+            pre_validaciones = _validar_pre_calculo_planilla_mensajes(
+                cursor, cia, payroll_type, processtype
+            )
+        except Exception:
+            logging.exception('validar_pre_calculo_planilla antes de ejecutar_calculo_planilla')
+            pre_validaciones = []
+
+        if pre_validaciones:
+            return jsonify(
+                {
+                    'error': (
+                        'No se puede calcular: hay conceptos configurados en más de una vía. '
+                        'Revise las validaciones previas.'
+                    ),
+                    'validaciones_pre': pre_validaciones,
+                }
+            ), 400
+
         exitos = 0
         errores = []
         call_sql = f'{{CALL {sp_name} (?, ?, ?, ?, ?, ?, ?)}}'
@@ -15412,6 +15481,30 @@ def ejecutar_calculo_streaming():
                 return
 
             _drain_pyodbc_cursor(cursor)
+
+            try:
+                pre_validaciones = _validar_pre_calculo_planilla_mensajes(
+                    cursor, cia, payroll_type, processtype
+                )
+            except Exception:
+                logging.exception('validar_pre_calculo_planilla antes de ejecutar_calculo_streaming')
+                pre_validaciones = []
+
+            if pre_validaciones:
+                yield (
+                    'data: '
+                    + json.dumps(
+                        {
+                            'error': (
+                                'No se puede calcular: hay conceptos configurados en más de una vía. '
+                                'Revise las validaciones previas.'
+                            ),
+                            'validaciones_pre': pre_validaciones,
+                        }
+                    )
+                    + '\n\n'
+                )
+                return
 
             exitos = 0
             errores = []

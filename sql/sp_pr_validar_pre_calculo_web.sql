@@ -11,6 +11,10 @@
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
     y antes de /ejecutar_calculo_streaming y /ejecutar_calculo_planilla.
 
+    El procedimiento de cálculo (p. ej. sp_pr_calcular_finmes_persona) se obtiene de
+    PR_ProcessType.ProcedureName en la BD del cliente; no se versiona en sql/ porque
+    puede variar por empresa.
+
     Parámetros:
       @cia         — compañía
       @payrolltype — tipo de planilla

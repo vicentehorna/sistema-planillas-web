@@ -16,6 +16,7 @@ ALTER_FIRST = [
     "alter_pr_mapping_add_banbifbank.sql",
     "alter_pr_payrolltype_add_diasvacaciones.sql",
     "alter_pr_processtype_add_procedurename.sql",
+    "alter_pr_importconcept_xlastuser_20.sql",
     "alter_sy_company_add_logoname_signaturename.sql",
     "tables_pr_plame_sunat_web.sql",
 ]

@@ -66,6 +66,10 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_selectorperiodocalculo_web.sql` | Periodos de cálculo (Procesar planilla) |
 | `sp_pr_selectorperiodos_web.sql` | Periodos por compañía, planilla y proceso |
 | `sp_pr_calcularplanillas_web.sql` | Cálculo planillas |
+| `sp_pr_listarimportconcept_web.sql` | Listado plantillas importación → POST `/api/plantillas-importacion/listado` |
+| `sp_pr_obtenerimportconcept_web.sql` | Detalle plantilla importación → POST `/api/plantillas-importacion/obtener` |
+| `sp_pr_guardarimportconcept_web.sql` | Alta/edición plantilla importación → POST `/api/plantillas-importacion/guardar` |
+| `sp_pr_validar_pre_calculo_web.sql` | Validaciones previas al cálculo (duplicidad de conceptos FIN_DE_MES) → POST `/api/procesar-planilla/validar-pre-calculo` |
 | `sp_pr_validar_calculo_web.sql` | Validaciones post-cálculo → POST `/api/procesar-planilla/validar-calculo` |
 | `sp_pr_selectorbancos_web.sql` | Bancos |
 | `sp_pr_selectorconceptos_web.sql` | Conceptos |
@@ -82,10 +86,40 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_listarusercompany_empresas_web.sql` | Empresas con asignación por usuario |
 | `sp_pr_guardarusercompany_web.sql` | Guardar asignaciones (`SY_UserCompany`) |
 
+## Depuración conceptos AUXILIARES
+
+Comparar conceptos tipo **Auxiliares** (`PR_ConceptType.ShortName = 'X'`) no utilizados por compañía.
+
+| Archivo | Procedimiento / uso |
+|---------|---------------------|
+| `queries_depurar_conceptos_auxiliares.sql` | Consultas de referencia por grupo (G1–G4); cambiar `@company` |
+| `sp_pr_extraer_nemonicos_literal_sp_web.sql` | Nemónicos literales en un SP de cálculo (`OBJECT_DEFINITION`) |
+| `sp_pr_depurar_conceptos_auxiliares_web.sql` | Depuración completa: `@company`, `@modo` = `RESUMEN`, `NO_USADOS`, `G1`…`G4`, `DETALLE` |
+
+**Grupos:** G1 fórmulas · G2 `PR_EmployeeConcept` · G3 `PR_EmployeePayRollConcept` · G4 SP (`sp_pr_calcular_finmes_persona`, liquidación, gratificación, provisiones).
+
+**Excel desde Python:** `python depurar_conceptos_auxiliares.py --company BGT --database hm_aci2`
+
+**Deploy SPs:** `python _tmp_deploy_depurar_auxiliares.py`
+
 ## Notas
 
 - **`sp_pr_reporteplamevertical_web`**: requiere tablas de trabajo `xx_plamevertical2` y `xx_reporteplanilla` en la base de datos.
 - Los scripts usan `CREATE OR ALTER PROCEDURE` (SQL Server 2016 SP1+).
+- **SPs de cálculo por persona** (`sp_pr_calcular_finmes_persona`, `sp_pr_calcular_pagocts_persona`, etc.): **no se versionan en `sql/`** porque pueden variar por empresa/base de datos. Se referencian desde `PR_ProcessType.ProcedureName` y ya deben existir en el ERP del cliente. `sp_pr_validar_pre_calculo_web` los lee en tiempo de ejecución con `OBJECT_DEFINITION` para detectar llamadas a `sp_pr_registrar_concepto`; no incluir `sp_pr_calcular_finmes_persona` en el repositorio.
+
+## Scripts ALTER (esquema legacy)
+
+| Archivo | Tabla(s) | Descripción |
+|---------|----------|-------------|
+| `alter_pr_importconcept_xlastuser_20.sql` | `PR_ImportConcept`, `PR_ImportConceptDetail` | `XlastUser` VARCHAR(4) → VARCHAR(20) (plantillas de importación) |
+| `alter_pr_concept_add_flagafectoutilidad.sql` | `PR_Concept` | Flag afecto utilidades |
+| `alter_pr_formuladetail_conceptlist.sql` | `PR_FormulaDetail` | Lista de conceptos en fórmulas |
+| `alter_pr_formuladetail_divisor.sql` | `PR_FormulaDetail` | Divisor en fórmulas |
+| `alter_pr_mapping_add_banbifbank.sql` | `PR_Mapping` | Banco BanBif |
+| `alter_pr_payrolltype_add_diasvacaciones.sql` | `PR_PayrollType` | Días vacaciones |
+| `alter_pr_processtype_add_procedurename.sql` | `PR_ProcessType` | Nombre SP de cálculo |
+| `alter_sy_company_add_logoname_signaturename.sql` | `SY_Company` | Logo y firma en boleta |
 
 ## Deploy en SQL Server
 
@@ -93,6 +127,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 |--------|---------------|-------------|
 | `deploy_planillas_web_completo.sql` | Cada cliente (`hm_aci`, `hm_ultra`, …) | ALTER + todos los SP web (200 archivos). Regenerar con `python sql/_generar_deploy_completo.py`. |
 | `deploy_hm_planillas_enrutador.sql` | Solo `hm_planillas` | Tabla `USUARIOS_ROUTER` (usuario → base de datos). |
+| `alter_pr_importconcept_xlastuser_20.sql` | Cada cliente con plantillas importación | Ejecutar antes del SP `sp_pr_guardarimportconcept_web` si la BD aún tiene `XlastUser` VARCHAR(4). |
 
 Pasos típicos para una base cliente nueva:
 

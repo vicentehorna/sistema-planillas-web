@@ -5522,6 +5522,262 @@ def usuarios_empresa_page():
     return render_template('maestro_usuarios_empresa.html')
 
 
+@app.route('/carga-masiva/plantillas-importacion')
+@login_required
+def plantillas_importacion_page():
+    return render_template('carga_masiva_plantillas.html')
+
+
+@app.route('/carga-masiva/importacion-conceptos')
+@login_required
+def importacion_conceptos_page():
+    return render_template('carga_masiva_conceptos.html')
+
+
+def _importconcept_lista_dict(r):
+    return {
+        'importconcept': _jsonable_value(r.get('importconcept')),
+        'name': _jsonable_value(r.get('name')),
+        'company': _jsonable_value(r.get('company')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_value(r.get('xlastdate')),
+        'lineas': int(r.get('lineas') or 0),
+    }
+
+
+def _importconcept_cabecera_dict(r):
+    if not r:
+        return None
+    return {
+        'importconcept': _jsonable_value(r.get('importconcept')),
+        'company': _jsonable_value(r.get('company')),
+        'name': _jsonable_value(r.get('name')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_value(r.get('xlastdate')),
+    }
+
+
+def _importconcept_detalle_dict(r):
+    return {
+        'line': int(r.get('line') or 0),
+        'concept': _jsonable_value(r.get('concept')),
+        'description': _jsonable_value(r.get('description')),
+        'concept_description': _jsonable_value(r.get('concept_description')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+    }
+
+
+def _importconcept_detalle_to_xml(lineas):
+    root = ET.Element('root')
+    for idx, ln in enumerate(lineas or [], start=1):
+        if not isinstance(ln, dict):
+            continue
+        concept = str(ln.get('concept') or '').strip()
+        if not concept:
+            continue
+        el = ET.SubElement(root, 'l')
+        fields = [
+            ('line', ln.get('line') or idx),
+            ('concept', concept),
+            ('description', ln.get('description')),
+        ]
+        for tag, val in fields:
+            if val is None:
+                continue
+            sval = str(val).strip()
+            if sval == '':
+                continue
+            child = ET.SubElement(el, tag)
+            child.text = sval
+    return ET.tostring(root, encoding='unicode')
+
+
+def _importconcept_obtener_sets_from_cursor(cursor):
+    sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=2)
+    cab_rows = sets[0] if len(sets) > 0 else []
+    det_rows = sets[1] if len(sets) > 1 else []
+    return cab_rows, det_rows
+
+
+@app.route('/api/plantillas-importacion/listado', methods=['POST'])
+@login_required
+def api_plantillas_importacion_listado():
+    """sp_pr_listarimportconcept_web: listado de plantillas."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('localizar') or '').strip() or None
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarimportconcept_web @company=?, @busqueda=?",
+            (cia, busqueda),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [_importconcept_lista_dict(r) for r in rows],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_plantillas_importacion_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plantillas-importacion/obtener', methods=['POST'])
+@login_required
+def api_plantillas_importacion_obtener():
+    """sp_pr_obtenerimportconcept_web: cabecera + detalle."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    importconcept = str(body.get('importconcept') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not importconcept:
+        return jsonify({"error": "Seleccione una plantilla."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerimportconcept_web @company=?, @importconcept=?",
+            (cia, importconcept),
+        )
+        cab_rows, det_rows = _importconcept_obtener_sets_from_cursor(cursor)
+        cabecera = _importconcept_cabecera_dict(cab_rows[0] if cab_rows else None)
+        if not cabecera:
+            return jsonify({"error": "Plantilla no encontrada."}), 404
+        return jsonify({
+            "cabecera": cabecera,
+            "detalle": [_importconcept_detalle_dict(r) for r in det_rows],
+        })
+    except Exception as e:
+        logging.exception("api_plantillas_importacion_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plantillas-importacion/guardar', methods=['POST'])
+@login_required
+def api_plantillas_importacion_guardar():
+    """sp_pr_guardarimportconcept_web: alta / edición de plantilla."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    importconcept = str(body.get('importconcept') or '').strip()
+    modo = str(body.get('modo') or ('U' if importconcept else 'I')).strip().upper()
+    name = str(body.get('name') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not name:
+        return jsonify({"error": "Indique el nombre de la plantilla."}), 400
+
+    detalle_raw = body.get('detalle') or []
+    if not isinstance(detalle_raw, list):
+        detalle_raw = []
+
+    if not detalle_raw:
+        return jsonify({"error": "La plantilla debe tener al menos un concepto asociado."}), 400
+
+    detalle_valido = []
+    for idx, ln in enumerate(detalle_raw, start=1):
+        if not isinstance(ln, dict):
+            continue
+        concept = str(ln.get('concept') or '').strip()
+        if not concept:
+            return jsonify({
+                "error": f"La línea {idx} del detalle debe tener un concepto asociado."
+            }), 400
+        detalle_valido.append(ln)
+
+    if not detalle_valido:
+        return jsonify({"error": "La plantilla debe tener al menos un concepto asociado."}), 400
+
+    detalle_xml = _importconcept_detalle_to_xml(detalle_valido)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarimportconcept_web "
+            "@modo=?, @company=?, @importconcept=?, @name=?, @detalle_xml=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                importconcept or None,
+                name,
+                detalle_xml or None,
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        ic_id = str(row.get('importconcept') or importconcept or '').strip()
+        return jsonify({
+            "ok": True,
+            "importconcept": ic_id,
+            "modo": _jsonable_value(row.get('modo')) or modo,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_plantillas_importacion_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plantillas-importacion/conceptos', methods=['GET'])
+@login_required
+def api_plantillas_importacion_conceptos():
+    """Conceptos activos para el detalle de plantilla."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorconceptos_web @cia=?", (cia,))
+        conceptos = [
+            {"id": r.concept, "text": r.description}
+            for r in cursor.fetchall()
+        ]
+        return jsonify({"conceptos": conceptos})
+    except Exception as e:
+        logging.exception("api_plantillas_importacion_conceptos")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _usercompany_usuario_dict(r):
     return {
         'userid': _jsonable_value(r.get('userid')),

@@ -1,0 +1,650 @@
+{% extends "layout.html" %}
+
+{% block title %}Plantillas de Importación{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pi-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+
+    .pi-panel-izq {
+        flex: 0 0 32%;
+        max-width: 32%;
+        min-width: 240px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pi-panel-der {
+        flex: 1 1 68%;
+        min-width: 0;
+    }
+
+    .pi-grilla {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 5rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-pi-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-pi-lista th,
+    .table-pi-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-pi-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-pi-lista tbody tr.pi-row {
+        cursor: pointer;
+    }
+
+    .table-pi-lista tbody tr.pi-row:hover {
+        background: #f8f9fa;
+    }
+
+    .table-pi-lista tbody tr.pi-row.active {
+        background: #cfe2ff;
+    }
+
+    .pi-form-card .form-label {
+        font-size: 0.78rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .pi-form-card .form-control-sm,
+    .pi-form-card .form-select-sm {
+        font-size: 0.82rem;
+    }
+
+    .campo-obligatorio.form-control {
+        background-color: #d9edf7;
+        border-color: #b8daff;
+    }
+
+    .pi-campo-auditoria {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+
+    .pi-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    .pi-msg-guardado {
+        margin-top: 0.75rem;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #0f5132;
+        background-color: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 0.375rem;
+    }
+
+    .pi-detalle-wrap {
+        max-height: 360px;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-pi-detalle {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+
+    .table-pi-detalle th,
+    .table-pi-detalle td {
+        padding: 0.2rem 0.35rem;
+        vertical-align: middle;
+    }
+
+    .table-pi-detalle thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 1;
+    }
+
+    .table-pi-detalle tbody tr.det-row {
+        cursor: pointer;
+    }
+
+    .table-pi-detalle tbody tr.det-row.active {
+        background: #e7f1ff;
+    }
+
+    .table-pi-detalle select.form-select-sm {
+        min-width: 220px;
+        font-size: 11px;
+    }
+
+    .table-pi-detalle input.form-control-sm {
+        min-width: 180px;
+        font-size: 11px;
+    }
+
+    @media (max-width: 991.98px) {
+        .pi-layout {
+            flex-direction: column;
+        }
+
+        .pi-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .pi-grilla {
+            max-height: 280px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosPlantillas" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtBuscarPlantilla" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                <input type="search" id="txtBuscarPlantilla" class="form-control form-control-sm" placeholder="Nombre de plantilla..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevaPlantilla">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="pi-layout">
+    <aside class="pi-panel-izq">
+        <div class="pi-grilla">
+            <table class="table table-bordered table-sm table-hover table-pi-lista align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Plantilla</th>
+                        <th class="text-center">Líneas</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyPlantillas">
+                    <tr>
+                        <td colspan="2" class="text-center text-muted py-3">Seleccione una compañía</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="lblConteoPlantillas" class="small text-muted mt-2">0 registros</div>
+    </aside>
+
+    <section class="pi-panel-der">
+        <div id="placeholderPlantilla" class="pi-placeholder">
+            <div>
+                <i class="bi bi-file-earmark-spreadsheet fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione una plantilla de la lista o cree una nueva.
+            </div>
+        </div>
+
+        <div id="panelEdicionPlantilla" class="card border-0 shadow-sm pi-form-card d-none">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="fw-semibold" id="tituloEdicionPlantilla">Nueva plantilla</span>
+                <button type="button" class="btn btn-primary btn-sm" id="btnGuardarPlantilla">
+                    <i class="bi bi-save"></i> Guardar
+                </button>
+            </div>
+            <div class="card-body">
+                <form id="frmPlantilla" class="row g-3">
+                    <input type="hidden" id="hidImportConcept" value="">
+                    <input type="hidden" id="hidModo" value="I">
+
+                    <div class="col-12 col-md-6">
+                        <label for="txtNombrePlantilla" class="form-label fw-semibold text-muted">Plantilla</label>
+                        <input type="text" id="txtNombrePlantilla" class="form-control form-control-sm campo-obligatorio text-uppercase" maxlength="50" required>
+                    </div>
+                </form>
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mt-4 mb-2">
+                    <span class="fw-semibold small">Conceptos de la plantilla</span>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-outline-success btn-sm" id="btnAgregarLinea">
+                            <i class="bi bi-plus-lg"></i> Agregar
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" id="btnEliminarLinea">
+                            <i class="bi bi-trash"></i> Borrar
+                        </button>
+                    </div>
+                </div>
+
+                <div class="pi-detalle-wrap">
+                    <table class="table table-bordered table-sm table-pi-detalle align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 3rem;">#</th>
+                                <th>Concepto</th>
+                                <th>Descripción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDetalle">
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-2">Sin conceptos</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div id="msgGuardadoPlantilla" class="pi-msg-guardado d-none" role="status"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+    const URL_LISTADO = {{ url_for('api_plantillas_importacion_listado') | tojson }};
+    const URL_OBTENER = {{ url_for('api_plantillas_importacion_obtener') | tojson }};
+    const URL_GUARDAR = {{ url_for('api_plantillas_importacion_guardar') | tojson }};
+    const URL_CONCEPTOS = {{ url_for('api_plantillas_importacion_conceptos') | tojson }};
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectElement) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const tbodyPlantillas = document.getElementById('tbodyPlantillas');
+    const tbodyDetalle = document.getElementById('tbodyDetalle');
+    const placeholder = document.getElementById('placeholderPlantilla');
+    const panelEdicion = document.getElementById('panelEdicionPlantilla');
+    const msgGuardado = document.getElementById('msgGuardadoPlantilla');
+
+    let plantillasCache = [];
+    let plantillaSeleccionada = null;
+    let detalleCache = [];
+    let lineaSeleccionada = null;
+    let conceptosCache = [];
+    let msgGuardadoTimer = null;
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function ocultarMensajeGuardado() {
+        if (msgGuardadoTimer) clearTimeout(msgGuardadoTimer);
+        if (msgGuardado) {
+            msgGuardado.textContent = '';
+            msgGuardado.classList.add('d-none');
+        }
+    }
+
+    function mostrarMensajeGuardado(texto) {
+        if (!msgGuardado) return;
+        ocultarMensajeGuardado();
+        msgGuardado.textContent = texto || 'Registro guardado correctamente.';
+        msgGuardado.classList.remove('d-none');
+        msgGuardadoTimer = setTimeout(ocultarMensajeGuardado, 6000);
+    }
+
+    function optionsConceptos(selected) {
+        const sel = String(selected || '').trim();
+        let html = '<option value="">Seleccione...</option>';
+        conceptosCache.forEach((c) => {
+            const id = String(c.id || '').trim();
+            const text = String(c.text || '').trim();
+            html += `<option value="${escHtml(id)}"${id === sel ? ' selected' : ''}>${escHtml(text)}</option>`;
+        });
+        return html;
+    }
+
+    function descripcionConcepto(conceptId) {
+        const found = conceptosCache.find((c) => String(c.id || '').trim() === String(conceptId || '').trim());
+        return found ? String(found.text || '').trim() : '';
+    }
+
+    function renderDetalle() {
+        if (!detalleCache.length) {
+            tbodyDetalle.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-2">Sin conceptos</td></tr>';
+            lineaSeleccionada = null;
+            return;
+        }
+
+        tbodyDetalle.innerHTML = detalleCache.map((ln, idx) => {
+            const line = idx + 1;
+            const active = lineaSeleccionada === line ? ' active' : '';
+            return `
+                <tr class="det-row${active}" data-line="${line}">
+                    <td class="text-center">${line}</td>
+                    <td>
+                        <select class="form-select form-select-sm sel-concepto" data-line="${line}">
+                            ${optionsConceptos(ln.concept)}
+                        </select>
+                    </td>
+                    <td>
+                        <input type="text" class="form-control form-control-sm txt-descripcion" data-line="${line}"
+                               maxlength="50" value="${escHtml(ln.description || '')}">
+                    </td>
+                </tr>`;
+        }).join('');
+
+        tbodyDetalle.querySelectorAll('.sel-concepto').forEach((sel) => {
+            sel.addEventListener('change', function () {
+                const line = Number(this.dataset.line);
+                const row = detalleCache.find((x, i) => i + 1 === line);
+                if (!row) return;
+                row.concept = String(this.value || '').trim();
+                if (!String(row.description || '').trim()) {
+                    row.description = descripcionConcepto(row.concept);
+                    const txt = tbodyDetalle.querySelector(`.txt-descripcion[data-line="${line}"]`);
+                    if (txt) txt.value = row.description;
+                }
+            });
+        });
+
+        tbodyDetalle.querySelectorAll('.txt-descripcion').forEach((txt) => {
+            txt.addEventListener('input', function () {
+                const line = Number(this.dataset.line);
+                const row = detalleCache.find((x, i) => i + 1 === line);
+                if (row) row.description = String(this.value || '').trim();
+            });
+        });
+
+        tbodyDetalle.querySelectorAll('.det-row').forEach((tr) => {
+            tr.addEventListener('click', function (e) {
+                if (e.target.closest('select') || e.target.closest('input')) return;
+                lineaSeleccionada = Number(this.dataset.line);
+                renderDetalle();
+            });
+        });
+    }
+
+    function limpiarFormulario() {
+        ocultarMensajeGuardado();
+        document.getElementById('hidImportConcept').value = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('frmPlantilla').reset();
+        document.getElementById('tituloEdicionPlantilla').textContent = 'Nueva plantilla';
+        detalleCache = [];
+        lineaSeleccionada = null;
+        renderDetalle();
+    }
+
+    function cargarFormulario(data) {
+        const cab = data.cabecera || {};
+        document.getElementById('hidImportConcept').value = cab.importconcept || '';
+        document.getElementById('hidModo').value = 'U';
+        document.getElementById('txtNombrePlantilla').value = cab.name || '';
+        document.getElementById('tituloEdicionPlantilla').textContent = cab.name || 'Editar plantilla';
+        detalleCache = (Array.isArray(data.detalle) ? data.detalle : []).map((ln) => ({
+            line: ln.line,
+            concept: ln.concept || '',
+            description: ln.description || ln.concept_description || '',
+        }));
+        lineaSeleccionada = null;
+        renderDetalle();
+    }
+
+    function resaltarPlantilla(importconcept) {
+        tbodyPlantillas.querySelectorAll('.pi-row').forEach((tr) => {
+            tr.classList.toggle('active', tr.dataset.id === importconcept);
+        });
+    }
+
+    function renderPlantillas(rows) {
+        plantillasCache = Array.isArray(rows) ? rows : [];
+        if (!plantillasCache.length) {
+            tbodyPlantillas.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">Sin registros</td></tr>';
+            document.getElementById('lblConteoPlantillas').textContent = '0 registros';
+            return;
+        }
+
+        tbodyPlantillas.innerHTML = plantillasCache.map((p) => {
+            const id = String(p.importconcept || '').trim();
+            const active = plantillaSeleccionada === id ? ' active' : '';
+            return `
+                <tr class="pi-row${active}" data-id="${escHtml(id)}">
+                    <td>${escHtml(p.name || '')}</td>
+                    <td class="text-center">${escHtml(p.lineas != null ? p.lineas : 0)}</td>
+                </tr>`;
+        }).join('');
+
+        tbodyPlantillas.querySelectorAll('.pi-row').forEach((tr) => {
+            tr.addEventListener('click', function () {
+                abrirPlantilla(this.dataset.id);
+            });
+        });
+
+        document.getElementById('lblConteoPlantillas').textContent =
+            `${plantillasCache.length} registro${plantillasCache.length === 1 ? '' : 's'}`;
+    }
+
+    async function cargarConceptos() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            conceptosCache = [];
+            return;
+        }
+        const data = await leerJson(await fetch(`${URL_CONCEPTOS}?cia=${encodeURIComponent(cia)}`));
+        conceptosCache = Array.isArray(data.conceptos) ? data.conceptos : [];
+    }
+
+    async function listarPlantillas() {
+        const cia = cboCia.value.trim();
+        const busqueda = document.getElementById('txtBuscarPlantilla').value.trim();
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        await cargarConceptos();
+        const data = await leerJson(await fetch(URL_LISTADO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, busqueda }),
+        }));
+        renderPlantillas(data.rows || []);
+    }
+
+    async function abrirPlantilla(importconcept) {
+        const cia = cboCia.value.trim();
+        if (!cia || !importconcept) return;
+        plantillaSeleccionada = importconcept;
+        resaltarPlantilla(importconcept);
+        mostrarPanelEdicion(true);
+        ocultarMensajeGuardado();
+
+        const data = await leerJson(await fetch(URL_OBTENER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, importconcept }),
+        }));
+        cargarFormulario(data);
+    }
+
+    async function guardarPlantilla() {
+        const cia = cboCia.value.trim();
+        const name = document.getElementById('txtNombrePlantilla').value.trim();
+        const importconcept = document.getElementById('hidImportConcept').value.trim();
+        const modo = document.getElementById('hidModo').value.trim().toUpperCase();
+
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        if (!name) {
+            alert('Indique el nombre de la plantilla.');
+            return;
+        }
+
+        if (!detalleCache.length) {
+            alert('Agregue al menos un concepto a la plantilla.');
+            return;
+        }
+
+        const lineaSinConcepto = detalleCache.findIndex((ln) => !String(ln.concept || '').trim());
+        if (lineaSinConcepto >= 0) {
+            alert(`La línea ${lineaSinConcepto + 1} debe tener un concepto asociado.`);
+            lineaSeleccionada = lineaSinConcepto + 1;
+            renderDetalle();
+            return;
+        }
+
+        const detalle = detalleCache.map((ln, idx) => ({
+            line: idx + 1,
+            concept: String(ln.concept || '').trim(),
+            description: String(ln.description || descripcionConcepto(ln.concept) || '').trim(),
+        }));
+
+        const data = await leerJson(await fetch(URL_GUARDAR, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cia,
+                modo,
+                importconcept: importconcept || null,
+                name,
+                detalle,
+            }),
+        }));
+
+        mostrarMensajeGuardado(data.mensaje || 'Guardado correctamente.');
+        await listarPlantillas();
+        if (data.importconcept) {
+            await abrirPlantilla(data.importconcept);
+        }
+    }
+
+    document.getElementById('frmFiltrosPlantillas').addEventListener('submit', function (e) {
+        e.preventDefault();
+        plantillaSeleccionada = null;
+        listarPlantillas();
+    });
+
+    document.getElementById('btnNuevaPlantilla').addEventListener('click', async function () {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        await cargarConceptos();
+        plantillaSeleccionada = null;
+        tbodyPlantillas.querySelectorAll('.pi-row').forEach((tr) => tr.classList.remove('active'));
+        limpiarFormulario();
+        mostrarPanelEdicion(true);
+    });
+
+    document.getElementById('btnGuardarPlantilla').addEventListener('click', function () {
+        guardarPlantilla().catch((e) => alert(e.message || 'No se pudo guardar.'));
+    });
+
+    document.getElementById('btnAgregarLinea').addEventListener('click', function () {
+        detalleCache.push({ concept: '', description: '' });
+        lineaSeleccionada = detalleCache.length;
+        renderDetalle();
+    });
+
+    document.getElementById('btnEliminarLinea').addEventListener('click', function () {
+        if (!lineaSeleccionada || lineaSeleccionada < 1) {
+            alert('Seleccione una línea para borrar.');
+            return;
+        }
+        detalleCache.splice(lineaSeleccionada - 1, 1);
+        lineaSeleccionada = null;
+        renderDetalle();
+    });
+
+    cboCia.addEventListener('change', function () {
+        plantillaSeleccionada = null;
+        plantillasCache = [];
+        tbodyPlantillas.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">Seleccione una compañía</td></tr>';
+        document.getElementById('lblConteoPlantillas').textContent = '0 registros';
+        mostrarPanelEdicion(false);
+        limpiarFormulario();
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+});
+</script>
+{% endblock %}

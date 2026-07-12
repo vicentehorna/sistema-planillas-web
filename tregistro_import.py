@@ -257,3 +257,86 @@ def construir_resumen_importacion(
         },
         'filas': filas,
     }
+
+
+def _primer_registro_set(item: dict[str, Any]) -> dict[str, Any]:
+    registros = item.get('set') or []
+    if not registros:
+        return {}
+    return registros[0] if isinstance(registros, list) else {}
+
+
+def _valor_set_o_tra(item: dict[str, Any], campo_set: str, campo_tra: str = '') -> str:
+    reg_set = _primer_registro_set(item)
+    if reg_set.get(campo_set):
+        return str(reg_set.get(campo_set) or '').strip()
+    tra = item.get('tra') or {}
+    if campo_tra and tra.get(campo_tra):
+        return str(tra.get(campo_tra) or '').strip()
+    return ''
+
+
+def trabajador_a_payload_registro(item: dict[str, Any]) -> dict[str, Any]:
+    """Convierte un trabajador consolidado del T-Registro a payload JSON para el SP de registro."""
+    ide = item.get('ide') or {}
+    dir_row = item.get('dir') or {}
+    tra = item.get('tra') or {}
+    ssa = item.get('ssa') or {}
+
+    nombres = str(ide.get('nombres') or tra.get('nombres') or '').strip()
+    if not nombres:
+        partes = str(item.get('nombre_completo') or '').strip().split()
+        if len(partes) >= 3:
+            nombres = ' '.join(partes[2:])
+
+    return {
+        'tipo_doc': str(item.get('tipo_doc') or ide.get('tipo_doc') or '').strip(),
+        'num_doc': str(item.get('num_doc') or ide.get('num_doc') or '').strip(),
+        'apellido_paterno': str(ide.get('apellido_paterno') or tra.get('apellido_paterno') or '').strip(),
+        'apellido_materno': str(ide.get('apellido_materno') or tra.get('apellido_materno') or '').strip(),
+        'nombres': nombres,
+        'nombre_completo': str(item.get('nombre_completo') or '').strip(),
+        'fecha_nac': str(ide.get('fecha_nac') or '').strip(),
+        'nacionalidad': str(ide.get('nacionalidad') or '').strip(),
+        'sexo': str(ide.get('sexo') or '').strip(),
+        'telefono': str(ide.get('telefono') or '').strip(),
+        'email': str(ide.get('email') or '').strip(),
+        'direccion': str(dir_row.get('dir1_descripcion') or '').strip(),
+        'fecha_ingreso': str(tra.get('fec_inicio') or '').strip(),
+        'tipo_trabajador': str(tra.get('tipo_trabajador') or ssa.get('tipo_trabajador') or '').strip(),
+        'regimen_laboral': str(tra.get('regimen_laboral') or '').strip(),
+        'cat_ocupacional': str(tra.get('cat_ocupacional') or '').strip(),
+        'ocupacion': str(tra.get('ocupacion') or '').strip(),
+        'nivel_educativo': _valor_set_o_tra(item, 'situacion_educativa', 'nivel_educativo'),
+        'tipo_contrato': str(tra.get('tipo_contrato') or '').strip(),
+        'tipo_pago': str(tra.get('tipo_pago') or '').strip(),
+        'entidad_financiera': str(tra.get('entidad_financiera') or '').strip(),
+        'nro_cuenta': str(tra.get('nro_cuenta') or '').strip(),
+        'remun_bas': str(tra.get('remun_bas') or '').strip(),
+        'regimen_pension': str(ssa.get('regimen_pension_tipo') or '').strip(),
+        'regimen_pension_fec': str(ssa.get('regimen_pension_fec_inicio') or '').strip(),
+        'cuspp': str(ssa.get('cuspp') or '').strip(),
+        'regimen_salud': str(ssa.get('regimen_salud_tipo') or '').strip(),
+        'regimen_salud_fec': str(ssa.get('regimen_salud_fec_inicio') or '').strip(),
+        'situacion_especial': str(tra.get('situacion_especial') or '').strip(),
+        'sindicalizado': str(tra.get('sindicalizado') or '').strip(),
+    }
+
+
+def construir_payload_registro_nuevos(
+    parsed_files: dict[str, dict[str, Any]],
+    dnis_existentes: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
+    dnis_existentes = dnis_existentes or {}
+    trabajadores = consolidar_trabajadores(parsed_files)
+    payload: list[dict[str, Any]] = []
+
+    for _key, item in trabajadores.items():
+        num_norm = normalizar_num_doc(item.get('num_doc', ''))
+        if not num_norm or dnis_existentes.get(num_norm):
+            continue
+        if len(item.get('archivos') or []) < len(ARCHIVOS_REQUERIDOS):
+            continue
+        payload.append(trabajador_a_payload_registro(item))
+
+    return payload

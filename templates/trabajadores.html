@@ -84,7 +84,7 @@
 {% block content %}
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
-        <form id="frmTrabajadores" class="row g-3">
+        <form id="frmTrabajadores" class="row g-3" action="#" method="post" onsubmit="return false;">
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
@@ -146,7 +146,9 @@
                 </div>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
-                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnConsultarTrabajadores" disabled>
+                    <i class="bi bi-search"></i> Consultar
+                </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelTrab" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
                 <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCountTrab">0</span></span>
             </div>
@@ -172,6 +174,16 @@
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
+    const frmTrabajadores = document.getElementById('frmTrabajadores');
+    const btnConsultarTrab = document.getElementById('btnConsultarTrabajadores');
+    let consultaHabilitada = false;
+
+    if (frmTrabajadores) {
+        frmTrabajadores.addEventListener('submit', function (e) {
+            e.preventDefault();
+        });
+    }
+
     const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.trabajadores
         ? window.FiltrosPlanillasReportes.trabajadores()
         : null;
@@ -409,6 +421,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function ejecutarConsultaTrabajadores() {
         lastExportTrab = null;
         document.getElementById('btnExportExcelTrab').disabled = true;
+        if (btnConsultarTrab) btnConsultarTrab.disabled = true;
         if (filtrosPersist) filtrosPersist.guardar();
 
         const cia = document.getElementById('cboCompania').value.trim();
@@ -426,15 +439,18 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (!cia) {
             alert('Seleccione una compañía.');
+            if (btnConsultarTrab && consultaHabilitada) btnConsultarTrab.disabled = false;
             return;
         }
         if (fechaIngreso.activo) {
             if (!fechaIngreso.desde || !fechaIngreso.hasta) {
                 alert('Indique fecha de ingreso desde y hasta.');
+                if (btnConsultarTrab && consultaHabilitada) btnConsultarTrab.disabled = false;
                 return;
             }
             if (fechaIngreso.desde > fechaIngreso.hasta) {
                 alert('La fecha de ingreso desde no puede ser mayor que hasta.');
+                if (btnConsultarTrab && consultaHabilitada) btnConsultarTrab.disabled = false;
                 return;
             }
         }
@@ -486,6 +502,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.getElementById('btnExportExcelTrab').disabled = true;
             document.getElementById('lblRowCountTrab').textContent = '0';
             alert('Error de red o del servidor.');
+        } finally {
+            if (btnConsultarTrab && consultaHabilitada) {
+                btnConsultarTrab.disabled = false;
+            }
         }
     }
 
@@ -613,6 +633,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    consultaHabilitada = true;
+    if (btnConsultarTrab) btnConsultarTrab.disabled = false;
+
     document.getElementById('cboCompania').addEventListener('change', async function () {
         const cia = this.value;
         const cboPlanillaEl = document.getElementById('cboTipoPlanilla');
@@ -664,10 +687,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    document.getElementById('frmTrabajadores').addEventListener('submit', async function (e) {
-        e.preventDefault();
-        await ejecutarConsultaTrabajadores();
-    });
+    if (btnConsultarTrab) {
+        btnConsultarTrab.addEventListener('click', async function () {
+            if (!consultaHabilitada) return;
+            await ejecutarConsultaTrabajadores();
+        });
+    }
 
     document.getElementById('btnExportExcelTrab').addEventListener('click', async function () {
         if (!lastExportTrab || !lastExportTrab.headers || !lastExportTrab.headers.length) {

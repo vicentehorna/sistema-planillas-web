@@ -63,6 +63,7 @@ except Exception as _weasy_err:
 
 from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
 from tregistro_import import (
+    construir_payload_registro_nuevos,
     construir_resumen_importacion,
     normalizar_num_doc,
     parsear_archivo_tregistro,
@@ -9100,6 +9101,39 @@ def _tregistro_import_ruc_compania(cursor, cia):
     return str(row[0]).strip() if row and row[0] else ''
 
 
+def _tregistro_import_parse_uploads(request_obj):
+    campos = {
+        'IDE': 'file_ide',
+        'DIR': 'file_dir',
+        'TRA': 'file_tra',
+        'SSA': 'file_ssa',
+        'SET': 'file_set',
+    }
+    faltantes = [code for code, field in campos.items() if not request_obj.files.get(field)]
+    if faltantes:
+        raise ValueError(f"Debe adjuntar los cinco archivos TXT. Faltan: {', '.join(faltantes)}.")
+
+    parsed_files = {}
+    for code, field in campos.items():
+        upload = request_obj.files[field]
+        raw = upload.read()
+        if not raw:
+            raise ValueError(f"El archivo {code} está vacío.")
+        try:
+            contenido = raw.decode('utf-8')
+        except UnicodeDecodeError:
+            contenido = raw.decode('cp1252')
+        bundle = parsear_archivo_tregistro(contenido, upload.filename or f'{code}.txt')
+        tipo_detectado = str(bundle.get('codigo') or '').upper()
+        if tipo_detectado != code:
+            raise ValueError(
+                f"El archivo seleccionado para {code} parece ser de tipo {tipo_detectado}. "
+                f'Verifique que subió el TXT correcto.'
+            )
+        parsed_files[code] = bundle
+    return parsed_files
+
+
 @app.route('/api/tregistro-importacion/resumen', methods=['POST'])
 @login_required
 def api_tregistro_importacion_resumen():
@@ -9121,27 +9155,8 @@ def api_tregistro_importacion_resumen():
             "error": f"Debe adjuntar los cinco archivos TXT. Faltan: {', '.join(faltantes)}.",
         }), 400
 
-    parsed_files = {}
     try:
-        for code, field in campos.items():
-            upload = request.files[field]
-            raw = upload.read()
-            if not raw:
-                return jsonify({"error": f"El archivo {code} está vacío."}), 400
-            try:
-                contenido = raw.decode('utf-8')
-            except UnicodeDecodeError:
-                contenido = raw.decode('cp1252')
-            bundle = parsear_archivo_tregistro(contenido, upload.filename or f'{code}.txt')
-            tipo_detectado = str(bundle.get('codigo') or '').upper()
-            if tipo_detectado != code:
-                return jsonify({
-                    "error": (
-                        f"El archivo seleccionado para {code} parece ser de tipo {tipo_detectado}. "
-                        f'Verifique que subió el TXT correcto.'
-                    ),
-                }), 400
-            parsed_files[code] = bundle
+        parsed_files = _tregistro_import_parse_uploads(request)
     except ValueError as ex:
         return jsonify({"error": str(ex)}), 400
     except Exception as ex:
@@ -9167,6 +9182,181 @@ def api_tregistro_importacion_resumen():
         return jsonify(resultado)
     except Exception as ex:
         logging.exception('api_tregistro_importacion_resumen')
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tregistro-importacion/registrar', methods=['POST'])
+@login_required
+def api_tregistro_importacion_registrar():
+    """Registra en la ficha los trabajadores nuevos detectados en los TXT del T-Registro."""
+    cia = str(request.form.get('cia') or '').strip()
+    replicationunit = str(request.form.get('replicationunit') or 'LIMA').strip() or 'LIMA'
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    try:
+        parsed_files = _tregistro_import_parse_uploads(request)
+    except ValueError as ex:
+        return jsonify({"error": str(ex)}), 400
+    except Exception as ex:
+        logging.exception('api_tregistro_importacion_registrar parse')
+        return jsonify({"error": f"No se pudo leer un archivo TXT: {ex}"}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        dnis_existentes = _tregistro_import_mapa_dnis_existentes(cursor, cia)
+        payload = construir_payload_registro_nuevos(parsed_files, dnis_existentes)
+
+        if not payload:
+            return jsonify({
+                "error": "No hay trabajadores nuevos completos (5 archivos) para registrar.",
+            }), 400
+
+        ruc_archivos = ''
+        metas = [parsed_files[c]['meta'] for c in parsed_files if c in parsed_files]
+        rucs = {m.get('ruc') for m in metas if m.get('ruc')}
+        if rucs:
+            ruc_archivos = next(iter(rucs))
+        ruc_compania = _tregistro_import_ruc_compania(cursor, cia)
+        if ruc_archivos and ruc_compania and ruc_archivos != ruc_compania:
+            return jsonify({
+                "error": (
+                    f"El RUC de los archivos ({ruc_archivos}) no coincide con el de la compañía ({ruc_compania})."
+                ),
+            }), 400
+
+        filas = []
+        registrados = 0
+        errores = 0
+
+        for item in payload:
+            try:
+                cursor.execute(
+                    """
+                    DECLARE @person_out VARCHAR(20), @mensaje_out VARCHAR(500);
+                    EXEC sp_pr_tregistro_registrar_trabajador_nuevo_web
+                        @cia=?,
+                        @tipo_doc=?,
+                        @num_doc=?,
+                        @apellido_paterno=?,
+                        @apellido_materno=?,
+                        @nombres=?,
+                        @fecha_nac=?,
+                        @nacionalidad=?,
+                        @sexo=?,
+                        @telefono=?,
+                        @email=?,
+                        @direccion=?,
+                        @fecha_ingreso=?,
+                        @tipo_trabajador=?,
+                        @regimen_laboral=?,
+                        @cat_ocupacional=?,
+                        @ocupacion=?,
+                        @nivel_educativo=?,
+                        @tipo_contrato=?,
+                        @tipo_pago=?,
+                        @entidad_financiera=?,
+                        @nro_cuenta=?,
+                        @remun_bas=?,
+                        @regimen_pension=?,
+                        @regimen_pension_fec=?,
+                        @cuspp=?,
+                        @regimen_salud=?,
+                        @regimen_salud_fec=?,
+                        @situacion_especial=?,
+                        @sindicalizado=?,
+                        @replicationunit=?,
+                        @xlastuser=?,
+                        @person_out=@person_out OUTPUT,
+                        @mensaje_out=@mensaje_out OUTPUT;
+                    SELECT @person_out AS person, @mensaje_out AS mensaje;
+                    """,
+                    (
+                        cia,
+                        item.get('tipo_doc'),
+                        item.get('num_doc'),
+                        item.get('apellido_paterno'),
+                        item.get('apellido_materno'),
+                        item.get('nombres'),
+                        item.get('fecha_nac') or None,
+                        item.get('nacionalidad') or None,
+                        item.get('sexo'),
+                        item.get('telefono') or None,
+                        item.get('email') or None,
+                        item.get('direccion') or None,
+                        item.get('fecha_ingreso') or None,
+                        item.get('tipo_trabajador') or None,
+                        item.get('regimen_laboral') or None,
+                        item.get('cat_ocupacional') or None,
+                        item.get('ocupacion') or None,
+                        item.get('nivel_educativo') or None,
+                        item.get('tipo_contrato') or None,
+                        item.get('tipo_pago') or None,
+                        item.get('entidad_financiera') or None,
+                        item.get('nro_cuenta') or None,
+                        item.get('remun_bas') or None,
+                        item.get('regimen_pension') or None,
+                        item.get('regimen_pension_fec') or None,
+                        item.get('cuspp') or None,
+                        item.get('regimen_salud') or None,
+                        item.get('regimen_salud_fec') or None,
+                        item.get('situacion_especial') or None,
+                        item.get('sindicalizado') or None,
+                        replicationunit,
+                        _xlastuser_id(),
+                    ),
+                )
+                out_rows = _dicts_first_nonempty_resultset(cursor)
+                person = (out_rows[0].get('person') if out_rows else '') or ''
+                mensaje = (out_rows[0].get('mensaje') if out_rows else '') or 'Trabajador registrado correctamente.'
+                filas.append({
+                    'num_doc': item.get('num_doc'),
+                    'nombre': item.get('nombre_completo'),
+                    'estado': 'OK',
+                    'person': person,
+                    'mensaje': mensaje,
+                })
+                registrados += 1
+            except Exception as ex_item:
+                filas.append({
+                    'num_doc': item.get('num_doc'),
+                    'nombre': item.get('nombre_completo'),
+                    'estado': 'ERROR',
+                    'person': None,
+                    'mensaje': str(ex_item),
+                })
+                errores += 1
+
+        conn.commit()
+
+        return jsonify({
+            "ok": True,
+            "cia": cia,
+            "registrados": registrados,
+            "errores": errores,
+            "total": len(filas),
+            "filas": filas,
+            "mensaje": (
+                f"Se registraron {registrados} trabajador(es) nuevo(s)."
+                if errores == 0
+                else f"Registrados: {registrados}. Con error: {errores}."
+            ),
+        })
+    except Exception as ex:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('api_tregistro_importacion_registrar')
         return jsonify({"error": str(ex)}), 500
     finally:
         if conn:

@@ -221,6 +221,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_RESUMEN = {{ url_for('api_tregistro_importacion_resumen') | tojson }};
+    const URL_REGISTRAR = {{ url_for('api_tregistro_importacion_registrar') | tojson }};
     const DEFAULT_CIA = 'BGT';
 
     let filasResumen = [];
@@ -313,7 +314,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             <div><strong>Trabajadores en T-Registro:</strong> ${Number(resumen.total_trabajadores || 0)}</div>
             <div><strong>Nuevos (sin ficha):</strong> <span class="valor-nuevo">${Number(resumen.nuevos || 0)}</span></div>
             <div><strong>Ya en ficha:</strong> ${Number(resumen.existentes || 0)}</div>
-            <div><strong>Próximo paso:</strong> registrar solo los nuevos</div>
+            <div><strong>Próximo paso:</strong> registrar solo los nuevos con el botón verde</div>
         `;
 
         const advertencias = Array.isArray(resumen.advertencias) ? resumen.advertencias : [];
@@ -324,7 +325,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         btnRegistrar.disabled = Number(resumen.nuevos || 0) === 0;
         btnRegistrar.title = Number(resumen.nuevos || 0) === 0
             ? 'No hay trabajadores nuevos para registrar'
-            : 'Disponible en el siguiente paso del desarrollo';
+            : 'Registrar en la ficha los trabajadores marcados como nuevos';
     }
 
     function renderGrilla() {
@@ -370,7 +371,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         document.getElementById('cardResumenTregistro').classList.remove('d-none');
         document.getElementById('lblEstadoAccion').textContent =
-            `${Number(data.resumen.nuevos || 0)} trabajador(es) nuevo(s) listo(s) para el siguiente paso.`;
+            `${Number(data.resumen.nuevos || 0)} trabajador(es) nuevo(s) listo(s) para registrar.`;
 
         document.getElementById('cardResumenTregistro').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -440,10 +441,92 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     });
 
-    document.getElementById('btnRegistrarNuevos').addEventListener('click', function () {
-        const msg = 'El registro de trabajadores nuevos se implementará en el siguiente paso.';
-        if (window.HmUi) HmUi.info(msg);
-        else alert(msg);
+    document.getElementById('btnRegistrarNuevos').addEventListener('click', async function () {
+        const nuevos = Number((resumenActual && resumenActual.resumen && resumenActual.resumen.nuevos) || 0);
+        if (!nuevos) {
+            const msg = 'No hay trabajadores nuevos para registrar.';
+            if (window.HmUi) HmUi.advertencia(msg);
+            else alert(msg);
+            return;
+        }
+
+        const cia = document.getElementById('cboCompania').value.trim();
+        if (!cia) {
+            if (window.HmUi) HmUi.advertencia('Seleccione una compañía.');
+            else alert('Seleccione una compañía.');
+            return;
+        }
+
+        const confirmar = window.HmUi
+            ? await HmUi.confirmar({
+                titulo: 'Registrar trabajadores nuevos',
+                mensaje: `Se registrarán ${nuevos} trabajador(es) nuevo(s) en la ficha. ¿Desea continuar?`,
+                textoAceptar: 'Registrar',
+                textoCancelar: 'Cancelar',
+                tipo: 'success',
+            })
+            : window.confirm(`Se registrarán ${nuevos} trabajador(es) nuevo(s). ¿Desea continuar?`);
+        if (!confirmar) return;
+
+        const files = {
+            file_ide: document.getElementById('fileIde').files[0],
+            file_dir: document.getElementById('fileDir').files[0],
+            file_tra: document.getElementById('fileTra').files[0],
+            file_ssa: document.getElementById('fileSsa').files[0],
+            file_set: document.getElementById('fileSet').files[0],
+        };
+        for (const file of Object.values(files)) {
+            if (!file) {
+                const msg = 'Debe mantener los cinco archivos TXT seleccionados para registrar.';
+                if (window.HmUi) HmUi.advertencia(msg);
+                else alert(msg);
+                return;
+            }
+        }
+
+        const btn = document.getElementById('btnRegistrarNuevos');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Registrando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('cia', cia);
+            fd.append('replicationunit', 'LIMA');
+            Object.entries(files).forEach(([name, file]) => fd.append(name, file));
+
+            const res = await fetch(URL_REGISTRAR, { method: 'POST', body: fd });
+            const data = await leerRespuestaJson(res, 'Registro T-Registro');
+            if (!res.ok || data.error) {
+                const msg = data.error || 'No se pudo registrar los trabajadores.';
+                if (window.HmUi) HmUi.error(msg);
+                else alert(msg);
+                return;
+            }
+
+            const msgOk = data.mensaje || 'Registro completado.';
+            if (window.HmUi) HmUi.exito(msgOk);
+            else alert(msgOk);
+
+            if (Array.isArray(data.filas) && data.filas.length) {
+                const errores = data.filas.filter((f) => f.estado === 'ERROR');
+                if (errores.length) {
+                    const detalle = errores.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n');
+                    if (window.HmUi) HmUi.advertencia(detalle);
+                    else alert(detalle);
+                }
+            }
+
+            document.getElementById('btnAnalizarArchivos').click();
+        } catch (err) {
+            console.error(err);
+            const msg = err.message || 'Error al registrar trabajadores.';
+            if (window.HmUi) HmUi.error(msg);
+            else alert(msg);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
     });
 
     const cboCia = document.getElementById('cboCompania');

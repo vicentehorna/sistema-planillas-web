@@ -303,7 +303,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         : null;
 
     const URL_LISTADO = {{ url_for('api_asignacion_conceptos_listado') | tojson }};
-    const URL_DETALLE = {{ url_for('api_asignacion_conceptos_detalle') | tojson }};
     const URL_GUARDAR = {{ url_for('api_asignacion_conceptos_guardar') | tojson }};
     const URL_ELIMINAR = {{ url_for('api_asignacion_conceptos_eliminar') | tojson }};
     const HEADERS = [
@@ -344,28 +343,209 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    async function poblarSelectModal(url, selectElement) {
-        await poblarSelect(url, selectElement, { incluyeTodos: false });
+    const cacheCombosModal = {
+        cia: '',
+        payrolltype: '',
+        trabajadores: null,
+        conceptos: null,
+        periodos: null,
+    };
+    let precacheCombosModalKey = '';
+    let precacheCombosModalPromise = null;
+
+    function invalidarCacheCombosModal() {
+        cacheCombosModal.cia = '';
+        cacheCombosModal.payrolltype = '';
+        cacheCombosModal.trabajadores = null;
+        cacheCombosModal.conceptos = null;
+        cacheCombosModal.periodos = null;
+        precacheCombosModalKey = '';
+        precacheCombosModalPromise = null;
     }
 
-    async function poblarPeriodosModal(cia, payrolltype) {
+    async function fetchSelectorJson(url) {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('Error al cargar selector.');
+        const data = await res.json();
+        return Array.isArray(data) ? data : [];
+    }
+
+    function poblarSelectDesdeDatos(selectElement, data, opciones) {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
+        if (!selectElement) return;
+        selectElement.innerHTML = '';
+        if (incluyeTodos) {
+            const optTodos = document.createElement('option');
+            optTodos.value = valorTodos;
+            optTodos.textContent = textoTodos;
+            selectElement.appendChild(optTodos);
+        } else {
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = 'Seleccione...';
+            selectElement.appendChild(def);
+        }
+        data.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : '';
+            opt.textContent = item.text != null ? String(item.text) : '';
+            selectElement.appendChild(opt);
+        });
+        if (incluyeTodos) {
+            selectElement.value = valorTodos;
+        }
+        selectElement.disabled = false;
+    }
+
+    function poblarSelectUnicaOpcion(selectElement, value, text) {
+        if (!selectElement) return;
+        const v = String(value || '').trim();
+        selectElement.innerHTML = '';
+        if (!v) return;
+        const opt = document.createElement('option');
+        opt.value = v;
+        opt.textContent = String(text || v).trim() || v;
+        selectElement.appendChild(opt);
+        selectElement.value = v;
+    }
+
+    async function obtenerTrabajadoresModal(cia) {
+        if (cacheCombosModal.cia === cia && cacheCombosModal.trabajadores) {
+            return cacheCombosModal.trabajadores;
+        }
+        if (cacheCombosModal.cia !== cia) {
+            invalidarCacheCombosModal();
+        }
+        const data = await fetchSelectorJson(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`);
+        cacheCombosModal.cia = cia;
+        cacheCombosModal.trabajadores = data;
+        return data;
+    }
+
+    async function obtenerConceptosModal(cia) {
+        if (cacheCombosModal.cia === cia && cacheCombosModal.conceptos) {
+            return cacheCombosModal.conceptos;
+        }
+        if (cacheCombosModal.cia !== cia) {
+            invalidarCacheCombosModal();
+        }
+        const data = await fetchSelectorJson(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`);
+        cacheCombosModal.cia = cia;
+        cacheCombosModal.conceptos = data;
+        return data;
+    }
+
+    async function obtenerPeriodosModal(cia, payrolltype) {
+        if (cacheCombosModal.cia === cia && cacheCombosModal.payrolltype === payrolltype && cacheCombosModal.periodos) {
+            return cacheCombosModal.periodos;
+        }
+        const data = await fetchSelectorJson(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+        );
+        cacheCombosModal.cia = cia;
+        cacheCombosModal.payrolltype = payrolltype;
+        cacheCombosModal.periodos = data;
+        return data;
+    }
+
+    function combosModalCacheListos(cia, payrolltype) {
+        cia = String(cia || '').trim();
+        payrolltype = String(payrolltype || '').trim();
+        return cacheCombosModal.cia === cia
+            && cacheCombosModal.payrolltype === payrolltype
+            && cacheCombosModal.trabajadores
+            && cacheCombosModal.conceptos
+            && cacheCombosModal.periodos;
+    }
+
+    function precacheCombosModal(cia, payrolltype) {
+        cia = String(cia || '').trim();
+        payrolltype = String(payrolltype || '').trim();
+        if (!cia || !payrolltype) return Promise.resolve();
+        if (combosModalCacheListos(cia, payrolltype)) return Promise.resolve();
+
+        const key = `${cia}|${payrolltype}`;
+        if (precacheCombosModalPromise && precacheCombosModalKey === key) {
+            return precacheCombosModalPromise;
+        }
+
+        precacheCombosModalKey = key;
+        precacheCombosModalPromise = Promise.all([
+            obtenerTrabajadoresModal(cia),
+            obtenerConceptosModal(cia),
+            obtenerPeriodosModal(cia, payrolltype),
+        ]).catch((err) => {
+            console.warn('Precarga combos modal asignación:', err);
+        }).finally(() => {
+            precacheCombosModalPromise = null;
+        });
+        return precacheCombosModalPromise;
+    }
+
+    function aplicarDatosCombosModal(trabajadores, conceptos, periodos) {
+        const cboEmpleado = document.getElementById('cboModalEmpleado');
+        const cboConcepto = document.getElementById('cboModalConcepto');
         const cboInicio = document.getElementById('cboModalPeriodoInicio');
         const cboFin = document.getElementById('cboModalPeriodoFin');
-        await poblarSelectModal(
-            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            cboInicio
-        );
-        await poblarSelectModal(
-            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            cboFin
-        );
+        poblarSelectDesdeDatos(cboEmpleado, trabajadores, { incluyeTodos: false });
+        poblarSelectDesdeDatos(cboConcepto, conceptos, { incluyeTodos: false });
+        poblarSelectDesdeDatos(cboInicio, periodos, { incluyeTodos: false });
+        poblarSelectDesdeDatos(cboFin, periodos, { incluyeTodos: false });
         actualizarEstadoPeriodoFinModal();
     }
 
+    function poblarCombosModalDesdeCache() {
+        if (!cacheCombosModal.trabajadores || !cacheCombosModal.conceptos || !cacheCombosModal.periodos) {
+            return false;
+        }
+        aplicarDatosCombosModal(
+            cacheCombosModal.trabajadores,
+            cacheCombosModal.conceptos,
+            cacheCombosModal.periodos
+        );
+        return true;
+    }
+
     async function poblarCombosModal(cia, payrolltype) {
-        await poblarSelectModal(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, document.getElementById('cboModalEmpleado'));
-        await poblarSelectModal(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, document.getElementById('cboModalConcepto'));
-        await poblarPeriodosModal(cia, payrolltype);
+        const cboEmpleado = document.getElementById('cboModalEmpleado');
+        const cboConcepto = document.getElementById('cboModalConcepto');
+        const cboInicio = document.getElementById('cboModalPeriodoInicio');
+        const cboFin = document.getElementById('cboModalPeriodoFin');
+
+        if (combosModalCacheListos(cia, payrolltype)) {
+            poblarCombosModalDesdeCache();
+            return;
+        }
+
+        [cboEmpleado, cboConcepto, cboInicio, cboFin].forEach((el) => {
+            if (el) {
+                el.innerHTML = '<option value="">Cargando...</option>';
+                el.disabled = true;
+            }
+        });
+
+        const [trabajadores, conceptos, periodos] = await Promise.all([
+            obtenerTrabajadoresModal(cia),
+            obtenerConceptosModal(cia),
+            obtenerPeriodosModal(cia, payrolltype),
+        ]);
+        aplicarDatosCombosModal(trabajadores, conceptos, periodos);
+    }
+
+    async function poblarPeriodoFinModal(cia, payrolltype, periodoFinSel, periodoFinTexto) {
+        const cboFin = document.getElementById('cboModalPeriodoFin');
+        cboFin.innerHTML = '<option value="">Cargando...</option>';
+        cboFin.disabled = true;
+        const periodos = await obtenerPeriodosModal(cia, payrolltype);
+        poblarSelectDesdeDatos(cboFin, periodos, { incluyeTodos: false });
+        if (periodoFinSel) {
+            asegurarOpcionSelect(cboFin, periodoFinSel, periodoFinTexto);
+        }
+        actualizarEstadoPeriodoFinModal();
     }
 
     function limpiarFormularioModal() {
@@ -398,7 +578,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hdModalPlanilla').value = payrolltype;
         document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla');
 
-        await poblarCombosModal(cia, payrolltype);
+        if (!combosModalCacheListos(cia, payrolltype)) {
+            await poblarCombosModal(cia, payrolltype);
+        } else {
+            poblarCombosModalDesdeCache();
+        }
 
         const periodoFiltro = document.getElementById('cboPeriodo').value.trim();
         if (periodoFiltro && periodoFiltro !== '0') {
@@ -486,70 +670,54 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('modalAsignacionConceptoLabel').textContent = 'Editar asignación de concepto';
         document.getElementById('hdModalModo').value = 'U';
 
-        try {
-            const res = await fetch(URL_DETALLE, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(keys)
-            });
-            const payload = await res.json();
-            if (!res.ok || payload.error) {
-                alert(payload.error || 'No se pudo cargar la asignación.');
-                return;
+        const det = row;
+        const cia = String(det.company || keys.company).trim();
+        const payrolltype = String(det.payrolltype || keys.payrolltype).trim();
+
+        document.getElementById('hdModalCompania').value = cia;
+        document.getElementById('txtModalCompania').value = selectedText('cboCompania') || cia;
+        document.getElementById('hdModalPlanilla').value = payrolltype;
+        document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla') || payrolltype;
+        document.getElementById('hdModalCostCenter').value = det.costcenter != null ? String(det.costcenter) : keys.costcenter;
+
+        const personId = String(det.person || keys.person || '').trim();
+        const etiquetaEmpleado = String(det.nombre || det.employeecode || personId).trim();
+        const conceptId = String(det.concept || keys.concept || '').trim();
+        const etiquetaConcepto = String(det.conceptname || conceptId).trim();
+        const periodoInicio = String(det.prperiodstart || keys.prperiodstart || '').trim();
+
+        poblarSelectUnicaOpcion(document.getElementById('cboModalEmpleado'), personId, etiquetaEmpleado);
+        poblarSelectUnicaOpcion(document.getElementById('cboModalConcepto'), conceptId, etiquetaConcepto);
+        poblarSelectUnicaOpcion(
+            document.getElementById('cboModalPeriodoInicio'),
+            periodoInicio,
+            fmtPeriodoDisplay(periodoInicio)
+        );
+
+        document.getElementById('hdModalPerson').value = personId;
+        document.getElementById('hdModalConcept').value = conceptId;
+        document.getElementById('hdModalPeriodoInicio').value = periodoInicio;
+
+        const tipo = String(det.flagfrecuencytype || 'P').trim().toUpperCase();
+        document.getElementById('radModalPermanente').checked = tipo !== 'T';
+        document.getElementById('radModalTemporal').checked = tipo === 'T';
+        actualizarEstadoPeriodoFinModal();
+
+        document.getElementById('txtModalValor').value = det.conceptvalue != null ? String(det.conceptvalue) : '';
+        document.getElementById('cboModalMoneda').value = String(det.conceptcurrency || 'LO').trim().toUpperCase() === 'EX' ? 'EX' : 'LO';
+        document.getElementById('chkModalAplicaFormula').checked = String(det.flagapplyformula || '').trim().toUpperCase() === 'Y';
+
+        setModalCamposClaveDisabled(true);
+        modalAsignacion.show();
+
+        if (tipo === 'T') {
+            const periodoFin = String(det.prperiodend || '').trim();
+            try {
+                await poblarPeriodoFinModal(cia, payrolltype, periodoFin, fmtPeriodoDisplay(periodoFin));
+            } catch (err) {
+                console.error(err);
+                alert('No se pudo cargar la lista de periodos.');
             }
-            const det = payload.row || {};
-            const cia = String(det.company || keys.company).trim();
-            const payrolltype = String(det.payrolltype || keys.payrolltype).trim();
-
-            document.getElementById('hdModalCompania').value = cia;
-            document.getElementById('txtModalCompania').value = selectedText('cboCompania') || cia;
-            document.getElementById('hdModalPlanilla').value = payrolltype;
-            document.getElementById('txtModalPlanilla').value = selectedText('cboTipoPlanilla') || payrolltype;
-            document.getElementById('hdModalCostCenter').value = det.costcenter != null ? String(det.costcenter) : keys.costcenter;
-
-            await poblarCombosModal(cia, payrolltype);
-
-            const personId = String(det.person || keys.person || row.person || '').trim();
-            const etiquetaEmpleado = String(det.nombre || row.nombre || det.employeecode || row.employeecode || personId).trim();
-            asegurarOpcionSelect(document.getElementById('cboModalEmpleado'), personId, etiquetaEmpleado);
-
-            const conceptId = String(det.concept || keys.concept || row.concept || '').trim();
-            const etiquetaConcepto = String(det.conceptname || row.conceptname || conceptId).trim();
-            asegurarOpcionSelect(document.getElementById('cboModalConcepto'), conceptId, etiquetaConcepto);
-
-            const periodoInicio = String(det.prperiodstart || keys.prperiodstart || row.prperiodstart || '').trim();
-            document.getElementById('hdModalPerson').value = personId;
-            document.getElementById('hdModalConcept').value = conceptId;
-            document.getElementById('hdModalPeriodoInicio').value = periodoInicio;
-            asegurarOpcionSelect(
-                document.getElementById('cboModalPeriodoInicio'),
-                periodoInicio,
-                fmtPeriodoDisplay(periodoInicio)
-            );
-
-            const tipo = String(det.flagfrecuencytype || 'P').trim().toUpperCase();
-            document.getElementById('radModalPermanente').checked = tipo !== 'T';
-            document.getElementById('radModalTemporal').checked = tipo === 'T';
-            actualizarEstadoPeriodoFinModal();
-
-            if (tipo === 'T' && det.prperiodend) {
-                const periodoFin = String(det.prperiodend || row.prperiodend || '').trim();
-                asegurarOpcionSelect(
-                    document.getElementById('cboModalPeriodoFin'),
-                    periodoFin,
-                    fmtPeriodoDisplay(periodoFin)
-                );
-            }
-
-            document.getElementById('txtModalValor').value = det.conceptvalue != null ? String(det.conceptvalue) : '';
-            document.getElementById('cboModalMoneda').value = String(det.conceptcurrency || 'LO').trim().toUpperCase() === 'EX' ? 'EX' : 'LO';
-            document.getElementById('chkModalAplicaFormula').checked = String(det.flagapplyformula || '').trim().toUpperCase() === 'Y';
-
-            setModalCamposClaveDisabled(true);
-            modalAsignacion.show();
-        } catch (err) {
-            console.error(err);
-            alert('Error al cargar la asignación.');
         }
     }
 
@@ -1007,19 +1175,59 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function poblarPeriodosAsignacion(cia, payrolltype, selectElement) {
-        await poblarSelect(
-            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            selectElement,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
-        );
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const data = await obtenerPeriodosModal(cia, payrolltype);
+            poblarSelectDesdeDatos(selectElement, data, { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' });
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="0">Todos</option>';
+            selectElement.value = '0';
+            selectElement.disabled = false;
+        }
     }
 
     async function poblarConceptos(cia, selectElement) {
-        await poblarSelect(
-            `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
-            selectElement,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
-        );
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const data = await obtenerConceptosModal(cia);
+            poblarSelectDesdeDatos(selectElement, data, { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' });
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="0">Todos</option>';
+            selectElement.value = '0';
+            selectElement.disabled = false;
+        }
+    }
+
+    async function poblarTrabajadoresFiltro(cia, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const data = await obtenerTrabajadoresModal(cia);
+            selectElement.innerHTML = '';
+            const optTodos = document.createElement('option');
+            optTodos.value = '';
+            optTodos.textContent = 'Todos (por defecto)';
+            selectElement.appendChild(optTodos);
+            data.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.value = '';
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
     }
 
     async function ejecutarConsulta() {
@@ -1041,6 +1249,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Complete compañía y tipo planilla.');
             return;
         }
+
+        precacheCombosModal(cia, payrolltype);
 
         document.getElementById('lblRowCountAsigConceptos').textContent = '0';
 
@@ -1126,6 +1336,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 poblarSelect,
                 poblarPeriodosAsignacion,
                 poblarConceptos,
+                poblarTrabajadoresFiltro,
                 etiquetaTrabajadorTodosPorDefecto
             });
             limpiarValorComboSiObsoleto(cboPlanilla);
@@ -1158,6 +1369,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = cboCia.value.trim();
         const payrolltype = cboPlanilla.value.trim();
         if (cia && payrolltype) {
+            precacheCombosModal(cia, payrolltype);
             await ejecutarConsulta();
         }
     }
@@ -1165,6 +1377,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     actualizarBtnNuevaAsignacion();
 
     cboCia.addEventListener('change', async function () {
+        invalidarCacheCombosModal();
         const cia = this.value;
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.disabled = true;
@@ -1175,9 +1388,11 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-            await poblarConceptos(cia, cboConcepto);
-            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+            await Promise.all([
+                poblarConceptos(cia, cboConcepto),
+                poblarTrabajadoresFiltro(cia, cboTrabajador),
+            ]);
+            cboConcepto.disabled = false;
             cboTrabajador.disabled = false;
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
@@ -1188,11 +1403,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     cboPlanilla.addEventListener('change', async function () {
+        cacheCombosModal.periodos = null;
+        cacheCombosModal.payrolltype = '';
         const cia = cboCia.value;
         const payroll = this.value;
 
         if (cia && payroll) {
             await poblarPeriodosAsignacion(cia, payroll, cboPeriodo);
+            precacheCombosModal(cia, payroll);
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';

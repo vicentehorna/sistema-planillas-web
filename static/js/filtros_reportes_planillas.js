@@ -920,14 +920,18 @@
             }
 
             if (cboTrabajador && cia) {
-                await poblarSelect(
-                    `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-                    cboTrabajador
-                );
-                if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {
-                    opts.etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-                } else if (cboTrabajador.options.length && cboTrabajador.options[0].value === '') {
-                    cboTrabajador.options[0].textContent = 'Todos (por defecto)';
+                if (typeof opts.poblarTrabajadoresFiltro === 'function') {
+                    await opts.poblarTrabajadoresFiltro(cia, cboTrabajador);
+                } else {
+                    await poblarSelect(
+                        `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                        cboTrabajador
+                    );
+                    if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {
+                        opts.etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+                    } else if (cboTrabajador.options.length && cboTrabajador.options[0].value === '') {
+                        cboTrabajador.options[0].textContent = 'Todos (por defecto)';
+                    }
                 }
                 cboTrabajador.disabled = false;
                 const person = filtros.person != null ? String(filtros.person).trim() : '';

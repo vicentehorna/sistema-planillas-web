@@ -2,19 +2,817 @@
 
 {% block title %}Importación de Conceptos{% endblock %}
 
-{% block content %}
-<div class="container-fluid py-3">
-    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-        <div>
-            <h4 class="mb-1">Importación de Conceptos</h4>
-            <p class="text-muted small mb-0">Carga masiva de conceptos desde archivo Excel.</p>
-        </div>
-    </div>
+{% block extra_css %}
+<style>
+    .ic-grid-wrap {
+        max-height: calc(100vh - 22rem);
+        min-height: 280px;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
 
-    <div class="card shadow-sm border-0">
-        <div class="card-body">
-            <p class="mb-0 text-muted">Módulo en preparación.</p>
+    .table-ic-import {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-ic-import th,
+    .table-ic-import td {
+        padding: 0.28rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-ic-import thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-ic-import .col-num {
+        text-align: right;
+    }
+
+    .table-ic-import tbody tr.row-error {
+        background: #fff5f5;
+    }
+
+    .table-ic-import tbody tr.row-ok {
+        background: #fff;
+    }
+
+    .ic-estado-ok {
+        color: #198754;
+        font-weight: 600;
+    }
+
+    .ic-estado-error {
+        color: #dc3545;
+        font-weight: 600;
+    }
+
+    .ic-estado-pendiente {
+        color: #6c757d;
+        font-weight: 600;
+    }
+
+    .ic-estado-procesado {
+        color: #0d6efd;
+        font-weight: 600;
+    }
+
+    .ic-estructura-box {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+        font-size: 0.82rem;
+    }
+
+    .ic-estructura-box code {
+        font-size: 0.78rem;
+        color: #0d6efd;
+    }
+
+    .ic-archivo-nombre {
+        font-size: 0.82rem;
+        color: #495057;
+    }
+
+    .ic-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 240px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+        padding: 1rem;
+    }
+
+    .ic-resumen {
+        font-size: 0.82rem;
+        color: #495057;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+            <div>
+                <h4 class="mb-1">Importación de Conceptos</h4>
+                <p class="text-muted small mb-0">Seleccione la plantilla y cargue un Excel con DNI (obligatorio), Nombre (opcional) y conceptos.</p>
+            </div>
+        </div>
+
+        <form id="frmImportacionConceptos" class="row g-2 align-items-end">
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="cboPlantilla" class="form-label small fw-bold text-muted mb-1">Plantilla</label>
+                <select id="cboPlantilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+
+            <div class="col-12">
+                <div class="ic-estructura-box" id="boxEstructura">
+                    <span class="text-muted">Seleccione una plantilla para ver la estructura esperada del Excel.</span>
+                </div>
+            </div>
+
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <input type="file" id="inpArchivoExcel" class="d-none" accept=".xlsx,.xlsm,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnImportarExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Importar Excel
+                </button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnProcesarImportacion" disabled>
+                    <i class="bi bi-play-fill"></i> Procesar
+                </button>
+                <span class="ic-archivo-nombre" id="lblArchivoExcel">Ningún archivo seleccionado</span>
+                <span class="ms-auto ic-resumen">
+                    Registros: <strong id="lblTotalRegistros">0</strong>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body py-3">
+        <div id="placeholderGrilla" class="ic-placeholder">
+            Seleccione compañía, tipo planilla, periodo y plantilla. Luego importe el archivo Excel.
+        </div>
+
+        <div id="panelGrilla" class="d-none">
+            <div class="ic-grid-wrap">
+                <table class="table table-bordered table-sm table-hover table-ic-import align-middle mb-0">
+                    <thead id="theadImportacion"></thead>
+                    <tbody id="tbodyImportacion"></tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+    const URL_COMPANIAS = {{ url_for('api_companias') | tojson }};
+    const URL_TIPOS_PLANILLA = {{ url_for('api_tipos_planilla_listado') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_tipos_planilla_periodos_listado') | tojson }};
+    const URL_PLANTILLAS = {{ url_for('api_plantillas_importacion_listado') | tojson }};
+    const URL_PLANTILLA_OBTENER = {{ url_for('api_plantillas_importacion_obtener') | tojson }};
+    const URL_PERIODO_SUGERIDO = {{ url_for('api_aperturar_periodos_periodo_sugerido') | tojson }};
+    const URL_TRABAJADORES_LISTADO = {{ url_for('api_trabajadores_listado') | tojson }};
+    const URL_PROCESAR = {{ url_for('api_importacion_conceptos_procesar') | tojson }};
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboTipoPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboPlantilla = document.getElementById('cboPlantilla');
+    const boxEstructura = document.getElementById('boxEstructura');
+    const btnImportarExcel = document.getElementById('btnImportarExcel');
+    const btnProcesarImportacion = document.getElementById('btnProcesarImportacion');
+    const inpArchivoExcel = document.getElementById('inpArchivoExcel');
+    const lblArchivoExcel = document.getElementById('lblArchivoExcel');
+    const lblTotalRegistros = document.getElementById('lblTotalRegistros');
+    const placeholderGrilla = document.getElementById('placeholderGrilla');
+    const panelGrilla = document.getElementById('panelGrilla');
+    const theadImportacion = document.getElementById('theadImportacion');
+    const tbodyImportacion = document.getElementById('tbodyImportacion');
+
+    let plantillaDetalle = [];
+    let filasImportadas = [];
+    let archivoActual = '';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function normHeader(value) {
+        return String(value == null ? '' : value)
+            .trim()
+            .toUpperCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\s+/g, ' ');
+    }
+
+    function cellText(value) {
+        if (value == null) return '';
+        if (typeof value === 'object') {
+            if (value.text != null) return String(value.text).trim();
+            if (value.result != null) return String(value.result).trim();
+            if (value.richText && value.richText.length) {
+                return value.richText.map((p) => p.text || '').join('').trim();
+            }
+        }
+        return String(value).trim();
+    }
+
+    function fmtPeriodoDisplay(prperiod) {
+        const s = String(prperiod || '').trim();
+        if (/^\d{8}$/.test(s)) {
+            return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+        }
+        return s;
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    async function poblarSelectSimple(url, selectElement, opts) {
+        const options = opts || {};
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            let items = [];
+            if (options.method === 'POST') {
+                const data = await leerJson(await fetch(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(options.body || {}),
+                }));
+                items = data.rows || data.conceptos || data || [];
+            } else {
+                const data = await leerJson(await fetch(url));
+                items = Array.isArray(data) ? data : (data.rows || []);
+            }
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                if (options.valueKey) {
+                    opt.value = String(item[options.valueKey] ?? '').trim();
+                    opt.textContent = options.textFn ? options.textFn(item) : String(item[options.textKey] ?? opt.value);
+                } else {
+                    opt.value = item.id != null ? String(item.id) : '';
+                    opt.textContent = item.text != null ? String(item.text) : opt.value;
+                }
+                selectElement.appendChild(opt);
+            });
+            if (!options.neverDisable) {
+                selectElement.disabled = items.length === 0;
+            }
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            if (!options.neverDisable) {
+                selectElement.disabled = true;
+            }
+            throw err;
+        }
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function normalizarDni(value) {
+        let s = cellText(value);
+        if (/^\d+\.0$/.test(s)) s = s.slice(0, -2);
+        return s.replace(/\s+/g, '').trim();
+    }
+
+    function contarColumnasFila(row) {
+        for (let i = row.length - 1; i >= 0; i -= 1) {
+            if (String(row[i] ?? '').trim() !== '') return i + 1;
+        }
+        return 0;
+    }
+
+    function columnasRequeridas() {
+        return 2 + plantillaDetalle.length;
+    }
+
+    function titulosColumnasExcel() {
+        const cols = ['Col. 1: DNI', 'Col. 2: Nombre (opcional)'];
+        plantillaDetalle.forEach((_, idx) => {
+            cols.push(`Col. ${idx + 3}: ${tituloConcepto(idx)}`);
+        });
+        return cols;
+    }
+
+    function tituloConcepto(idx) {
+        const ln = plantillaDetalle[idx];
+        if (!ln) return `Concepto ${idx + 1}`;
+        const desc = String(ln.concept_description || ln.description || '').trim();
+        const code = String(ln.formulacode || ln.concept || '').trim();
+        if (desc && code) return `${desc} (${code})`;
+        return desc || code || `Concepto ${idx + 1}`;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    async function seleccionarPeriodoAbierto(cia, payrolltype) {
+        if (!cia || !payrolltype) return;
+        try {
+            const data = await leerJson(await fetch(
+                `${URL_PERIODO_SUGERIDO}?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            ));
+            const prperiod = String(data.prperiod || '').trim();
+            if (prperiod && optionExists(cboPeriodo, prperiod)) {
+                cboPeriodo.value = prperiod;
+            }
+        } catch (err) {
+            console.warn('No se pudo obtener el periodo abierto sugerido.', err);
+        }
+    }
+
+    function renderEstructuraEsperada() {
+        if (!plantillaDetalle.length) {
+            boxEstructura.innerHTML = '<span class="text-muted">Seleccione una plantilla para ver la estructura esperada del Excel.</span>';
+            return;
+        }
+        const cols = titulosColumnasExcel().map((h) => `<code>${escHtml(h)}</code>`).join(' &nbsp;|&nbsp; ');
+        const detalle = plantillaDetalle.map((ln, idx) => {
+            const titulo = tituloConcepto(idx);
+            return `<li><strong>Columna ${idx + 3}</strong>: ${escHtml(titulo)}</li>`;
+        }).join('');
+        boxEstructura.innerHTML = `
+            <div class="fw-semibold mb-1">Estructura del Excel (por posición de columnas)</div>
+            <div class="mb-1">${cols}</div>
+            <div class="text-muted small mb-2">Los encabezados del archivo pueden tener cualquier nombre. DNI es obligatorio; Nombre es opcional y se completa automáticamente si viene vacío.</div>
+            <ul class="mb-0 ps-3">${detalle}</ul>
+        `;
+    }
+
+    function limpiarGrilla(mensaje) {
+        filasImportadas = [];
+        archivoActual = '';
+        lblArchivoExcel.textContent = 'Ningún archivo seleccionado';
+        lblTotalRegistros.textContent = '0';
+        theadImportacion.innerHTML = '';
+        tbodyImportacion.innerHTML = '';
+        panelGrilla.classList.add('d-none');
+        placeholderGrilla.classList.remove('d-none');
+        placeholderGrilla.textContent = mensaje || 'Seleccione compañía, tipo planilla, periodo y plantilla. Luego importe el archivo Excel.';
+        inpArchivoExcel.value = '';
+        actualizarEstadoImportar();
+    }
+
+    function actualizarEstadoImportar() {
+        const filtrosOk = cboCia.value.trim()
+            && cboTipoPlanilla.value.trim()
+            && cboPeriodo.value.trim()
+            && cboPlantilla.value.trim()
+            && plantillaDetalle.length > 0;
+        btnImportarExcel.disabled = !filtrosOk;
+
+        const filasValidas = filasImportadas.some((row) => row.estado === 'OK');
+        btnProcesarImportacion.disabled = !(filtrosOk && filasImportadas.length > 0 && filasValidas);
+    }
+
+    function renderGrilla() {
+        if (!filasImportadas.length) {
+            limpiarGrilla('No hay registros para mostrar.');
+            return;
+        }
+
+        const conceptHeaders = plantillaDetalle.map((_, idx) => tituloConcepto(idx));
+        theadImportacion.innerHTML = `
+            <tr>
+                <th>#</th>
+                <th>DNI</th>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Mensaje</th>
+                ${conceptHeaders.map((h) => `<th class="col-num">${escHtml(h)}</th>`).join('')}
+            </tr>
+        `;
+
+        tbodyImportacion.innerHTML = filasImportadas.map((row, idx) => {
+            let estadoClass = 'ic-estado-pendiente';
+            if (row.estado === 'OK') estadoClass = 'ic-estado-ok';
+            else if (row.estado === 'Procesado') estadoClass = 'ic-estado-procesado';
+            else if (row.estado === 'Error') estadoClass = 'ic-estado-error';
+            const trClass = row.estado === 'Error' ? 'row-error' : 'row-ok';
+            const conceptosHtml = (row.conceptos || []).map((v) => `<td class="col-num">${escHtml(v)}</td>`).join('');
+            return `
+                <tr class="${trClass}">
+                    <td class="text-center">${idx + 1}</td>
+                    <td>${escHtml(row.dni)}</td>
+                    <td>${escHtml(row.nombre)}</td>
+                    <td class="${estadoClass}">${escHtml(row.estado)}</td>
+                    <td>${escHtml(row.mensaje)}</td>
+                    ${conceptosHtml}
+                </tr>
+            `;
+        }).join('');
+
+        placeholderGrilla.classList.add('d-none');
+        panelGrilla.classList.remove('d-none');
+        lblTotalRegistros.textContent = String(filasImportadas.length);
+        actualizarEstadoImportar();
+    }
+
+    function validarCantidadColumnas(headerRow) {
+        const requeridas = columnasRequeridas();
+        const encontradas = contarColumnasFila(headerRow);
+        if (encontradas < requeridas) {
+            return [`El archivo debe tener al menos ${requeridas} columnas (DNI, Nombre y ${plantillaDetalle.length} concepto(s)). Tiene ${encontradas}.`];
+        }
+        return [];
+    }
+
+    function validarFila(dni, nombre, conceptos, trabajador) {
+        const msgs = [];
+        if (!dni) msgs.push('DNI vacío.');
+        else if (!trabajador) msgs.push('DNI no registrado.');
+        conceptos.forEach((valor, idx) => {
+            if (valor === '') return;
+            const num = Number(String(valor).replace(/,/g, ''));
+            if (Number.isNaN(num)) {
+                msgs.push(`Columna ${idx + 3} no es numérica.`);
+            }
+        });
+        return msgs;
+    }
+
+    async function cargarMapaTrabajadoresPorDni(cia, payrolltype) {
+        const data = await leerJson(await fetch(URL_TRABAJADORES_LISTADO, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cia,
+                payrolltype,
+                person: '0',
+                docnro: '',
+                nombre: '',
+                estado: 'T',
+                cesados: 'T',
+            }),
+        }));
+
+        const mapa = new Map();
+        (data.data || []).forEach((fila, idx) => {
+            const dni = normalizarDni(fila[5]);
+            if (!dni) return;
+            const meta = (data.rows || [])[idx] || {};
+            mapa.set(dni, {
+                nombre: String(fila[2] || '').trim(),
+                person: String(meta.person || '').trim(),
+                codigo: String(meta.codigo || fila[1] || '').trim(),
+            });
+        });
+        return mapa;
+    }
+
+    async function cargarTiposPlanilla() {
+        cboTipoPlanilla.disabled = true;
+        cboPeriodo.disabled = true;
+        cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        plantillaDetalle = [];
+        renderEstructuraEsperada();
+        limpiarGrilla();
+
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            actualizarEstadoImportar();
+            return;
+        }
+
+        await poblarSelectSimple(URL_TIPOS_PLANILLA, cboTipoPlanilla, {
+            method: 'POST',
+            body: { cia },
+            valueKey: 'payrolltype',
+            textFn: (item) => {
+                const desc = String(item.description || item.shortname || '').trim();
+                return desc || String(item.payrolltype || '').trim();
+            },
+        });
+        cboTipoPlanilla.disabled = false;
+        actualizarEstadoImportar();
+    }
+
+    async function cargarPeriodos() {
+        cboPeriodo.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        plantillaDetalle = [];
+        renderEstructuraEsperada();
+        limpiarGrilla();
+
+        const cia = cboCia.value.trim();
+        const payrolltype = cboTipoPlanilla.value.trim();
+        if (!cia || !payrolltype) {
+            cboPeriodo.disabled = false;
+            actualizarEstadoImportar();
+            return;
+        }
+
+        await poblarSelectSimple(URL_PERIODOS, cboPeriodo, {
+            method: 'POST',
+            body: { cia, payrolltype },
+            valueKey: 'prperiod',
+            textFn: (item) => fmtPeriodoDisplay(item.prperiod),
+        });
+        await seleccionarPeriodoAbierto(cia, payrolltype);
+        cboPeriodo.disabled = false;
+        actualizarEstadoImportar();
+    }
+
+    async function cargarPlantillas() {
+        cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
+        plantillaDetalle = [];
+        renderEstructuraEsperada();
+        limpiarGrilla();
+
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            actualizarEstadoImportar();
+            return;
+        }
+
+        await poblarSelectSimple(URL_PLANTILLAS, cboPlantilla, {
+            method: 'POST',
+            body: { cia },
+            neverDisable: true,
+            valueKey: 'importconcept',
+            textFn: (item) => {
+                const name = String(item.name || '').trim();
+                const code = String(item.importconcept || '').trim();
+                return name || code;
+            },
+        });
+        actualizarEstadoImportar();
+    }
+
+    async function cargarDetallePlantilla() {
+        plantillaDetalle = [];
+        renderEstructuraEsperada();
+        limpiarGrilla();
+
+        const cia = cboCia.value.trim();
+        const importconcept = cboPlantilla.value.trim();
+        if (!cia || !importconcept) {
+            actualizarEstadoImportar();
+            return;
+        }
+
+        const data = await leerJson(await fetch(URL_PLANTILLA_OBTENER, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, importconcept }),
+        }));
+
+        plantillaDetalle = (data.detalle || []).filter((ln) => String(ln.concept || '').trim());
+        renderEstructuraEsperada();
+        actualizarEstadoImportar();
+    }
+
+    async function procesarArchivoExcel(file) {
+        if (!file) return;
+
+        if (!plantillaDetalle.length) {
+            alert('Seleccione una plantilla con conceptos antes de importar.');
+            return;
+        }
+
+        const buffer = await file.arrayBuffer();
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const sheet = workbook.worksheets[0];
+        if (!sheet) {
+            alert('El archivo Excel no contiene hojas.');
+            return;
+        }
+
+        const rows = [];
+        sheet.eachRow({ includeEmpty: false }, (row) => {
+            const values = [];
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                values[colNumber - 1] = cellText(cell.value);
+            });
+            rows.push(values);
+        });
+
+        if (!rows.length) {
+            alert('El archivo Excel está vacío.');
+            return;
+        }
+
+        const headerRow = rows[0].map((v) => String(v ?? '').trim());
+        const erroresColumnas = validarCantidadColumnas(headerRow);
+        if (erroresColumnas.length) {
+            alert('La estructura del Excel no coincide con la plantilla:\n\n' + erroresColumnas.join('\n'));
+            return;
+        }
+
+        const dataRows = rows.slice(1).filter((r) => r.some((c) => String(c || '').trim() !== ''));
+        if (!dataRows.length) {
+            alert('El Excel no contiene filas de datos.');
+            return;
+        }
+
+        const cia = cboCia.value.trim();
+        const payrolltype = cboTipoPlanilla.value.trim();
+        const mapaTrabajadores = await cargarMapaTrabajadoresPorDni(cia, payrolltype);
+
+        filasImportadas = dataRows.map((row) => {
+            const dni = normalizarDni(row[0]);
+            const nombreExcel = String(row[1] ?? '').trim();
+            const trabajador = mapaTrabajadores.get(dni) || null;
+            const nombre = nombreExcel || (trabajador ? trabajador.nombre : '');
+            const conceptos = [];
+            for (let i = 0; i < plantillaDetalle.length; i += 1) {
+                conceptos.push(String(row[i + 2] ?? '').trim());
+            }
+            const msgs = validarFila(dni, nombre, conceptos, trabajador);
+            return {
+                dni,
+                nombre,
+                person: trabajador ? trabajador.person : '',
+                codigo: trabajador ? trabajador.codigo : '',
+                conceptos,
+                estado: msgs.length ? 'Error' : 'OK',
+                mensaje: msgs.length ? msgs.join(' ') : 'Listo para importar',
+            };
+        });
+
+        archivoActual = file.name;
+        lblArchivoExcel.textContent = archivoActual;
+        renderGrilla();
+    }
+
+    async function procesarImportacion() {
+        if (btnProcesarImportacion.disabled) return;
+
+        const filasProcesar = filasImportadas.filter((row) => row.estado === 'OK');
+        if (!filasProcesar.length) {
+            alert('No hay filas válidas para procesar.');
+            return;
+        }
+
+        const confirmar = window.confirm(
+            '¿Procesar la importación en Asignación de Conceptos?\n\n'
+            + 'Se registrarán conceptos temporales para el periodo seleccionado. '
+            + 'Si ya existen, se actualizarán.'
+        );
+        if (!confirmar) return;
+
+        btnProcesarImportacion.disabled = true;
+        btnImportarExcel.disabled = true;
+        const textoOriginal = btnProcesarImportacion.innerHTML;
+        btnProcesarImportacion.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Procesando...';
+
+        try {
+            const payload = {
+                cia: cboCia.value.trim(),
+                payrolltype: cboTipoPlanilla.value.trim(),
+                period: cboPeriodo.value.trim(),
+                conceptos: plantillaDetalle.map((ln) => ({ concept: ln.concept })),
+                rows: filasProcesar.map((row) => ({
+                    dni: row.dni,
+                    nombre: row.nombre,
+                    person: row.person,
+                    conceptos: row.conceptos,
+                })),
+            };
+
+            const data = await leerJson(await fetch(URL_PROCESAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            }));
+
+            const mapaResultado = new Map(
+                (data.rows || []).map((row) => [String(row.dni || '').trim(), row])
+            );
+
+            filasImportadas = filasImportadas.map((row) => {
+                const key = String(row.dni || '').trim();
+                return mapaResultado.has(key) ? { ...row, ...mapaResultado.get(key) } : row;
+            });
+
+            renderGrilla();
+
+            const res = data.resumen || {};
+            const msg = [
+                `Filas procesadas: ${res.filas_ok || 0}`,
+                `Filas con error: ${res.filas_error || 0}`,
+                `Conceptos registrados: ${res.conceptos_ok || 0}`,
+            ].join('\n');
+            alert((data.ok ? 'Proceso completado.\n\n' : 'Proceso finalizado con observaciones.\n\n') + msg);
+        } catch (err) {
+            alert(err.message || 'No se pudo procesar la importación.');
+        } finally {
+            btnProcesarImportacion.innerHTML = textoOriginal;
+            actualizarEstadoImportar();
+        }
+    }
+
+    cboCia.addEventListener('change', async () => {
+        try {
+            await cargarTiposPlanilla();
+            await cargarPlantillas();
+        } catch (err) {
+            alert(err.message || 'Error al cargar datos de la compañía.');
+        }
+    });
+
+    cboTipoPlanilla.addEventListener('change', async () => {
+        try {
+            await cargarPeriodos();
+            if (cboPlantilla.value.trim()) {
+                await cargarDetallePlantilla();
+            }
+        } catch (err) {
+            alert(err.message || 'Error al cargar periodos.');
+        }
+    });
+
+    cboPlantilla.addEventListener('change', async () => {
+        try {
+            await cargarDetallePlantilla();
+        } catch (err) {
+            alert(err.message || 'Error al cargar la plantilla.');
+        }
+    });
+
+    btnImportarExcel.addEventListener('click', () => {
+        if (btnImportarExcel.disabled) return;
+        inpArchivoExcel.click();
+    });
+
+    btnProcesarImportacion.addEventListener('click', () => {
+        procesarImportacion().catch((err) => {
+            console.error(err);
+            alert(err.message || 'Error al procesar la importación.');
+        });
+    });
+
+    inpArchivoExcel.addEventListener('change', async () => {
+        const file = inpArchivoExcel.files && inpArchivoExcel.files[0];
+        if (!file) return;
+        try {
+            await procesarArchivoExcel(file);
+        } catch (err) {
+            console.error(err);
+            alert(err.message || 'No se pudo leer el archivo Excel.');
+        } finally {
+            inpArchivoExcel.value = '';
+        }
+    });
+
+    document.getElementById('frmImportacionConceptos').addEventListener('submit', (e) => e.preventDefault());
+
+    try {
+        await poblarSelectSimple(URL_COMPANIAS, cboCia);
+        if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+            await cargarTiposPlanilla();
+            await cargarPlantillas();
+        }
+    } catch (err) {
+        console.error(err);
+        alert(err.message || 'Error al inicializar la pantalla.');
+    }
+});
+</script>
 {% endblock %}

@@ -5778,6 +5778,314 @@ def api_plantillas_importacion_conceptos():
                 pass
 
 
+def _importacion_conceptos_error_sql(exc):
+    err = str(exc)
+    if 'RAISERROR' in err or '50000' in err:
+        parts = err.split(']')
+        if len(parts) > 1:
+            return parts[-1].strip(" ()'\"")
+    return err
+
+
+def _importacion_conceptos_parse_valor(raw):
+    if raw is None:
+        return 0.0
+    s = str(raw).strip().replace(',', '')
+    if not s:
+        return 0.0
+    return float(s)
+
+
+def _importacion_conceptos_costcenter(cursor, cia, person, payrolltype, cache):
+    key = (cia, person, payrolltype)
+    if key in cache:
+        return cache[key]
+    cursor.execute(
+        """
+        SELECT ISNULL(NULLIF(LTRIM(RTRIM(e.CostCenter)), ''), '')
+        FROM PR_Employee e
+        WHERE e.Company = ? AND e.Person = ? AND e.PayRollType = ?
+        """,
+        (cia, person, payrolltype),
+    )
+    row = cursor.fetchone()
+    costcenter = str(row[0] if row and row[0] is not None else '').strip()
+    cache[key] = costcenter
+    return costcenter
+
+
+def _importacion_conceptos_meta_concepto(cursor, cia, concept, cache):
+    key = (cia, concept)
+    if key in cache:
+        return cache[key]
+    cursor.execute(
+        """
+        SELECT
+            UPPER(LTRIM(RTRIM(ISNULL(c.ConceptCurrency, 'LO')))) AS conceptcurrency,
+            UPPER(LTRIM(RTRIM(ISNULL(c.FlagIsMonetary, 'Y')))) AS flagismonetary
+        FROM PR_Concept c
+        WHERE c.Company = ? AND c.Concept = ?
+        """,
+        (cia, concept),
+    )
+    row = cursor.fetchone()
+    meta = {
+        'conceptcurrency': 'EX' if row and str(row[0] or '').strip().upper() == 'EX' else 'LO',
+        'flagismonetary': str(row[1] if row else 'Y').strip().upper() or 'Y',
+    }
+    cache[key] = meta
+    return meta
+
+
+def _importacion_conceptos_existe(cursor, cia, person, concept, payrolltype, period, costcenter):
+    cursor.execute(
+        """
+        SELECT 1
+        FROM PR_EmployeeConcept ec
+        WHERE ec.Company = ?
+          AND ec.Person = ?
+          AND ec.Concept = ?
+          AND ec.PayRollType = ?
+          AND ec.PRPeriodStart = ?
+          AND ec.CostCenter = ?
+        """,
+        (cia, person, concept, payrolltype, period, costcenter),
+    )
+    return cursor.fetchone() is not None
+
+
+def _importacion_conceptos_guardar_fila(
+    cursor,
+    *,
+    modo,
+    cia,
+    person,
+    concept,
+    payrolltype,
+    period,
+    costcenter,
+    conceptvalue,
+    conceptcurrency,
+    xlastuser,
+):
+    cursor.execute(
+        "EXEC sp_pr_guardarasignacionconcepto_web "
+        "@modo=?, @par_company=?, @par_person=?, @par_concept=?, @par_payrolltype=?, "
+        "@par_prperiodstart=?, @par_costcenter=?, @par_prperiodend=?, @par_conceptvalue=?, "
+        "@par_conceptcurrency=?, @par_flagapplyformula=?, @par_flagfrecuencytype=?, @xlastuser=?",
+        (
+            modo,
+            cia,
+            person,
+            concept,
+            payrolltype,
+            period,
+            costcenter,
+            period,
+            conceptvalue,
+            conceptcurrency,
+            'N',
+            'T',
+            xlastuser,
+        ),
+    )
+    _drain_pyodbc_cursor(cursor)
+
+
+@app.route('/api/importacion-conceptos/procesar', methods=['POST'])
+@login_required
+def api_importacion_conceptos_procesar():
+    """Registra importes del Excel en PR_EmployeeConcept (temporal, upsert)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
+    conceptos_tpl = body.get('conceptos') or []
+    filas = body.get('rows') or []
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione un tipo de planilla."}), 400
+    if not period:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    if not isinstance(conceptos_tpl, list) or not conceptos_tpl:
+        return jsonify({"error": "La plantilla no tiene conceptos configurados."}), 400
+    if not isinstance(filas, list) or not filas:
+        return jsonify({"error": "No hay filas para procesar."}), 400
+
+    conceptos_codigos = []
+    for item in conceptos_tpl:
+        if isinstance(item, dict):
+            code = str(item.get('concept') or '').strip()
+        else:
+            code = str(item or '').strip()
+        if code:
+            conceptos_codigos.append(code)
+    if not conceptos_codigos:
+        return jsonify({"error": "La plantilla no tiene conceptos válidos."}), 400
+
+    xlastuser = _xlastuser_id()
+    costcenter_cache = {}
+    concepto_cache = {}
+    resultado_filas = []
+    total_conceptos = 0
+    ok_conceptos = 0
+    filas_ok = 0
+    filas_error = 0
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        for fila in filas:
+            if not isinstance(fila, dict):
+                continue
+
+            dni = str(fila.get('dni') or '').strip()
+            nombre = str(fila.get('nombre') or '').strip()
+            person = str(fila.get('person') or '').strip()
+            valores = fila.get('conceptos') or []
+            if not isinstance(valores, list):
+                valores = []
+
+            if not person:
+                filas_error += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "conceptos": valores,
+                    "estado": "Error",
+                    "mensaje": "DNI no registrado o trabajador no identificado.",
+                })
+                continue
+
+            costcenter = _importacion_conceptos_costcenter(
+                cursor, cia, person, payrolltype, costcenter_cache
+            )
+            if not costcenter:
+                filas_error += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "conceptos": valores,
+                    "estado": "Error",
+                    "mensaje": "Verifique el tipo de planilla o el centro de costo del trabajador.",
+                })
+                continue
+
+            errores_fila = []
+            procesados_fila = 0
+
+            for idx, concept in enumerate(conceptos_codigos):
+                valor_raw = valores[idx] if idx < len(valores) else ''
+                try:
+                    conceptvalue = _importacion_conceptos_parse_valor(valor_raw)
+                except ValueError:
+                    errores_fila.append(f"Columna {idx + 3}: importe inválido.")
+                    continue
+
+                if conceptvalue == 0:
+                    continue
+
+                meta = _importacion_conceptos_meta_concepto(
+                    cursor, cia, concept, concepto_cache
+                )
+                if meta.get('flagismonetary') == 'N':
+                    continue
+
+                total_conceptos += 1
+                modo = 'U' if _importacion_conceptos_existe(
+                    cursor, cia, person, concept, payrolltype, period, costcenter
+                ) else 'I'
+
+                try:
+                    _importacion_conceptos_guardar_fila(
+                        cursor,
+                        modo=modo,
+                        cia=cia,
+                        person=person,
+                        concept=concept,
+                        payrolltype=payrolltype,
+                        period=period,
+                        costcenter=costcenter,
+                        conceptvalue=conceptvalue,
+                        conceptcurrency=meta.get('conceptcurrency') or 'LO',
+                        xlastuser=xlastuser,
+                    )
+                    conn.commit()
+                    ok_conceptos += 1
+                    procesados_fila += 1
+                except Exception as exc:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    errores_fila.append(
+                        f"{concept}: {_importacion_conceptos_error_sql(exc)}"
+                    )
+
+            if errores_fila:
+                filas_error += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "conceptos": valores,
+                    "estado": "Error",
+                    "mensaje": ' '.join(errores_fila),
+                })
+            elif procesados_fila > 0:
+                filas_ok += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "conceptos": valores,
+                    "estado": "Procesado",
+                    "mensaje": f"Procesado correctamente ({procesados_fila} concepto(s)).",
+                })
+            else:
+                filas_ok += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "conceptos": valores,
+                    "estado": "Procesado",
+                    "mensaje": "Sin importes mayores a cero.",
+                })
+
+        return jsonify({
+            "ok": filas_error == 0,
+            "rows": resultado_filas,
+            "resumen": {
+                "filas": len(resultado_filas),
+                "filas_ok": filas_ok,
+                "filas_error": filas_error,
+                "conceptos_intentados": total_conceptos,
+                "conceptos_ok": ok_conceptos,
+            },
+        })
+    except Exception as e:
+        logging.exception("api_importacion_conceptos_procesar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _usercompany_usuario_dict(r):
     return {
         'userid': _jsonable_value(r.get('userid')),

@@ -112,6 +112,30 @@
         color: #6c757d;
         opacity: 0.65;
     }
+
+    .table-planilla-vertical tbody tr.planilla-row-located {
+        background-color: #0d6efd !important;
+        color: #fff;
+    }
+
+    .table-planilla-vertical.table-hover > tbody > tr.planilla-row-located > td {
+        background-color: transparent;
+        color: inherit;
+    }
+
+    .table-planilla-vertical.table-hover > tbody > tr.planilla-row-located:hover > td {
+        background-color: transparent;
+        color: inherit;
+    }
+
+    .table-planilla-vertical tbody tr.planilla-row-located:hover {
+        background-color: #0b5ed7 !important;
+        color: #fff;
+    }
+
+    .table-planilla-vertical tbody tr.planilla-row-located .form-check-input {
+        border-color: rgba(255, 255, 255, 0.85);
+    }
 </style>
 {% endblock %}
 
@@ -155,6 +179,10 @@
                 <select id="cboUnidad" class="form-select form-select-sm">
                     <option value="0">Todas</option>
                 </select>
+            </div>
+            <div class="col-12 col-md-6 col-lg-3">
+                <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted">Localizar trabajador</label>
+                <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarPlanilla">
@@ -311,6 +339,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProc = document.getElementById('cboProcesoCalculo');
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
+    const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
     const btnResumenCalculo = document.getElementById('btnResumenCalculo');
     const modalResumenCalculoEl = document.getElementById('modalResumenCalculo');
     const modalResumenCalculo = modalResumenCalculoEl ? new bootstrap.Modal(modalResumenCalculoEl) : null;
@@ -426,6 +455,76 @@ document.addEventListener('DOMContentLoaded', async function () {
         return text === 'LIQUIDACION';
     }
 
+    function esProcesoValidacionPostCalculo() {
+        if (!cboProc) return false;
+        const opt = cboProc.options[cboProc.selectedIndex];
+        if (!opt) return false;
+        const shortName = String(opt.dataset.shortName || '').trim().toUpperCase();
+        const procId = String(cboProc.value || '').trim().toUpperCase();
+        const text = String(opt.textContent || '').trim().toUpperCase();
+        if (shortName === 'FIN_DE_MES') return true;
+        if (text === 'MENSUAL' || text.includes('FIN DE MES')) return true;
+        if (procId.includes('FIN_DE_MES')) return true;
+        return false;
+    }
+
+    function terminoLocalizador() {
+        return String(txtBuscarTrabajador?.value || '').trim().toLowerCase();
+    }
+
+    function apellidoLocalizador(nombre) {
+        const n = String(nombre || '').trim().toLowerCase();
+        if (!n) return '';
+        const coma = n.indexOf(',');
+        if (coma >= 0) return n.slice(0, coma).trim();
+        return n.split(/\s+/)[0] || '';
+    }
+
+    function filaCoincideLocalizador(tr, q) {
+        if (!q) return false;
+        const apellido = tr.dataset.apellido || '';
+        const nombre = tr.dataset.nombre || '';
+        const person = tr.dataset.person || '';
+        return apellido.startsWith(q) || nombre.startsWith(q) || person.startsWith(q);
+    }
+
+    function scrollFilaEnContenedor(scroll, row) {
+        if (!scroll || !row) return;
+        const scrollRect = scroll.getBoundingClientRect();
+        const rowRect = row.getBoundingClientRect();
+        if (rowRect.top < scrollRect.top) {
+            scroll.scrollTop -= scrollRect.top - rowRect.top + 4;
+        } else if (rowRect.bottom > scrollRect.bottom) {
+            scroll.scrollTop += rowRect.bottom - scrollRect.bottom + 4;
+        }
+    }
+
+    function moverCursorLocalizadorPlanilla() {
+        const tbody = document.getElementById('tbodyTrabajadores');
+        const scroll = document.querySelector('.table-scroll-container');
+        const rows = tbody ? tbody.querySelectorAll('tr.planilla-row') : [];
+        rows.forEach((tr) => tr.classList.remove('planilla-row-located'));
+
+        if (!rows.length) return;
+
+        const q = terminoLocalizador();
+        let target = rows[0];
+
+        if (q) {
+            for (const tr of rows) {
+                if (filaCoincideLocalizador(tr, q)) {
+                    target = tr;
+                    break;
+                }
+            }
+        } else if (scroll) {
+            scroll.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        target.classList.add('planilla-row-located');
+        scrollFilaEnContenedor(scroll, target);
+    }
+
     function aplicarReglaCesadosPorProceso() {
         if (!cboCesados) return;
         if (esProcesoLiquidacionSeleccionado()) {
@@ -459,6 +558,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const chk = document.getElementById('checkAll');
         chk.checked = false;
         chk.indeterminate = false;
+        if (txtBuscarTrabajador) txtBuscarTrabajador.value = '';
         invalidarResumenCalculo();
         actualizarContadores();
     }
@@ -579,6 +679,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 opt.value = item.id != null ? String(item.id) : '';
                 opt.textContent = item.text != null ? String(item.text) : '';
                 opt.dataset.procedureName = item.procedurename != null ? String(item.procedurename).trim() : '';
+                opt.dataset.shortName = item.shortname != null ? String(item.shortname).trim() : '';
                 cboProc.appendChild(opt);
             });
         } catch (e) {
@@ -657,12 +758,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             const want = restoreIds && Array.isArray(restoreIds) ? new Set(restoreIds.map((x) => String(x).trim())) : null;
             data.forEach((t) => {
                 const tr = document.createElement('tr');
+                tr.className = 'planilla-row';
+                const pid = String(t.person || '').trim();
+                const nombreRaw = String(t.name || '').trim();
+                tr.dataset.nombre = nombreRaw.toLowerCase();
+                tr.dataset.apellido = apellidoLocalizador(nombreRaw);
+                tr.dataset.person = pid.toLowerCase();
                 const td0 = document.createElement('td');
                 td0.className = 'text-center';
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.className = 'check-trabajador form-check-input';
-                const pid = String(t.person || '').trim();
                 cb.value = pid;
                 if (want && want.has(pid)) cb.checked = true;
                 td0.appendChild(cb);
@@ -670,7 +776,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 td1.className = 'font-monospace';
                 td1.textContent = pid;
                 const td2 = document.createElement('td');
-                td2.textContent = String(t.name || '').trim();
+                td2.textContent = nombreRaw;
                 const td3 = document.createElement('td');
                 td3.textContent = String(t.entrydate || '').trim();
                 const td4 = document.createElement('td');
@@ -689,6 +795,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             actualizarContadores();
             if (filtrosPersist) filtrosPersist.guardar();
             await consultarValidacionesPreCalculo();
+            moverCursorLocalizadorPlanilla();
         } catch (e) {
             console.error(e);
             alert('Error de red o del servidor.');
@@ -730,6 +837,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     function renderizarValidacionesCalculo(validaciones) {
         const card = document.getElementById('cardValidacionesCalculo');
         const lista = document.getElementById('listaValidacionesCalculo');
+        if (!esProcesoValidacionPostCalculo()) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
         const items = Array.isArray(validaciones) ? validaciones : [];
         if (!items.length) {
             card.classList.add('d-none');
@@ -793,6 +905,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function consultarValidacionesCalculo() {
+        if (!esProcesoValidacionPostCalculo()) {
+            ocultarValidacionesCalculo();
+            return [];
+        }
         const cia = cboCia.value.trim();
         const payrolltype = cboPt.value.trim();
         const processtype = cboProc.value.trim();
@@ -1233,10 +1349,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtPR.value = '';
         txtPR.title = '';
         limpiarTablaTrabajadores();
+        ocultarValidacionesCalculo();
         aplicarReglaCesadosPorProceso();
         await cargarPeriodo();
         if (filtrosPersist) filtrosPersist.guardar();
     });
+
+    if (txtBuscarTrabajador) {
+        txtBuscarTrabajador.addEventListener('input', function () {
+            moverCursorLocalizadorPlanilla();
+        });
+    }
 
     document.getElementById('cboCesados').addEventListener('change', function () {
         limpiarTablaTrabajadores();

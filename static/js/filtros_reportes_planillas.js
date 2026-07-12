@@ -855,13 +855,6 @@
 
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
 
-            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
-            if (!payroll || !optionExists(cboPt, payroll)) {
-                guardar();
-                return true;
-            }
-            cboPt.value = payroll;
-
             if (typeof poblarConceptos === 'function') {
                 await poblarConceptos(cia, cboConcepto);
             } else {
@@ -870,6 +863,37 @@
                     cboConcepto
                 );
             }
+            cboConcepto.disabled = false;
+
+            if (cboTrabajador && cia) {
+                if (typeof opts.poblarTrabajadoresFiltro === 'function') {
+                    await opts.poblarTrabajadoresFiltro(cia, cboTrabajador);
+                } else {
+                    await poblarSelect(
+                        `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                        cboTrabajador
+                    );
+                    if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {
+                        opts.etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+                    } else if (cboTrabajador.options.length && cboTrabajador.options[0].value === '') {
+                        cboTrabajador.options[0].textContent = 'Todos (por defecto)';
+                    }
+                }
+                cboTrabajador.disabled = false;
+            }
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '';
+            if (!payroll || !optionExists(cboPt, payroll)) {
+                const concept = filtros.concept != null ? String(filtros.concept).trim() : '0';
+                if (concept && optionExists(cboConcepto, concept)) {
+                    cboConcepto.value = concept;
+                } else if (optionExists(cboConcepto, '0')) {
+                    cboConcepto.value = '0';
+                }
+                guardar();
+                return true;
+            }
+            cboPt.value = payroll;
 
             const concept = filtros.concept != null ? String(filtros.concept).trim() : '0';
             if (concept && optionExists(cboConcepto, concept)) {
@@ -920,20 +944,6 @@
             }
 
             if (cboTrabajador && cia) {
-                if (typeof opts.poblarTrabajadoresFiltro === 'function') {
-                    await opts.poblarTrabajadoresFiltro(cia, cboTrabajador);
-                } else {
-                    await poblarSelect(
-                        `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-                        cboTrabajador
-                    );
-                    if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {
-                        opts.etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-                    } else if (cboTrabajador.options.length && cboTrabajador.options[0].value === '') {
-                        cboTrabajador.options[0].textContent = 'Todos (por defecto)';
-                    }
-                }
-                cboTrabajador.disabled = false;
                 const person = filtros.person != null ? String(filtros.person).trim() : '';
                 if (person && person !== '0' && optionExists(cboTrabajador, person)) {
                     cboTrabajador.value = person;

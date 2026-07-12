@@ -100,6 +100,30 @@
         font-size: 0.82rem;
         color: #495057;
     }
+
+    .ic-filtro-empresas {
+        min-width: 5.5rem;
+    }
+
+    .ic-filtro-empresas .form-check-label {
+        white-space: nowrap;
+    }
+
+    @media (min-width: 992px) {
+        .ic-filtros-row > .ic-filtro-cia,
+        .ic-filtros-row > .ic-filtro-tipo,
+        .ic-filtros-row > .ic-filtro-periodo,
+        .ic-filtros-row > .ic-filtro-plantilla,
+        .ic-filtros-row > .ic-filtro-empresas {
+            flex: 0 0 auto;
+        }
+
+        .ic-filtros-row > .ic-filtro-cia { width: 25%; }
+        .ic-filtros-row > .ic-filtro-tipo { width: 18.75%; }
+        .ic-filtros-row > .ic-filtro-periodo { width: 16%; }
+        .ic-filtros-row > .ic-filtro-plantilla { width: 28.25%; }
+        .ic-filtros-row > .ic-filtro-empresas { width: 12%; }
+    }
 </style>
 {% endblock %}
 
@@ -109,34 +133,41 @@
         <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
             <div>
                 <h4 class="mb-1">Importación de Conceptos</h4>
-                <p class="text-muted small mb-0">Seleccione la plantilla y cargue un Excel con DNI (obligatorio), Nombre (opcional) y conceptos.</p>
+                <p class="text-muted small mb-0">Seleccione la plantilla y cargue un Excel con DNI (obligatorio), Nombre (opcional) y conceptos. Use <strong>Todas</strong> para importar trabajadores de distintas empresas en un solo archivo.</p>
             </div>
         </div>
 
-        <form id="frmImportacionConceptos" class="row g-2 align-items-end">
-            <div class="col-12 col-md-6 col-lg-3">
+        <form id="frmImportacionConceptos" class="row g-2 align-items-end ic-filtros-row">
+            <div class="col-12 col-md-6 col-lg-3 ic-filtro-cia">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-6 col-lg-3 ic-filtro-tipo">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-4 col-lg-2 ic-filtro-periodo">
                 <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
                 <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-md-6 col-lg-3">
+            <div class="col-12 col-md-8 col-lg-3 ic-filtro-plantilla">
                 <label for="cboPlantilla" class="form-label small fw-bold text-muted mb-1">Plantilla</label>
                 <select id="cboPlantilla" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-1 ic-filtro-empresas">
+                <label class="form-label small fw-bold text-muted mb-1 d-block">Empresas</label>
+                <div class="form-check form-switch mt-1">
+                    <input class="form-check-input" type="checkbox" role="switch" id="chkTodasEmpresas">
+                    <label class="form-check-label small" for="chkTodasEmpresas">Todas</label>
+                </div>
             </div>
 
             <div class="col-12">
@@ -191,10 +222,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_PLANTILLAS = {{ url_for('api_plantillas_importacion_listado') | tojson }};
     const URL_PLANTILLA_OBTENER = {{ url_for('api_plantillas_importacion_obtener') | tojson }};
     const URL_PERIODO_SUGERIDO = {{ url_for('api_aperturar_periodos_periodo_sugerido') | tojson }};
-    const URL_TRABAJADORES_LISTADO = {{ url_for('api_trabajadores_listado') | tojson }};
+    const URL_TRABAJADORES_MAPA = {{ url_for('api_importacion_conceptos_mapa_trabajadores') | tojson }};
     const URL_PROCESAR = {{ url_for('api_importacion_conceptos_procesar') | tojson }};
 
     const cboCia = document.getElementById('cboCompania');
+    const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
     const cboTipoPlanilla = document.getElementById('cboTipoPlanilla');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const cboPlantilla = document.getElementById('cboPlantilla');
@@ -210,8 +242,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     const tbodyImportacion = document.getElementById('tbodyImportacion');
 
     let plantillaDetalle = [];
+    let plantillaDetallePorCia = {};
     let filasImportadas = [];
     let archivoActual = '';
+    let modoTodasEmpresas = false;
+    let payrolltypePorCia = {};
+    let plantillaPorCia = {};
+    let companiasMap = new Map();
+    let listaCompanias = [];
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -398,15 +436,49 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function actualizarEstadoImportar() {
-        const filtrosOk = cboCia.value.trim()
-            && cboTipoPlanilla.value.trim()
-            && cboPeriodo.value.trim()
-            && cboPlantilla.value.trim()
-            && plantillaDetalle.length > 0;
+        const filtrosOk = modoTodasEmpresas
+            ? cboTipoPlanilla.value.trim()
+                && cboPeriodo.value.trim()
+                && cboPlantilla.value.trim()
+                && plantillaDetalle.length > 0
+            : cboCia.value.trim()
+                && cboTipoPlanilla.value.trim()
+                && cboPeriodo.value.trim()
+                && cboPlantilla.value.trim()
+                && plantillaDetalle.length > 0;
         btnImportarExcel.disabled = !filtrosOk;
 
         const filasValidas = filasImportadas.some((row) => row.estado === 'OK');
         btnProcesarImportacion.disabled = !(filtrosOk && filasImportadas.length > 0 && filasValidas);
+    }
+
+    function nombreEmpresa(codigo) {
+        const c = String(codigo || '').trim();
+        if (!c) return '';
+        return companiasMap.get(c) || c;
+    }
+
+    function marcarDuplicadosDni(filas) {
+        const vistos = new Map();
+        const duplicados = new Set();
+        filas.forEach((row, idx) => {
+            const dni = String(row.dni || '').trim();
+            if (!dni) return;
+            if (vistos.has(dni)) {
+                duplicados.add(dni);
+            } else {
+                vistos.set(dni, idx);
+            }
+        });
+        if (!duplicados.size) return false;
+
+        filas.forEach((row) => {
+            if (duplicados.has(String(row.dni || '').trim())) {
+                row.estado = 'Error';
+                row.mensaje = 'DNI duplicado en el Excel.';
+            }
+        });
+        return true;
     }
 
     function renderGrilla() {
@@ -416,9 +488,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
 
         const conceptHeaders = plantillaDetalle.map((_, idx) => tituloConcepto(idx));
+        const colEmpresa = modoTodasEmpresas
+            ? '<th>Empresa</th>'
+            : '';
         theadImportacion.innerHTML = `
             <tr>
                 <th>#</th>
+                ${colEmpresa}
                 <th>DNI</th>
                 <th>Nombre</th>
                 <th>Estado</th>
@@ -434,9 +510,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             else if (row.estado === 'Error') estadoClass = 'ic-estado-error';
             const trClass = row.estado === 'Error' ? 'row-error' : 'row-ok';
             const conceptosHtml = (row.conceptos || []).map((v) => `<td class="col-num">${escHtml(v)}</td>`).join('');
+            const tdEmpresa = modoTodasEmpresas
+                ? `<td>${escHtml(row.company_name || nombreEmpresa(row.company))}</td>`
+                : '';
             return `
                 <tr class="${trClass}">
                     <td class="text-center">${idx + 1}</td>
+                    ${tdEmpresa}
                     <td>${escHtml(row.dni)}</td>
                     <td>${escHtml(row.nombre)}</td>
                     <td class="${estadoClass}">${escHtml(row.estado)}</td>
@@ -464,7 +544,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     function validarFila(dni, nombre, conceptos, trabajador) {
         const msgs = [];
         if (!dni) msgs.push('DNI vacío.');
-        else if (!trabajador) msgs.push('DNI no registrado.');
+        else if (!trabajador || !trabajador.ok) {
+            msgs.push(trabajador && trabajador.mensaje ? trabajador.mensaje : 'DNI no registrado.');
+        }
         conceptos.forEach((valor, idx) => {
             if (valor === '') return;
             const num = Number(String(valor).replace(/,/g, ''));
@@ -475,43 +557,174 @@ document.addEventListener('DOMContentLoaded', async function () {
         return msgs;
     }
 
-    async function cargarMapaTrabajadoresPorDni(cia, payrolltype) {
-        const data = await leerJson(await fetch(URL_TRABAJADORES_LISTADO, {
+    async function cargarMapaTrabajadoresPorDni() {
+        const payload = {
+            todas_empresas: modoTodasEmpresas ? 'Y' : 'N',
+            cia: cboCia.value.trim(),
+            payrolltype: cboTipoPlanilla.value.trim(),
+            payrolltype_por_cia: payrolltypePorCia,
+        };
+        const data = await leerJson(await fetch(URL_TRABAJADORES_MAPA, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                cia,
-                payrolltype,
-                person: '0',
-                docnro: '',
-                nombre: '',
-                estado: 'T',
-                cesados: 'T',
-            }),
+            body: JSON.stringify(payload),
         }));
 
+        Object.entries(data.company_names || {}).forEach(([cod, nom]) => {
+            companiasMap.set(String(cod).trim(), String(nom || cod).trim());
+        });
+
         const mapa = new Map();
-        (data.data || []).forEach((fila, idx) => {
-            const dni = normalizarDni(fila[5]);
-            if (!dni) return;
-            const meta = (data.rows || [])[idx] || {};
-            mapa.set(dni, {
-                nombre: String(fila[2] || '').trim(),
-                person: String(meta.person || '').trim(),
-                codigo: String(meta.codigo || fila[1] || '').trim(),
-            });
+        Object.entries(data.mapa || {}).forEach(([dni, info]) => {
+            mapa.set(String(dni).trim(), info);
         });
         return mapa;
     }
 
-    async function cargarTiposPlanilla() {
+    async function construirPayrolltypePorCiaDesdeSeleccion() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboTipoPlanilla.value.trim();
+        const payrolltypeText = cboTipoPlanilla.selectedOptions[0]
+            ? String(cboTipoPlanilla.selectedOptions[0].textContent || '').trim()
+            : '';
+
+        payrolltypePorCia = {};
+        let descKey = normHeader(payrolltypeText);
+
+        if (!descKey && cia && payrolltype) {
+            const rows = await fetchTiposPlanillaCia(cia);
+            const match = rows.find((item) => String(item.payrolltype || '').trim() === payrolltype);
+            if (match) {
+                descKey = normHeader(String(match.description || match.shortname || '').trim());
+            }
+        }
+        if (!descKey) return false;
+
+        for (const comp of companiasActivas()) {
+            const rows = await fetchTiposPlanillaCia(comp);
+            const match = rows.find((item) => {
+                const desc = String(item.description || item.shortname || '').trim();
+                return normHeader(desc) === descKey;
+            });
+            if (match) {
+                payrolltypePorCia[comp] = String(match.payrolltype || '').trim();
+            }
+        }
+        return Object.keys(payrolltypePorCia).length > 0;
+    }
+
+    function restaurarSeleccionPlantilla(selectElement, preserveSelection, mapaPlantillas) {
+        const preserveText = String(preserveSelection || '').trim();
+        if (!preserveText) return false;
+
+        if (optionExists(selectElement, preserveText)) {
+            selectElement.value = preserveText;
+            return true;
+        }
+
+        const want = normHeader(preserveText);
+        if (mapaPlantillas && mapaPlantillas[want] && optionExists(selectElement, want)) {
+            selectElement.value = want;
+            return true;
+        }
+
+        const opt = Array.from(selectElement.options).find((o) => {
+            const value = String(o.value || '').trim();
+            const text = String(o.textContent || '').trim();
+            return value === preserveText
+                || text === preserveText
+                || normHeader(text) === want
+                || normHeader(value) === want;
+        });
+        if (!opt) return false;
+        selectElement.value = opt.value;
+        return true;
+    }
+
+    function resetFiltrosDependientes() {
         cboTipoPlanilla.disabled = true;
         cboPeriodo.disabled = true;
         cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
         plantillaDetalle = [];
+        plantillaDetallePorCia = {};
+        payrolltypePorCia = {};
+        plantillaPorCia = {};
         renderEstructuraEsperada();
         limpiarGrilla();
+    }
+
+    function companiasActivas() {
+        return listaCompanias.map((c) => String(c.id || c.company || '').trim()).filter(Boolean);
+    }
+
+    async function fetchTiposPlanillaCia(cia) {
+        const data = await leerJson(await fetch(URL_TIPOS_PLANILLA, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia }),
+        }));
+        return data.rows || [];
+    }
+
+    async function fetchPeriodosCia(cia, payrolltype) {
+        const data = await leerJson(await fetch(URL_PERIODOS, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, payrolltype }),
+        }));
+        return data.rows || [];
+    }
+
+    async function fetchPlantillasCia(cia) {
+        const data = await leerJson(await fetch(URL_PLANTILLAS, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia }),
+        }));
+        return data.rows || [];
+    }
+
+    async function cargarTiposPlanilla() {
+        resetFiltrosDependientes();
+
+        if (modoTodasEmpresas) {
+            const companies = companiasActivas();
+            if (!companies.length) {
+                actualizarEstadoImportar();
+                return;
+            }
+
+            const agregado = new Map();
+            for (const cia of companies) {
+                const rows = await fetchTiposPlanillaCia(cia);
+                rows.forEach((item) => {
+                    const desc = String(item.description || item.shortname || '').trim();
+                    const key = normHeader(desc);
+                    if (!key) return;
+                    if (!agregado.has(key)) {
+                        agregado.set(key, { description: desc, porCia: {} });
+                    }
+                    agregado.get(key).porCia[cia] = String(item.payrolltype || '').trim();
+                });
+            }
+
+            cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            Array.from(agregado.entries())
+                .sort((a, b) => a[1].description.localeCompare(b[1].description, 'es'))
+                .forEach(([key, info]) => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = info.description;
+                    opt.dataset.description = info.description;
+                    cboTipoPlanilla.appendChild(opt);
+                });
+            payrolltypePorCia = {};
+            cboTipoPlanilla.disabled = agregado.size === 0;
+            actualizarEstadoImportar();
+            return;
+        }
 
         const cia = cboCia.value.trim();
         if (!cia) {
@@ -532,12 +745,71 @@ document.addEventListener('DOMContentLoaded', async function () {
         actualizarEstadoImportar();
     }
 
+    async function seleccionarPeriodoAbiertoTodas() {
+        const entries = Object.entries(payrolltypePorCia || {});
+        for (const [cia, payrolltype] of entries) {
+            try {
+                await seleccionarPeriodoAbierto(cia, payrolltype);
+                if (cboPeriodo.value.trim()) return;
+            } catch (err) {
+                console.warn('Periodo sugerido no disponible para', cia, err);
+            }
+        }
+    }
+
     async function cargarPeriodos() {
         cboPeriodo.disabled = true;
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         plantillaDetalle = [];
+        plantillaDetallePorCia = {};
         renderEstructuraEsperada();
         limpiarGrilla();
+
+        if (modoTodasEmpresas) {
+            const key = cboTipoPlanilla.value.trim();
+            const opt = cboTipoPlanilla.selectedOptions[0];
+            if (!key || !opt) {
+                cboPeriodo.disabled = false;
+                actualizarEstadoImportar();
+                return;
+            }
+            payrolltypePorCia = {};
+            try {
+                const agregado = new Map();
+                const companies = companiasActivas();
+                for (const cia of companies) {
+                    const rows = await fetchTiposPlanillaCia(cia);
+                    const match = rows.find((item) => {
+                        const desc = String(item.description || item.shortname || '').trim();
+                        return normHeader(desc) === key;
+                    });
+                    if (!match) continue;
+                    const pt = String(match.payrolltype || '').trim();
+                    payrolltypePorCia[cia] = pt;
+                    const periodos = await fetchPeriodosCia(cia, pt);
+                    periodos.forEach((item) => {
+                        const prperiod = String(item.prperiod || '').trim();
+                        if (prperiod) agregado.set(prperiod, item);
+                    });
+                }
+                cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+                Array.from(agregado.keys())
+                    .sort((a, b) => b.localeCompare(a))
+                    .forEach((prperiod) => {
+                        const optP = document.createElement('option');
+                        optP.value = prperiod;
+                        optP.textContent = fmtPeriodoDisplay(prperiod);
+                        cboPeriodo.appendChild(optP);
+                    });
+                await seleccionarPeriodoAbiertoTodas();
+            } catch (err) {
+                console.error(err);
+                cboPeriodo.innerHTML = '<option value="">Error</option>';
+            }
+            cboPeriodo.disabled = false;
+            actualizarEstadoImportar();
+            return;
+        }
 
         const cia = cboCia.value.trim();
         const payrolltype = cboTipoPlanilla.value.trim();
@@ -558,11 +830,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         actualizarEstadoImportar();
     }
 
-    async function cargarPlantillas() {
+    async function cargarPlantillas(preserveSelection, opts) {
+        const options = opts || {};
+        const preserveText = String(preserveSelection || '').trim();
+
         cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
         plantillaDetalle = [];
+        plantillaDetallePorCia = {};
+        plantillaPorCia = {};
         renderEstructuraEsperada();
-        limpiarGrilla();
+        if (options.limpiarGrilla !== false) {
+            limpiarGrilla();
+        }
+
+        if (modoTodasEmpresas) {
+            const companies = Object.keys(payrolltypePorCia);
+            if (!companies.length) {
+                actualizarEstadoImportar();
+                return;
+            }
+            const agregado = new Map();
+            for (const cia of companies) {
+                const rows = await fetchPlantillasCia(cia);
+                rows.forEach((item) => {
+                    const name = String(item.name || '').trim();
+                    const key = normHeader(name || String(item.importconcept || '').trim());
+                    if (!key) return;
+                    if (!agregado.has(key)) {
+                        agregado.set(key, { name: name || key, porCia: {} });
+                    }
+                    agregado.get(key).porCia[cia] = String(item.importconcept || '').trim();
+                });
+            }
+            cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
+            plantillaPorCia = {};
+            Array.from(agregado.entries())
+                .sort((a, b) => a[1].name.localeCompare(b[1].name, 'es'))
+                .forEach(([key, info]) => {
+                    const opt = document.createElement('option');
+                    opt.value = key;
+                    opt.textContent = info.name;
+                    plantillaPorCia[key] = info;
+                    cboPlantilla.appendChild(opt);
+                });
+            restaurarSeleccionPlantilla(cboPlantilla, preserveText, plantillaPorCia);
+            actualizarEstadoImportar();
+            return;
+        }
 
         const cia = cboCia.value.trim();
         if (!cia) {
@@ -581,13 +895,43 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return name || code;
             },
         });
+        restaurarSeleccionPlantilla(cboPlantilla, preserveText, null);
         actualizarEstadoImportar();
     }
 
-    async function cargarDetallePlantilla() {
+    async function cargarDetallePlantilla(opts) {
+        const options = opts || {};
         plantillaDetalle = [];
+        plantillaDetallePorCia = {};
         renderEstructuraEsperada();
-        limpiarGrilla();
+        if (options.limpiarGrilla !== false) {
+            limpiarGrilla();
+        }
+
+        if (modoTodasEmpresas) {
+            const key = cboPlantilla.value.trim();
+            const info = plantillaPorCia[key];
+            if (!key || !info || !info.porCia) {
+                actualizarEstadoImportar();
+                return;
+            }
+            for (const [cia, importconcept] of Object.entries(info.porCia)) {
+                if (!importconcept) continue;
+                const data = await leerJson(await fetch(URL_PLANTILLA_OBTENER, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cia, importconcept }),
+                }));
+                plantillaDetallePorCia[cia] = (data.detalle || []).filter((ln) => {
+                    return String(ln.concept || '').trim() || String(ln.formulacode || '').trim();
+                });
+            }
+            const primeraCia = Object.keys(plantillaDetallePorCia)[0];
+            plantillaDetalle = primeraCia ? (plantillaDetallePorCia[primeraCia] || []) : [];
+            renderEstructuraEsperada();
+            actualizarEstadoImportar();
+            return;
+        }
 
         const cia = cboCia.value.trim();
         const importconcept = cboPlantilla.value.trim();
@@ -651,15 +995,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        const cia = cboCia.value.trim();
-        const payrolltype = cboTipoPlanilla.value.trim();
-        const mapaTrabajadores = await cargarMapaTrabajadoresPorDni(cia, payrolltype);
+        const mapaTrabajadores = await cargarMapaTrabajadoresPorDni();
 
         filasImportadas = dataRows.map((row) => {
             const dni = normalizarDni(row[0]);
             const nombreExcel = String(row[1] ?? '').trim();
             const trabajador = mapaTrabajadores.get(dni) || null;
-            const nombre = nombreExcel || (trabajador ? trabajador.nombre : '');
+            const nombre = nombreExcel || (trabajador && trabajador.ok ? trabajador.nombre : '');
             const conceptos = [];
             for (let i = 0; i < plantillaDetalle.length; i += 1) {
                 conceptos.push(String(row[i + 2] ?? '').trim());
@@ -668,17 +1010,26 @@ document.addEventListener('DOMContentLoaded', async function () {
             return {
                 dni,
                 nombre,
-                person: trabajador ? trabajador.person : '',
-                codigo: trabajador ? trabajador.codigo : '',
+                person: trabajador && trabajador.ok ? trabajador.person : '',
+                codigo: trabajador && trabajador.ok ? trabajador.codigo : '',
+                company: trabajador && trabajador.ok ? trabajador.company : '',
+                company_name: trabajador && trabajador.ok ? trabajador.company_name : '',
+                payrolltype: trabajador && trabajador.ok ? trabajador.payrolltype : '',
                 conceptos,
                 estado: msgs.length ? 'Error' : 'OK',
                 mensaje: msgs.length ? msgs.join(' ') : 'Listo para importar',
             };
         });
 
+        const hayDuplicados = marcarDuplicadosDni(filasImportadas);
+
         archivoActual = file.name;
         lblArchivoExcel.textContent = archivoActual;
         renderGrilla();
+
+        if (hayDuplicados) {
+            alert('Advertencia: el Excel contiene DNI duplicados. Corrija el archivo antes de procesar.');
+        }
     }
 
     async function procesarImportacion() {
@@ -704,14 +1055,21 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         try {
             const payload = {
+                todas_empresas: modoTodasEmpresas ? 'Y' : 'N',
                 cia: cboCia.value.trim(),
-                payrolltype: cboTipoPlanilla.value.trim(),
+                payrolltype: modoTodasEmpresas ? '' : cboTipoPlanilla.value.trim(),
+                payrolltype_por_cia: modoTodasEmpresas ? payrolltypePorCia : undefined,
                 period: cboPeriodo.value.trim(),
-                conceptos: plantillaDetalle.map((ln) => ({ concept: ln.concept })),
+                conceptos: plantillaDetalle.map((ln) => ({
+                    concept: ln.concept,
+                    formulacode: ln.formulacode,
+                })),
                 rows: filasProcesar.map((row) => ({
                     dni: row.dni,
                     nombre: row.nombre,
                     person: row.person,
+                    company: row.company,
+                    payrolltype: row.payrolltype,
                     conceptos: row.conceptos,
                 })),
             };
@@ -748,7 +1106,55 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function aplicarModoTodasEmpresas() {
+        const seleccionPlantillaTexto = cboPlantilla.selectedOptions[0]
+            ? String(cboPlantilla.selectedOptions[0].textContent || '').trim()
+            : '';
+        const seleccionPlantillaValor = cboPlantilla.value.trim();
+        const preservePlantilla = seleccionPlantillaTexto || seleccionPlantillaValor;
+
+        modoTodasEmpresas = !!chkTodasEmpresas.checked;
+        cboCia.disabled = modoTodasEmpresas;
+        if (modoTodasEmpresas) {
+            cboCia.removeAttribute('required');
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
+
+            const ok = await construirPayrolltypePorCiaDesdeSeleccion();
+            if (!ok) {
+                alert('No se pudo determinar el tipo de planilla para todas las empresas.');
+            } else {
+                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
+                if (cboPlantilla.value.trim()) {
+                    await cargarDetallePlantilla({ limpiarGrilla: false });
+                }
+            }
+        } else {
+            cboCia.setAttribute('required', 'required');
+            payrolltypePorCia = {};
+            plantillaPorCia = {};
+            plantillaDetallePorCia = {};
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
+            if (cboCia.value.trim()) {
+                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
+                if (cboPlantilla.value.trim()) {
+                    await cargarDetallePlantilla({ limpiarGrilla: false });
+                }
+            }
+        }
+        actualizarEstadoImportar();
+    }
+
+    chkTodasEmpresas.addEventListener('change', () => {
+        aplicarModoTodasEmpresas().catch((err) => {
+            console.error(err);
+            alert(err.message || 'Error al cambiar el modo de empresas.');
+        });
+    });
+
     cboCia.addEventListener('change', async () => {
+        if (modoTodasEmpresas) return;
         try {
             await cargarTiposPlanilla();
             await cargarPlantillas();
@@ -759,7 +1165,17 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     cboTipoPlanilla.addEventListener('change', async () => {
         try {
-            await cargarPeriodos();
+            const preservePlantilla = cboPlantilla.selectedOptions[0]
+                ? String(cboPlantilla.selectedOptions[0].textContent || '').trim()
+                : cboPlantilla.value.trim();
+
+            if (modoTodasEmpresas) {
+                await construirPayrolltypePorCiaDesdeSeleccion();
+                await cargarPlantillas(preservePlantilla);
+            } else {
+                await cargarPeriodos();
+            }
+
             if (cboPlantilla.value.trim()) {
                 await cargarDetallePlantilla();
             }
@@ -804,6 +1220,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('frmImportacionConceptos').addEventListener('submit', (e) => e.preventDefault());
 
     try {
+        const dataComp = await leerJson(await fetch(URL_COMPANIAS));
+        listaCompanias = Array.isArray(dataComp) ? dataComp : (dataComp.rows || []);
+        listaCompanias.forEach((item) => {
+            const id = String(item.id || item.company || '').trim();
+            const text = String(item.text || item.description || id).trim();
+            if (id) companiasMap.set(id, text);
+        });
         await poblarSelectSimple(URL_COMPANIAS, cboCia);
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             await cargarTiposPlanilla();

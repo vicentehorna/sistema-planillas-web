@@ -1185,6 +1185,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(e);
             selectElement.innerHTML = '<option value="0">Todos</option>';
             selectElement.value = '0';
+        } finally {
             selectElement.disabled = false;
         }
     }
@@ -1200,6 +1201,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(e);
             selectElement.innerHTML = '<option value="0">Todos</option>';
             selectElement.value = '0';
+        } finally {
             selectElement.disabled = false;
         }
     }
@@ -1409,7 +1411,19 @@ document.addEventListener('DOMContentLoaded', async function () {
         const payroll = this.value;
 
         if (cia && payroll) {
-            await poblarPeriodosAsignacion(cia, payroll, cboPeriodo);
+            const conceptoPendiente = cboConcepto.disabled
+                || cboConcepto.options.length <= 1
+                || (cboConcepto.options.length === 1 && cboConcepto.options[0].value === '');
+            const empleadoPendiente = cboTrabajador.disabled
+                || (cboTrabajador.options.length <= 1 && cboTrabajador.options[0].value === '');
+
+            const tareas = [poblarPeriodosAsignacion(cia, payroll, cboPeriodo)];
+            if (conceptoPendiente) tareas.push(poblarConceptos(cia, cboConcepto));
+            if (empleadoPendiente) tareas.push(poblarTrabajadoresFiltro(cia, cboTrabajador));
+            await Promise.all(tareas);
+
+            cboConcepto.disabled = false;
+            cboTrabajador.disabled = false;
             precacheCombosModal(cia, payroll);
             if (filtrosPersist) filtrosPersist.guardar();
         } else {

@@ -5892,21 +5892,228 @@ def _importacion_conceptos_guardar_fila(
     _drain_pyodbc_cursor(cursor)
 
 
+def _importacion_conceptos_normalize_dni(raw):
+    s = str(raw or '').strip()
+    if s.endswith('.0') and s[:-2].isdigit():
+        s = s[:-2]
+    return s.replace(' ', '').strip()
+
+
+def _importacion_conceptos_trabajador_activo(record):
+    if not isinstance(record, dict):
+        return False
+    status = str(record.get('status') or '').strip().upper()
+    ceasedate = record.get('ceasedate')
+    return status == 'N' and ceasedate is None
+
+
+def _importacion_conceptos_concept_por_formulacode(cursor, cia, formulacode, concept_fallback, cache):
+    fc = str(formulacode or '').strip()
+    concept_fb = str(concept_fallback or '').strip()
+    if not fc and concept_fb:
+        key = (cia, concept_fb)
+        if key not in cache:
+            cache[key] = concept_fb
+        return concept_fb
+    if not fc:
+        return ''
+    key = (cia, fc.upper())
+    if key in cache:
+        return cache[key]
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(c.Concept))
+        FROM PR_Concept c
+        WHERE c.Company = ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))) = ?
+        ORDER BY c.Concept
+        """,
+        (cia, fc.upper()),
+    )
+    row = cursor.fetchone()
+    concept = str(row[0] if row and row[0] is not None else '').strip()
+    if not concept and concept_fb:
+        cursor.execute(
+            """
+            SELECT TOP 1 1
+            FROM PR_Concept c
+            WHERE c.Company = ? AND c.Concept = ?
+            """,
+            (cia, concept_fb),
+        )
+        if cursor.fetchone():
+            concept = concept_fb
+    cache[key] = concept
+    return concept
+
+
+def _importacion_conceptos_pairs_from_body(body):
+    todas = str(body.get('todas_empresas') or body.get('todas') or 'N').strip().upper() in (
+        'Y', 'S', '1', 'TRUE', 'SI'
+    )
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    payrolltype_por_cia = body.get('payrolltype_por_cia') or {}
+
+    pairs = []
+    if todas:
+        if isinstance(payrolltype_por_cia, dict):
+            for comp, pt in payrolltype_por_cia.items():
+                comp_s = str(comp or '').strip()
+                pt_s = str(pt or '').strip()
+                if comp_s and pt_s:
+                    pairs.append((comp_s, pt_s))
+        if not pairs:
+            return todas, [], 'No hay tipos de planilla configurados para las empresas.'
+    else:
+        if not cia:
+            return todas, [], 'Seleccione una compañía.'
+        if not payrolltype:
+            return todas, [], 'Seleccione un tipo de planilla.'
+        pairs = [(cia, payrolltype)]
+    return todas, pairs, None
+
+
+def _importacion_conceptos_fetch_trabajadores(cursor, pairs):
+    records = []
+    for comp, pt in pairs:
+        cursor.execute(
+            """
+            SELECT
+                LTRIM(RTRIM(p.DocumentNumber)) AS dni,
+                e.Company AS company,
+                e.Person AS person,
+                LTRIM(RTRIM(e.EmployeeCode)) AS codigo,
+                e.PayRollType AS payrolltype,
+                e.Status AS status,
+                e.CeaseDate AS ceasedate,
+                LTRIM(RTRIM(
+                    ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' ' +
+                    ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
+                )) AS nombre
+            FROM PR_Employee e
+            INNER JOIN SY_Person p ON e.Person = p.Person
+            WHERE e.Company = ? AND e.PayRollType = ?
+            """,
+            (comp, pt),
+        )
+        records.extend(_dicts_first_nonempty_resultset(cursor))
+    return records
+
+
+def _importacion_conceptos_resolver_mapa_trabajadores(records, company_names=None):
+    company_names = company_names or {}
+    by_dni = {}
+    for record in records or []:
+        dni = _importacion_conceptos_normalize_dni(record.get('dni'))
+        if not dni:
+            continue
+        by_dni.setdefault(dni, []).append(record)
+
+    mapa = {}
+    for dni, items in by_dni.items():
+        activos = [r for r in items if _importacion_conceptos_trabajador_activo(r)]
+        if len(activos) == 1:
+            r = activos[0]
+            comp = str(r.get('company') or '').strip()
+            mapa[dni] = {
+                'dni': dni,
+                'company': comp,
+                'company_name': str(company_names.get(comp) or comp).strip(),
+                'person': str(r.get('person') or '').strip(),
+                'codigo': str(r.get('codigo') or '').strip(),
+                'nombre': str(r.get('nombre') or '').strip(),
+                'payrolltype': str(r.get('payrolltype') or '').strip(),
+                'ok': True,
+            }
+        elif len(activos) > 1:
+            comps = []
+            for r in activos:
+                comp = str(r.get('company') or '').strip()
+                comps.append({
+                    'company': comp,
+                    'company_name': str(company_names.get(comp) or comp).strip(),
+                })
+            mapa[dni] = {
+                'dni': dni,
+                'ok': False,
+                'error': 'ambiguo',
+                'mensaje': (
+                    'El DNI está activo en más de una empresa. '
+                    'Regístrelo manualmente en Asignación de Conceptos.'
+                ),
+                'empresas': comps,
+            }
+        elif items:
+            mapa[dni] = {
+                'dni': dni,
+                'ok': False,
+                'error': 'inactivo',
+                'mensaje': 'Trabajador inactivo o cesado.',
+            }
+        else:
+            mapa[dni] = {
+                'dni': dni,
+                'ok': False,
+                'error': 'no_registrado',
+                'mensaje': 'DNI no registrado.',
+            }
+    return mapa
+
+
+@app.route('/api/importacion-conceptos/mapa-trabajadores', methods=['POST'])
+@login_required
+def api_importacion_conceptos_mapa_trabajadores():
+    """Mapa DNI → trabajador activo/no cesado para importación masiva."""
+    body = request.get_json(silent=True) or {}
+    todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorcompanias_web")
+        company_rows = cursor.fetchall()
+        company_names = {
+            str(r.Company or '').strip(): str(r.description or r.Company or '').strip()
+            for r in company_rows
+        }
+        records = _importacion_conceptos_fetch_trabajadores(cursor, pairs)
+        mapa = _importacion_conceptos_resolver_mapa_trabajadores(records, company_names)
+        return jsonify({
+            "todas_empresas": todas,
+            "mapa": mapa,
+            "company_names": company_names,
+        })
+    except Exception as e:
+        logging.exception("api_importacion_conceptos_mapa_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/importacion-conceptos/procesar', methods=['POST'])
 @login_required
 def api_importacion_conceptos_procesar():
     """Registra importes del Excel en PR_EmployeeConcept (temporal, upsert)."""
     body = request.get_json(silent=True) or {}
+    todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
     period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
     conceptos_tpl = body.get('conceptos') or []
     filas = body.get('rows') or []
 
-    if not cia:
-        return jsonify({"error": "Seleccione una compañía."}), 400
-    if not payrolltype:
-        return jsonify({"error": "Seleccione un tipo de planilla."}), 400
+    if err:
+        return jsonify({"error": err}), 400
+    if not period:
+        return jsonify({"error": "Seleccione un periodo."}), 400
     if not period:
         return jsonify({"error": "Seleccione un periodo."}), 400
     if not isinstance(conceptos_tpl, list) or not conceptos_tpl:
@@ -5914,20 +6121,31 @@ def api_importacion_conceptos_procesar():
     if not isinstance(filas, list) or not filas:
         return jsonify({"error": "No hay filas para procesar."}), 400
 
-    conceptos_codigos = []
+    conceptos_tpl_norm = []
     for item in conceptos_tpl:
         if isinstance(item, dict):
-            code = str(item.get('concept') or '').strip()
+            conceptos_tpl_norm.append({
+                'concept': str(item.get('concept') or '').strip(),
+                'formulacode': str(item.get('formulacode') or '').strip(),
+            })
         else:
-            code = str(item or '').strip()
-        if code:
-            conceptos_codigos.append(code)
-    if not conceptos_codigos:
+            conceptos_tpl_norm.append({
+                'concept': str(item or '').strip(),
+                'formulacode': '',
+            })
+    if not any(c.get('concept') or c.get('formulacode') for c in conceptos_tpl_norm):
         return jsonify({"error": "La plantilla no tiene conceptos válidos."}), 400
+
+    if not todas:
+        if not cia:
+            return jsonify({"error": "Seleccione una compañía."}), 400
+        if not payrolltype:
+            return jsonify({"error": "Seleccione un tipo de planilla."}), 400
 
     xlastuser = _xlastuser_id()
     costcenter_cache = {}
     concepto_cache = {}
+    concepto_por_formulacode_cache = {}
     resultado_filas = []
     total_conceptos = 0
     ok_conceptos = 0
@@ -5946,6 +6164,10 @@ def api_importacion_conceptos_procesar():
             dni = str(fila.get('dni') or '').strip()
             nombre = str(fila.get('nombre') or '').strip()
             person = str(fila.get('person') or '').strip()
+            cia_fila = str(fila.get('company') or fila.get('cia') or cia or '').strip()
+            payrolltype_fila = str(
+                fila.get('payrolltype') or fila.get('payroll_type') or payrolltype or ''
+            ).strip()
             valores = fila.get('conceptos') or []
             if not isinstance(valores, list):
                 valores = []
@@ -5956,14 +6178,28 @@ def api_importacion_conceptos_procesar():
                     "dni": dni,
                     "nombre": nombre,
                     "person": person,
+                    "company": cia_fila,
                     "conceptos": valores,
                     "estado": "Error",
                     "mensaje": "DNI no registrado o trabajador no identificado.",
                 })
                 continue
 
+            if not cia_fila or not payrolltype_fila:
+                filas_error += 1
+                resultado_filas.append({
+                    "dni": dni,
+                    "nombre": nombre,
+                    "person": person,
+                    "company": cia_fila,
+                    "conceptos": valores,
+                    "estado": "Error",
+                    "mensaje": "No se pudo determinar la empresa o el tipo de planilla del trabajador.",
+                })
+                continue
+
             costcenter = _importacion_conceptos_costcenter(
-                cursor, cia, person, payrolltype, costcenter_cache
+                cursor, cia_fila, person, payrolltype_fila, costcenter_cache
             )
             if not costcenter:
                 filas_error += 1
@@ -5971,6 +6207,7 @@ def api_importacion_conceptos_procesar():
                     "dni": dni,
                     "nombre": nombre,
                     "person": person,
+                    "company": cia_fila,
                     "conceptos": valores,
                     "estado": "Error",
                     "mensaje": "Verifique el tipo de planilla o el centro de costo del trabajador.",
@@ -5980,7 +6217,7 @@ def api_importacion_conceptos_procesar():
             errores_fila = []
             procesados_fila = 0
 
-            for idx, concept in enumerate(conceptos_codigos):
+            for idx, concept_item in enumerate(conceptos_tpl_norm):
                 valor_raw = valores[idx] if idx < len(valores) else ''
                 try:
                     conceptvalue = _importacion_conceptos_parse_valor(valor_raw)
@@ -5991,25 +6228,42 @@ def api_importacion_conceptos_procesar():
                 if conceptvalue == 0:
                     continue
 
+                if todas:
+                    concept = _importacion_conceptos_concept_por_formulacode(
+                        cursor,
+                        cia_fila,
+                        concept_item.get('formulacode'),
+                        concept_item.get('concept'),
+                        concepto_por_formulacode_cache,
+                    )
+                else:
+                    concept = concept_item.get('concept') or ''
+
+                if not concept:
+                    errores_fila.append(
+                        f"Columna {idx + 3}: concepto no encontrado en la empresa {cia_fila}."
+                    )
+                    continue
+
                 meta = _importacion_conceptos_meta_concepto(
-                    cursor, cia, concept, concepto_cache
+                    cursor, cia_fila, concept, concepto_cache
                 )
                 if meta.get('flagismonetary') == 'N':
                     continue
 
                 total_conceptos += 1
                 modo = 'U' if _importacion_conceptos_existe(
-                    cursor, cia, person, concept, payrolltype, period, costcenter
+                    cursor, cia_fila, person, concept, payrolltype_fila, period, costcenter
                 ) else 'I'
 
                 try:
                     _importacion_conceptos_guardar_fila(
                         cursor,
                         modo=modo,
-                        cia=cia,
+                        cia=cia_fila,
                         person=person,
                         concept=concept,
-                        payrolltype=payrolltype,
+                        payrolltype=payrolltype_fila,
                         period=period,
                         costcenter=costcenter,
                         conceptvalue=conceptvalue,
@@ -6028,36 +6282,32 @@ def api_importacion_conceptos_procesar():
                         f"{concept}: {_importacion_conceptos_error_sql(exc)}"
                     )
 
+            row_result = {
+                "dni": dni,
+                "nombre": nombre,
+                "person": person,
+                "company": cia_fila,
+                "conceptos": valores,
+            }
             if errores_fila:
                 filas_error += 1
-                resultado_filas.append({
-                    "dni": dni,
-                    "nombre": nombre,
-                    "person": person,
-                    "conceptos": valores,
+                row_result.update({
                     "estado": "Error",
                     "mensaje": ' '.join(errores_fila),
                 })
             elif procesados_fila > 0:
                 filas_ok += 1
-                resultado_filas.append({
-                    "dni": dni,
-                    "nombre": nombre,
-                    "person": person,
-                    "conceptos": valores,
+                row_result.update({
                     "estado": "Procesado",
                     "mensaje": f"Procesado correctamente ({procesados_fila} concepto(s)).",
                 })
             else:
                 filas_ok += 1
-                resultado_filas.append({
-                    "dni": dni,
-                    "nombre": nombre,
-                    "person": person,
-                    "conceptos": valores,
+                row_result.update({
                     "estado": "Procesado",
                     "mensaje": "Sin importes mayores a cero.",
                 })
+            resultado_filas.append(row_result)
 
         return jsonify({
             "ok": filas_error == 0,
@@ -15397,6 +15647,7 @@ def api_procesar_planilla_procesos():
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         proc_names = {}
+        proc_shortnames = {}
         try:
             cursor.execute(
                 """
@@ -15409,12 +15660,12 @@ def api_procesar_planilla_procesos():
             for pr in _dicts_first_nonempty_resultset(cursor):
                 pt = str(pr.get('ProcessType') or pr.get('processtype') or '').strip()
                 pn = str(pr.get('ProcedureName') or pr.get('procedurename') or '').strip()
+                sn = str(pr.get('ShortName') or pr.get('shortname') or '').strip()
                 if not pn:
-                    pn = _payroll_calc_procedure_fallback(
-                        pr.get('ShortName') or pr.get('shortname')
-                    )
+                    pn = _payroll_calc_procedure_fallback(sn)
                 if pt:
                     proc_names[pt] = pn
+                    proc_shortnames[pt] = sn
         except Exception:
             logging.debug('ProcedureName no disponible en PR_ProcessType', exc_info=True)
 
@@ -15423,6 +15674,7 @@ def api_procesar_planilla_procesos():
                 "id": str(r.get("processtype") or "").strip(),
                 "text": str(r.get("description") or "").strip(),
                 "procedurename": proc_names.get(str(r.get("processtype") or "").strip(), ''),
+                "shortname": proc_shortnames.get(str(r.get("processtype") or "").strip(), ''),
             }
             for r in rows
             if str(r.get("processtype") or "").strip()
@@ -15519,8 +15771,34 @@ def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype
     return _validacion_planilla_rows_to_mensajes(rows)
 
 
+def _proceso_aplica_validacion_post_calculo(cursor, cia, processtype):
+    """Validaciones post-cálculo (panel amarillo) solo para mensual / fin de mes."""
+    cursor.execute(
+        """
+        SELECT
+            UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) AS shortname,
+            UPPER(LTRIM(RTRIM(ISNULL(Description, '')))) AS description
+        FROM PR_ProcessType
+        WHERE Company = ? AND ProcessType = ?
+        """,
+        (cia, processtype),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return False
+    shortname = str(_cursor_row_field(row, 'shortname', 0) or '').strip().upper()
+    description = str(_cursor_row_field(row, 'description', 1) or '').strip().upper()
+    if shortname == 'FIN_DE_MES':
+        return True
+    if description == 'MENSUAL' or 'FIN DE MES' in description:
+        return True
+    return False
+
+
 def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, period):
     """sp_pr_validar_calculo_web → lista de mensajes para el panel de validaciones."""
+    if not _proceso_aplica_validacion_post_calculo(cursor, cia, processtype):
+        return []
     cursor.execute(
         "EXEC sp_pr_validar_calculo_web "
         "@cia=?, @payrolltype=?, @processtype=?, @period=?",

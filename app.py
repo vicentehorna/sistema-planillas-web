@@ -8514,9 +8514,7 @@ def api_conceptos_guardar_cias():
 
         partes = []
         if actualizados:
-            partes.append(
-                f"Actualizado en {len(actualizados)} empresa(s): {', '.join(actualizados)}."
-            )
+            partes.append('Actualizado en todas las empresas.')
         if no_existia:
             partes.append(f"No existía en: {', '.join(no_existia)}.")
         if errores:
@@ -8678,7 +8676,7 @@ def api_conceptos_eliminar_cias():
 
         partes = []
         if eliminados:
-            partes.append(f"Eliminado en {len(eliminados)} empresa(s): {', '.join(eliminados)}.")
+            partes.append('Eliminado en todas las empresas.')
         if no_existia:
             partes.append(f"No existía en: {', '.join(no_existia)}.")
         if errores:
@@ -8863,7 +8861,7 @@ def api_conceptos_replicar_cias():
 
         partes = []
         if creados:
-            partes.append(f"Replicado en {len(creados)} empresa(s): {', '.join(creados)}.")
+            partes.append('Replicado en todas las empresas.')
         if omitidos:
             partes.append(f"Ya existía en {len(omitidos)} empresa(s): {', '.join(omitidos)}.")
         if errores:

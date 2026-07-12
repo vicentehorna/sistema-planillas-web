@@ -14,6 +14,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datosgenerales_trabajador_web]
     @sex                    CHAR(1),
     @sectelephone           VARCHAR(15) = NULL,
     @email                  VARCHAR(255) = NULL,
+    @address                VARCHAR(255) = NULL,
+    @nacionalidad           VARCHAR(100) = NULL,
     @employeedocumenttype   VARCHAR(20),
     @documentnumber         VARCHAR(15),
     @replicationunit        VARCHAR(4),
@@ -37,6 +39,8 @@ BEGIN
     SET @sex = NULLIF(LTRIM(RTRIM(ISNULL(@sex, ''))), '');
     SET @sectelephone = NULLIF(LTRIM(RTRIM(ISNULL(@sectelephone, ''))), '');
     SET @email = NULLIF(LTRIM(RTRIM(ISNULL(@email, ''))), '');
+    SET @address = NULLIF(LTRIM(RTRIM(ISNULL(@address, ''))), '');
+    SET @nacionalidad = NULLIF(LTRIM(RTRIM(ISNULL(@nacionalidad, ''))), '');
     SET @employeedocumenttype = LTRIM(RTRIM(ISNULL(@employeedocumenttype, '')));
     SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
@@ -182,6 +186,8 @@ BEGIN
         name = @nombre_completo,
         sectelephone = @sectelephone,
         email = @email,
+        address = @address,
+        nacionalidad = @nacionalidad,
         employeedocumenttype = @employeedocumenttype,
         documenttype = @employeedocumenttype,
         documentnumber = @documentnumber,

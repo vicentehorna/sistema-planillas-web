@@ -25,6 +25,8 @@ BEGIN
         LTRIM(RTRIM(ISNULL(sp.name, ''))) AS name,
         LTRIM(RTRIM(ISNULL(sp.sectelephone, ''))) AS sectelephone,
         LTRIM(RTRIM(ISNULL(sp.email, ''))) AS email,
+        LTRIM(RTRIM(ISNULL(sp.address, ''))) AS address,
+        LTRIM(RTRIM(ISNULL(sp.nacionalidad, ''))) AS nacionalidad,
         LTRIM(RTRIM(ISNULL(sp.employeedocumenttype, ''))) AS employeedocumenttype,
         LTRIM(RTRIM(ISNULL(dt.description, ''))) AS employeedocumenttype_desc,
         LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) AS documentnumber,

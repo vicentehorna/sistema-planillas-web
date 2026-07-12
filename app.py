@@ -62,6 +62,11 @@ except Exception as _weasy_err:
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
 from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
+from tregistro_import import (
+    construir_resumen_importacion,
+    normalizar_num_doc,
+    parsear_archivo_tregistro,
+)
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
 
 
@@ -4698,6 +4703,8 @@ def _empleado_generales_desde_form(form):
         'sex': sex if sex in ('1', '2') else '',
         'sectelephone': str(form.get('sectelephone') or '').strip()[:15],
         'email': str(form.get('email') or '').strip()[:255],
+        'address': str(form.get('address') or '').strip()[:255],
+        'nacionalidad': str(form.get('nacionalidad') or '').strip()[:100],
         'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
         'documentnumber': str(form.get('documentnumber') or '').strip()[:15],
         'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
@@ -4852,7 +4859,8 @@ def trabajadores_editar(person_id):
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
                 '@birthdate=?, @sex=?, '
-                '@sectelephone=?, @email=?, @employeedocumenttype=?, @documentnumber=?, '
+                '@sectelephone=?, @email=?, @address=?, @nacionalidad=?, '
+                '@employeedocumenttype=?, @documentnumber=?, '
                 '@replicationunit=?, @userid=?, @xlastuser=?',
                 (
                     cia,
@@ -4865,6 +4873,8 @@ def trabajadores_editar(person_id):
                     datos['sex'],
                     datos['sectelephone'] or None,
                     datos['email'] or None,
+                    datos['address'] or None,
+                    datos['nacionalidad'] or None,
                     datos['employeedocumenttype'],
                     datos['documentnumber'],
                     datos['replicationunit'],
@@ -9046,6 +9056,124 @@ def plame_tregistro_page():
 @login_required
 def plame_validar_page():
     return render_template('plame_validar.html')
+
+
+@app.route('/plame/t-registro/importar')
+@login_required
+def tregistro_importar_page():
+    return render_template('tregistro_importar.html')
+
+
+def _tregistro_import_mapa_dnis_existentes(cursor, cia):
+    cursor.execute(
+        """
+        SELECT
+            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) AS documentnumber,
+            LTRIM(RTRIM(ISNULL(e.Person, ''))) AS person,
+            LTRIM(RTRIM(ISNULL(e.EmployeeCode, ''))) AS employeecode,
+            LTRIM(RTRIM(ISNULL(sp.Name, ''))) AS name
+        FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person sp (NOLOCK) ON sp.Person = e.Person
+        WHERE e.Company = ?
+        """,
+        (cia,),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    out = {}
+    for row in rows:
+        key = normalizar_num_doc(row.get('documentnumber'))
+        if key:
+            out[key] = row
+    return out
+
+
+def _tregistro_import_ruc_compania(cursor, cia):
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(ISNULL(RUC, ''))) AS ruc
+        FROM SY_Company (NOLOCK)
+        WHERE Company = ?
+        """,
+        (cia,),
+    )
+    row = cursor.fetchone()
+    return str(row[0]).strip() if row and row[0] else ''
+
+
+@app.route('/api/tregistro-importacion/resumen', methods=['POST'])
+@login_required
+def api_tregistro_importacion_resumen():
+    """Analiza los 5 TXT del T-Registro SUNAT y compara DNIs con la ficha de trabajadores."""
+    cia = str(request.form.get('cia') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    campos = {
+        'IDE': 'file_ide',
+        'DIR': 'file_dir',
+        'TRA': 'file_tra',
+        'SSA': 'file_ssa',
+        'SET': 'file_set',
+    }
+    faltantes = [code for code, field in campos.items() if not request.files.get(field)]
+    if faltantes:
+        return jsonify({
+            "error": f"Debe adjuntar los cinco archivos TXT. Faltan: {', '.join(faltantes)}.",
+        }), 400
+
+    parsed_files = {}
+    try:
+        for code, field in campos.items():
+            upload = request.files[field]
+            raw = upload.read()
+            if not raw:
+                return jsonify({"error": f"El archivo {code} está vacío."}), 400
+            try:
+                contenido = raw.decode('utf-8')
+            except UnicodeDecodeError:
+                contenido = raw.decode('cp1252')
+            bundle = parsear_archivo_tregistro(contenido, upload.filename or f'{code}.txt')
+            tipo_detectado = str(bundle.get('codigo') or '').upper()
+            if tipo_detectado != code:
+                return jsonify({
+                    "error": (
+                        f"El archivo seleccionado para {code} parece ser de tipo {tipo_detectado}. "
+                        f'Verifique que subió el TXT correcto.'
+                    ),
+                }), 400
+            parsed_files[code] = bundle
+    except ValueError as ex:
+        return jsonify({"error": str(ex)}), 400
+    except Exception as ex:
+        logging.exception('api_tregistro_importacion_resumen parse')
+        return jsonify({"error": f"No se pudo leer un archivo TXT: {ex}"}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        dnis_existentes = _tregistro_import_mapa_dnis_existentes(cursor, cia)
+        resultado = construir_resumen_importacion(parsed_files, dnis_existentes)
+
+        ruc_archivos = str((resultado.get('meta') or {}).get('ruc') or '').strip()
+        ruc_compania = _tregistro_import_ruc_compania(cursor, cia)
+        if ruc_archivos and ruc_compania and ruc_archivos != ruc_compania:
+            resultado.setdefault('resumen', {}).setdefault('advertencias', []).append(
+                f'El RUC de los archivos ({ruc_archivos}) no coincide con el RUC de la compañía seleccionada ({ruc_compania}).'
+            )
+
+        resultado['ok'] = True
+        resultado['cia'] = cia
+        return jsonify(resultado)
+    except Exception as ex:
+        logging.exception('api_tregistro_importacion_resumen')
+        return jsonify({"error": str(ex)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _plame_sunat_obtener_carga(cursor, cia, period):

@@ -669,7 +669,7 @@
                     </ul>
                 </li>
 
-                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_tregistro_page', 'plame_validar_page') %}
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
                        class="sidebar-parent-link"
@@ -709,6 +709,11 @@
                         <li class="{{ 'active' if request.endpoint == 'plame_validar_page' else '' }}">
                             <a href="{{ url_for('plame_validar_page') }}" title="Validar PLAME">
                                 <i class="bi bi-shield-check"></i><span class="sidebar-link-text">Validar PLAME</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'tregistro_importar_page' else '' }}">
+                            <a href="{{ url_for('tregistro_importar_page') }}" title="Importar T-Registro">
+                                <i class="bi bi-box-arrow-in-down"></i><span class="sidebar-link-text">Importar T-Registro</span>
                             </a>
                         </li>
                     </ul>

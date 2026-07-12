@@ -302,7 +302,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                         ? `/trabajadores/editar/${encodeURIComponent(person)}?cia=${encodeURIComponent(ciaActual)}`
                         : '#';
                     const btn = person
-                        ? `<a href="${editUrl}" class="text-decoration-none" title="Editar datos bancarios"><i class="bi bi-pencil-fill text-danger"></i></a>`
+                        ? `<a href="${editUrl}" class="text-decoration-none" title="Editar trabajador"><i class="bi bi-pencil-fill text-success"></i></a>`
                         : '<span class="text-muted">—</span>';
                     htmlBody += `<td class="text-center">${btn}</td>`;
                     return;

@@ -18,6 +18,7 @@ ALTER_FIRST = [
     "alter_pr_processtype_add_procedurename.sql",
     "alter_pr_importconcept_xlastuser_20.sql",
     "alter_sy_company_add_logoname_signaturename.sql",
+    "alter_sy_person_add_nacionalidad.sql",
     "tables_pr_plame_sunat_web.sql",
 ]
 LEGACY_NEXT = ["SP_PR_EjecutarFormula.sql"]

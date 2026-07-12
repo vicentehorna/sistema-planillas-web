@@ -1,0 +1,456 @@
+{% extends "layout.html" %}
+
+{% block title %}Importar T-Registro{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tri-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .tri-info code {
+        font-size: 0.78rem;
+    }
+
+    .tri-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 992px) {
+        .tri-filtro-compania {
+            flex: 0 0 32%;
+            max-width: 32%;
+        }
+    }
+
+    .archivo-tregistro-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #6c757d;
+    }
+
+    .archivo-tregistro-label .badge {
+        font-size: 0.65rem;
+        vertical-align: middle;
+    }
+
+    .estado-carga-ok {
+        border-left: 4px solid #198754;
+    }
+
+    .estado-carga-vacio,
+    .estado-carga-alerta {
+        border-left: 4px solid #adb5bd;
+    }
+
+    .estado-carga-alerta {
+        border-left-color: #ffc107;
+    }
+
+    .table-tregistro-import {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-tregistro-import th,
+    .table-tregistro-import td {
+        padding: 0.3rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-tregistro-import thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+    }
+
+    .estado-nuevo {
+        color: #198754;
+        font-weight: 700;
+    }
+
+    .estado-existente {
+        color: #0d6efd;
+        font-weight: 600;
+    }
+
+    .resumen-tregistro-import {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 0.35rem 1.25rem;
+    }
+
+    @media (max-width: 767.98px) {
+        .resumen-tregistro-import {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .resumen-tregistro-import .valor-nuevo {
+        color: #198754;
+        font-weight: 700;
+    }
+
+    .tri-filtros-trabajadores .btn {
+        font-size: 0.78rem;
+    }
+
+    .tri-archivo-ok {
+        color: #198754;
+    }
+
+    .tri-archivo-falta {
+        color: #adb5bd;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border tri-info mb-3" role="note">
+    <strong>Importación T-Registro — reportes SUNAT.</strong>
+    Seleccione la compañía y los cinco TXT descargados de la interfaz del T-Registro:
+    <code>IDE</code>, <code>DIR</code>, <code>TRA</code>, <code>SSA</code> y <code>SET</code>.
+    Nombre esperado: <code>RRRRRRRRRRR_IDE_DDMMAAAA_HHMMSS.txt</code>.
+    El sistema mostrará un resumen y marcará como <strong>nuevos</strong> los trabajadores cuyo DNI no esté en la ficha.
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmTregistroImportar" class="row g-3" enctype="multipart/form-data">
+            <div class="col-12 col-lg-4 tri-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+
+            <div class="col-12 col-md-6 col-lg-4">
+                <label for="fileIde" class="form-label archivo-tregistro-label">
+                    IDE <span class="badge text-bg-secondary">TR3 Identificación</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" id="fileIde" name="file_ide" accept=".txt,text/plain" required>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <label for="fileDir" class="form-label archivo-tregistro-label">
+                    DIR <span class="badge text-bg-secondary">TR4 Dirección</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" id="fileDir" name="file_dir" accept=".txt,text/plain" required>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <label for="fileTra" class="form-label archivo-tregistro-label">
+                    TRA <span class="badge text-bg-secondary">TR5 Laborales</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" id="fileTra" name="file_tra" accept=".txt,text/plain" required>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <label for="fileSsa" class="form-label archivo-tregistro-label">
+                    SSA <span class="badge text-bg-secondary">TR6 Seg. social</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" id="fileSsa" name="file_ssa" accept=".txt,text/plain" required>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <label for="fileSet" class="form-label archivo-tregistro-label">
+                    SET <span class="badge text-bg-secondary">TR1 Educación</span>
+                </label>
+                <input type="file" class="form-control form-control-sm" id="fileSet" name="file_set" accept=".txt,text/plain" required>
+            </div>
+
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnAnalizarArchivos">
+                    <i class="bi bi-search"></i> Analizar archivos
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnRegistrarNuevos" disabled>
+                    <i class="bi bi-person-plus"></i> Registrar nuevos
+                </button>
+                <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los cinco archivos TXT.</span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-4 estado-carga-vacio" id="cardEstadoArchivos">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3">Archivos analizados</h5>
+        <div id="contenidoEstadoArchivos" class="small text-muted"></div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-4" id="cardResumenTregistro">
+    <div class="card-body pt-3">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2 mb-3">
+            <h5 class="fw-bold mb-0" id="tituloResumenTregistro">Resumen de trabajadores T-Registro</h5>
+            <div class="tri-filtros-trabajadores btn-group btn-group-sm" role="group" aria-label="Filtrar trabajadores">
+                <button type="button" class="btn btn-outline-secondary active" data-filtro="TODOS">Todos</button>
+                <button type="button" class="btn btn-outline-success" data-filtro="NUEVO">Nuevos</button>
+                <button type="button" class="btn btn-outline-primary" data-filtro="EXISTENTE">En ficha</button>
+            </div>
+        </div>
+
+        <div id="resumenTregistroImport" class="resumen-tregistro-import small mb-3"></div>
+        <div id="alertasTregistroImport"></div>
+
+        <div class="table-scroll-container" style="max-height: 58vh; overflow: auto; border: 1px solid #dee2e6;">
+            <table class="table table-bordered table-sm table-hover table-tregistro-import align-middle">
+                <thead>
+                    <tr>
+                        <th>Estado</th>
+                        <th>DNI / Doc.</th>
+                        <th>Trabajador</th>
+                        <th>F. ingreso</th>
+                        <th>Tipo trabajador</th>
+                        <th>Régimen pensión</th>
+                        <th>Situación</th>
+                        <th>Archivos</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTregistroImport"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_RESUMEN = {{ url_for('api_tregistro_importacion_resumen') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+
+    let filasResumen = [];
+    let filtroActual = 'TODOS';
+    let resumenActual = null;
+
+    function escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text == null ? '' : String(text);
+        return div.innerHTML;
+    }
+
+    async function leerRespuestaJson(resp, etiqueta) {
+        const texto = await resp.text();
+        if (!texto) throw new Error(`${etiqueta}: respuesta vacía (HTTP ${resp.status}).`);
+        try {
+            return JSON.parse(texto);
+        } catch (err) {
+            throw new Error(`${etiqueta}: respuesta no JSON (HTTP ${resp.status}).`);
+        }
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectElement) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    function renderEstadoArchivos(meta, resumen) {
+        const card = document.getElementById('cardEstadoArchivos');
+        const cont = document.getElementById('contenidoEstadoArchivos');
+        card.classList.remove('d-none', 'estado-carga-ok', 'estado-carga-alerta', 'estado-carga-vacio');
+
+        const advertencias = (resumen && resumen.advertencias) || [];
+        if (advertencias.length) {
+            card.classList.add('estado-carga-alerta');
+        } else {
+            card.classList.add('estado-carga-ok');
+        }
+
+        const archivos = (meta && meta.archivos) || {};
+        const orden = ['IDE', 'DIR', 'TRA', 'SSA', 'SET'];
+        const filasArchivos = orden.map((code) => {
+            const info = archivos[code];
+            if (!info) {
+                return `<div class="col-md-6 col-lg-4 tri-archivo-falta"><strong>${code}:</strong> no cargado</div>`;
+            }
+            return `<div class="col-md-6 col-lg-4 tri-archivo-ok"><strong>${code}:</strong> ${escapeHtml(info.nombre || code)} (${Number(info.filas || 0)} reg.)</div>`;
+        }).join('');
+
+        cont.innerHTML = `
+            <div class="row g-2">
+                <div class="col-md-4"><strong>RUC:</strong> ${escapeHtml(meta.ruc || '-')}</div>
+                <div class="col-md-8"><strong>Empleador:</strong> ${escapeHtml(meta.razon_social || '-')}</div>
+                <div class="col-md-6"><strong>Fecha generación:</strong> ${escapeHtml(meta.fecha_generacion || '-')}</div>
+                ${filasArchivos}
+            </div>
+        `;
+    }
+
+    function renderResumen(resumen) {
+        const cont = document.getElementById('resumenTregistroImport');
+        const alertas = document.getElementById('alertasTregistroImport');
+        const btnRegistrar = document.getElementById('btnRegistrarNuevos');
+
+        cont.innerHTML = `
+            <div><strong>Trabajadores en T-Registro:</strong> ${Number(resumen.total_trabajadores || 0)}</div>
+            <div><strong>Nuevos (sin ficha):</strong> <span class="valor-nuevo">${Number(resumen.nuevos || 0)}</span></div>
+            <div><strong>Ya en ficha:</strong> ${Number(resumen.existentes || 0)}</div>
+            <div><strong>Próximo paso:</strong> registrar solo los nuevos</div>
+        `;
+
+        const advertencias = Array.isArray(resumen.advertencias) ? resumen.advertencias : [];
+        alertas.innerHTML = advertencias.length
+            ? `<div class="alert alert-warning py-2 small mb-3">${advertencias.map((a) => escapeHtml(a)).join('<br>')}</div>`
+            : '';
+
+        btnRegistrar.disabled = Number(resumen.nuevos || 0) === 0;
+        btnRegistrar.title = Number(resumen.nuevos || 0) === 0
+            ? 'No hay trabajadores nuevos para registrar'
+            : 'Disponible en el siguiente paso del desarrollo';
+    }
+
+    function renderGrilla() {
+        const tbody = document.getElementById('tbodyTregistroImport');
+        const filas = filasResumen.filter((f) => filtroActual === 'TODOS' || f.estado === filtroActual);
+
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros para el filtro seleccionado.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = filas.map((f) => {
+            const clsEstado = f.estado === 'NUEVO' ? 'estado-nuevo' : 'estado-existente';
+            const etiqueta = f.estado === 'NUEVO' ? 'Nuevo' : 'En ficha';
+            const archivos = Array.isArray(f.archivos_presentes) ? f.archivos_presentes.join(', ') : '';
+            return `
+                <tr>
+                    <td class="${clsEstado}">${escapeHtml(etiqueta)}</td>
+                    <td>${escapeHtml(f.num_doc || '')}</td>
+                    <td>${escapeHtml(f.nombre_completo || '')}</td>
+                    <td>${escapeHtml(f.fecha_ingreso || '')}</td>
+                    <td>${escapeHtml(f.tipo_trabajador || '')}</td>
+                    <td>${escapeHtml(f.regimen_pension || '')}</td>
+                    <td>${escapeHtml(f.situacion || '')}</td>
+                    <td>${escapeHtml(archivos)}</td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    function renderResultado(data) {
+        resumenActual = data;
+        filasResumen = Array.isArray(data.filas) ? data.filas : [];
+        filtroActual = 'TODOS';
+
+        document.querySelectorAll('.tri-filtros-trabajadores [data-filtro]').forEach((btn) => {
+            btn.classList.toggle('active', btn.getAttribute('data-filtro') === 'TODOS');
+        });
+
+        renderEstadoArchivos(data.meta || {}, data.resumen || {});
+        renderResumen(data.resumen || {});
+        renderGrilla();
+
+        document.getElementById('cardResumenTregistro').classList.remove('d-none');
+        document.getElementById('lblEstadoAccion').textContent =
+            `${Number(data.resumen.nuevos || 0)} trabajador(es) nuevo(s) listo(s) para el siguiente paso.`;
+
+        document.getElementById('cardResumenTregistro').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    document.getElementById('frmTregistroImportar').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const cia = document.getElementById('cboCompania').value.trim();
+        if (!cia) {
+            if (window.HmUi) HmUi.advertencia('Seleccione una compañía.');
+            else alert('Seleccione una compañía.');
+            return;
+        }
+
+        const files = {
+            file_ide: document.getElementById('fileIde').files[0],
+            file_dir: document.getElementById('fileDir').files[0],
+            file_tra: document.getElementById('fileTra').files[0],
+            file_ssa: document.getElementById('fileSsa').files[0],
+            file_set: document.getElementById('fileSet').files[0],
+        };
+        for (const [key, file] of Object.entries(files)) {
+            if (!file) {
+                const msg = 'Debe seleccionar los cinco archivos TXT (IDE, DIR, TRA, SSA y SET).';
+                if (window.HmUi) HmUi.advertencia(msg);
+                else alert(msg);
+                return;
+            }
+        }
+
+        const btn = document.getElementById('btnAnalizarArchivos');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Analizando...';
+
+        try {
+            const fd = new FormData();
+            fd.append('cia', cia);
+            Object.entries(files).forEach(([name, file]) => fd.append(name, file));
+
+            const res = await fetch(URL_RESUMEN, { method: 'POST', body: fd });
+            const data = await leerRespuestaJson(res, 'T-Registro');
+            if (!res.ok || data.error) {
+                const msg = data.error || 'No se pudo analizar los archivos.';
+                if (window.HmUi) HmUi.error(msg);
+                else alert(msg);
+                return;
+            }
+            renderResultado(data);
+        } catch (err) {
+            console.error(err);
+            const msg = err.message || 'Error al analizar los archivos.';
+            if (window.HmUi) HmUi.error(msg);
+            else alert(msg);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    });
+
+    document.querySelectorAll('.tri-filtros-trabajadores [data-filtro]').forEach((btn) => {
+        btn.addEventListener('click', function () {
+            filtroActual = this.getAttribute('data-filtro') || 'TODOS';
+            document.querySelectorAll('.tri-filtros-trabajadores [data-filtro]').forEach((b) => {
+                b.classList.toggle('active', b === this);
+            });
+            renderGrilla();
+        });
+    });
+
+    document.getElementById('btnRegistrarNuevos').addEventListener('click', function () {
+        const msg = 'El registro de trabajadores nuevos se implementará en el siguiente paso.';
+        if (window.HmUi) HmUi.info(msg);
+        else alert(msg);
+    });
+
+    const cboCia = document.getElementById('cboCompania');
+    await poblarSelect('/api/selectores/companias', cboCia);
+    if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+        /* default */
+    }
+});
+</script>
+{% endblock %}

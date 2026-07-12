@@ -174,6 +174,16 @@
                             <input type="email" id="txtEmail" name="email" class="form-control form-control-sm"
                                    maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off">
                         </div>
+                        <div class="col-md-8">
+                            <label for="txtAddress" class="form-label small fw-bold text-muted">Dirección</label>
+                            <input type="text" id="txtAddress" name="address" class="form-control form-control-sm"
+                                   maxlength="255" value="{{ empleado.address or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="txtNacionalidad" class="form-label small fw-bold text-muted">Nacionalidad</label>
+                            <input type="text" id="txtNacionalidad" name="nacionalidad" class="form-control form-control-sm"
+                                   maxlength="100" value="{{ empleado.nacionalidad or '' }}" autocomplete="off">
+                        </div>
                         <div class="col-md-5">
                             <label for="cboTipoDocumento" class="form-label small fw-bold text-muted">Tipo De Documento</label>
                             <select id="cboTipoDocumento" name="employeedocumenttype" class="form-select form-select-sm campo-obligatorio" required>

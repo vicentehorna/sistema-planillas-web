@@ -329,8 +329,9 @@ BEGIN
              OR (@txt LIKE '%OBRA%' AND @txt LIKE '%DETERM%' AND cm.pdt = '09')
              OR (@txt LIKE '%OBRA%' AND @txt LIKE '%DETERM%' AND UPPER(cm.description) LIKE '%OBRA DETERMIN%')
              OR (@txt LIKE '%SERV%ESPEC%' AND cm.pdt = '09')
-             OR (@txt LIKE '%INDETERM%' AND cm.pdt = '01')
-             OR (@txt LIKE '%INDETERM%' AND UPPER(cm.description) LIKE '%INDETERMIN%')
+             /* T-Registro envía "A PLAZO INDET - D.LEG. 728" (abreviatura de INDETERMINADO) */
+             OR (@txt LIKE '%INDET%' AND cm.pdt = '01')
+             OR (@txt LIKE '%INDET%' AND UPPER(cm.description) LIKE '%INDETERMIN%')
              OR (@txt LIKE '%PLAZO FIJO%' AND cm.pdt = '02')
              OR (@txt LIKE '%TEMPORAL%' AND cm.pdt IN ('03', '04'))
           )

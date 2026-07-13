@@ -1,0 +1,442 @@
+{% extends "layout.html" %}
+
+{% block title %}Interfaz Asientos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .asi-grilla {
+        max-height: calc(100vh - 280px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-asi {
+        font-size: 12px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-asi th,
+    .table-asi td {
+        padding: 0.28rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-asi thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        font-weight: 600;
+        color: #495057;
+    }
+    .table-asi tbody tr.asi-row {
+        cursor: default;
+    }
+    .table-asi tbody tr.asi-row.selected {
+        background: #cfe2ff;
+    }
+    .table-asi tbody tr.asi-row:hover {
+        background: #eef5ff;
+    }
+    .table-asi .col-sel {
+        width: 2.2rem;
+        text-align: center;
+    }
+    .table-asi .col-importe {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .asi-titulo-grilla {
+        font-size: 1.05rem;
+        font-weight: 600;
+        margin: 0 0 0.5rem 0;
+        color: #212529;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosAsi">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-5 col-lg-4">
+                    <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                    <select id="cboCompania" class="form-select form-select-sm" required>
+                        <option value="">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3 col-lg-2">
+                    <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                    <select id="cboPeriodo" class="form-select form-select-sm">
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-3 col-lg-2">
+                    <label for="cboEstado" class="form-label small fw-bold text-muted mb-1">Estado</label>
+                    <select id="cboEstado" class="form-select form-select-sm">
+                        <option value="A" selected>Aprobado</option>
+                        <option value="N">No aprobado</option>
+                        <option value="">Todos</option>
+                    </select>
+                </div>
+            </div>
+            <div class="row g-2 align-items-center mt-2">
+                <div class="col-auto d-flex align-items-center gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                    <button type="button" id="btnGenerarArchivo" class="btn btn-success btn-sm px-3">
+                        <i class="bi bi-file-earmark-text"></i> Generar Archivo
+                    </button>
+                </div>
+                <div class="col d-flex align-items-center justify-content-end">
+                    <span id="lblConteo" class="small text-muted">0 registros</span>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<h5 id="tituloAsientos" class="asi-titulo-grilla">Interfaz Asientos</h5>
+<div class="asi-grilla">
+    <table class="table table-bordered table-sm table-hover table-asi align-middle">
+        <thead>
+            <tr>
+                <th class="col-sel">
+                    <input type="checkbox" id="chkSelHeader" title="Seleccionar / deseleccionar visibles" disabled>
+                </th>
+                <th>Periodo</th>
+                <th>Voucher</th>
+                <th>Und. Neg.</th>
+                <th>Fecha</th>
+                <th>Título</th>
+                <th class="text-end">Importe</th>
+                <th>Estado</th>
+                <th>Usuario</th>
+                <th>Ingreso</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyAsi">
+            <tr>
+                <td colspan="10" class="text-center text-muted py-4">Seleccione filtros y pulse Buscar</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+    const MESES = [
+        '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ];
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboEstado = document.getElementById('cboEstado');
+    const tbodyAsi = document.getElementById('tbodyAsi');
+    const lblConteo = document.getElementById('lblConteo');
+    const chkSelHeader = document.getElementById('chkSelHeader');
+    const tituloAsientos = document.getElementById('tituloAsientos');
+
+    let filas = [];
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastErr(m) {
+        if (window.HmUi) HmUi.error(m);
+        else alert(m);
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); }
+            catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function seleccionarInsensitive(select, codigo) {
+        const want = String(codigo || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectEl, placeholder) {
+        selectEl.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await leerJson(res);
+            const items = Array.isArray(data) ? data : (data.rows || data.items || []);
+            selectEl.innerHTML = `<option value="">${escHtml(placeholder || 'Seleccione...')}</option>`;
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(opt);
+            });
+            return items;
+        } catch (err) {
+            console.error(err);
+            selectEl.innerHTML = '<option value="">Error</option>';
+            return [];
+        }
+    }
+
+    function fmtFecha(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]}`;
+        return s;
+    }
+
+    function fmtFechaHora(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}${m[6] ? ':' + m[6] : ''}`;
+        return s;
+    }
+
+    function fmtImporte(n) {
+        const num = Number(n);
+        if (!Number.isFinite(num)) return '';
+        return num.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function textoPeriodoTitulo(periodRaw) {
+        const s = String(periodRaw || '').trim().replace('-', '');
+        if (s.length >= 6 && /^\d{6}/.test(s)) {
+            const anio = s.slice(0, 4);
+            const mes = parseInt(s.slice(4, 6), 10);
+            const nom = MESES[mes] || s.slice(4, 6);
+            return `${nom} ${anio}`;
+        }
+        return '';
+    }
+
+    function actualizarTitulo() {
+        const periodoTxt = textoPeriodoTitulo(cboPeriodo.value);
+        tituloAsientos.textContent = periodoTxt
+            ? `Interfaz Asientos — ${periodoTxt}`
+            : 'Interfaz Asientos';
+    }
+
+    function syncSelHeader() {
+        const checks = Array.from(tbodyAsi.querySelectorAll('.chk-asi'));
+        if (!checks.length) {
+            chkSelHeader.checked = false;
+            chkSelHeader.indeterminate = false;
+            chkSelHeader.disabled = true;
+            lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}`;
+            return;
+        }
+        chkSelHeader.disabled = false;
+        const n = checks.filter((c) => c.checked).length;
+        chkSelHeader.checked = n === checks.length;
+        chkSelHeader.indeterminate = n > 0 && n < checks.length;
+        lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}` +
+            (n ? ` · ${n} seleccionado${n === 1 ? '' : 's'}` : '');
+    }
+
+    function setSeleccion(todos) {
+        tbodyAsi.querySelectorAll('.chk-asi').forEach((c) => {
+            c.checked = !!todos;
+            const tr = c.closest('tr');
+            if (tr) tr.classList.toggle('selected', !!todos);
+        });
+        syncSelHeader();
+    }
+
+    function render() {
+        actualizarTitulo();
+        if (!filas.length) {
+            tbodyAsi.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin asientos para los filtros</td></tr>';
+            lblConteo.textContent = '0 registros';
+            syncSelHeader();
+            return;
+        }
+
+        tbodyAsi.innerHTML = filas.map((f, idx) => `
+            <tr class="asi-row" data-idx="${idx}">
+                <td class="col-sel">
+                    <input type="checkbox" class="form-check-input chk-asi" data-idx="${idx}" data-voucher="${escHtml(f.voucher)}">
+                </td>
+                <td>${escHtml(f.period_fmt || f.period || '')}</td>
+                <td>${escHtml(f.voucherno || '')}</td>
+                <td>${escHtml(f.businessunit || '')}</td>
+                <td>${escHtml(fmtFecha(f.voucherdate))}</td>
+                <td title="${escHtml(f.title || '')}">${escHtml(f.title || '')}</td>
+                <td class="col-importe">${escHtml(fmtImporte(f.importe))}</td>
+                <td>${escHtml(f.status_desc || f.status || '')}</td>
+                <td>${escHtml(f.entryuser || '')}</td>
+                <td>${escHtml(fmtFechaHora(f.entrydate))}</td>
+            </tr>
+        `).join('');
+
+        syncSelHeader();
+    }
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value;
+        cboPeriodo.innerHTML = '<option value="">Todos</option>';
+        filas = [];
+        render();
+        if (!cia) return;
+        const items = await poblarSelect(
+            `/api/asientos/interfaz/periodos?cia=${encodeURIComponent(cia)}`,
+            cboPeriodo,
+            'Todos'
+        );
+        if (items.length) {
+            cboPeriodo.value = items[0].id;
+        }
+        actualizarTitulo();
+    }
+
+    async function buscar() {
+        if (!cboCia.value) {
+            toastErr('Seleccione una compañía.');
+            return;
+        }
+        try {
+            const res = await fetch('/api/asientos/interfaz/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value,
+                    period: cboPeriodo.value || null,
+                    status: cboEstado.value === '' ? null : cboEstado.value,
+                }),
+            });
+            const data = await leerJson(res);
+            filas = data.rows || [];
+            render();
+        } catch (err) {
+            toastErr(err.message || String(err));
+        }
+    }
+
+    async function generarArchivo() {
+        const checks = Array.from(tbodyAsi.querySelectorAll('.chk-asi:checked'));
+        if (checks.length === 0) {
+            toastErr('Seleccione un asiento para generar el archivo.');
+            return;
+        }
+        if (checks.length > 1) {
+            toastErr('Seleccione solo un asiento.');
+            return;
+        }
+        if (!cboCia.value) {
+            toastErr('Seleccione una compañía.');
+            return;
+        }
+
+        const voucher = checks[0].getAttribute('data-voucher') || '';
+        if (!voucher) {
+            toastErr('Asiento inválido.');
+            return;
+        }
+
+        const btn = document.getElementById('btnGenerarArchivo');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+
+        try {
+            const res = await fetch('/api/asientos/interfaz/generar-archivo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value,
+                    voucher,
+                }),
+            });
+            const cd = res.headers.get('Content-Disposition') || '';
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                } catch (e) { /* blob/texto */ }
+                throw new Error(msg);
+            }
+
+            const blob = await res.blob();
+            let filename = 'asiento.txt';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+
+            if (window.HmUi) HmUi.exito('Archivo generado.');
+        } catch (err) {
+            toastErr(err.message || String(err));
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    }
+
+    document.getElementById('frmFiltrosAsi').addEventListener('submit', function (e) {
+        e.preventDefault();
+        buscar();
+    });
+
+    document.getElementById('btnGenerarArchivo').addEventListener('click', generarArchivo);
+
+    cboCia.addEventListener('change', cargarPeriodos);
+    cboPeriodo.addEventListener('change', actualizarTitulo);
+    chkSelHeader.addEventListener('change', function () {
+        setSeleccion(chkSelHeader.checked);
+    });
+
+    tbodyAsi.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('chk-asi')) return;
+        // Un solo asiento a la vez (Generar Archivo)
+        if (e.target.checked) {
+            tbodyAsi.querySelectorAll('.chk-asi').forEach((c) => {
+                if (c !== e.target) {
+                    c.checked = false;
+                    const otr = c.closest('tr');
+                    if (otr) otr.classList.remove('selected');
+                }
+            });
+        }
+        const tr = e.target.closest('tr');
+        if (tr) tr.classList.toggle('selected', e.target.checked);
+        syncSelHeader();
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
+    seleccionarInsensitive(cboCia, DEFAULT_CIA);
+    if (cboCia.value) await cargarPeriodos();
+});
+</script>
+{% endblock %}

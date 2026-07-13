@@ -1,0 +1,685 @@
+{% extends "layout.html" %}
+
+{% block title %}Configurar Conceptos — Asientos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .acc-grilla {
+        max-height: calc(100vh - 280px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-acc {
+        font-size: 12px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-acc th,
+    .table-acc td {
+        padding: 0.3rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-acc thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        font-weight: 600;
+        color: #495057;
+    }
+    .table-acc tbody tr.acc-row.dirty {
+        background: #fff8e6;
+    }
+    .table-acc tbody tr.acc-row.nueva {
+        background: #eef8ff;
+    }
+    .table-acc .form-control-sm,
+    .table-acc .form-select-sm {
+        font-size: 12px;
+        min-width: 0;
+    }
+    .acc-cuenta-wrap {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+        min-width: 8.5rem;
+    }
+    .acc-cuenta-wrap input {
+        flex: 1 1 auto;
+        width: 5.5rem;
+    }
+    .acc-cuenta-wrap .btn {
+        padding: 0.15rem 0.35rem;
+        line-height: 1;
+    }
+    .acc-concepto-select {
+        min-width: 14rem;
+        max-width: 22rem;
+    }
+    .acc-flag-select {
+        min-width: 8.5rem;
+    }
+    .acc-msg {
+        min-height: 1.4rem;
+    }
+    #modalCuentas .modal-body {
+        max-height: 60vh;
+        overflow: auto;
+    }
+    #modalCuentas .table tbody tr {
+        cursor: pointer;
+    }
+    #modalCuentas .table tbody tr:hover {
+        background: #cfe2ff;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">Configurar Conceptos</h5>
+                <div class="small text-muted">Asocie cada concepto de planilla a su cuenta contable (perfil + proceso).</div>
+            </div>
+        </div>
+        <form id="frmFiltrosAcc" class="row g-2 align-items-end">
+            <div class="col-12 col-md-3 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboPerfil" class="form-label small fw-bold text-muted mb-1">Perfil contable</label>
+                <select id="cboPerfil" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <label for="txtLocalizar" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                <input type="search" id="txtLocalizar" class="form-control form-control-sm" placeholder="Concepto o cuenta..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnAgregar" disabled>
+                    <i class="bi bi-plus-lg"></i> Agregar
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm px-3" id="btnGuardar" disabled>
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+                <span id="lblConteo" class="small text-muted ms-auto">0 registros</span>
+            </div>
+        </form>
+        <div id="msgAcc" class="acc-msg small mt-2"></div>
+    </div>
+</div>
+
+<div class="acc-grilla">
+    <table class="table table-bordered table-sm table-hover table-acc align-middle">
+        <thead>
+            <tr>
+                <th style="min-width:16rem">Concepto</th>
+                <th style="min-width:9rem">Crédito</th>
+                <th style="min-width:9rem">Débito</th>
+                <th style="min-width:9rem">Detalle a nivel</th>
+                <th style="width:4.5rem" class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyAcc">
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">Seleccione filtros y pulse Consultar</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal búsqueda de cuentas -->
+<div class="modal fade" id="modalCuentas" tabindex="-1" aria-labelledby="tituloModalCuentas" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="tituloModalCuentas">Buscar cuenta contable</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="input-group input-group-sm mb-2">
+                    <input type="search" id="txtBuscarCuenta" class="form-control" placeholder="Código o nombre..." autocomplete="off">
+                    <button type="button" class="btn btn-outline-secondary" id="btnBuscarCuenta">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCuentasModal">
+                        <tr><td colspan="2" class="text-muted text-center">Escriba para buscar</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+    const FLAG_OPTS = [
+        { id: 'T', text: 'Trabajador' },
+        { id: 'C', text: 'Centro de Costo' },
+        { id: 'O', text: 'Concepto' },
+    ];
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPerfil = document.getElementById('cboPerfil');
+    const cboProceso = document.getElementById('cboProceso');
+    const txtLocalizar = document.getElementById('txtLocalizar');
+    const tbodyAcc = document.getElementById('tbodyAcc');
+    const lblConteo = document.getElementById('lblConteo');
+    const msgAcc = document.getElementById('msgAcc');
+    const btnAgregar = document.getElementById('btnAgregar');
+    const btnGuardar = document.getElementById('btnGuardar');
+    const txtBuscarCuenta = document.getElementById('txtBuscarCuenta');
+    const tbodyCuentasModal = document.getElementById('tbodyCuentasModal');
+    const modalCuentasEl = document.getElementById('modalCuentas');
+    const modalCuentas = new bootstrap.Modal(modalCuentasEl);
+
+    let filas = [];
+    let conceptosCache = [];
+    let cuentaTarget = null; // { idx, campo: 'credit'|'debit' }
+    let buscarCuentaTimer = null;
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
+    function toastErr(m) { if (window.HmUi) HmUi.error(m); else alert(m); }
+
+    function setMsg(texto, tipo) {
+        msgAcc.className = 'acc-msg small mt-2';
+        if (!texto) { msgAcc.textContent = ''; return; }
+        msgAcc.classList.add(tipo === 'ok' ? 'text-success' : 'text-danger');
+        msgAcc.textContent = texto;
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function seleccionarInsensitive(select, codigo) {
+        const want = String(codigo || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectEl, opts) {
+        const placeholder = (opts && opts.placeholder) || 'Seleccione...';
+        selectEl.innerHTML = `<option value="">Cargando...</option>`;
+        try {
+            const res = await fetch(url);
+            const data = await leerJson(res);
+            const items = Array.isArray(data) ? data : (data.rows || data.items || []);
+            selectEl.innerHTML = `<option value="">${escHtml(placeholder)}</option>`;
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(opt);
+            });
+            return items;
+        } catch (err) {
+            console.error(err);
+            selectEl.innerHTML = '<option value="">Error</option>';
+            return [];
+        }
+    }
+
+    async function postJson(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body || {}),
+        });
+        return leerJson(res);
+    }
+
+    function filtrosOk() {
+        return !!(cboCia.value && cboPerfil.value && cboProceso.value);
+    }
+
+    function syncBotones() {
+        const ok = filtrosOk();
+        btnAgregar.disabled = !ok;
+        const dirty = filas.some((f) => f._dirty || f._nuevo);
+        btnGuardar.disabled = !ok || !dirty;
+    }
+
+    function opcionesFlag(sel) {
+        return FLAG_OPTS.map((o) =>
+            `<option value="${o.id}" ${o.id === sel ? 'selected' : ''}>${escHtml(o.text)}</option>`
+        ).join('');
+    }
+
+    function opcionesConcepto(sel) {
+        const opts = ['<option value="">Seleccione...</option>'];
+        conceptosCache.forEach((c) => {
+            const id = String(c.id || '');
+            const selected = id === String(sel || '') ? 'selected' : '';
+            opts.push(`<option value="${escHtml(id)}" ${selected}>${escHtml(c.text || id)}</option>`);
+        });
+        return opts.join('');
+    }
+
+    function conceptoReadonly(f) {
+        const txt = f.concept_description || f.concept || '';
+        const code = f.formulacode ? ` (${f.formulacode})` : '';
+        return `<span title="${escHtml(f.concept || '')}">${escHtml(txt + code)}</span>`;
+    }
+
+    function celdaCuenta(idx, campo, code, account) {
+        const codeVal = code || '';
+        const accVal = account || '';
+        return `<div class="acc-cuenta-wrap">
+            <input type="text" class="form-control form-control-sm acc-code"
+                   data-idx="${idx}" data-campo="${campo}" maxlength="20"
+                   value="${escHtml(codeVal)}" data-account="${escHtml(accVal)}" autocomplete="off">
+            <button type="button" class="btn btn-outline-secondary btn-sm acc-buscar-cta"
+                    data-idx="${idx}" data-campo="${campo}" title="Buscar cuenta">
+                <i class="bi bi-search"></i>
+            </button>
+        </div>`;
+    }
+
+    function render() {
+        if (!filas.length) {
+            tbodyAcc.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Sin configuraciones para los filtros</td></tr>';
+            lblConteo.textContent = '0 registros';
+            syncBotones();
+            return;
+        }
+
+        tbodyAcc.innerHTML = filas.map((f, idx) => {
+            const cls = [
+                'acc-row',
+                f._nuevo ? 'nueva' : '',
+                f._dirty ? 'dirty' : '',
+            ].filter(Boolean).join(' ');
+            const conceptoHtml = f._nuevo
+                ? `<select class="form-select form-select-sm acc-concepto-select acc-concept" data-idx="${idx}">${opcionesConcepto(f.concept)}</select>`
+                : conceptoReadonly(f);
+            return `<tr class="${cls}" data-idx="${idx}">
+                <td>${conceptoHtml}</td>
+                <td>${celdaCuenta(idx, 'credit', f.creditaccountcode, f.creditaccount)}</td>
+                <td>${celdaCuenta(idx, 'debit', f.debitaccountcode, f.debitaccount)}</td>
+                <td><select class="form-select form-select-sm acc-flag-select acc-flag" data-idx="${idx}">${opcionesFlag(f.flagsumtype || 'T')}</select></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-outline-danger btn-sm acc-del" data-idx="${idx}" title="Eliminar">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}`;
+        syncBotones();
+    }
+
+    function marcarDirty(idx) {
+        if (!filas[idx]) return;
+        filas[idx]._dirty = true;
+        const tr = tbodyAcc.querySelector(`tr[data-idx="${idx}"]`);
+        if (tr) tr.classList.add('dirty');
+        syncBotones();
+    }
+
+    async function cargarDependientes() {
+        const cia = cboCia.value;
+        cboPerfil.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        filas = [];
+        render();
+        if (!cia) return;
+
+        await Promise.all([
+            poblarSelect(`/api/asientos/configurar-conceptos/perfiles?cia=${encodeURIComponent(cia)}`, cboPerfil),
+            poblarSelect(`/api/asientos/configurar-conceptos/procesos?cia=${encodeURIComponent(cia)}`, cboProceso),
+        ]);
+
+        const dataConc = await postJson('/api/asientos/configurar-conceptos/conceptos', { cia });
+        conceptosCache = dataConc.rows || [];
+    }
+
+    async function consultar() {
+        if (!filtrosOk()) {
+            toastErr('Seleccione compañía, perfil contable y proceso.');
+            return;
+        }
+        setMsg('');
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/listado', {
+                cia: cboCia.value,
+                accountprofile: cboPerfil.value,
+                processtype: cboProceso.value,
+                busqueda: txtLocalizar.value.trim() || null,
+            });
+            filas = (data.rows || []).map((r) => ({
+                ...r,
+                _nuevo: false,
+                _dirty: false,
+            }));
+            render();
+            setMsg(`${filas.length} registro(s) cargados.`, 'ok');
+        } catch (err) {
+            toastErr(err.message || String(err));
+            setMsg(err.message || String(err), 'err');
+        }
+    }
+
+    function agregarFila() {
+        if (!filtrosOk()) return;
+        filas.push({
+            detail: '',
+            accountprofile: cboPerfil.value,
+            concept: '',
+            concept_description: '',
+            formulacode: '',
+            processtype: cboProceso.value,
+            debitaccount: '',
+            debitaccountcode: '',
+            creditaccount: '',
+            creditaccountcode: '',
+            flagsumtype: 'T',
+            currency: 'LO',
+            company: cboCia.value,
+            _nuevo: true,
+            _dirty: true,
+        });
+        render();
+        const lastSelect = tbodyAcc.querySelector(`tr[data-idx="${filas.length - 1}"] .acc-concept`);
+        if (lastSelect) lastSelect.focus();
+    }
+
+    async function eliminarFila(idx) {
+        const f = filas[idx];
+        if (!f) return;
+
+        if (f._nuevo) {
+            filas.splice(idx, 1);
+            render();
+            return;
+        }
+
+        const ok = window.HmUi
+            ? await HmUi.confirmar({
+                titulo: 'Eliminar configuración',
+                mensaje: `¿Eliminar la configuración del concepto "${f.concept_description || f.concept}"?`,
+                textoOk: 'Eliminar',
+                variant: 'danger',
+            })
+            : confirm('¿Eliminar esta configuración?');
+        if (!ok) return;
+
+        try {
+            await postJson('/api/asientos/configurar-conceptos/eliminar', {
+                cia: cboCia.value,
+                detail: f.detail,
+                accountprofile: f.accountprofile,
+            });
+            filas.splice(idx, 1);
+            render();
+            toastOk('Configuración eliminada.');
+        } catch (err) {
+            toastErr(err.message || String(err));
+        }
+    }
+
+    async function guardarCambios() {
+        const pendientes = filas.filter((f) => f._dirty || f._nuevo);
+        if (!pendientes.length) return;
+
+        for (const f of pendientes) {
+            if (!f.concept) {
+                toastErr('Toda fila nueva debe tener un concepto.');
+                return;
+            }
+            if (!(f.creditaccountcode || '').trim() && !(f.debitaccountcode || '').trim()) {
+                toastErr(`El concepto "${f.concept_description || f.concept}" necesita al menos una cuenta.`);
+                return;
+            }
+        }
+
+        btnGuardar.disabled = true;
+        let okCount = 0;
+        try {
+            for (const f of pendientes) {
+                const payload = {
+                    modo: f._nuevo ? 'I' : 'U',
+                    cia: cboCia.value,
+                    detail: f.detail || null,
+                    accountprofile: cboPerfil.value,
+                    concept: f.concept,
+                    processtype: cboProceso.value,
+                    creditaccount: f.creditaccount || null,
+                    creditaccountcode: (f.creditaccountcode || '').trim() || null,
+                    debitaccount: f.debitaccount || null,
+                    debitaccountcode: (f.debitaccountcode || '').trim() || null,
+                    flagsumtype: f.flagsumtype || 'T',
+                };
+                const data = await postJson('/api/asientos/configurar-conceptos/guardar', payload);
+                if (f._nuevo && data.detail) f.detail = data.detail;
+                f.accountprofile = cboPerfil.value;
+                f._nuevo = false;
+                f._dirty = false;
+                okCount += 1;
+            }
+            toastOk(`${okCount} configuración(es) guardada(s).`);
+            await consultar();
+        } catch (err) {
+            toastErr(err.message || String(err));
+            syncBotones();
+        }
+    }
+
+    async function abrirBusquedaCuenta(idx, campo) {
+        cuentaTarget = { idx, campo };
+        txtBuscarCuenta.value = '';
+        tbodyCuentasModal.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Escriba para buscar</td></tr>';
+        modalCuentas.show();
+        setTimeout(() => txtBuscarCuenta.focus(), 250);
+        await buscarCuentas('');
+    }
+
+    async function buscarCuentas(q) {
+        if (!cboCia.value) return;
+        tbodyCuentasModal.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Buscando...</td></tr>';
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/cuentas', {
+                cia: cboCia.value,
+                busqueda: q || null,
+            });
+            const rows = data.rows || [];
+            if (!rows.length) {
+                tbodyCuentasModal.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Sin resultados</td></tr>';
+                return;
+            }
+            tbodyCuentasModal.innerHTML = rows.map((r) =>
+                `<tr data-id="${escHtml(r.id)}" data-code="${escHtml(r.code)}" data-name="${escHtml(r.name)}">
+                    <td>${escHtml(r.code)}</td>
+                    <td>${escHtml(r.name)}</td>
+                </tr>`
+            ).join('');
+        } catch (err) {
+            tbodyCuentasModal.innerHTML = `<tr><td colspan="2" class="text-danger text-center">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function resolverCuentaPorCodigo(idx, campo, code) {
+        const f = filas[idx];
+        if (!f) return;
+        const codeNorm = String(code || '').trim();
+        if (!codeNorm) {
+            if (campo === 'credit') {
+                f.creditaccount = '';
+                f.creditaccountcode = '';
+            } else {
+                f.debitaccount = '';
+                f.debitaccountcode = '';
+            }
+            marcarDirty(idx);
+            return;
+        }
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/cuentas', {
+                cia: cboCia.value,
+                busqueda: codeNorm,
+            });
+            const hit = (data.rows || []).find((r) => String(r.code || '').trim() === codeNorm);
+            if (!hit) {
+                toastErr(`Cuenta ${codeNorm} no encontrada o inactiva.`);
+                return;
+            }
+            if (campo === 'credit') {
+                f.creditaccount = hit.id;
+                f.creditaccountcode = hit.code;
+            } else {
+                f.debitaccount = hit.id;
+                f.debitaccountcode = hit.code;
+            }
+            marcarDirty(idx);
+            render();
+        } catch (err) {
+            toastErr(err.message || String(err));
+        }
+    }
+
+    // --- eventos ---
+    document.getElementById('frmFiltrosAcc').addEventListener('submit', function (e) {
+        e.preventDefault();
+        consultar();
+    });
+
+    cboCia.addEventListener('change', cargarDependientes);
+    cboPerfil.addEventListener('change', () => { filas = []; render(); syncBotones(); });
+    cboProceso.addEventListener('change', () => { filas = []; render(); syncBotones(); });
+
+    btnAgregar.addEventListener('click', agregarFila);
+    btnGuardar.addEventListener('click', guardarCambios);
+
+    tbodyAcc.addEventListener('change', function (e) {
+        const t = e.target;
+        const idx = parseInt(t.getAttribute('data-idx'), 10);
+        if (Number.isNaN(idx) || !filas[idx]) return;
+        if (t.classList.contains('acc-concept')) {
+            filas[idx].concept = t.value;
+            const item = conceptosCache.find((c) => String(c.id) === String(t.value));
+            filas[idx].concept_description = item ? item.text : '';
+            filas[idx].formulacode = item ? (item.formulacode || '') : '';
+            marcarDirty(idx);
+        }
+        if (t.classList.contains('acc-flag')) {
+            filas[idx].flagsumtype = t.value;
+            marcarDirty(idx);
+        }
+    });
+
+    tbodyAcc.addEventListener('click', function (e) {
+        const btnBuscar = e.target.closest('.acc-buscar-cta');
+        if (btnBuscar) {
+            abrirBusquedaCuenta(
+                parseInt(btnBuscar.getAttribute('data-idx'), 10),
+                btnBuscar.getAttribute('data-campo')
+            );
+            return;
+        }
+        const btnDel = e.target.closest('.acc-del');
+        if (btnDel) {
+            eliminarFila(parseInt(btnDel.getAttribute('data-idx'), 10));
+        }
+    });
+
+    tbodyAcc.addEventListener('blur', function (e) {
+        const t = e.target;
+        if (!t.classList.contains('acc-code')) return;
+        const idx = parseInt(t.getAttribute('data-idx'), 10);
+        const campo = t.getAttribute('data-campo');
+        if (Number.isNaN(idx) || !filas[idx]) return;
+        const code = t.value.trim();
+        const actual = campo === 'credit' ? (filas[idx].creditaccountcode || '') : (filas[idx].debitaccountcode || '');
+        if (code === actual) return;
+        resolverCuentaPorCodigo(idx, campo, code);
+    }, true);
+
+    tbodyAcc.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.classList.contains('acc-code')) {
+            e.preventDefault();
+            e.target.blur();
+        }
+    });
+
+    document.getElementById('btnBuscarCuenta').addEventListener('click', () => buscarCuentas(txtBuscarCuenta.value.trim()));
+    txtBuscarCuenta.addEventListener('input', function () {
+        clearTimeout(buscarCuentaTimer);
+        buscarCuentaTimer = setTimeout(() => buscarCuentas(txtBuscarCuenta.value.trim()), 300);
+    });
+    txtBuscarCuenta.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            buscarCuentas(txtBuscarCuenta.value.trim());
+        }
+    });
+
+    tbodyCuentasModal.addEventListener('click', function (e) {
+        const tr = e.target.closest('tr[data-id]');
+        if (!tr || !cuentaTarget) return;
+        const { idx, campo } = cuentaTarget;
+        if (!filas[idx]) return;
+        if (campo === 'credit') {
+            filas[idx].creditaccount = tr.getAttribute('data-id');
+            filas[idx].creditaccountcode = tr.getAttribute('data-code');
+        } else {
+            filas[idx].debitaccount = tr.getAttribute('data-id');
+            filas[idx].debitaccountcode = tr.getAttribute('data-code');
+        }
+        marcarDirty(idx);
+        modalCuentas.hide();
+        render();
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    seleccionarInsensitive(cboCia, DEFAULT_CIA);
+    if (cboCia.value) await cargarDependientes();
+});
+</script>
+{% endblock %}

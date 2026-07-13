@@ -5503,6 +5503,18 @@ def cuentas_bancarias_page():
     return render_template('maestro_cuentas_bancarias.html')
 
 
+@app.route('/asientos/configurar-conceptos')
+@login_required
+def asientos_configurar_conceptos_page():
+    return render_template('asientos_configurar_conceptos.html')
+
+
+@app.route('/asientos/interfaz')
+@login_required
+def asientos_interfaz_page():
+    return render_template('asientos_interfaz.html')
+
+
 @app.route('/cargos')
 @login_required
 def cargos_page():
@@ -6668,6 +6680,469 @@ def api_cuentas_bancarias_eliminar():
             if len(parts) > 1:
                 err = parts[-1].strip(" ()'\"")
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _accprofiledetail_lista_dict(r):
+    return {
+        'detail': _jsonable_value(r.get('detail')),
+        'accountprofile': _jsonable_value(r.get('accountprofile')),
+        'concept': _jsonable_value(r.get('concept')),
+        'concept_description': _jsonable_value(r.get('concept_description')),
+        'formulacode': _jsonable_value(r.get('formulacode')),
+        'processtype': _jsonable_value(r.get('processtype')),
+        'process_description': _jsonable_value(r.get('process_description')),
+        'debitaccount': _jsonable_value(r.get('debitaccount')),
+        'debitaccountcode': _jsonable_value(r.get('debitaccountcode')),
+        'creditaccount': _jsonable_value(r.get('creditaccount')),
+        'creditaccountcode': _jsonable_value(r.get('creditaccountcode')),
+        'flagsumtype': _jsonable_value(r.get('flagsumtype')) or 'T',
+        'flagsumtype_desc': _jsonable_value(r.get('flagsumtype_desc')),
+        'currency': _jsonable_value(r.get('currency')) or 'LO',
+        'company': _jsonable_value(r.get('company')),
+        'replicationunit': _jsonable_value(r.get('replicationunit')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _sp_error_message(exc):
+    err = str(exc)
+    if 'RAISERROR' in err or '50000' in err:
+        parts = err.split(']')
+        if len(parts) > 1:
+            err = parts[-1].strip(" ()'\"")
+    return err
+
+
+@app.route('/api/asientos/configurar-conceptos/listado', methods=['POST'])
+@login_required
+def api_asientos_configurar_conceptos_listado():
+    """sp_pr_listar_accountprofiledetail_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    accountprofile = str(body.get('accountprofile') or '').strip()
+    processtype = str(body.get('processtype') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia or not accountprofile or not processtype:
+        return jsonify({"error": "Seleccione compañía, perfil contable y proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_accountprofiledetail_web "
+            "@company=?, @accountprofile=?, @processtype=?, @busqueda=?",
+            (cia, accountprofile, processtype, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_accprofiledetail_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/guardar', methods=['POST'])
+@login_required
+def api_asientos_configurar_conceptos_guardar():
+    """sp_pr_guardar_accountprofiledetail_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    detail = str(body.get('detail') or '').strip()
+    modo = str(body.get('modo') or ('U' if detail else 'I')).strip().upper()
+    accountprofile = str(body.get('accountprofile') or '').strip()
+    concept = str(body.get('concept') or '').strip()
+    processtype = str(body.get('processtype') or '').strip()
+    debitaccount = str(body.get('debitaccount') or '').strip()
+    debitaccountcode = str(body.get('debitaccountcode') or '').strip()
+    creditaccount = str(body.get('creditaccount') or '').strip()
+    creditaccountcode = str(body.get('creditaccountcode') or '').strip()
+    flagsumtype = str(body.get('flagsumtype') or 'T').strip().upper() or 'T'
+    xlastuser = _xlastuser_id()
+
+    if not cia or not accountprofile or not concept or not processtype:
+        return jsonify({"error": "Complete compañía, perfil, proceso y concepto."}), 400
+    if not debitaccountcode and not creditaccountcode:
+        return jsonify({"error": "Indique al menos una cuenta de crédito o débito."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardar_accountprofiledetail_web "
+            "@modo=?, @company=?, @detail=?, @accountprofile=?, @concept=?, @processtype=?, "
+            "@debitaccount=?, @debitaccountcode=?, @creditaccount=?, @creditaccountcode=?, "
+            "@flagsumtype=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                detail or None,
+                accountprofile,
+                concept,
+                processtype,
+                debitaccount or None,
+                debitaccountcode or None,
+                creditaccount or None,
+                creditaccountcode or None,
+                flagsumtype,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "detail": _jsonable_value(row.get('detail')),
+            "accountprofile": _jsonable_value(row.get('accountprofile')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Configuración guardada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/eliminar', methods=['POST'])
+@login_required
+def api_asientos_configurar_conceptos_eliminar():
+    """sp_pr_eliminar_accountprofiledetail_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    detail = str(body.get('detail') or '').strip()
+    accountprofile = str(body.get('accountprofile') or '').strip()
+
+    if not cia or not detail or not accountprofile:
+        return jsonify({"error": "Indique compañía, detalle y perfil contable."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminar_accountprofiledetail_web "
+            "@company=?, @detail=?, @accountprofile=?",
+            (cia, detail, accountprofile),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "detail": _jsonable_value(row.get('detail')),
+            "accountprofile": _jsonable_value(row.get('accountprofile')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Configuración eliminada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/perfiles', methods=['GET'])
+@login_required
+def api_asientos_configurar_conceptos_perfiles():
+    """sp_pr_selectoraccountprofile_web"""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectoraccountprofile_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify(items)
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_perfiles")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/procesos', methods=['GET'])
+@login_required
+def api_asientos_configurar_conceptos_procesos():
+    """sp_pr_selectorprocesos_contables_web"""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorprocesos_contables_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+                'shortname': _jsonable_value(r.get('shortname')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify(items)
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_procesos")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/conceptos', methods=['POST'])
+@login_required
+def api_asientos_configurar_conceptos_conceptos():
+    """sp_pr_selectorconceptos_contables_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or request.args.get('cia') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorconceptos_contables_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+                'formulacode': _jsonable_value(r.get('formulacode')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_conceptos")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/configurar-conceptos/cuentas', methods=['POST'])
+@login_required
+def api_asientos_configurar_conceptos_cuentas():
+    """sp_pr_selectoraccount_web — cuentas contables activas"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectoraccount_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'code': _jsonable_value(r.get('code')),
+                'name': _jsonable_value(r.get('name')),
+                'text': _jsonable_value(r.get('text')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_asientos_configurar_conceptos_cuentas")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _asiento_interfaz_lista_dict(r):
+    return {
+        'voucher': _jsonable_value(r.get('voucher')),
+        'voucherno': _jsonable_value(r.get('voucherno')),
+        'company': _jsonable_value(r.get('company')),
+        'period': _jsonable_value(r.get('period')),
+        'period_fmt': _jsonable_value(r.get('period_fmt')),
+        'businessunit': _jsonable_value(r.get('businessunit')),
+        'voucherdate': _jsonable_datetime(r.get('voucherdate')),
+        'title': _jsonable_value(r.get('title')),
+        'importe': _jsonable_value(r.get('importe')),
+        'status': _jsonable_value(r.get('status')),
+        'status_desc': _jsonable_value(r.get('status_desc')),
+        'entryuser': _jsonable_value(r.get('entryuser')),
+        'entrydate': _jsonable_datetime(r.get('entrydate')),
+        'application': _jsonable_value(r.get('application')),
+    }
+
+
+@app.route('/api/asientos/interfaz/listado', methods=['POST'])
+@login_required
+def api_asientos_interfaz_listado():
+    """sp_pr_listar_asientos_interfaz_web — asientos de planilla (solo consulta)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    status = body.get('status', 'A')
+    if status is None:
+        status = ''
+    status = str(status).strip().upper()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_asientos_interfaz_web "
+            "@company=?, @period=?, @status=?, @busqueda=?",
+            (cia, period or None, status or None, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_asiento_interfaz_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_asientos_interfaz_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/interfaz/periodos', methods=['GET'])
+@login_required
+def api_asientos_interfaz_periodos():
+    """sp_pr_selectorperiodos_asientos_web"""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorperiodos_asientos_web @company=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify(items)
+    except Exception as e:
+        logging.exception("api_asientos_interfaz_periodos")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/interfaz/generar-archivo', methods=['POST'])
+@login_required
+def api_asientos_interfaz_generar_archivo():
+    """Genera TXT Alvisoft del asiento seleccionado (descarga)."""
+    from alvisoft_export import generar_txt_alvisoft
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    voucher = str(body.get('voucher') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not voucher:
+        return jsonify({"error": "Seleccione un asiento."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        filename, contenido = generar_txt_alvisoft(cursor, cia, voucher)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception as e:
+        logging.exception("api_asientos_interfaz_generar_archivo")
+        return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

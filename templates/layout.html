@@ -834,6 +834,31 @@
                     </ul>
                 </li>
 
+                {% set asientos_active = request.endpoint in ('asientos_configurar_conceptos_page', 'asientos_interfaz_page') %}
+                <li class="sidebar-menu-parent {{ 'active' if asientos_active else '' }}">
+                    <a href="#submenuAsientos"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if asientos_active else 'false' }}"
+                       aria-controls="submenuAsientos"
+                       title="Asientos">
+                        <i class="bi bi-journal-bookmark"></i><span class="sidebar-link-text">Asientos</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if asientos_active else '' }}" id="submenuAsientos">
+                        <li class="{{ 'active' if request.endpoint == 'asientos_configurar_conceptos_page' else '' }}">
+                            <a href="{{ url_for('asientos_configurar_conceptos_page') }}" title="Configurar Conceptos">
+                                <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Configurar Conceptos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'asientos_interfaz_page' else '' }}">
+                            <a href="{{ url_for('asientos_interfaz_page') }}" title="Interfaz Asientos">
+                                <i class="bi bi-list-check"></i><span class="sidebar-link-text">Interfaz Asientos</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>

@@ -81,7 +81,16 @@ BEGIN
     DECLARE @sctr_pension_id        VARCHAR(20);
     DECLARE @costcentername         VARCHAR(20);
     DECLARE @is_unionized           CHAR(1);
+    DECLARE @flag_mixta             CHAR(1);
+    DECLARE @tiene_afp              CHAR(1);
+    DECLARE @es_construccion        CHAR(1);
+    DECLARE @concept_rembasica      VARCHAR(20);
+    DECLARE @concept_afp_flujo      VARCHAR(20);
+    DECLARE @period_start           VARCHAR(10);
+    DECLARE @cc_asignacion          VARCHAR(20);
+    DECLARE @cc_code_asignacion     VARCHAR(20);
     DECLARE @txt                    VARCHAR(200);
+    DECLARE @tipo_contrato_raw      VARCHAR(80);
     DECLARE @pos_space              INT;
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
@@ -304,18 +313,32 @@ BEGIN
         ORDER BY CASE WHEN il.instructionlevel LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, il.instructionlevel;
     END;
 
-    /* --- Modalidad de contrato --- */
-    SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@tipo_contrato, ''))));
-    IF @txt LIKE '%OBRA%' OR @txt LIKE '%DETERM%' OR @txt LIKE '%SERV%ESPEC%'
-        SET @txt = 'PARA OBRA DETERMINADA O SERVICIO ESPECÍFICO';
-    ELSE IF @txt LIKE '%INDETERM%'
-        SET @txt = 'A PLAZO INDETERMINADO';
+    /* --- Modalidad de contrato (TRA → HR_ContractModality de la compañía) --- */
+    SET @tipo_contrato_raw = UPPER(LTRIM(RTRIM(ISNULL(@tipo_contrato, ''))));
+    SET @txt = @tipo_contrato_raw;
 
-    SELECT TOP 1 @contract_modality_id = cm.contractmodality
-    FROM hr_contractmodality cm (NOLOCK)
-    WHERE UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) = @txt
-       OR UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) LIKE '%' + REPLACE(@txt, 'Í', 'I') + '%'
-    ORDER BY CASE WHEN cm.contractmodality LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, cm.contractmodality;
+    IF @txt <> ''
+    BEGIN
+        SELECT TOP 1 @contract_modality_id = cm.contractmodality
+        FROM hr_contractmodality cm (NOLOCK)
+        WHERE (cm.company = @cia OR cm.contractmodality LIKE 'LIMA' + @cia + '%')
+          AND (
+                UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) = @txt
+             OR UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) LIKE '%' + @txt + '%'
+             OR @txt LIKE '%' + UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) + '%'
+             OR (@txt LIKE '%OBRA%' AND @txt LIKE '%DETERM%' AND cm.pdt = '09')
+             OR (@txt LIKE '%OBRA%' AND @txt LIKE '%DETERM%' AND UPPER(cm.description) LIKE '%OBRA DETERMIN%')
+             OR (@txt LIKE '%SERV%ESPEC%' AND cm.pdt = '09')
+             OR (@txt LIKE '%INDETERM%' AND cm.pdt = '01')
+             OR (@txt LIKE '%INDETERM%' AND UPPER(cm.description) LIKE '%INDETERMIN%')
+             OR (@txt LIKE '%PLAZO FIJO%' AND cm.pdt = '02')
+             OR (@txt LIKE '%TEMPORAL%' AND cm.pdt IN ('03', '04'))
+          )
+        ORDER BY
+            CASE WHEN cm.company = @cia THEN 0 ELSE 1 END,
+            CASE WHEN cm.contractmodality LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+            cm.contractmodality;
+    END;
 
     /* --- Pensión --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_pension, ''))));
@@ -331,6 +354,85 @@ BEGIN
          OR (@txt LIKE '%PRIMA%' AND pt.pdt = '24')
       )
     ORDER BY CASE WHEN pt.pensiontype LIKE 'LIMA' + @cia + '%' THEN 0 WHEN pt.pensiontype LIKE @cia + '%' THEN 1 ELSE 2 END;
+
+    /* AFP en T-Registro (SPP / CUSPP) → marcar flag AFP mixta por defecto */
+    SET @flag_mixta = 'N';
+    IF @pension_type_id IS NOT NULL
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM pr_pensiontype pt (NOLOCK)
+            WHERE pt.pensiontype = @pension_type_id
+              AND (
+                    pt.pdt IN ('21', '23', '24', '25')
+                 OR (
+                        (
+                            UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%SPP%'
+                         OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%AFP%'
+                        )
+                    AND UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) NOT LIKE '%ONP%'
+                 )
+              )
+        )
+            SET @flag_mixta = 'Y';
+    END;
+    IF @flag_mixta = 'N'
+    BEGIN
+        SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_pension, ''))));
+        IF @txt LIKE '%SPP%'
+           OR @txt LIKE '%INTEGRA%'
+           OR @txt LIKE '%PRIMA%'
+           OR @txt LIKE '%PROFUTURO%'
+           OR @txt LIKE '%HABITAT%'
+           OR @txt LIKE '%AFP%'
+            SET @flag_mixta = 'Y';
+        IF @txt LIKE '%ONP%' OR @txt LIKE '%19990%'
+            SET @flag_mixta = 'N';
+        IF NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), '') IS NOT NULL
+           AND @txt NOT LIKE '%ONP%'
+            SET @flag_mixta = 'Y';
+    END;
+
+    /* Trabajador con régimen AFP (no ONP) → asignar concepto AFP_FLUJO */
+    SET @tiene_afp = 'N';
+    IF @pension_type_id IS NOT NULL
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM pr_pensiontype pt (NOLOCK)
+            WHERE pt.pensiontype = @pension_type_id
+              AND (
+                    pt.pdt IN ('21', '23', '24', '25')
+                 OR (
+                        (
+                            UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%SPP%'
+                         OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%AFP%'
+                        )
+                    AND UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) NOT LIKE '%ONP%'
+                 )
+              )
+        )
+            SET @tiene_afp = 'Y';
+    END;
+    IF @tiene_afp = 'N'
+    BEGIN
+        SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_pension, ''))));
+        IF (
+               @txt LIKE '%SPP%'
+            OR @txt LIKE '%INTEGRA%'
+            OR @txt LIKE '%PRIMA%'
+            OR @txt LIKE '%PROFUTURO%'
+            OR @txt LIKE '%HABITAT%'
+            OR @txt LIKE '%AFP%'
+           )
+           AND @txt NOT LIKE '%ONP%'
+           AND @txt NOT LIKE '%19990%'
+            SET @tiene_afp = 'Y';
+        IF NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), '') IS NOT NULL
+           AND @txt NOT LIKE '%ONP%'
+           AND @txt NOT LIKE '%19990%'
+            SET @tiene_afp = 'Y';
+    END;
 
     /* --- Salud --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_salud, ''))));
@@ -403,16 +505,17 @@ BEGIN
     ORDER BY CASE WHEN es.pdt = '11' THEN 0 WHEN es.pdt = '10' THEN 1 ELSE 2 END,
              CASE WHEN es.employeestatus LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END;
 
-    /* --- Defaults laborales según tipo trabajador existente en la compañía --- */
+    /* --- Defaults laborales (sin cargo ni centro de costo; vienen vacíos) --- */
+    SET @position_id = NULL;
+    SET @costcenter_id = NULL;
+    SET @costcentername = NULL;
+
     SELECT TOP 1
         @payroll_type_id = e.payrolltype,
-        @position_id = e.position,
-        @costcenter_id = e.costcenter,
         @accountprofile_id = e.accountprofile,
         @salaryaccounttype_id = e.salaryaccounttype,
         @sctr_health_id = e.sctrhealth,
-        @sctr_pension_id = e.sctrpension,
-        @costcentername = e.costcentername
+        @sctr_pension_id = e.sctrpension
     FROM pr_employee e (NOLOCK)
     WHERE e.company = @cia
       AND (
@@ -436,13 +539,6 @@ BEGIN
         FROM pr_employee e (NOLOCK)
         WHERE e.company = @cia AND e.salaryaccounttype IS NOT NULL
         ORDER BY e.xlastdate DESC;
-
-    IF @costcentername IS NULL AND @costcenter_id IS NOT NULL
-    BEGIN
-        SELECT TOP 1 @costcentername = LTRIM(RTRIM(ISNULL(cc.name, '')))
-        FROM ac_costcenter cc (NOLOCK)
-        WHERE cc.company = @cia AND cc.costcenter = @costcenter_id;
-    END;
 
     IF NOT EXISTS (
         SELECT 1
@@ -494,7 +590,7 @@ BEGIN
             otherincomerenttax, isunionized, affiliatedowneps, relievedrenttax,
             specialstatus, collectionform, workingdaystype, professionalcategory,
             pensionmembership, ocupation, regimehealth, accidentinsurance,
-            confirmcessation, rembasica, salary, afpcard
+            confirmcessation, rembasica, salary, afpcard, flagmixta
         )
         VALUES (
             @person, @cia, @person, @employee_type_id, @employee_category_id,
@@ -508,8 +604,186 @@ BEGIN
             '0', @is_unionized, '0', '0',
             @special_status_id, @collection_form_id, 'S', @prof_category_id,
             '0', @ocupation_id, @regime_health_id, '0',
-            'N', @rembasica, @rembasica, NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), '')
+            'N', @rembasica, @rembasica, NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), ''), @flag_mixta
         );
+
+        /*
+            Asignación permanente REM_BASICA desde el periodo de ingreso.
+            No aplica a Construcción Civil (planilla/tipo CONSTRUCCION): usan jornal diario.
+        */
+        SET @es_construccion = 'N';
+        IF EXISTS (
+            SELECT 1
+            FROM pr_employeetype et (NOLOCK)
+            WHERE et.employeetype = @employee_type_id
+              AND (
+                    et.pdt = '27'
+                 OR UPPER(LTRIM(RTRIM(ISNULL(et.description, '')))) LIKE '%CONSTRUCCION%'
+              )
+        )
+            SET @es_construccion = 'Y';
+
+        IF @es_construccion = 'N' AND EXISTS (
+            SELECT 1
+            FROM pr_payrolltype pt (NOLOCK)
+            WHERE pt.payrolltype = @payroll_type_id
+              AND (
+                    UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%CONSTRUCCION%'
+                 OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) LIKE '%CONSTRUCCION%'
+              )
+        )
+            SET @es_construccion = 'Y';
+
+        IF @es_construccion = 'N'
+           AND @rembasica IS NOT NULL
+           AND @rembasica > 0
+           AND @payroll_type_id IS NOT NULL
+           AND @entrydate_dt IS NOT NULL
+        BEGIN
+            SET @concept_rembasica = NULL;
+            SELECT TOP 1 @concept_rembasica = c.concept
+            FROM pr_concept c (NOLOCK)
+            WHERE c.company = @cia
+              AND c.formulacode = 'REM_BASICA'
+              AND c.status = 'A'
+            ORDER BY c.concept;
+
+            SET @period_start = NULL;
+            SELECT TOP 1 @period_start = p.prperiod
+            FROM pr_period p (NOLOCK)
+            WHERE p.company = @cia
+              AND p.payrolltype = @payroll_type_id
+              AND @entrydate_dt BETWEEN p.datebegin AND p.dateend
+            ORDER BY p.prperiod;
+
+            IF @period_start IS NULL
+            BEGIN
+                /* Si aún no hay periodo que contenga la fecha, usar el más cercano posterior o el último anterior. */
+                SELECT TOP 1 @period_start = p.prperiod
+                FROM pr_period p (NOLOCK)
+                WHERE p.company = @cia
+                  AND p.payrolltype = @payroll_type_id
+                  AND p.datebegin >= @entrydate_dt
+                ORDER BY p.datebegin ASC, p.prperiod ASC;
+
+                IF @period_start IS NULL
+                    SELECT TOP 1 @period_start = p.prperiod
+                    FROM pr_period p (NOLOCK)
+                    WHERE p.company = @cia
+                      AND p.payrolltype = @payroll_type_id
+                      AND p.datebegin <= @entrydate_dt
+                    ORDER BY p.datebegin DESC, p.prperiod DESC;
+            END;
+
+            SET @cc_asignacion = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(@costcenter_id, ''))), ''), '');
+            SET @cc_code_asignacion = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(@costcentername, ''))), ''), @cc_asignacion);
+
+            IF @concept_rembasica IS NOT NULL
+               AND @period_start IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM pr_employeeconcept ec (NOLOCK)
+                    WHERE ec.person = @person
+                      AND ec.company = @cia
+                      AND ec.concept = @concept_rembasica
+                      AND ec.payrolltype = @payroll_type_id
+                      AND ec.prperiodstart = @period_start
+                      AND ec.costcenter = @cc_asignacion
+               )
+            BEGIN
+                INSERT INTO pr_employeeconcept (
+                    person, company, concept, payrolltype, prperiodstart, costcenter,
+                    prperiodend, conceptvalue, application, conceptcurrency, comments,
+                    flagapplyformula, flagfrecuencytype, replicationunit,
+                    xlastuser, xlastdate, conceptvaluelo, conceptvalueex, exchangerate,
+                    costcentercode, project, projectcode, percentagedistribution, flagcopy
+                )
+                VALUES (
+                    @person, @cia, @concept_rembasica, @payroll_type_id, @period_start, @cc_asignacion,
+                    NULL, @rembasica, NULL, 'LO', NULL,
+                    'N', 'P', @replicationunit,
+                    @xlastuser, GETDATE(), @rembasica, 0, 0,
+                    @cc_code_asignacion, '', '', 'A', NULL
+                );
+            END;
+        END;
+
+        /*
+            Asignación permanente AFP_FLUJO (=1) desde el periodo de ingreso.
+            Aplica a todo trabajador con AFP, sin excepción por tipo de planilla.
+        */
+        IF @tiene_afp = 'Y'
+           AND @payroll_type_id IS NOT NULL
+           AND @entrydate_dt IS NOT NULL
+        BEGIN
+            SET @concept_afp_flujo = NULL;
+            SELECT TOP 1 @concept_afp_flujo = c.concept
+            FROM pr_concept c (NOLOCK)
+            WHERE c.company = @cia
+              AND c.formulacode = 'AFP_FLUJO'
+              AND c.status = 'A'
+            ORDER BY c.concept;
+
+            IF @period_start IS NULL
+            BEGIN
+                SELECT TOP 1 @period_start = p.prperiod
+                FROM pr_period p (NOLOCK)
+                WHERE p.company = @cia
+                  AND p.payrolltype = @payroll_type_id
+                  AND @entrydate_dt BETWEEN p.datebegin AND p.dateend
+                ORDER BY p.prperiod;
+
+                IF @period_start IS NULL
+                BEGIN
+                    SELECT TOP 1 @period_start = p.prperiod
+                    FROM pr_period p (NOLOCK)
+                    WHERE p.company = @cia
+                      AND p.payrolltype = @payroll_type_id
+                      AND p.datebegin >= @entrydate_dt
+                    ORDER BY p.datebegin ASC, p.prperiod ASC;
+
+                    IF @period_start IS NULL
+                        SELECT TOP 1 @period_start = p.prperiod
+                        FROM pr_period p (NOLOCK)
+                        WHERE p.company = @cia
+                          AND p.payrolltype = @payroll_type_id
+                          AND p.datebegin <= @entrydate_dt
+                        ORDER BY p.datebegin DESC, p.prperiod DESC;
+                END;
+            END;
+
+            SET @cc_asignacion = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(@costcenter_id, ''))), ''), '');
+            SET @cc_code_asignacion = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(@costcentername, ''))), ''), @cc_asignacion);
+
+            IF @concept_afp_flujo IS NOT NULL
+               AND @period_start IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM pr_employeeconcept ec (NOLOCK)
+                    WHERE ec.person = @person
+                      AND ec.company = @cia
+                      AND ec.concept = @concept_afp_flujo
+                      AND ec.payrolltype = @payroll_type_id
+                      AND ec.prperiodstart = @period_start
+                      AND ec.costcenter = @cc_asignacion
+               )
+            BEGIN
+                INSERT INTO pr_employeeconcept (
+                    person, company, concept, payrolltype, prperiodstart, costcenter,
+                    prperiodend, conceptvalue, application, conceptcurrency, comments,
+                    flagapplyformula, flagfrecuencytype, replicationunit,
+                    xlastuser, xlastdate, conceptvaluelo, conceptvalueex, exchangerate,
+                    costcentercode, project, projectcode, percentagedistribution, flagcopy
+                )
+                VALUES (
+                    @person, @cia, @concept_afp_flujo, @payroll_type_id, @period_start, @cc_asignacion,
+                    NULL, 1, NULL, 'LO', NULL,
+                    'N', 'P', @replicationunit,
+                    @xlastuser, GETDATE(), 1, 0, 0,
+                    @cc_code_asignacion, '', '', 'A', NULL
+                );
+            END;
+        END;
 
         COMMIT TRANSACTION;
 

@@ -348,12 +348,58 @@ BEGIN
       AND (
             UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt
          OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%' + @txt + '%'
-         OR (@txt LIKE '%ONP%' AND pt.pdt IN ('02', '2'))
+         OR @txt LIKE '%' + UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) + '%'
+         OR (
+                (
+                    @txt LIKE '%ONP%'
+                 OR @txt LIKE '%19990%'
+                 OR @txt LIKE '%DECRETO LEY 19990%'
+                 OR @txt LIKE '%SISTEMA NACIONAL DE PENS%'
+                 OR @txt LIKE '%S.N.P.%'
+                 OR @txt LIKE '%SNP%'
+                )
+            AND pt.pdt IN ('02', '2')
+            )
          OR (@txt LIKE '%INTEGRA%' AND pt.pdt = '21')
          OR (@txt LIKE '%PROFUTURO%' AND pt.pdt = '23')
-         OR (@txt LIKE '%PRIMA%' AND pt.pdt = '24')
+         OR (@txt LIKE '%PRIMA%' AND @txt NOT LIKE '%ONP%' AND @txt NOT LIKE '%19990%' AND pt.pdt = '24')
       )
-    ORDER BY CASE WHEN pt.pensiontype LIKE 'LIMA' + @cia + '%' THEN 0 WHEN pt.pensiontype LIKE @cia + '%' THEN 1 ELSE 2 END;
+    ORDER BY
+        CASE
+            WHEN (
+                    @txt LIKE '%ONP%'
+                 OR @txt LIKE '%19990%'
+                 OR @txt LIKE '%SISTEMA NACIONAL DE PENS%'
+                 OR @txt LIKE '%DECRETO LEY 19990%'
+                )
+             AND pt.pdt IN ('02', '2')
+                THEN 0
+            WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt THEN 1
+            ELSE 2
+        END,
+        CASE WHEN pt.pensiontype LIKE 'LIMA' + @cia + '%' THEN 0 WHEN pt.pensiontype LIKE @cia + '%' THEN 1 ELSE 2 END,
+        pt.pensiontype;
+
+    /* Respaldo ONP: texto T-Registro DL 19990 sin coincidencia literal en catálogo */
+    IF @pension_type_id IS NULL
+       AND (
+            @txt LIKE '%ONP%'
+         OR @txt LIKE '%19990%'
+         OR @txt LIKE '%DECRETO LEY 19990%'
+         OR @txt LIKE '%SISTEMA NACIONAL DE PENS%'
+         OR @txt LIKE '%S.N.P.%'
+         OR @txt LIKE '%SNP%'
+       )
+    BEGIN
+        SELECT TOP 1 @pension_type_id = pt.pensiontype
+        FROM pr_pensiontype pt (NOLOCK)
+        WHERE (pt.company = @cia OR pt.pensiontype LIKE @cia + '%')
+          AND pt.pdt IN ('02', '2')
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%19990%'
+        ORDER BY
+            CASE WHEN pt.company = @cia AND pt.pensiontype NOT LIKE 'LIMA%' THEN 0 ELSE 1 END,
+            pt.pensiontype;
+    END;
 
     /* AFP en T-Registro (SPP / CUSPP) → marcar flag AFP mixta por defecto */
     SET @flag_mixta = 'N';

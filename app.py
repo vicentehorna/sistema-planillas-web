@@ -4843,10 +4843,10 @@ def trabajadores_editar(person_id):
 
     if not person_id:
         flash('Trabajador no indicado.', 'warning')
-        return redirect(url_for('trabajadores_page'))
+        return redirect(url_for('trabajadores_page', retorno=1))
     if not cia:
         flash('Indique la compañía (cia) para editar el trabajador.', 'warning')
-        return redirect(url_for('trabajadores_page'))
+        return redirect(url_for('trabajadores_page', retorno=1))
 
     conn = None
     try:
@@ -5027,7 +5027,7 @@ def trabajadores_editar(person_id):
         rows = _dicts_first_nonempty_resultset(cursor)
         if not rows:
             flash('No se encontró el trabajador indicado.', 'warning')
-            return redirect(url_for('trabajadores_page'))
+            return redirect(url_for('trabajadores_page', retorno=1))
 
         empleado = rows[0]
         if seccion == 'generales':
@@ -5071,7 +5071,7 @@ def trabajadores_editar(person_id):
                 pass
         logging.exception('trabajadores_editar')
         flash(f'Error al procesar la solicitud: {e}', 'danger')
-        return redirect(url_for('trabajadores_page'))
+        return redirect(url_for('trabajadores_page', retorno=1))
     finally:
         if conn:
             try:

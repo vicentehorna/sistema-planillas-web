@@ -1708,6 +1708,11 @@
                 txtNombre.value = String(filtros.nombre);
             }
 
+            const txtDni = document.getElementById('txtDni');
+            if (txtDni && filtros.docnro != null) {
+                txtDni.value = String(filtros.docnro);
+            }
+
             const chkFechaIngreso = document.getElementById('chkFechaIngreso');
             const txtFechaIngresoDesde = document.getElementById('txtFechaIngresoDesde');
             const txtFechaIngresoHasta = document.getElementById('txtFechaIngresoHasta');

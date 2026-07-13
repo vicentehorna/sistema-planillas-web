@@ -563,66 +563,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
     }
 
+    async function poblarDependientesCompania(cia) {
+        if (!cia) return;
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            cboPlanilla,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+        await poblarSelect(
+            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+            cboTrabajador,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos (por defecto)' }
+        );
+        await poblarBancosHaberes(cia);
+    }
+
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboTrabajador = document.getElementById('cboTrabajador');
     const txtDni = document.getElementById('txtDni');
     const txtNombre = document.getElementById('txtNombre');
+    const paramsUrl = new URLSearchParams(window.location.search);
+    const esRetornoListado = paramsUrl.get('retorno') === '1';
 
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
-    document.getElementById('chkFechaIngreso').checked = false;
-    actualizarFiltroFechaIngreso(false);
-
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
+    let filtrosRestaurados = false;
+
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes });
-        if (guardadoObj.docnro) txtDni.value = guardadoObj.docnro;
-        if (guardadoObj.nombre) txtNombre.value = guardadoObj.nombre;
-        const estadoFiltro = guardadoObj.estadoFiltro || guardadoObj.estado;
-        if (estadoFiltro && optionExists(document.getElementById('cboEstado'), estadoFiltro)) {
-            document.getElementById('cboEstado').value = estadoFiltro;
-        }
-        const chkFechaIngreso = document.getElementById('chkFechaIngreso');
-        const activoFecha = guardadoObj.fechaIngresoActivo === true;
-        if (chkFechaIngreso) {
-            chkFechaIngreso.checked = activoFecha;
-        }
+        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes });
+    } else if (!esRetornoListado) {
+        document.getElementById('chkFechaIngreso').checked = false;
         actualizarFiltroFechaIngreso(false);
-        if (activoFecha) {
-            if (guardadoObj.fechaIngresoDesde) {
-                document.getElementById('txtFechaIngresoDesde').value = String(guardadoObj.fechaIngresoDesde).trim();
-            }
-            if (guardadoObj.fechaIngresoHasta) {
-                document.getElementById('txtFechaIngresoHasta').value = String(guardadoObj.fechaIngresoHasta).trim();
-            }
-            actualizarFiltroFechaIngreso(false);
-        }
     }
 
     limpiarValorComboSiObsoleto(cboCia);
-    if (!String(cboCia.value || '').trim()) {
+    if (!filtrosRestaurados && !String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
-            const ciaNorm = cboCia.value.trim();
-            await poblarSelect(
-                `/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`,
-                cboPlanilla,
-                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
-            );
-            await poblarSelect(
-                `/api/selectores/trabajadores?cia=${encodeURIComponent(ciaNorm)}`,
-                cboTrabajador,
-                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos (por defecto)' }
-            );
-            await poblarBancosHaberes(ciaNorm);
+            await poblarDependientesCompania(cboCia.value.trim());
         }
-    } else {
+    } else if (!filtrosRestaurados) {
         const ciaInicial = cboCia.value.trim();
         if (ciaInicial) {
-            await poblarBancosHaberes(ciaInicial);
+            await poblarDependientesCompania(ciaInicial);
         }
     }
 
@@ -636,6 +623,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     consultaHabilitada = true;
     if (btnConsultarTrab) btnConsultarTrab.disabled = false;
 
+    if (esRetornoListado) {
+        history.replaceState({}, '', window.location.pathname);
+    }
+
     document.getElementById('cboCompania').addEventListener('change', async function () {
         const cia = this.value;
         const cboPlanillaEl = document.getElementById('cboTipoPlanilla');
@@ -643,17 +634,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cboBancoEl = document.getElementById('cboBancoHaberes');
 
         if (cia) {
-            await poblarSelect(
-                `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
-                cboPlanillaEl,
-                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
-            );
-            await poblarSelect(
-                `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-                cboTrabajadorEl,
-                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos (por defecto)' }
-            );
-            await poblarBancosHaberes(cia);
+            await poblarDependientesCompania(cia);
         } else {
             cboPlanillaEl.innerHTML = '<option value="0">Todos</option>';
             cboPlanillaEl.disabled = true;
@@ -663,7 +644,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    actualizarFiltroFechaIngreso();
     document.getElementById('chkFechaIngreso').addEventListener('change', function () {
         actualizarFiltroFechaIngreso(this.checked);
         if (filtrosPersist) filtrosPersist.guardar();
@@ -686,6 +666,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             filtrosPersist.guardar();
         });
     }
+
+    document.getElementById('tbody-trabajadores').addEventListener('click', function (ev) {
+        const link = ev.target.closest('a[href*="/trabajadores/editar/"]');
+        if (link && filtrosPersist) {
+            filtrosPersist.guardar();
+        }
+    });
 
     if (btnConsultarTrab) {
         btnConsultarTrab.addEventListener('click', async function () {

@@ -19,6 +19,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @payrolltype        VARCHAR(20) = NULL,
     @accountprofile     VARCHAR(20) = NULL,
     @sueldo             VARCHAR(20) = NULL,
+    @flagasigfamiliar   VARCHAR(1) = 'N',
     @xlastuser          VARCHAR(20) = NULL
 AS
 BEGIN
@@ -33,6 +34,7 @@ BEGIN
         RETURN;
     END
 
+    IF RTRIM(ISNULL(@flagasigfamiliar, '')) NOT IN ('Y', 'N') SET @flagasigfamiliar = 'N';
     DECLARE @fecha_ingreso DATETIME = NULL;
     DECLARE @fecha_reingreso DATETIME = NULL;
     DECLARE @fecha_cese DATETIME = NULL;
@@ -102,6 +104,7 @@ BEGIN
         accountprofile = NULLIF(LTRIM(RTRIM(@accountprofile)), ''),
         rembasica = CASE WHEN @rembasica IS NULL THEN rembasica ELSE @rembasica END,
         salary = CASE WHEN @rembasica IS NULL THEN salary ELSE @rembasica END,
+        flagasigfamiliar = @flagasigfamiliar,
         xlastdate = GETDATE(),
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia

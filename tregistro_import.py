@@ -199,6 +199,7 @@ def construir_resumen_importacion(
         ssa = item.get('ssa') or {}
         ide = item.get('ide') or {}
         dir_row = item.get('dir') or {}
+        educ = _educacion_resumen_desde_item(item)
         obs = []
         if len(item.get('archivos') or []) < len(ARCHIVOS_REQUERIDOS):
             obs.append('No está en los 5 archivos.')
@@ -231,7 +232,12 @@ def construir_resumen_importacion(
             'regimen_salud': ssa.get('regimen_salud_tipo', ''),
             'situacion': tra.get('situacion', '') or ssa.get('situacion', ''),
             'archivos_presentes': item.get('archivos') or [],
-            'registros_educativos': len(item.get('set') or []),
+            'registros_educativos': educ['registros_educativos'],
+            'nivel_educativo': educ['nivel_educativo'],
+            'nombre_inst_educ': educ['nombre_inst_educ'],
+            'carrera': educ['carrera'],
+            'anio_egreso': educ['anio_egreso'],
+            'indicador_educ': educ['indicador'],
             'observaciones': obs,
         })
 
@@ -263,7 +269,18 @@ def _primer_registro_set(item: dict[str, Any]) -> dict[str, Any]:
     registros = item.get('set') or []
     if not registros:
         return {}
-    return registros[0] if isinstance(registros, list) else {}
+    if not isinstance(registros, list):
+        return registros if isinstance(registros, dict) else {}
+
+    def _score(reg: dict[str, Any]) -> tuple[int, int, int, int]:
+        return (
+            1 if str(reg.get('nombre_inst_educ') or '').strip() else 0,
+            1 if str(reg.get('carrera') or '').strip() else 0,
+            1 if str(reg.get('anio_egreso') or '').strip() else 0,
+            1 if str(reg.get('situacion_educativa') or '').strip() else 0,
+        )
+
+    return max(registros, key=_score)
 
 
 def _valor_set_o_tra(item: dict[str, Any], campo_set: str, campo_tra: str = '') -> str:
@@ -276,12 +293,31 @@ def _valor_set_o_tra(item: dict[str, Any], campo_set: str, campo_tra: str = '') 
     return ''
 
 
+def _educacion_resumen_desde_item(item: dict[str, Any]) -> dict[str, Any]:
+    """Campos de educación a mostrar en análisis / usar al registrar."""
+    reg_set = _primer_registro_set(item)
+    tra = item.get('tra') or {}
+    return {
+        'nivel_educativo': (
+            str(reg_set.get('situacion_educativa') or '').strip()
+            or str(tra.get('nivel_educativo') or '').strip()
+        ),
+        'formacion_superior_completa': str(reg_set.get('formacion_superior_completa') or '').strip(),
+        'tipo_inst_educ': str(reg_set.get('tipo_inst_educ') or '').strip(),
+        'nombre_inst_educ': str(reg_set.get('nombre_inst_educ') or '').strip(),
+        'carrera': str(reg_set.get('carrera') or '').strip(),
+        'anio_egreso': str(reg_set.get('anio_egreso') or '').strip(),
+        'indicador': str(reg_set.get('indicador') or '').strip(),
+        'registros_educativos': len(item.get('set') or []),
+    }
+
 def trabajador_a_payload_registro(item: dict[str, Any]) -> dict[str, Any]:
     """Convierte un trabajador consolidado del T-Registro a payload JSON para el SP de registro."""
     ide = item.get('ide') or {}
     dir_row = item.get('dir') or {}
     tra = item.get('tra') or {}
     ssa = item.get('ssa') or {}
+    educ = _educacion_resumen_desde_item(item)
 
     nombres = str(ide.get('nombres') or tra.get('nombres') or '').strip()
     if not nombres:
@@ -307,7 +343,13 @@ def trabajador_a_payload_registro(item: dict[str, Any]) -> dict[str, Any]:
         'regimen_laboral': str(tra.get('regimen_laboral') or '').strip(),
         'cat_ocupacional': str(tra.get('cat_ocupacional') or '').strip(),
         'ocupacion': str(tra.get('ocupacion') or '').strip(),
-        'nivel_educativo': _valor_set_o_tra(item, 'situacion_educativa', 'nivel_educativo'),
+        'nivel_educativo': educ['nivel_educativo'],
+        'formacion_superior_completa': educ['formacion_superior_completa'],
+        'tipo_inst_educ': educ['tipo_inst_educ'],
+        'nombre_inst_educ': educ['nombre_inst_educ'],
+        'carrera': educ['carrera'],
+        'anio_egreso': educ['anio_egreso'],
+        'indicador': educ['indicador'],
         'tipo_contrato': str(tra.get('tipo_contrato') or '').strip(),
         'tipo_pago': str(tra.get('tipo_pago') or '').strip(),
         'entidad_financiera': str(tra.get('entidad_financiera') or '').strip(),

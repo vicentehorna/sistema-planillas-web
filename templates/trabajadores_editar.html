@@ -70,6 +70,7 @@
         <p class="text-muted small mb-0">
             {% if seccion == 'generales' %}Datos generales del trabajador
             {% elif seccion == 'laborales' %}Datos laborales del trabajador
+            {% elif seccion == 'educacion' %}Datos de educación del trabajador
             {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
             {% else %}Información bancaria y depósito de CTS{% endif %}
         </p>
@@ -94,6 +95,8 @@
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
             <a class="nav-link {% if seccion == 'laborales' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
+            <a class="nav-link {% if seccion == 'educacion' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
             <a class="nav-link {% if seccion == 'pensiones' %}active{% endif %}"
                href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
             <a class="nav-link {% if seccion == 'bancario' %}active{% endif %}"
@@ -294,12 +297,21 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-12">
+                        <div class="col-md-6">
                             <label for="cboContractModality" class="form-label small fw-bold text-muted">Tipo de contrato</label>
                             <select id="cboContractModality" name="contractmodality" class="form-select form-select-sm">
                                 <option value="">Seleccione...</option>
                                 {% for opt in contract_modalities %}
                                 <option value="{{ opt.id }}" {% if empleado.contractmodality == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboCostCenter" class="form-label small fw-bold text-muted">Centro de costo</label>
+                            <select id="cboCostCenter" name="costcenter" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in cost_centers %}
+                                <option value="{{ opt.id }}" {% if empleado.costcenter == opt.id %}selected{% endif %}>{{ opt.text }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -321,29 +333,12 @@
                                 {% endfor %}
                             </select>
                         </div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
-                <div class="section-title">Puesto</div>
-                <div class="section-body">
-                    <div class="row g-3">
                         <div class="col-md-6">
                             <label for="cboPosition" class="form-label small fw-bold text-muted">Cargo</label>
                             <select id="cboPosition" name="position" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in positions %}
                                 <option value="{{ opt.id }}" {% if empleado.position == opt.id %}selected{% endif %}>{{ opt.text }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="cboCostCenter" class="form-label small fw-bold text-muted">Centro de costo</label>
-                            <select id="cboCostCenter" name="costcenter" class="form-select form-select-sm">
-                                <option value="">Seleccione...</option>
-                                {% for opt in cost_centers %}
-                                <option value="{{ opt.id }}" {% if empleado.costcenter == opt.id %}selected{% endif %}>{{ opt.text }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -377,6 +372,103 @@
                             <label for="txtSueldo" class="form-label small fw-bold text-muted">Sueldo básico</label>
                             <input type="number" id="txtSueldo" name="sueldo" class="form-control form-control-sm campo-obligatorio text-end"
                                    min="0" step="0.01" value="{{ empleado.sueldo or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="chkFlagAsigFamiliar" name="flagasigfamiliar" value="Y"
+                                       {% if empleado.flagasigfamiliar == 'Y' %}checked{% endif %}>
+                                <label class="form-check-label small" for="chkFlagAsigFamiliar">Asignación Familiar</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </form>
+        {% elif seccion == 'educacion' %}
+        <form id="frmEducacion" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=educacion"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="educacion">
+
+            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+                <h5 class="mb-0 fw-semibold">Datos Educación</h5>
+                <div class="d-flex gap-2">
+                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
+                    <button type="submit" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-save"></i> Guardar cambios
+                    </button>
+                </div>
+            </div>
+
+            <div class="section-card mb-4">
+                <div class="section-title">Formación académica</div>
+                <div class="section-body">
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label for="cboInstructionLevel" class="form-label small fw-bold text-muted">Nivel instrucción</label>
+                            <select id="cboInstructionLevel" name="instructionlevel" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in instruction_levels %}
+                                <option value="{{ opt.id }}" {% if empleado.instructionlevel == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboInstitution" class="form-label small fw-bold text-muted">Institución</label>
+                            <select id="cboInstitution" name="costcenter1" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for opt in institutions %}
+                                <option value="{{ opt.id }}" {% if empleado.costcenter1 == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboCareer" class="form-label small fw-bold text-muted">Carrera</label>
+                            <select id="cboCareer" name="costcenter2" class="form-select form-select-sm"
+                                    data-selected="{{ empleado.costcenter2 or '' }}">
+                                {% if empleado.costcenter1 %}
+                                <option value="">Seleccione...</option>
+                                {% for opt in careers %}
+                                <option value="{{ opt.id }}" {% if empleado.costcenter2 == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                {% endfor %}
+                                {% else %}
+                                <option value="">Seleccione institución primero...</option>
+                                {% endif %}
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="txtAnioEgreso" class="form-label small fw-bold text-muted">Año egreso</label>
+                            <input type="text" id="txtAnioEgreso" name="anio_egreso" class="form-control form-control-sm"
+                                   maxlength="4" inputmode="numeric" pattern="[12][0-9]{3}"
+                                   value="{{ empleado.anio_egreso or '' }}" autocomplete="off" placeholder="Ej. 1997">
+                        </div>
+                        <div class="col-md-3">
+                            <label for="txtIndicator" class="form-label small fw-bold text-muted">Indicador</label>
+                            <input type="text" id="txtIndicator" name="indicator" class="form-control form-control-sm"
+                                   maxlength="1" value="{{ empleado.indicator or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtSpecialty" class="form-label small fw-bold text-muted">Especialidad</label>
+                            <input type="text" id="txtSpecialty" name="specialty" class="form-control form-control-sm text-uppercase"
+                                   maxlength="100" value="{{ empleado.specialty or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="cboCenterType" class="form-label small fw-bold text-muted">Tipo de centro de formación profesional</label>
+                            <select id="cboCenterType" name="profesionalstudiescentertype" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                <option value="1" {% if empleado.profesionalstudiescentertype == '1' %}selected{% endif %}>1: Centro Educativo</option>
+                                <option value="2" {% if empleado.profesionalstudiescentertype == '2' %}selected{% endif %}>2: Universidad</option>
+                                <option value="3" {% if empleado.profesionalstudiescentertype == '3' %}selected{% endif %}>3: Instituto</option>
+                                <option value="4" {% if empleado.profesionalstudiescentertype == '4' %}selected{% endif %}>4: Otros</option>
+                            </select>
+                        </div>
+                        <div class="col-12">
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" id="chkIsTrainer" name="istrainer" value="Y"
+                                       {% if empleado.istrainer == 'Y' %}checked{% endif %}>
+                                <label class="form-check-label small" for="chkIsTrainer">Estudios concluidos</label>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -425,6 +517,13 @@
                                    placeholder="12 caracteres alfanuméricos">
                             <div class="form-text">Código único del sistema privado de pensiones (AFP).</div>
                         </div>
+                        <div class="col-md-6 d-flex align-items-end">
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" id="chkFlagMixta" name="flagmixta" value="Y"
+                                       {% if empleado.flagmixta == 'Y' %}checked{% endif %}>
+                                <label class="form-check-label small" for="chkFlagMixta">AFP Mixta</label>
+                            </div>
+                        </div>
                         <div class="col-12">
                             <label for="cboRegimeHealth" class="form-label small fw-bold text-muted">Régimen de Aseguramiento de Salud</label>
                             <select id="cboRegimeHealth" name="regimehealth" class="form-select form-select-sm">
@@ -433,20 +532,6 @@
                                 <option value="{{ opt.id }}" {% if empleado.regimehealth == opt.id %}selected{% endif %}>{{ opt.text }}</option>
                                 {% endfor %}
                             </select>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-check mt-2">
-                                <input class="form-check-input" type="checkbox" id="chkFlagMixta" name="flagmixta" value="Y"
-                                       {% if empleado.flagmixta == 'Y' %}checked{% endif %}>
-                                <label class="form-check-label small" for="chkFlagMixta">AFP Mixta</label>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="form-check mt-2">
-                                <input class="form-check-input" type="checkbox" id="chkFlagAsigFamiliar" name="flagasigfamiliar" value="Y"
-                                       {% if empleado.flagasigfamiliar == 'Y' %}checked{% endif %}>
-                                <label class="form-check-label small" for="chkFlagAsigFamiliar">Asignación Familiar</label>
-                            </div>
                         </div>
                     </div>
                 </div>
@@ -665,6 +750,85 @@ document.addEventListener('DOMContentLoaded', function () {
                     e.preventDefault();
                     alert('Indique un sueldo básico válido.');
                     txtSueldo?.focus();
+                }
+            });
+        }
+        return;
+    }
+
+    if (seccion === 'educacion') {
+        const cia = {{ cia | tojson }};
+        const cboInstitution = document.getElementById('cboInstitution');
+        const cboCareer = document.getElementById('cboCareer');
+        const txtAnio = document.getElementById('txtAnioEgreso');
+        const txtSpecialty = document.getElementById('txtSpecialty');
+        const txtIndicator = document.getElementById('txtIndicator');
+
+        normalizarMayusculas(txtSpecialty);
+
+        if (txtAnio) {
+            txtAnio.addEventListener('input', function () {
+                this.value = this.value.replace(/\D/g, '').slice(0, 4);
+            });
+        }
+        if (txtIndicator) {
+            txtIndicator.addEventListener('input', function () {
+                this.value = this.value.replace(/\s/g, '').slice(0, 1);
+            });
+        }
+
+        async function cargarCarreras(institutionPdt, selectedId) {
+            if (!cboCareer) return;
+            cboCareer.innerHTML = '<option value="">Cargando...</option>';
+            cboCareer.disabled = true;
+            if (!institutionPdt) {
+                cboCareer.innerHTML = '<option value="">Seleccione institución primero...</option>';
+                cboCareer.disabled = false;
+                return;
+            }
+            try {
+                const url = `/api/selectores/carreras-educacion?cia=${encodeURIComponent(cia)}&institution_pdt=${encodeURIComponent(institutionPdt)}`;
+                const resp = await fetch(url);
+                const data = await resp.json();
+                const opts = Array.isArray(data) ? data : [];
+                let html = '<option value="">Seleccione...</option>';
+                opts.forEach((opt) => {
+                    const id = String(opt.id || '');
+                    const text = String(opt.text || id);
+                    const sel = selectedId && id === String(selectedId) ? ' selected' : '';
+                    html += `<option value="${id}"${sel}>${text}</option>`;
+                });
+                cboCareer.innerHTML = html;
+            } catch (err) {
+                console.error(err);
+                cboCareer.innerHTML = '<option value="">Error al cargar carreras</option>';
+            } finally {
+                cboCareer.disabled = false;
+            }
+        }
+
+        if (cboInstitution) {
+            cboInstitution.addEventListener('change', function () {
+                cargarCarreras(this.value, '');
+            });
+        }
+
+        const frmEducacion = document.getElementById('frmEducacion');
+        if (frmEducacion) {
+            frmEducacion.addEventListener('submit', function (e) {
+                const anio = (txtAnio?.value || '').trim();
+                if (anio && !/^(19|20)\d{2}$/.test(anio)) {
+                    e.preventDefault();
+                    alert('Año de egreso no válido. Use formato YYYY (ej. 1997).');
+                    txtAnio?.focus();
+                    return;
+                }
+                const carrera = (cboCareer?.value || '').trim();
+                const institucion = (cboInstitution?.value || '').trim();
+                if (carrera && !institucion) {
+                    e.preventDefault();
+                    alert('Seleccione la institución antes de la carrera.');
+                    cboInstitution?.focus();
                 }
             });
         }

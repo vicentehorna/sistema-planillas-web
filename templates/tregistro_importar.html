@@ -107,7 +107,8 @@
     Seleccione la compañía y los <strong>cinco ZIP</strong> descargados de la interfaz del T-Registro
     (<code>IDE</code>, <code>DIR</code>, <code>TRA</code>, <code>SSA</code> y <code>SET</code>).
     El sistema los descomprimirá, listará los TXT internos y marcará como <strong>nuevos</strong>
-    los trabajadores cuyo DNI no esté en la ficha.
+    los trabajadores cuyo DNI no esté en la ficha. Al registrar nuevos se graban también los
+    <strong>datos de educación</strong> del archivo <code>SET</code> (nivel, institución, carrera, año e indicador).
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -183,6 +184,8 @@
                         <th>F. ingreso</th>
                         <th>Tipo trabajador</th>
                         <th>Régimen pensión</th>
+                        <th>Nivel instrucción</th>
+                        <th>Institución / Carrera</th>
                         <th>Situación</th>
                         <th>Archivos</th>
                     </tr>
@@ -479,7 +482,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const filas = filasResumen.filter((f) => filtroActual === 'TODOS' || f.estado === filtroActual);
 
         if (!filas.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros para el filtro seleccionado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Sin registros para el filtro seleccionado.</td></tr>';
             return;
         }
 
@@ -487,6 +490,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             const clsEstado = f.estado === 'NUEVO' ? 'estado-nuevo' : 'estado-existente';
             const etiqueta = f.estado === 'NUEVO' ? 'Nuevo' : 'En ficha';
             const archivos = Array.isArray(f.archivos_presentes) ? f.archivos_presentes.join(', ') : '';
+            const educDetalle = [f.nombre_inst_educ, f.carrera, f.anio_egreso]
+                .map((v) => String(v || '').trim())
+                .filter(Boolean)
+                .join(' · ');
             return `
                 <tr>
                     <td class="${clsEstado}">${escapeHtml(etiqueta)}</td>
@@ -495,6 +502,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     <td>${escapeHtml(f.fecha_ingreso || '')}</td>
                     <td>${escapeHtml(f.tipo_trabajador || '')}</td>
                     <td>${escapeHtml(f.regimen_pension || '')}</td>
+                    <td>${escapeHtml(f.nivel_educativo || '')}</td>
+                    <td>${escapeHtml(educDetalle || '—')}</td>
                     <td>${escapeHtml(f.situacion || '')}</td>
                     <td>${escapeHtml(archivos)}</td>
                 </tr>

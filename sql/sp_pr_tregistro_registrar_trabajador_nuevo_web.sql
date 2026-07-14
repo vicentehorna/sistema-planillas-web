@@ -27,6 +27,12 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_tregistro_registrar_trabajador_nuevo_web]
     @cat_ocupacional        VARCHAR(80) = NULL,
     @ocupacion              VARCHAR(120) = NULL,
     @nivel_educativo        VARCHAR(80) = NULL,
+    @formacion_superior_completa VARCHAR(120) = NULL,
+    @tipo_inst_educ         VARCHAR(80) = NULL,
+    @nombre_inst_educ       VARCHAR(120) = NULL,
+    @carrera                VARCHAR(120) = NULL,
+    @anio_egreso            VARCHAR(10) = NULL,
+    @indicador_educ         VARCHAR(5) = NULL,
     @tipo_contrato          VARCHAR(80) = NULL,
     @tipo_pago              VARCHAR(80) = NULL,
     @entidad_financiera     VARCHAR(120) = NULL,
@@ -65,6 +71,13 @@ BEGIN
     DECLARE @contract_modality_id   VARCHAR(20);
     DECLARE @ocupation_id           VARCHAR(20);
     DECLARE @instruction_level_id   VARCHAR(20);
+    DECLARE @institution_pdt        VARCHAR(20);
+    DECLARE @career_pdt             VARCHAR(20);
+    DECLARE @anio_egreso_int        INT;
+    DECLARE @center_type            CHAR(1);
+    DECLARE @istrainer_educ         CHAR(1);
+    DECLARE @indicator_educ         CHAR(1);
+    DECLARE @specialty_educ         VARCHAR(100);
     DECLARE @pension_type_id        VARCHAR(20);
     DECLARE @regime_health_id       VARCHAR(20);
     DECLARE @collection_form_id     VARCHAR(20);
@@ -312,6 +325,86 @@ BEGIN
            OR UPPER(LTRIM(RTRIM(ISNULL(il.description, '')))) LIKE '%' + @txt + '%'
         ORDER BY CASE WHEN il.instructionlevel LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, il.instructionlevel;
     END;
+
+    /* --- Educación detalle (SET TR1 → campos SY_Person reutilizados) --- */
+    SET @institution_pdt = NULL;
+    SET @career_pdt = NULL;
+    SET @anio_egreso_int = NULL;
+    SET @center_type = NULL;
+    SET @istrainer_educ = 'N';
+    SET @indicator_educ = NULL;
+    SET @specialty_educ = NULL;
+
+    SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@nombre_inst_educ, ''))));
+    IF @txt <> ''
+    BEGIN
+        SELECT TOP 1 @institution_pdt = i.pdt
+        FROM pr_institution i (NOLOCK)
+        WHERE i.company = @cia
+          AND (
+                UPPER(LTRIM(RTRIM(ISNULL(i.description, '')))) = @txt
+             OR UPPER(LTRIM(RTRIM(ISNULL(i.description, '')))) LIKE '%' + @txt + '%'
+             OR @txt LIKE '%' + UPPER(LTRIM(RTRIM(ISNULL(i.description, '')))) + '%'
+          )
+        ORDER BY
+            CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(i.description, '')))) = @txt THEN 0 ELSE 1 END,
+            i.institution;
+    END;
+
+    SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@carrera, ''))));
+    IF @txt <> ''
+    BEGIN
+        SET @specialty_educ = LEFT(@txt, 100);
+
+        IF @institution_pdt IS NOT NULL
+        BEGIN
+            SELECT TOP 1 @career_pdt = c.pdt
+            FROM pr_career c (NOLOCK)
+                INNER JOIN pr_institution i (NOLOCK)
+                    ON i.institution = c.institution
+                   AND i.company = c.company
+            WHERE c.company = @cia
+              AND i.pdt = @institution_pdt
+              AND (
+                    UPPER(LTRIM(RTRIM(ISNULL(c.description, '')))) = @txt
+                 OR UPPER(LTRIM(RTRIM(ISNULL(c.description, '')))) LIKE '%' + @txt + '%'
+                 OR @txt LIKE '%' + UPPER(LTRIM(RTRIM(ISNULL(c.description, '')))) + '%'
+              )
+            ORDER BY
+                CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(c.description, '')))) = @txt THEN 0 ELSE 1 END,
+                c.line;
+        END;
+    END;
+
+    SET @txt = LTRIM(RTRIM(ISNULL(@anio_egreso, '')));
+    IF @txt <> '' AND ISNUMERIC(@txt) = 1 AND LEN(@txt) = 4
+       AND CAST(@txt AS INT) BETWEEN 1900 AND 2100
+        SET @anio_egreso_int = CAST(@txt AS INT);
+
+    SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@tipo_inst_educ, ''))));
+    IF @txt LIKE '%UNIVERSIDAD%'
+        SET @center_type = '2';
+    ELSE IF @txt LIKE '%INSTITUTO%'
+        SET @center_type = '3';
+    ELSE IF @txt LIKE '%CENTRO%' OR @txt LIKE '%COLEGIO%' OR @txt LIKE '%EDUCATIV%'
+        SET @center_type = '1';
+    ELSE IF @txt <> ''
+        SET @center_type = '4';
+
+    SET @txt = LTRIM(RTRIM(ISNULL(@indicador_educ, '')));
+    IF @txt <> ''
+        SET @indicator_educ = LEFT(@txt, 1);
+    ELSE
+        SET @indicator_educ = NULL;
+
+    IF NULLIF(LTRIM(RTRIM(ISNULL(@formacion_superior_completa, ''))), '') IS NOT NULL
+        SET @istrainer_educ = 'Y';
+    ELSE IF @indicator_educ IN ('1', '2') AND (
+            @institution_pdt IS NOT NULL
+         OR @career_pdt IS NOT NULL
+         OR @anio_egreso_int IS NOT NULL
+    )
+        SET @istrainer_educ = 'Y';
 
     /* --- Modalidad de contrato (TRA → HR_ContractModality de la compañía) --- */
     SET @tipo_contrato_raw = UPPER(LTRIM(RTRIM(ISNULL(@tipo_contrato, ''))));
@@ -611,7 +704,9 @@ BEGIN
             employeedocumenttype, flagkeep, flagname, flagoutsourcingin,
             flagoutsourcingout, isdomiciled, nacionalidad, flagperceptionagent,
             flagsunat5, istrainer, isrecruiter, issupervisor, indicator,
-            flaglockca, licensecondition
+            flaglockca, licensecondition,
+            costcenter1, costcenter2, driverlicenseantiquity, specialty,
+            profesionalstudiescentertype
         )
         VALUES (
             @person, 'N', 'NN', @nombre_completo, @direccion,
@@ -621,8 +716,10 @@ BEGIN
             @name1, NULLIF(@apellido_materno, ''), @birthdate_dt, @instruction_level_id, @sex_code,
             @doc_type_id, 'N', 'P', 'N',
             'N', '1', @nacionalidad, 'N',
-            'N', 'N', 'N', 'N', '1',
-            'N', 'L'
+            'N', @istrainer_educ, 'N', 'N', @indicator_educ,
+            'N', 'L',
+            @institution_pdt, @career_pdt, @anio_egreso_int, @specialty_educ,
+            @center_type
         );
 
         INSERT INTO pr_employee (

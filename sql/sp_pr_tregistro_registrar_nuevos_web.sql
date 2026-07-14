@@ -63,6 +63,12 @@ BEGIN
     DECLARE @cat_ocupacional        VARCHAR(80);
     DECLARE @ocupacion              VARCHAR(120);
     DECLARE @nivel_educativo        VARCHAR(80);
+    DECLARE @formacion_superior_completa VARCHAR(120);
+    DECLARE @tipo_inst_educ         VARCHAR(80);
+    DECLARE @nombre_inst_educ       VARCHAR(120);
+    DECLARE @carrera                VARCHAR(120);
+    DECLARE @anio_egreso            VARCHAR(10);
+    DECLARE @indicador_educ         VARCHAR(5);
     DECLARE @tipo_contrato          VARCHAR(80);
     DECLARE @tipo_pago              VARCHAR(80);
     DECLARE @entidad_financiera     VARCHAR(120);
@@ -99,6 +105,12 @@ BEGIN
             JSON_VALUE(j.value, '$.cat_ocupacional'),
             JSON_VALUE(j.value, '$.ocupacion'),
             JSON_VALUE(j.value, '$.nivel_educativo'),
+            JSON_VALUE(j.value, '$.formacion_superior_completa'),
+            JSON_VALUE(j.value, '$.tipo_inst_educ'),
+            JSON_VALUE(j.value, '$.nombre_inst_educ'),
+            JSON_VALUE(j.value, '$.carrera'),
+            JSON_VALUE(j.value, '$.anio_egreso'),
+            JSON_VALUE(j.value, '$.indicador'),
             JSON_VALUE(j.value, '$.tipo_contrato'),
             JSON_VALUE(j.value, '$.tipo_pago'),
             JSON_VALUE(j.value, '$.entidad_financiera'),
@@ -119,7 +131,9 @@ BEGIN
         @tipo_doc, @num_doc, @apellido_paterno, @apellido_materno, @nombres,
         @fecha_nac, @nacionalidad, @sexo, @telefono, @email, @direccion,
         @fecha_ingreso, @tipo_trabajador, @regimen_laboral, @cat_ocupacional,
-        @ocupacion, @nivel_educativo, @tipo_contrato, @tipo_pago,
+        @ocupacion, @nivel_educativo, @formacion_superior_completa, @tipo_inst_educ,
+        @nombre_inst_educ, @carrera, @anio_egreso, @indicador_educ,
+        @tipo_contrato, @tipo_pago,
         @entidad_financiera, @nro_cuenta, @remun_bas, @regimen_pension,
         @regimen_pension_fec, @cuspp, @regimen_salud, @regimen_salud_fec,
         @situacion_especial, @sindicalizado, @nombre_completo;
@@ -150,6 +164,12 @@ BEGIN
                 @cat_ocupacional = @cat_ocupacional,
                 @ocupacion = @ocupacion,
                 @nivel_educativo = @nivel_educativo,
+                @formacion_superior_completa = @formacion_superior_completa,
+                @tipo_inst_educ = @tipo_inst_educ,
+                @nombre_inst_educ = @nombre_inst_educ,
+                @carrera = @carrera,
+                @anio_egreso = @anio_egreso,
+                @indicador_educ = @indicador_educ,
                 @tipo_contrato = @tipo_contrato,
                 @tipo_pago = @tipo_pago,
                 @entidad_financiera = @entidad_financiera,
@@ -180,7 +200,9 @@ BEGIN
             @tipo_doc, @num_doc, @apellido_paterno, @apellido_materno, @nombres,
             @fecha_nac, @nacionalidad, @sexo, @telefono, @email, @direccion,
             @fecha_ingreso, @tipo_trabajador, @regimen_laboral, @cat_ocupacional,
-            @ocupacion, @nivel_educativo, @tipo_contrato, @tipo_pago,
+            @ocupacion, @nivel_educativo, @formacion_superior_completa, @tipo_inst_educ,
+            @nombre_inst_educ, @carrera, @anio_egreso, @indicador_educ,
+            @tipo_contrato, @tipo_pago,
             @entidad_financiera, @nro_cuenta, @remun_bas, @regimen_pension,
             @regimen_pension_fec, @cuspp, @regimen_salud, @regimen_salud_fec,
             @situacion_especial, @sindicalizado, @nombre_completo;

@@ -66,7 +66,8 @@ BEGIN
                 AND ec.PRPeriodEnd IS NULL),
             e.salary,
             0
-        ) AS sueldo
+        ) AS sueldo,
+        CASE WHEN LTRIM(RTRIM(ISNULL(e.flagasigfamiliar, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar
     FROM pr_employee e
         INNER JOIN sy_person sp
             ON sp.person = e.person

@@ -4688,9 +4688,29 @@ def _cargar_selectores_generales(cursor, cia):
     return tipos_documento, unidades, usuarios
 
 
+def _cargar_selectores_educacion(cursor, cia, institution_pdt=None):
+    instruction_levels = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorinstructionlevel_web @cia=?', (cia,)
+    )
+    institutions = _selector_items_from_sp(
+        cursor, 'EXEC sp_pr_selectorinstitution_web @cia=?', (cia,)
+    )
+    institution_pdt = str(institution_pdt or '').strip()
+    careers = []
+    if institution_pdt:
+        careers = _selector_items_from_sp(
+            cursor,
+            'EXEC sp_pr_selectorcareer_web @cia=?, @institution_pdt=?',
+            (cia, institution_pdt),
+        )
+    return instruction_levels, institutions, careers
+
+
 def _trabajadores_editar_seccion(raw):
     seccion = str(raw or 'generales').strip().lower()
-    return seccion if seccion in ('bancario', 'pensiones', 'generales', 'laborales') else 'generales'
+    return seccion if seccion in (
+        'bancario', 'pensiones', 'generales', 'laborales', 'educacion'
+    ) else 'generales'
 
 
 def _empleado_generales_desde_form(form):
@@ -4747,6 +4767,9 @@ def _render_trabajadores_editar(
     payroll_types=None,
     account_profiles=None,
     cease_reasons=None,
+    instruction_levels=None,
+    institutions=None,
+    careers=None,
 ):
     return render_template(
         'trabajadores_editar.html',
@@ -4772,6 +4795,9 @@ def _render_trabajadores_editar(
         payroll_types=payroll_types or [],
         account_profiles=account_profiles or [],
         cease_reasons=cease_reasons or [],
+        instruction_levels=instruction_levels or [],
+        institutions=institutions or [],
+        careers=careers or [],
     )
 
 
@@ -4781,7 +4807,6 @@ def _empleado_pensiones_desde_form(form):
         'pensioninscriptiondate': str(form.get('pensioninscriptiondate') or '').strip(),
         'regimehealth': str(form.get('regimehealth') or '').strip(),
         'flagmixta': 'Y' if form.get('flagmixta') == 'Y' else 'N',
-        'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
         'cuspp': str(form.get('cuspp') or '').strip().upper()[:20],
     }
 
@@ -4812,6 +4837,7 @@ def _empleado_laborales_desde_form(form):
         'payrolltype': str(form.get('payrolltype') or '').strip(),
         'accountprofile': str(form.get('accountprofile') or '').strip(),
         'sueldo': sueldo_raw,
+        'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
     }
 
 
@@ -4833,10 +4859,39 @@ def _empleado_laborales_para_form(empleado):
     return out
 
 
+def _empleado_educacion_desde_form(form):
+    center = str(form.get('profesionalstudiescentertype') or '').strip()
+    indicator = str(form.get('indicator') or '').strip()
+    return {
+        'instructionlevel': str(form.get('instructionlevel') or '').strip(),
+        'costcenter1': str(form.get('costcenter1') or '').strip(),
+        'costcenter2': str(form.get('costcenter2') or '').strip(),
+        'anio_egreso': str(form.get('anio_egreso') or '').strip(),
+        'specialty': str(form.get('specialty') or '').strip().upper()[:100],
+        'profesionalstudiescentertype': center if center in ('1', '2', '3', '4') else '',
+        'istrainer': 'Y' if form.get('istrainer') == 'Y' else 'N',
+        'indicator': indicator[:1] if indicator else '',
+    }
+
+
+def _empleado_educacion_para_form(empleado):
+    if not empleado:
+        return empleado
+    out = dict(empleado)
+    anio = str(out.get('anio_egreso') or '').strip()
+    out['anio_egreso'] = anio
+    center = str(out.get('profesionalstudiescentertype') or '').strip()
+    out['profesionalstudiescentertype'] = center if center in ('1', '2', '3', '4') else ''
+    istrainer = str(out.get('istrainer') or 'N').strip().upper()
+    out['istrainer'] = 'Y' if istrainer == 'Y' else 'N'
+    out['indicator'] = str(out.get('indicator') or '').strip()[:1]
+    return out
+
+
 @app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
 @login_required
 def trabajadores_editar(person_id):
-    """Edición de datos generales, laborales, bancarios, CTS y pensiones del trabajador."""
+    """Edición de datos generales, laborales, educación, bancarios, CTS y pensiones."""
     person_id = str(person_id or '').strip()
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
     seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion'))
@@ -4892,7 +4947,7 @@ def trabajadores_editar(person_id):
             cursor.execute(
                 'EXEC sp_pr_actualizar_pensiones_trabajador_web '
                 '@cia=?, @person=?, @pensiontype=?, @pensioninscriptiondate=?, '
-                '@regimehealth=?, @flagmixta=?, @flagasigfamiliar=?, @cuspp=?, @xlastuser=?',
+                '@regimehealth=?, @flagmixta=?, @cuspp=?, @xlastuser=?',
                 (
                     cia,
                     person_id,
@@ -4900,7 +4955,6 @@ def trabajadores_editar(person_id):
                     _sql_date_str_param(datos['pensioninscriptiondate']),
                     datos['regimehealth'],
                     datos['flagmixta'],
-                    datos['flagasigfamiliar'],
                     datos['cuspp'],
                     xlastuser,
                 ),
@@ -4917,7 +4971,7 @@ def trabajadores_editar(person_id):
                 '@entrydate=?, @reentrydate=?, @ceasedate=?, @ceasereason=?, '
                 '@contractmodality=?, @ocupation=?, '
                 '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
-                '@accountprofile=?, @sueldo=?, @xlastuser=?',
+                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @xlastuser=?',
                 (
                     cia,
                     person_id,
@@ -4935,12 +4989,38 @@ def trabajadores_editar(person_id):
                     datos['payrolltype'],
                     datos['accountprofile'],
                     datos['sueldo'] or None,
+                    datos['flagasigfamiliar'],
                     xlastuser,
                 ),
             )
             conn.commit()
             flash('Datos laborales actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales'))
+
+        if request.method == 'POST' and seccion == 'educacion':
+            datos = _empleado_educacion_desde_form(request.form)
+            cursor.execute(
+                'EXEC sp_pr_actualizar_datoseducacion_trabajador_web '
+                '@cia=?, @person=?, @instructionlevel=?, @costcenter1=?, @costcenter2=?, '
+                '@anio_egreso=?, @specialty=?, @profesionalstudiescentertype=?, '
+                '@istrainer=?, @indicator=?, @xlastuser=?',
+                (
+                    cia,
+                    person_id,
+                    datos['instructionlevel'] or None,
+                    datos['costcenter1'] or None,
+                    datos['costcenter2'] or None,
+                    datos['anio_egreso'] or None,
+                    datos['specialty'] or None,
+                    datos['profesionalstudiescentertype'] or None,
+                    datos['istrainer'],
+                    datos['indicator'] or None,
+                    xlastuser,
+                ),
+            )
+            conn.commit()
+            flash('Datos de educación actualizados correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion'))
 
         if request.method == 'POST' and seccion == 'bancario':
             collectionform = str(request.form.get('collectionform') or '').strip()
@@ -5019,6 +5099,11 @@ def trabajadores_editar(person_id):
                 'EXEC sp_pr_obtener_datoslaborales_trabajador_web @cia=?, @person=?',
                 (cia, person_id),
             )
+        elif seccion == 'educacion':
+            cursor.execute(
+                'EXEC sp_pr_obtener_datoseducacion_trabajador_web @cia=?, @person=?',
+                (cia, person_id),
+            )
         else:
             cursor.execute(
                 'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
@@ -5036,11 +5121,16 @@ def trabajadores_editar(person_id):
             empleado = _empleado_pensiones_para_form(empleado)
         elif seccion == 'laborales':
             empleado = _empleado_laborales_para_form(empleado)
+        elif seccion == 'educacion':
+            empleado = _empleado_educacion_para_form(empleado)
 
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
         pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
         tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
         labor_selectors = _cargar_selectores_laborales(cursor, cia)
+        instruction_levels, institutions, careers = _cargar_selectores_educacion(
+            cursor, cia, (empleado.get('costcenter1') if seccion == 'educacion' else None)
+        )
 
         return _render_trabajadores_editar(
             cia, person_id, seccion, empleado,
@@ -5062,6 +5152,9 @@ def trabajadores_editar(person_id):
             payroll_types=labor_selectors[7],
             account_profiles=labor_selectors[8],
             cease_reasons=labor_selectors[9],
+            instruction_levels=instruction_levels,
+            institutions=institutions,
+            careers=careers,
         )
     except Exception as e:
         if conn:
@@ -9736,6 +9829,12 @@ def api_tregistro_importacion_registrar():
                         @cat_ocupacional=?,
                         @ocupacion=?,
                         @nivel_educativo=?,
+                        @formacion_superior_completa=?,
+                        @tipo_inst_educ=?,
+                        @nombre_inst_educ=?,
+                        @carrera=?,
+                        @anio_egreso=?,
+                        @indicador_educ=?,
                         @tipo_contrato=?,
                         @tipo_pago=?,
                         @entidad_financiera=?,
@@ -9773,6 +9872,12 @@ def api_tregistro_importacion_registrar():
                         item.get('cat_ocupacional') or None,
                         item.get('ocupacion') or None,
                         item.get('nivel_educativo') or None,
+                        item.get('formacion_superior_completa') or None,
+                        item.get('tipo_inst_educ') or None,
+                        item.get('nombre_inst_educ') or None,
+                        item.get('carrera') or None,
+                        item.get('anio_egreso') or None,
+                        item.get('indicador') or None,
                         item.get('tipo_contrato') or None,
                         item.get('tipo_pago') or None,
                         item.get('entidad_financiera') or None,
@@ -13798,6 +13903,35 @@ def api_bancos():
         return jsonify(data)
     except Exception:
         logging.exception("api_bancos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/carreras-educacion')
+@login_required
+def api_selectores_carreras_educacion():
+    """Carreras educativas filtradas por institución (PDT)."""
+    cia = str(request.args.get('cia') or session.get('company') or '').strip()
+    institution_pdt = str(request.args.get('institution_pdt') or '').strip()
+    if not cia or not institution_pdt:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        data = _selector_items_from_sp(
+            cursor,
+            'EXEC sp_pr_selectorcareer_web @cia=?, @institution_pdt=?',
+            (cia, institution_pdt),
+        )
+        return jsonify(data)
+    except Exception:
+        logging.exception('api_selectores_carreras_educacion')
         return jsonify([])
     finally:
         if conn:

@@ -10,7 +10,6 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_pensiones_trabajador_web]
     @pensioninscriptiondate     VARCHAR(10) = '',
     @regimehealth               VARCHAR(20),
     @flagmixta                  VARCHAR(1) = 'N',
-    @flagasigfamiliar           VARCHAR(1) = 'N',
     @cuspp                      VARCHAR(20) = NULL,
     @xlastuser                  VARCHAR(20) = NULL
 AS
@@ -27,7 +26,6 @@ BEGIN
     END
 
     IF RTRIM(ISNULL(@flagmixta, '')) NOT IN ('Y', 'N') SET @flagmixta = 'N';
-    IF RTRIM(ISNULL(@flagasigfamiliar, '')) NOT IN ('Y', 'N') SET @flagasigfamiliar = 'N';
 
     DECLARE @fecha_inscripcion DATETIME = NULL;
     IF RTRIM(ISNULL(@pensioninscriptiondate, '')) <> ''
@@ -40,7 +38,6 @@ BEGIN
         pensioninscriptiondate = @fecha_inscripcion,
         regimehealth = NULLIF(LTRIM(RTRIM(@regimehealth)), ''),
         flagmixta = @flagmixta,
-        flagasigfamiliar = @flagasigfamiliar,
         afpcard = NULLIF(LTRIM(RTRIM(@cuspp)), ''),
         xlastdate = GETDATE(),
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')

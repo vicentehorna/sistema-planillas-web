@@ -28,17 +28,6 @@
         }
     }
 
-    .archivo-tregistro-label {
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: #6c757d;
-    }
-
-    .archivo-tregistro-label .badge {
-        font-size: 0.65rem;
-        vertical-align: middle;
-    }
-
     .estado-carga-ok {
         border-left: 4px solid #198754;
     }
@@ -115,10 +104,10 @@
 {% block content %}
 <div class="alert alert-light border tri-info mb-3" role="note">
     <strong>Importación T-Registro — reportes SUNAT.</strong>
-    Seleccione la compañía y los cinco TXT descargados de la interfaz del T-Registro:
-    <code>IDE</code>, <code>DIR</code>, <code>TRA</code>, <code>SSA</code> y <code>SET</code>.
-    Nombre esperado: <code>RRRRRRRRRRR_IDE_DDMMAAAA_HHMMSS.txt</code>.
-    El sistema mostrará un resumen y marcará como <strong>nuevos</strong> los trabajadores cuyo DNI no esté en la ficha.
+    Seleccione la compañía y los <strong>cinco ZIP</strong> descargados de la interfaz del T-Registro
+    (<code>IDE</code>, <code>DIR</code>, <code>TRA</code>, <code>SSA</code> y <code>SET</code>).
+    El sistema los descomprimirá, listará los TXT internos y marcará como <strong>nuevos</strong>
+    los trabajadores cuyo DNI no esté en la ficha.
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -131,45 +120,33 @@
                 </select>
             </div>
 
-            <div class="col-12 col-md-6 col-lg-4">
-                <label for="fileIde" class="form-label archivo-tregistro-label">
-                    IDE <span class="badge text-bg-secondary">TR3 Identificación</span>
+            <div class="col-12 col-lg-8">
+                <label for="fileZipsTregistro" class="form-label small fw-bold text-muted">
+                    ZIP T-Registro (5 archivos)
                 </label>
-                <input type="file" class="form-control form-control-sm" id="fileIde" name="file_ide" accept=".txt,text/plain" required>
+                <input type="file" class="form-control form-control-sm" id="fileZipsTregistro"
+                       accept=".zip,application/zip" multiple>
+                <div class="form-text">Seleccione a la vez los 5 ZIP: IDE, DIR, TRA, SSA y SET.</div>
             </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <label for="fileDir" class="form-label archivo-tregistro-label">
-                    DIR <span class="badge text-bg-secondary">TR4 Dirección</span>
-                </label>
-                <input type="file" class="form-control form-control-sm" id="fileDir" name="file_dir" accept=".txt,text/plain" required>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <label for="fileTra" class="form-label archivo-tregistro-label">
-                    TRA <span class="badge text-bg-secondary">TR5 Laborales</span>
-                </label>
-                <input type="file" class="form-control form-control-sm" id="fileTra" name="file_tra" accept=".txt,text/plain" required>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <label for="fileSsa" class="form-label archivo-tregistro-label">
-                    SSA <span class="badge text-bg-secondary">TR6 Seg. social</span>
-                </label>
-                <input type="file" class="form-control form-control-sm" id="fileSsa" name="file_ssa" accept=".txt,text/plain" required>
-            </div>
-            <div class="col-12 col-md-6 col-lg-4">
-                <label for="fileSet" class="form-label archivo-tregistro-label">
-                    SET <span class="badge text-bg-secondary">TR1 Educación</span>
-                </label>
-                <input type="file" class="form-control form-control-sm" id="fileSet" name="file_set" accept=".txt,text/plain" required>
+
+            <div class="col-12 d-none" id="wrapListaTxtZip">
+                <div class="border rounded p-3 bg-light">
+                    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+                        <strong class="small mb-0">TXT detectados en los ZIP</strong>
+                        <span class="small text-muted" id="lblConteoZipTxt">0 / 5</span>
+                    </div>
+                    <div id="listaTxtZip" class="row g-2 small"></div>
+                </div>
             </div>
 
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
-                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnAnalizarArchivos">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnAnalizarArchivos" disabled>
                     <i class="bi bi-search"></i> Analizar archivos
                 </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnRegistrarNuevos" disabled>
                     <i class="bi bi-person-plus"></i> Registrar nuevos
                 </button>
-                <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los cinco archivos TXT.</span>
+                <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los cinco ZIP.</span>
             </div>
         </form>
     </div>
@@ -218,20 +195,50 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_RESUMEN = {{ url_for('api_tregistro_importacion_resumen') | tojson }};
     const URL_REGISTRAR = {{ url_for('api_tregistro_importacion_registrar') | tojson }};
     const DEFAULT_CIA = 'BGT';
+    const ORDEN_TIPOS = ['IDE', 'DIR', 'TRA', 'SSA', 'SET'];
+    const CAMPOS_FORM = {
+        IDE: 'file_ide',
+        DIR: 'file_dir',
+        TRA: 'file_tra',
+        SSA: 'file_ssa',
+        SET: 'file_set',
+    };
+    const ETIQUETAS = {
+        IDE: 'TR3 Identificación',
+        DIR: 'TR4 Dirección',
+        TRA: 'TR5 Laborales',
+        SSA: 'TR6 Seg. social',
+        SET: 'TR1 Educación',
+    };
 
     let filasResumen = [];
     let filtroActual = 'TODOS';
     let resumenActual = null;
+    let archivosTxtPorTipo = {};
 
     function escapeHtml(text) {
         const div = document.createElement('div');
         div.textContent = text == null ? '' : String(text);
         return div.innerHTML;
+    }
+
+    function toastWarn(msg) {
+        if (window.HmUi) HmUi.advertencia(msg);
+        else alert(msg);
+    }
+    function toastErr(msg) {
+        if (window.HmUi) HmUi.error(msg);
+        else alert(msg);
+    }
+    function toastOk(msg) {
+        if (window.HmUi) HmUi.exito(msg);
+        else alert(msg);
     }
 
     async function leerRespuestaJson(resp, etiqueta) {
@@ -273,21 +280,160 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function detectarTipoPorNombre(nombre) {
+        const m = String(nombre || '').match(/(?:^|[\\/])(\d{11})_(IDE|DIR|TRA|SSA|SET)_\d{8}/i);
+        return m ? m[2].toUpperCase() : null;
+    }
+
+    function detectarTipoPorContenido(texto) {
+        const primera = String(texto || '').split(/\r?\n/, 1)[0].toUpperCase();
+        const mapa = { 'TR3:': 'IDE', 'TR4:': 'DIR', 'TR5:': 'TRA', 'TR6:': 'SSA', 'TR1:': 'SET' };
+        for (const [pref, code] of Object.entries(mapa)) {
+            if (primera.includes(pref)) return code;
+        }
+        return null;
+    }
+
+    function hayCincoCompletos() {
+        return ORDEN_TIPOS.every((code) => archivosTxtPorTipo[code] && archivosTxtPorTipo[code].file);
+    }
+
+    function syncBotonesSelector() {
+        const ok = hayCincoCompletos();
+        document.getElementById('btnAnalizarArchivos').disabled = !ok;
+        document.getElementById('lblEstadoAccion').textContent = ok
+            ? 'Listos los 5 TXT. Puede analizar.'
+            : 'Seleccione la compañía y los cinco ZIP.';
+        document.getElementById('btnRegistrarNuevos').disabled = true;
+        resumenActual = null;
+        filasResumen = [];
+        document.getElementById('cardResumenTregistro').classList.add('d-none');
+        document.getElementById('cardEstadoArchivos').classList.add('d-none');
+    }
+
+    function renderListaTxt() {
+        const wrap = document.getElementById('wrapListaTxtZip');
+        const lista = document.getElementById('listaTxtZip');
+        const lbl = document.getElementById('lblConteoZipTxt');
+        const n = ORDEN_TIPOS.filter((c) => archivosTxtPorTipo[c]).length;
+        lbl.textContent = `${n} / 5`;
+        wrap.classList.toggle('d-none', n === 0);
+
+        lista.innerHTML = ORDEN_TIPOS.map((code) => {
+            const item = archivosTxtPorTipo[code];
+            if (!item) {
+                return `
+                    <div class="col-md-6 col-lg-4">
+                        <div class="border rounded px-2 py-2 tri-archivo-falta bg-white">
+                            <strong>${code}</strong>
+                            <span class="badge text-bg-secondary ms-1">${escapeHtml(ETIQUETAS[code])}</span>
+                            <div class="text-muted">Pendiente</div>
+                        </div>
+                    </div>`;
+            }
+            return `
+                <div class="col-md-6 col-lg-4">
+                    <div class="border rounded px-2 py-2 tri-archivo-ok bg-white">
+                        <strong>${code}</strong>
+                        <span class="badge text-bg-secondary ms-1">${escapeHtml(ETIQUETAS[code])}</span>
+                        <div class="text-break">${escapeHtml(item.txtName)}</div>
+                        <div class="text-muted">ZIP: ${escapeHtml(item.zipName)}</div>
+                    </div>
+                </div>`;
+        }).join('');
+        syncBotonesSelector();
+    }
+
+    async function procesarZipsSeleccionados(fileList) {
+        archivosTxtPorTipo = {};
+        const files = Array.from(fileList || []);
+        if (!files.length) {
+            renderListaTxt();
+            return;
+        }
+        if (files.length !== 5) {
+            toastWarn(`Debe seleccionar exactamente 5 ZIP (uno por IDE, DIR, TRA, SSA y SET). Recibidos: ${files.length}.`);
+            document.getElementById('fileZipsTregistro').value = '';
+            renderListaTxt();
+            return;
+        }
+
+        if (typeof JSZip === 'undefined') {
+            toastErr('No se pudo cargar el descompresor ZIP (JSZip).');
+            return;
+        }
+
+        const asignados = {};
+        try {
+            for (const zipFile of files) {
+                if (!/\.zip$/i.test(zipFile.name)) {
+                    throw new Error(`El archivo "${zipFile.name}" no es ZIP.`);
+                }
+                const zip = await JSZip.loadAsync(await zipFile.arrayBuffer());
+                const entradasTxt = Object.keys(zip.files).filter((n) => {
+                    const entry = zip.files[n];
+                    return !entry.dir && /\.txt$/i.test(n) && !n.includes('__MACOSX');
+                });
+                if (!entradasTxt.length) {
+                    throw new Error(`El ZIP "${zipFile.name}" no contiene un TXT.`);
+                }
+
+                let txtPath = entradasTxt.find((n) => detectarTipoPorNombre(n)) || entradasTxt[0];
+                const txtName = txtPath.split(/[\\/]/).pop();
+                const u8 = await zip.files[txtPath].async('uint8array');
+                let tipo = detectarTipoPorNombre(txtName) || detectarTipoPorNombre(zipFile.name);
+                if (!tipo) {
+                    const preview = new TextDecoder('latin1').decode(u8.slice(0, 400));
+                    tipo = detectarTipoPorContenido(preview);
+                }
+                if (!tipo || !ORDEN_TIPOS.includes(tipo)) {
+                    throw new Error(`No se reconoció el tipo T-Registro de "${zipFile.name}" / "${txtName}".`);
+                }
+                if (asignados[tipo]) {
+                    throw new Error(`Hay más de un ZIP para el tipo ${tipo} (${asignados[tipo].zipName} y ${zipFile.name}).`);
+                }
+                const blob = new Blob([u8], { type: 'text/plain' });
+                const fileTxt = new File([blob], txtName, { type: 'text/plain' });
+                asignados[tipo] = { zipName: zipFile.name, txtName, file: fileTxt };
+            }
+
+            const faltantes = ORDEN_TIPOS.filter((c) => !asignados[c]);
+            if (faltantes.length) {
+                throw new Error(`Faltan tipos en la selección: ${faltantes.join(', ')}.`);
+            }
+
+            archivosTxtPorTipo = asignados;
+            renderListaTxt();
+            toastOk('Se cargaron los 5 TXT desde los ZIP.');
+        } catch (err) {
+            console.error(err);
+            archivosTxtPorTipo = {};
+            document.getElementById('fileZipsTregistro').value = '';
+            renderListaTxt();
+            toastErr(err.message || String(err));
+        }
+    }
+
+    function obtenerFilesParaApi() {
+        if (!hayCincoCompletos()) return null;
+        const out = {};
+        ORDEN_TIPOS.forEach((code) => {
+            out[CAMPOS_FORM[code]] = archivosTxtPorTipo[code].file;
+        });
+        return out;
+    }
+
     function renderEstadoArchivos(meta, resumen) {
         const card = document.getElementById('cardEstadoArchivos');
         const cont = document.getElementById('contenidoEstadoArchivos');
         card.classList.remove('d-none', 'estado-carga-ok', 'estado-carga-alerta', 'estado-carga-vacio');
 
         const advertencias = (resumen && resumen.advertencias) || [];
-        if (advertencias.length) {
-            card.classList.add('estado-carga-alerta');
-        } else {
-            card.classList.add('estado-carga-ok');
-        }
+        if (advertencias.length) card.classList.add('estado-carga-alerta');
+        else card.classList.add('estado-carga-ok');
 
         const archivos = (meta && meta.archivos) || {};
-        const orden = ['IDE', 'DIR', 'TRA', 'SSA', 'SET'];
-        const filasArchivos = orden.map((code) => {
+        const filasArchivos = ORDEN_TIPOS.map((code) => {
             const info = archivos[code];
             if (!info) {
                 return `<div class="col-md-6 col-lg-4 tri-archivo-falta"><strong>${code}:</strong> no cargado</div>`;
@@ -376,29 +522,23 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cardResumenTregistro').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
+    document.getElementById('fileZipsTregistro').addEventListener('change', async function () {
+        document.getElementById('lblEstadoAccion').textContent = 'Leyendo ZIP...';
+        await procesarZipsSeleccionados(this.files);
+    });
+
     document.getElementById('frmTregistroImportar').addEventListener('submit', async function (e) {
         e.preventDefault();
         const cia = document.getElementById('cboCompania').value.trim();
         if (!cia) {
-            if (window.HmUi) HmUi.advertencia('Seleccione una compañía.');
-            else alert('Seleccione una compañía.');
+            toastWarn('Seleccione una compañía.');
             return;
         }
 
-        const files = {
-            file_ide: document.getElementById('fileIde').files[0],
-            file_dir: document.getElementById('fileDir').files[0],
-            file_tra: document.getElementById('fileTra').files[0],
-            file_ssa: document.getElementById('fileSsa').files[0],
-            file_set: document.getElementById('fileSet').files[0],
-        };
-        for (const [key, file] of Object.entries(files)) {
-            if (!file) {
-                const msg = 'Debe seleccionar los cinco archivos TXT (IDE, DIR, TRA, SSA y SET).';
-                if (window.HmUi) HmUi.advertencia(msg);
-                else alert(msg);
-                return;
-            }
+        const files = obtenerFilesParaApi();
+        if (!files) {
+            toastWarn('Debe seleccionar los cinco ZIP (IDE, DIR, TRA, SSA y SET) antes de analizar.');
+            return;
         }
 
         const btn = document.getElementById('btnAnalizarArchivos');
@@ -414,17 +554,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_RESUMEN, { method: 'POST', body: fd });
             const data = await leerRespuestaJson(res, 'T-Registro');
             if (!res.ok || data.error) {
-                const msg = data.error || 'No se pudo analizar los archivos.';
-                if (window.HmUi) HmUi.error(msg);
-                else alert(msg);
+                toastErr(data.error || 'No se pudo analizar los archivos.');
                 return;
             }
             renderResultado(data);
         } catch (err) {
             console.error(err);
-            const msg = err.message || 'Error al analizar los archivos.';
-            if (window.HmUi) HmUi.error(msg);
-            else alert(msg);
+            toastErr(err.message || 'Error al analizar los archivos.');
         } finally {
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
@@ -444,16 +580,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnRegistrarNuevos').addEventListener('click', async function () {
         const nuevos = Number((resumenActual && resumenActual.resumen && resumenActual.resumen.nuevos) || 0);
         if (!nuevos) {
-            const msg = 'No hay trabajadores nuevos para registrar.';
-            if (window.HmUi) HmUi.advertencia(msg);
-            else alert(msg);
+            toastWarn('No hay trabajadores nuevos para registrar.');
             return;
         }
 
         const cia = document.getElementById('cboCompania').value.trim();
         if (!cia) {
-            if (window.HmUi) HmUi.advertencia('Seleccione una compañía.');
-            else alert('Seleccione una compañía.');
+            toastWarn('Seleccione una compañía.');
             return;
         }
 
@@ -468,20 +601,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             : window.confirm(`Se registrarán ${nuevos} trabajador(es) nuevo(s). ¿Desea continuar?`);
         if (!confirmar) return;
 
-        const files = {
-            file_ide: document.getElementById('fileIde').files[0],
-            file_dir: document.getElementById('fileDir').files[0],
-            file_tra: document.getElementById('fileTra').files[0],
-            file_ssa: document.getElementById('fileSsa').files[0],
-            file_set: document.getElementById('fileSet').files[0],
-        };
-        for (const file of Object.values(files)) {
-            if (!file) {
-                const msg = 'Debe mantener los cinco archivos TXT seleccionados para registrar.';
-                if (window.HmUi) HmUi.advertencia(msg);
-                else alert(msg);
-                return;
-            }
+        const files = obtenerFilesParaApi();
+        if (!files) {
+            toastWarn('Debe mantener los cinco ZIP cargados para registrar.');
+            return;
         }
 
         const btn = document.getElementById('btnRegistrarNuevos');
@@ -498,31 +621,23 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_REGISTRAR, { method: 'POST', body: fd });
             const data = await leerRespuestaJson(res, 'Registro T-Registro');
             if (!res.ok || data.error) {
-                const msg = data.error || 'No se pudo registrar los trabajadores.';
-                if (window.HmUi) HmUi.error(msg);
-                else alert(msg);
+                toastErr(data.error || 'No se pudo registrar los trabajadores.');
                 return;
             }
 
-            const msgOk = data.mensaje || 'Registro completado.';
-            if (window.HmUi) HmUi.exito(msgOk);
-            else alert(msgOk);
+            toastOk(data.mensaje || 'Registro completado.');
 
             if (Array.isArray(data.filas) && data.filas.length) {
                 const errores = data.filas.filter((f) => f.estado === 'ERROR');
                 if (errores.length) {
-                    const detalle = errores.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n');
-                    if (window.HmUi) HmUi.advertencia(detalle);
-                    else alert(detalle);
+                    toastWarn(errores.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n'));
                 }
             }
 
             document.getElementById('btnAnalizarArchivos').click();
         } catch (err) {
             console.error(err);
-            const msg = err.message || 'Error al registrar trabajadores.';
-            if (window.HmUi) HmUi.error(msg);
-            else alert(msg);
+            toastErr(err.message || 'Error al registrar trabajadores.');
         } finally {
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
@@ -531,9 +646,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const cboCia = document.getElementById('cboCompania');
     await poblarSelect('/api/selectores/companias', cboCia);
-    if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
-        /* default */
-    }
+    seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    renderListaTxt();
 });
 </script>
 {% endblock %}

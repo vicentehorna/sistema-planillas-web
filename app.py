@@ -5602,6 +5602,12 @@ def asientos_configurar_conceptos_page():
     return render_template('asientos_configurar_conceptos.html')
 
 
+@app.route('/asientos/cuentas-contables')
+@login_required
+def asientos_cuentas_contables_page():
+    return render_template('asientos_cuentas_contables.html')
+
+
 @app.route('/asientos/interfaz')
 @login_required
 def asientos_interfaz_page():
@@ -6823,6 +6829,135 @@ def _sp_error_message(exc):
         if len(parts) > 1:
             err = parts[-1].strip(" ()'\"")
     return err
+
+
+@app.route('/api/asientos/cuentas-contables/listado', methods=['POST'])
+@login_required
+def api_asientos_cuentas_contables_listado():
+    """sp_ac_listar_cuentas_contables_web: listado del maestro AC_Account."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_listar_cuentas_contables_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "account": _jsonable_value(r.get('account')),
+                    "code": _jsonable_value(r.get('code')),
+                    "name": _jsonable_value(r.get('name')),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_asientos_cuentas_contables_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/cuentas-contables/guardar', methods=['POST'])
+@login_required
+def api_asientos_cuentas_contables_guardar():
+    """sp_ac_guardar_cuenta_contable_web: alta / edición de AC_Account."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    account = str(body.get('account') or '').strip()
+    modo = str(body.get('modo') or ('U' if account else 'I')).strip().upper()
+    code = str(body.get('code') or '').strip()
+    name = str(body.get('name') or '').strip()
+    if not cia or not code or not name:
+        return jsonify({"error": "Indique compañía, código y nombre."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_guardar_cuenta_contable_web "
+            "@modo=?, @company=?, @account=?, @code=?, @name=?, @xlastuser=?",
+            (modo, cia, account or None, code, name, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "account": _jsonable_value(row.get('account')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Cuenta contable guardada.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_asientos_cuentas_contables_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/cuentas-contables/eliminar', methods=['POST'])
+@login_required
+def api_asientos_cuentas_contables_eliminar():
+    """sp_ac_eliminar_cuenta_contable_web: elimina una cuenta sin dependencias."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    account = str(body.get('account') or '').strip()
+    if not cia or not account:
+        return jsonify({"error": "Indique compañía y cuenta contable."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_eliminar_cuenta_contable_web @company=?, @account=?",
+            (cia, account),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "account": _jsonable_value(row.get('account')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Cuenta contable eliminada.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_asientos_cuentas_contables_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/asientos/configurar-conceptos/listado', methods=['POST'])
@@ -15126,13 +15261,12 @@ def reporte_resumen_total_post():
     """sp_pr_reporteplame_total_web: resumen por concepto y tipo (Mensual, Semanal, …)."""
     body = request.get_json(silent=True) or {}
     cia = (body.get('cia') or '').strip()
-    payroll_type = (body.get('payroll_type') or '').strip()
     period = (body.get('period') or '').strip()
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
-    if not payroll_type or not period:
-        return jsonify({"error": "Debe indicar tipo de planilla y periodo."}), 400
+    if not period:
+        return jsonify({"error": "Debe indicar el periodo."}), 400
 
     conn = None
     try:
@@ -15140,7 +15274,7 @@ def reporte_resumen_total_post():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_reporteplame_total_web @cia=?, @payrolltype=?, @period=?, @person=?",
-            (cia, payroll_type, period, None),
+            (cia, None, period, None),
         )
         col_names, rows = _fetch_last_query_resultset(cursor)
         resumen = []
@@ -15152,7 +15286,8 @@ def reporte_resumen_total_post():
             vacaciones = _float_sp_cell(rd.get('vacaciones'))
             cts = _float_sp_cell(rd.get('cts'))
             grati = _float_sp_cell(rd.get('grati'))
-            total_fila = mensual + semanal + liquida + vacaciones + cts + grati
+            utilidades = _float_sp_cell(rd.get('utilidades'))
+            total_fila = mensual + semanal + liquida + vacaciones + cts + grati + utilidades
 
             tipo_raw = rd.get('tipo')
             tipo = tipo_raw.strip() if isinstance(tipo_raw, str) else (str(tipo_raw).strip() if tipo_raw is not None else '')
@@ -15171,6 +15306,7 @@ def reporte_resumen_total_post():
                     "vacaciones": vacaciones,
                     "cts": cts,
                     "grati": grati,
+                    "utilidades": utilidades,
                     "total": total_fila,
                 }
             )

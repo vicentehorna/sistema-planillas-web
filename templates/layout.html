@@ -834,7 +834,7 @@
                     </ul>
                 </li>
 
-                {% set asientos_active = request.endpoint in ('asientos_configurar_conceptos_page', 'asientos_interfaz_page', 'asientos_generar_voucher_page', 'asientos_reporte_contable_page') %}
+                {% set asientos_active = request.endpoint in ('asientos_cuentas_contables_page', 'asientos_configurar_conceptos_page', 'asientos_interfaz_page', 'asientos_generar_voucher_page', 'asientos_reporte_contable_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if asientos_active else '' }}">
                     <a href="#submenuAsientos"
                        class="sidebar-parent-link"
@@ -846,6 +846,11 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if asientos_active else '' }}" id="submenuAsientos">
+                        <li class="{{ 'active' if request.endpoint == 'asientos_cuentas_contables_page' else '' }}">
+                            <a href="{{ url_for('asientos_cuentas_contables_page') }}" title="Cuentas Contables">
+                                <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Cuentas Contables</span>
+                            </a>
+                        </li>
                         <li class="{{ 'active' if request.endpoint == 'asientos_configurar_conceptos_page' else '' }}">
                             <a href="{{ url_for('asientos_configurar_conceptos_page') }}" title="Configurar Conceptos">
                                 <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Configurar Conceptos</span>

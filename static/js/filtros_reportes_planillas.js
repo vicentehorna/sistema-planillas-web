@@ -131,6 +131,75 @@
         }
     }
 
+    function crearPersistenciaResumenTotal() {
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    periodo: val('cboPeriodo'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY_RESUMEN_TOTAL, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros resumen total: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_RESUMEN_TOTAL);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+            const { poblarSelect } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPer = document.getElementById('cboPeriodo');
+            if (!cboCia || !cboPer) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            await poblarSelect(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`, cboPer);
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            if (periodo && optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            } else if (cboPer.options.length > 1) {
+                // periodos-plame: primera opción útil (después del placeholder)
+                const primera = Array.from(cboPer.options).find((o) => String(o.value || '').trim());
+                if (primera) cboPer.value = primera.value;
+            }
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboPeriodo'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_RESUMEN_TOTAL,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso) {
         function guardar() {
             try {
@@ -2620,7 +2689,7 @@
         obtenerConceptoNeto,
         poblarConceptosConNeto,
         resumenTotal: function () {
-            return crearPersistenciaReporte(STORAGE_KEY_RESUMEN_TOTAL, false);
+            return crearPersistenciaResumenTotal();
         },
         promedioLiquidaciones: function () {
             return crearPersistenciaReporte(STORAGE_KEY_PROMEDIO_LIQ, true);

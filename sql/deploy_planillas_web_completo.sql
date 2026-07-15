@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-07-14 21:02
+  Generado: 2026-07-14 22:26
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -22,7 +22,7 @@
   Tablas de trabajo requeridas por algunos reportes:
     xx_plamevertical2, xx_reporteplanilla (reporte planilla vertical)
 
-  Archivos incluidos (228):
+  Archivos incluidos (231):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
     - alter_pr_processtype_add_procedurename.sql
@@ -61,6 +61,9 @@
     - replicar_formulas_provisiones_bgt.sql
     - replicar_formulas_provisiones_bgt_limpio.sql
     - sp_ac_alvisoft_parte1.sql
+    - sp_ac_eliminar_cuenta_contable_web.sql
+    - sp_ac_guardar_cuenta_contable_web.sql
+    - sp_ac_listar_cuentas_contables_web.sql
     - sp_pr_5ta_trabajador_web.sql
     - sp_pr_actualizar_bancario_trabajador_web.sql
     - sp_pr_actualizar_datos_afp_web.sql
@@ -258,7 +261,7 @@ GO
 
 
 -- ============================================================================
--- [01/228] alter_pr_mapping_add_banbifbank.sql
+-- [01/231] alter_pr_mapping_add_banbifbank.sql
 -- ============================================================================
 
 /*
@@ -292,7 +295,7 @@ GO
 
 
 -- ============================================================================
--- [02/228] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [02/231] alter_pr_payrolltype_add_diasvacaciones.sql
 -- ============================================================================
 
 /*
@@ -315,7 +318,7 @@ GO
 
 
 -- ============================================================================
--- [03/228] alter_pr_processtype_add_procedurename.sql
+-- [03/231] alter_pr_processtype_add_procedurename.sql
 -- ============================================================================
 
 /*
@@ -408,7 +411,7 @@ GO
 
 
 -- ============================================================================
--- [04/228] alter_pr_importconcept_xlastuser_20.sql
+-- [04/231] alter_pr_importconcept_xlastuser_20.sql
 -- ============================================================================
 
 /*
@@ -453,7 +456,7 @@ GO
 
 
 -- ============================================================================
--- [05/228] alter_sy_company_add_logoname_signaturename.sql
+-- [05/231] alter_sy_company_add_logoname_signaturename.sql
 -- ============================================================================
 
 /*
@@ -493,7 +496,7 @@ GO
 
 
 -- ============================================================================
--- [06/228] alter_sy_person_add_nacionalidad.sql
+-- [06/231] alter_sy_person_add_nacionalidad.sql
 -- ============================================================================
 
 /*
@@ -518,7 +521,7 @@ GO
 
 
 -- ============================================================================
--- [07/228] tables_pr_plame_sunat_web.sql
+-- [07/231] tables_pr_plame_sunat_web.sql
 -- ============================================================================
 
 /*
@@ -593,7 +596,7 @@ GO
 
 
 -- ============================================================================
--- [08/228] SP_PR_EjecutarFormula.sql
+-- [08/231] SP_PR_EjecutarFormula.sql
 -- ============================================================================
 
 /*
@@ -1260,7 +1263,7 @@ GO
 
 
 -- ============================================================================
--- [09/228] SP_PR_ReportePromedioLiquidacion.sql
+-- [09/231] SP_PR_ReportePromedioLiquidacion.sql
 -- ============================================================================
 
 /*
@@ -1771,7 +1774,7 @@ GO
 
 
 -- ============================================================================
--- [10/228] alter_pr_concept_add_flagafectoutilidad.sql
+-- [10/231] alter_pr_concept_add_flagafectoutilidad.sql
 -- ============================================================================
 
 /*
@@ -1797,7 +1800,7 @@ GO
 
 
 -- ============================================================================
--- [11/228] alter_pr_formuladetail_conceptlist.sql
+-- [11/231] alter_pr_formuladetail_conceptlist.sql
 -- ============================================================================
 
 /*
@@ -1820,7 +1823,7 @@ GO
 
 
 -- ============================================================================
--- [12/228] alter_pr_formuladetail_divisor.sql
+-- [12/231] alter_pr_formuladetail_divisor.sql
 -- ============================================================================
 
 /*
@@ -1843,7 +1846,7 @@ GO
 
 
 -- ============================================================================
--- [13/228] alter_pr_mapping2_hm_atilio.sql
+-- [13/231] alter_pr_mapping2_hm_atilio.sql
 -- ============================================================================
 
 /*
@@ -1884,7 +1887,7 @@ GO
 
 
 -- ============================================================================
--- [14/228] f_count_medical_rest_days_web.sql
+-- [14/231] f_count_medical_rest_days_web.sql
 -- ============================================================================
 
 /*
@@ -1954,7 +1957,7 @@ GO
 
 
 -- ============================================================================
--- [15/228] f_getPromedioGrati.sql
+-- [15/231] f_getPromedioGrati.sql
 -- ============================================================================
 
 /*
@@ -2019,7 +2022,7 @@ GO
 
 
 -- ============================================================================
--- [16/228] f_getPromedioVac.sql
+-- [16/231] f_getPromedioVac.sql
 -- ============================================================================
 
 /*
@@ -2108,7 +2111,7 @@ GO
 
 
 -- ============================================================================
--- [17/228] f_getSuma5ta_web.sql
+-- [17/231] f_getSuma5ta_web.sql
 -- ============================================================================
 
 /*
@@ -2154,7 +2157,7 @@ GO
 
 
 -- ============================================================================
--- [18/228] f_getSumaConceptosCTS.sql
+-- [18/231] f_getSumaConceptosCTS.sql
 -- ============================================================================
 
 /*
@@ -2269,7 +2272,7 @@ GO
 
 
 -- ============================================================================
--- [19/228] f_getSumaConceptosGrati.sql
+-- [19/231] f_getSumaConceptosGrati.sql
 -- ============================================================================
 
 /*
@@ -2347,7 +2350,7 @@ GO
 
 
 -- ============================================================================
--- [20/228] f_getSumaConceptosIngreso.sql
+-- [20/231] f_getSumaConceptosIngreso.sql
 -- ============================================================================
 
 /*
@@ -2413,7 +2416,7 @@ GO
 
 
 -- ============================================================================
--- [21/228] f_getSumaConceptosProceso.sql
+-- [21/231] f_getSumaConceptosProceso.sql
 -- ============================================================================
 
 /*
@@ -2465,7 +2468,7 @@ GO
 
 
 -- ============================================================================
--- [22/228] f_map_conceptlist_cia.sql
+-- [22/231] f_map_conceptlist_cia.sql
 -- ============================================================================
 
 /*
@@ -2537,7 +2540,7 @@ GO
 
 
 -- ============================================================================
--- [23/228] limpiar_formulas_liquidacion_destino.sql
+-- [23/231] limpiar_formulas_liquidacion_destino.sql
 -- ============================================================================
 
 /*
@@ -2613,7 +2616,7 @@ GO
 
 
 -- ============================================================================
--- [24/228] limpiar_formulas_provisiones_destino.sql
+-- [24/231] limpiar_formulas_provisiones_destino.sql
 -- ============================================================================
 
 /*
@@ -2706,7 +2709,7 @@ GO
 
 
 -- ============================================================================
--- [25/228] listar_conceptos_faltantes_cias_liquidacion.sql
+-- [25/231] listar_conceptos_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2769,7 +2772,7 @@ GO
 
 
 -- ============================================================================
--- [26/228] listar_conceptos_faltantes_cias_provisiones.sql
+-- [26/231] listar_conceptos_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -2846,7 +2849,7 @@ GO
 
 
 -- ============================================================================
--- [27/228] listar_conceptos_faltantes_sb03_liquidacion.sql
+-- [27/231] listar_conceptos_faltantes_sb03_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2906,7 +2909,7 @@ GO
 
 
 -- ============================================================================
--- [28/228] listar_formulas_faltantes_cias_liquidacion.sql
+-- [28/231] listar_formulas_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2947,7 +2950,7 @@ GO
 
 
 -- ============================================================================
--- [29/228] listar_formulas_faltantes_cias_provisiones.sql
+-- [29/231] listar_formulas_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -2997,7 +3000,7 @@ GO
 
 
 -- ============================================================================
--- [30/228] queries_depurar_conceptos_auxiliares.sql
+-- [30/231] queries_depurar_conceptos_auxiliares.sql
 -- ============================================================================
 
 /*
@@ -3181,7 +3184,7 @@ GO
 
 
 -- ============================================================================
--- [31/228] replicar_conceptos_faltantes_cias_liquidacion.sql
+-- [31/231] replicar_conceptos_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -3428,7 +3431,7 @@ GO
 
 
 -- ============================================================================
--- [32/228] replicar_conceptos_faltantes_cias_provisiones.sql
+-- [32/231] replicar_conceptos_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -3622,7 +3625,7 @@ GO
 
 
 -- ============================================================================
--- [33/228] replicar_conceptos_faltantes_sb03_liquidacion.sql
+-- [33/231] replicar_conceptos_faltantes_sb03_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -3828,7 +3831,7 @@ GO
 
 
 -- ============================================================================
--- [34/228] replicar_formulas_liquidacion_bgt.sql
+-- [34/231] replicar_formulas_liquidacion_bgt.sql
 -- ============================================================================
 
 /*
@@ -3940,7 +3943,7 @@ GO
 
 
 -- ============================================================================
--- [35/228] replicar_formulas_liquidacion_bgt_limpio.sql
+-- [35/231] replicar_formulas_liquidacion_bgt_limpio.sql
 -- ============================================================================
 
 /*
@@ -4086,7 +4089,7 @@ GO
 
 
 -- ============================================================================
--- [36/228] replicar_formulas_provisiones_bgt.sql
+-- [36/231] replicar_formulas_provisiones_bgt.sql
 -- ============================================================================
 
 /*
@@ -4215,7 +4218,7 @@ GO
 
 
 -- ============================================================================
--- [37/228] replicar_formulas_provisiones_bgt_limpio.sql
+-- [37/231] replicar_formulas_provisiones_bgt_limpio.sql
 -- ============================================================================
 
 /*
@@ -4372,7 +4375,7 @@ GO
 
 
 -- ============================================================================
--- [38/228] sp_ac_alvisoft_parte1.sql
+-- [38/231] sp_ac_alvisoft_parte1.sql
 -- ============================================================================
 
 /*
@@ -4401,7 +4404,239 @@ GO
 
 
 -- ============================================================================
--- [39/228] sp_pr_5ta_trabajador_web.sql
+-- [39/231] sp_ac_eliminar_cuenta_contable_web.sql
+-- ============================================================================
+
+/*
+    Maestro Cuentas Contables — eliminación de AC_Account.
+    Usado por: POST /api/asientos/cuentas-contables/eliminar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_eliminar_cuenta_contable_web]
+    @company VARCHAR(4),
+    @account VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @account = LTRIM(RTRIM(ISNULL(@account, '')));
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM AC_Account (NOLOCK)
+        WHERE Company = @company
+          AND Account = @account
+    )
+    BEGIN
+        RAISERROR('No se encontró la cuenta contable.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_AccountProfileDetail (NOLOCK)
+        WHERE Company = @company
+          AND (DebitAccount = @account OR CreditAccount = @account)
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: la cuenta está asignada a conceptos contables.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM AC_Account (NOLOCK)
+        WHERE Company = @company
+          AND Account <> @account
+          AND (InflationAccount = @account OR AccountAssociated = @account)
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: la cuenta está asociada a otra cuenta contable.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        DELETE FROM AC_Account
+        WHERE Company = @company
+          AND Account = @account;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() = 547
+            RAISERROR('No se puede eliminar: la cuenta tiene movimientos o configuraciones relacionadas.', 16, 1);
+        ELSE
+        BEGIN
+            DECLARE @error VARCHAR(4000) = ERROR_MESSAGE();
+            RAISERROR('%s', 16, 1, @error);
+        END;
+        RETURN;
+    END CATCH;
+
+    SELECT
+        @account AS account,
+        'Cuenta contable eliminada correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [40/231] sp_ac_guardar_cuenta_contable_web.sql
+-- ============================================================================
+
+/*
+    Maestro Cuentas Contables — alta / edición de AC_Account.
+    El ID Account se genera desde SY_ObjectSecuence, objeto ACACCOUNT.
+    Usado por: POST /api/asientos/cuentas-contables/guardar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_guardar_cuenta_contable_web]
+    @modo      CHAR(1),
+    @company   VARCHAR(4),
+    @account   VARCHAR(20) = NULL,
+    @code      VARCHAR(255),
+    @name      VARCHAR(255),
+    @xlastuser VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @account_nuevo VARCHAR(20);
+    DECLARE @tabla_id TABLE (id_generado VARCHAR(20));
+
+    SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @account = NULLIF(LTRIM(RTRIM(ISNULL(@account, ''))), '');
+    SET @code = LTRIM(RTRIM(ISNULL(@code, '')));
+    SET @name = LTRIM(RTRIM(ISNULL(@name, '')));
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+
+    IF @modo NOT IN ('I', 'U')
+    BEGIN
+        RAISERROR('Modo de operación inválido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @company = ''
+    BEGIN
+        RAISERROR('Indique la compañía.', 16, 1);
+        RETURN;
+    END;
+
+    IF @code = '' OR @name = ''
+    BEGIN
+        RAISERROR('Indique el código y nombre de la cuenta contable.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM AC_Account (NOLOCK)
+        WHERE Company = @company
+          AND LTRIM(RTRIM(ISNULL(Code, ''))) = @code
+          AND (@modo = 'I' OR Account <> @account)
+    )
+    BEGIN
+        RAISERROR('Ya existe una cuenta contable con el mismo código.', 16, 1);
+        RETURN;
+    END;
+
+    IF @modo = 'I'
+    BEGIN
+        INSERT INTO @tabla_id (id_generado)
+        EXEC dbo.sp_pr_genera_correlativo_web
+            @cia = @company,
+            @object = 'ACACCOUNT',
+            @xlastuser = @xlastuser;
+
+        SELECT @account_nuevo = id_generado FROM @tabla_id;
+
+        IF NULLIF(LTRIM(RTRIM(ISNULL(@account_nuevo, ''))), '') IS NULL
+        BEGIN
+            RAISERROR('No se pudo generar el correlativo de la cuenta contable.', 16, 1);
+            RETURN;
+        END;
+
+        INSERT INTO AC_Account (
+            Account, Company, Code, Name, Description,
+            ACCurrency, Status, XLastUser, XLastDate
+        )
+        VALUES (
+            @account_nuevo, @company, @code, @name, @name,
+            'LO', 'A', @xlastuser, GETDATE()
+        );
+
+        SELECT
+            @account_nuevo AS account,
+            'Cuenta contable registrada correctamente.' AS mensaje;
+        RETURN;
+    END;
+
+    IF @account IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM AC_Account (NOLOCK)
+        WHERE Company = @company
+          AND Account = @account
+    )
+    BEGIN
+        RAISERROR('No se encontró la cuenta contable a actualizar.', 16, 1);
+        RETURN;
+    END;
+
+    UPDATE AC_Account
+    SET Code = @code,
+        Name = @name,
+        Description = @name,
+        XLastUser = @xlastuser,
+        XLastDate = GETDATE()
+    WHERE Company = @company
+      AND Account = @account;
+
+    SELECT
+        @account AS account,
+        'Cuenta contable actualizada correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [41/231] sp_ac_listar_cuentas_contables_web.sql
+-- ============================================================================
+
+/*
+    Maestro Cuentas Contables — listado AC_Account por compañía.
+    Usado por: POST /api/asientos/cuentas-contables/listado
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_listar_cuentas_contables_web]
+    @company  VARCHAR(4),
+    @busqueda VARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        A.Account AS account,
+        LTRIM(RTRIM(ISNULL(A.Code, ''))) AS code,
+        LTRIM(RTRIM(ISNULL(A.Name, ''))) AS name
+    FROM AC_Account A (NOLOCK)
+    WHERE A.Company = @company
+      AND (
+            @busqueda IS NULL
+         OR A.Code LIKE '%' + @busqueda + '%'
+         OR A.Name LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY A.Code, A.Name;
+END
+GO
+
+
+
+-- ============================================================================
+-- [42/231] sp_pr_5ta_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -4726,7 +4961,7 @@ GO
 
 
 -- ============================================================================
--- [40/228] sp_pr_actualizar_bancario_trabajador_web.sql
+-- [43/231] sp_pr_actualizar_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -4782,7 +5017,7 @@ GO
 
 
 -- ============================================================================
--- [41/228] sp_pr_actualizar_datos_afp_web.sql
+-- [44/231] sp_pr_actualizar_datos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -5139,7 +5374,7 @@ GO
 
 
 -- ============================================================================
--- [42/228] sp_pr_actualizar_datoseducacion_trabajador_web.sql
+-- [45/231] sp_pr_actualizar_datoseducacion_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5296,7 +5531,7 @@ GO
 
 
 -- ============================================================================
--- [43/228] sp_pr_actualizar_datosgenerales_trabajador_web.sql
+-- [46/231] sp_pr_actualizar_datosgenerales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5507,7 +5742,7 @@ GO
 
 
 -- ============================================================================
--- [44/228] sp_pr_actualizar_datoslaborales_trabajador_web.sql
+-- [47/231] sp_pr_actualizar_datoslaborales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5650,7 +5885,7 @@ GO
 
 
 -- ============================================================================
--- [45/228] sp_pr_actualizar_pensiones_trabajador_web.sql
+-- [48/231] sp_pr_actualizar_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5704,7 +5939,7 @@ GO
 
 
 -- ============================================================================
--- [46/228] sp_pr_aperturarperiodo_proceso_web.sql
+-- [49/231] sp_pr_aperturarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -5851,7 +6086,7 @@ GO
 
 
 -- ============================================================================
--- [47/228] sp_pr_calcular_gratificacion_persona.sql
+-- [50/231] sp_pr_calcular_gratificacion_persona.sql
 -- ============================================================================
 
 --sp_pr_calcular_provgrati_persona 'BGT', 'LIMABGT 000000000005', 'BGT 000000000008', '20260505', '71302181', 'ADMIN', 3.14
@@ -6425,7 +6660,7 @@ GO
 
 
 -- ============================================================================
--- [48/228] sp_pr_calcular_provcts_persona.sql
+-- [51/231] sp_pr_calcular_provcts_persona.sql
 -- ============================================================================
 
 -- Exportado desde hm_aci2
@@ -6858,7 +7093,7 @@ GO
 
 
 -- ============================================================================
--- [49/228] sp_pr_calcularplanillas_masivo_web.sql
+-- [52/231] sp_pr_calcularplanillas_masivo_web.sql
 -- ============================================================================
 
 /*
@@ -7024,7 +7259,7 @@ GO
 
 
 -- ============================================================================
--- [50/228] sp_pr_calcularplanillas_web.sql
+-- [53/231] sp_pr_calcularplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -7127,7 +7362,7 @@ GO
 
 
 -- ============================================================================
--- [51/228] sp_pr_cerrarperiodo_proceso_web.sql
+-- [54/231] sp_pr_cerrarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -7168,7 +7403,7 @@ GO
 
 
 -- ============================================================================
--- [52/228] sp_pr_certificadoquinta_web.sql
+-- [55/231] sp_pr_certificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -7954,7 +8189,7 @@ GO
 
 
 -- ============================================================================
--- [53/228] sp_pr_certificadoretirocts_web.sql
+-- [56/231] sp_pr_certificadoretirocts_web.sql
 -- ============================================================================
 
 /*
@@ -8065,7 +8300,7 @@ GO
 
 
 -- ============================================================================
--- [54/228] sp_pr_certificadotrabajo_web.sql
+-- [57/231] sp_pr_certificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -8170,7 +8405,7 @@ GO
 
 
 -- ============================================================================
--- [55/228] sp_pr_control_pagos_afp_web.sql
+-- [58/231] sp_pr_control_pagos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -8242,7 +8477,7 @@ GO
 
 
 -- ============================================================================
--- [56/228] sp_pr_datosusuario_web.sql
+-- [59/231] sp_pr_datosusuario_web.sql
 -- ============================================================================
 
 /*
@@ -8331,7 +8566,7 @@ GO
 
 
 -- ============================================================================
--- [57/228] sp_pr_depurar_conceptos_auxiliares_web.sql
+-- [60/231] sp_pr_depurar_conceptos_auxiliares_web.sql
 -- ============================================================================
 
 /*
@@ -8623,7 +8858,7 @@ GO
 
 
 -- ============================================================================
--- [58/228] sp_pr_descansos_eliminar_web.sql
+-- [61/231] sp_pr_descansos_eliminar_web.sql
 -- ============================================================================
 
 /*
@@ -8677,7 +8912,7 @@ GO
 
 
 -- ============================================================================
--- [59/228] sp_pr_descansos_guardar_web.sql
+-- [62/231] sp_pr_descansos_guardar_web.sql
 -- ============================================================================
 
 /*
@@ -8871,7 +9106,7 @@ GO
 
 
 -- ============================================================================
--- [60/228] sp_pr_descansos_obtener_trabajador_web.sql
+-- [63/231] sp_pr_descansos_obtener_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -8957,7 +9192,7 @@ GO
 
 
 -- ============================================================================
--- [61/228] sp_pr_detalleboletaaportes_web.sql
+-- [64/231] sp_pr_detalleboletaaportes_web.sql
 -- ============================================================================
 
 /*
@@ -9003,7 +9238,7 @@ GO
 
 
 -- ============================================================================
--- [62/228] sp_pr_detalleboletadescuentos_web.sql
+-- [65/231] sp_pr_detalleboletadescuentos_web.sql
 -- ============================================================================
 
 /*
@@ -9049,7 +9284,7 @@ GO
 
 
 -- ============================================================================
--- [63/228] sp_pr_detalleboletaingresos_web.sql
+-- [66/231] sp_pr_detalleboletaingresos_web.sql
 -- ============================================================================
 
 /*
@@ -9095,7 +9330,7 @@ GO
 
 
 -- ============================================================================
--- [64/228] sp_pr_detallecalculocertificadoquinta_web.sql
+-- [67/231] sp_pr_detallecalculocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -9151,7 +9386,7 @@ GO
 
 
 -- ============================================================================
--- [65/228] sp_pr_detallecalculoutilidades_web.sql
+-- [68/231] sp_pr_detallecalculoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -9210,7 +9445,7 @@ GO
 
 
 -- ============================================================================
--- [66/228] sp_pr_eliminar_accountprofiledetail_web.sql
+-- [69/231] sp_pr_eliminar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -9269,7 +9504,7 @@ GO
 
 
 -- ============================================================================
--- [67/228] sp_pr_eliminar_calculo_planilla_web.sql
+-- [70/231] sp_pr_eliminar_calculo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -9364,7 +9599,7 @@ GO
 
 
 -- ============================================================================
--- [68/228] sp_pr_eliminarasignacionconcepto_web.sql
+-- [71/231] sp_pr_eliminarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -9415,7 +9650,7 @@ GO
 
 
 -- ============================================================================
--- [69/228] sp_pr_eliminarbankaccount_web.sql
+-- [72/231] sp_pr_eliminarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -9478,7 +9713,7 @@ GO
 
 
 -- ============================================================================
--- [70/228] sp_pr_eliminarconcepto_web.sql
+-- [73/231] sp_pr_eliminarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -9576,7 +9811,7 @@ GO
 
 
 -- ============================================================================
--- [71/228] sp_pr_eliminarformula_web.sql
+-- [74/231] sp_pr_eliminarformula_web.sql
 -- ============================================================================
 
 /*
@@ -9644,7 +9879,7 @@ GO
 
 
 -- ============================================================================
--- [72/228] sp_pr_eliminarperiodo_payrolltype_web.sql
+-- [75/231] sp_pr_eliminarperiodo_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -9697,7 +9932,7 @@ GO
 
 
 -- ============================================================================
--- [73/228] sp_pr_eliminarpersondocumenttype_web.sql
+-- [76/231] sp_pr_eliminarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -9771,7 +10006,7 @@ GO
 
 
 -- ============================================================================
--- [74/228] sp_pr_eliminarposition_web.sql
+-- [77/231] sp_pr_eliminarposition_web.sql
 -- ============================================================================
 
 /*
@@ -9844,7 +10079,7 @@ GO
 
 
 -- ============================================================================
--- [75/228] sp_pr_eliminarreplicationunit_web.sql
+-- [78/231] sp_pr_eliminarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -9913,7 +10148,7 @@ GO
 
 
 -- ============================================================================
--- [76/228] sp_pr_extraer_nemonicos_literal_sp_web.sql
+-- [79/231] sp_pr_extraer_nemonicos_literal_sp_web.sql
 -- ============================================================================
 
 /*
@@ -10100,7 +10335,7 @@ GO
 
 
 -- ============================================================================
--- [77/228] sp_pr_formatoliquidacion_web.sql
+-- [80/231] sp_pr_formatoliquidacion_web.sql
 -- ============================================================================
 
 /*
@@ -10299,7 +10534,7 @@ GO
 
 
 -- ============================================================================
--- [78/228] sp_pr_formatoutilidades_web.sql
+-- [81/231] sp_pr_formatoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -10420,7 +10655,7 @@ GO
 
 
 -- ============================================================================
--- [79/228] sp_pr_genera_correlativo_web.sql
+-- [82/231] sp_pr_genera_correlativo_web.sql
 -- ============================================================================
 
 /*
@@ -10519,7 +10754,7 @@ GO
 
 
 -- ============================================================================
--- [80/228] sp_pr_generar_banbif_web.sql
+-- [83/231] sp_pr_generar_banbif_web.sql
 -- ============================================================================
 
 /*
@@ -10740,7 +10975,7 @@ GO
 
 
 -- ============================================================================
--- [81/228] sp_pr_generar_continental_web.sql
+-- [84/231] sp_pr_generar_continental_web.sql
 -- ============================================================================
 
 /*
@@ -11043,7 +11278,7 @@ GO
 
 
 -- ============================================================================
--- [82/228] sp_pr_generar_interbank_web.sql
+-- [85/231] sp_pr_generar_interbank_web.sql
 -- ============================================================================
 
 /*
@@ -11328,7 +11563,7 @@ GO
 
 
 -- ============================================================================
--- [83/228] sp_pr_generar_periodos_vacacionales_web.sql
+-- [86/231] sp_pr_generar_periodos_vacacionales_web.sql
 -- ============================================================================
 
 /*
@@ -11735,7 +11970,7 @@ GO
 
 
 -- ============================================================================
--- [84/228] sp_pr_generar_telecredito_web.sql
+-- [87/231] sp_pr_generar_telecredito_web.sql
 -- ============================================================================
 
 /*
@@ -12019,7 +12254,7 @@ GO
 
 
 -- ============================================================================
--- [85/228] sp_pr_generarboleta_web.sql
+-- [88/231] sp_pr_generarboleta_web.sql
 -- ============================================================================
 
 /*
@@ -12598,7 +12833,7 @@ GO
 
 
 -- ============================================================================
--- [86/228] sp_pr_guardar_accountprofiledetail_web.sql
+-- [89/231] sp_pr_guardar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -12836,7 +13071,7 @@ GO
 
 
 -- ============================================================================
--- [87/228] sp_pr_guardarasignacionconcepto_web.sql
+-- [90/231] sp_pr_guardarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -13095,7 +13330,7 @@ GO
 
 
 -- ============================================================================
--- [88/228] sp_pr_guardarbankaccount_web.sql
+-- [91/231] sp_pr_guardarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -13290,7 +13525,7 @@ GO
 
 
 -- ============================================================================
--- [89/228] sp_pr_guardarconcepto_web.sql
+-- [92/231] sp_pr_guardarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -13626,7 +13861,7 @@ GO
 
 
 -- ============================================================================
--- [90/228] sp_pr_guardarformula_web.sql
+-- [93/231] sp_pr_guardarformula_web.sql
 -- ============================================================================
 
 /*
@@ -13834,7 +14069,7 @@ GO
 
 
 -- ============================================================================
--- [91/228] sp_pr_guardarimportconcept_web.sql
+-- [94/231] sp_pr_guardarimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -14034,7 +14269,7 @@ GO
 
 
 -- ============================================================================
--- [92/228] sp_pr_guardarpayrolltype_web.sql
+-- [95/231] sp_pr_guardarpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -14217,7 +14452,7 @@ GO
 
 
 -- ============================================================================
--- [93/228] sp_pr_guardarperiodo_payrolltype_web.sql
+-- [96/231] sp_pr_guardarperiodo_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -14413,7 +14648,7 @@ GO
 
 
 -- ============================================================================
--- [94/228] sp_pr_guardarpersondocumenttype_web.sql
+-- [97/231] sp_pr_guardarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -14591,7 +14826,7 @@ GO
 
 
 -- ============================================================================
--- [95/228] sp_pr_guardarposition_web.sql
+-- [98/231] sp_pr_guardarposition_web.sql
 -- ============================================================================
 
 /*
@@ -14738,7 +14973,7 @@ GO
 
 
 -- ============================================================================
--- [96/228] sp_pr_guardarreplicationunit_web.sql
+-- [99/231] sp_pr_guardarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -14850,7 +15085,7 @@ GO
 
 
 -- ============================================================================
--- [97/228] sp_pr_guardarusercompany_web.sql
+-- [100/231] sp_pr_guardarusercompany_web.sql
 -- ============================================================================
 
 /*
@@ -14984,7 +15219,7 @@ GO
 
 
 -- ============================================================================
--- [98/228] sp_pr_listaasignacionconceptos_web.sql
+-- [101/231] sp_pr_listaasignacionconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -15180,7 +15415,7 @@ GO
 
 
 -- ============================================================================
--- [99/228] sp_pr_listabanbif_web.sql
+-- [102/231] sp_pr_listabanbif_web.sql
 -- ============================================================================
 
 /*
@@ -15322,7 +15557,7 @@ GO
 
 
 -- ============================================================================
--- [100/228] sp_pr_listacontinental_web.sql
+-- [103/231] sp_pr_listacontinental_web.sql
 -- ============================================================================
 
 /*
@@ -15454,7 +15689,7 @@ GO
 
 
 -- ============================================================================
--- [101/228] sp_pr_listado_declaracion_afp_web.sql
+-- [104/231] sp_pr_listado_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -15899,7 +16134,7 @@ GO
 
 
 -- ============================================================================
--- [102/228] sp_pr_listado_plame14_web.sql
+-- [105/231] sp_pr_listado_plame14_web.sql
 -- ============================================================================
 
 /*
@@ -16010,7 +16245,7 @@ GO
 
 
 -- ============================================================================
--- [103/228] sp_pr_listado_plame15_web.sql
+-- [106/231] sp_pr_listado_plame15_web.sql
 -- ============================================================================
 
 /*
@@ -16129,7 +16364,7 @@ GO
 
 
 -- ============================================================================
--- [104/228] sp_pr_listado_plame18_web.sql
+-- [107/231] sp_pr_listado_plame18_web.sql
 -- ============================================================================
 
 /*
@@ -16429,7 +16664,7 @@ GO
 
 
 -- ============================================================================
--- [105/228] sp_pr_listado_plame26_web.sql
+-- [108/231] sp_pr_listado_plame26_web.sql
 -- ============================================================================
 
 /*
@@ -16522,7 +16757,7 @@ GO
 
 
 -- ============================================================================
--- [106/228] sp_pr_listado_tregistro_web.sql
+-- [109/231] sp_pr_listado_tregistro_web.sql
 -- ============================================================================
 
 /*
@@ -16591,7 +16826,7 @@ GO
 
 
 -- ============================================================================
--- [107/228] sp_pr_listadocertificadoquinta_web.sql
+-- [110/231] sp_pr_listadocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -16657,7 +16892,7 @@ GO
 
 
 -- ============================================================================
--- [108/228] sp_pr_listadocertificadotrabajo_web.sql
+-- [111/231] sp_pr_listadocertificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -16714,7 +16949,7 @@ GO
 
 
 -- ============================================================================
--- [109/228] sp_pr_listadoformatoutilidades_web.sql
+-- [112/231] sp_pr_listadoformatoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -16807,7 +17042,7 @@ GO
 
 
 -- ============================================================================
--- [110/228] sp_pr_listadogenerarboletas_web.sql
+-- [113/231] sp_pr_listadogenerarboletas_web.sql
 -- ============================================================================
 
 /*
@@ -16861,7 +17096,7 @@ GO
 
 
 -- ============================================================================
--- [111/228] sp_pr_listainterbank_web.sql
+-- [114/231] sp_pr_listainterbank_web.sql
 -- ============================================================================
 
 /*
@@ -16962,7 +17197,7 @@ GO
 
 
 -- ============================================================================
--- [112/228] sp_pr_listaprocesscontrol_apertura_web.sql
+-- [115/231] sp_pr_listaprocesscontrol_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -17042,7 +17277,7 @@ GO
 
 
 -- ============================================================================
--- [113/228] sp_pr_listar_accountprofiledetail_web.sql
+-- [116/231] sp_pr_listar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -17120,7 +17355,7 @@ GO
 
 
 -- ============================================================================
--- [114/228] sp_pr_listar_asientos_interfaz_web.sql
+-- [117/231] sp_pr_listar_asientos_interfaz_web.sql
 -- ============================================================================
 
 /*
@@ -17201,7 +17436,7 @@ GO
 
 
 -- ============================================================================
--- [115/228] sp_pr_listarbankaccount_web.sql
+-- [118/231] sp_pr_listarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -17251,7 +17486,7 @@ GO
 
 
 -- ============================================================================
--- [116/228] sp_pr_listarconceptos_web.sql
+-- [119/231] sp_pr_listarconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -17320,7 +17555,7 @@ GO
 
 
 -- ============================================================================
--- [117/228] sp_pr_listarformulas_web.sql
+-- [120/231] sp_pr_listarformulas_web.sql
 -- ============================================================================
 
 /*
@@ -17385,7 +17620,7 @@ GO
 
 
 -- ============================================================================
--- [118/228] sp_pr_listarimportconcept_web.sql
+-- [121/231] sp_pr_listarimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -17428,7 +17663,7 @@ GO
 
 
 -- ============================================================================
--- [119/228] sp_pr_listarpayrolltype_web.sql
+-- [122/231] sp_pr_listarpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -17469,7 +17704,7 @@ GO
 
 
 -- ============================================================================
--- [120/228] sp_pr_listarperiodos_payrolltype_web.sql
+-- [123/231] sp_pr_listarperiodos_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -17506,7 +17741,7 @@ GO
 
 
 -- ============================================================================
--- [121/228] sp_pr_listarpersondocumenttype_web.sql
+-- [124/231] sp_pr_listarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -17545,7 +17780,7 @@ GO
 
 
 -- ============================================================================
--- [122/228] sp_pr_listarposition_web.sql
+-- [125/231] sp_pr_listarposition_web.sql
 -- ============================================================================
 
 /*
@@ -17582,7 +17817,7 @@ GO
 
 
 -- ============================================================================
--- [123/228] sp_pr_listarreplicationunit_web.sql
+-- [126/231] sp_pr_listarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -17618,7 +17853,7 @@ GO
 
 
 -- ============================================================================
--- [124/228] sp_pr_listarusercompany_empresas_web.sql
+-- [127/231] sp_pr_listarusercompany_empresas_web.sql
 -- ============================================================================
 
 /*
@@ -17662,7 +17897,7 @@ GO
 
 
 -- ============================================================================
--- [125/228] sp_pr_listarusercompany_usuarios_web.sql
+-- [128/231] sp_pr_listarusercompany_usuarios_web.sql
 -- ============================================================================
 
 /*
@@ -17705,7 +17940,7 @@ GO
 
 
 -- ============================================================================
--- [126/228] sp_pr_listatelecredito_web.sql
+-- [129/231] sp_pr_listatelecredito_web.sql
 -- ============================================================================
 
 /*
@@ -17815,7 +18050,7 @@ GO
 
 
 -- ============================================================================
--- [127/228] sp_pr_listatrabajadores_web.sql
+-- [130/231] sp_pr_listatrabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -17945,7 +18180,7 @@ GO
 
 
 -- ============================================================================
--- [128/228] sp_pr_obtener_bancario_trabajador_web.sql
+-- [131/231] sp_pr_obtener_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18006,7 +18241,7 @@ GO
 
 
 -- ============================================================================
--- [129/228] sp_pr_obtener_datoseducacion_trabajador_web.sql
+-- [132/231] sp_pr_obtener_datoseducacion_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18073,7 +18308,7 @@ GO
 
 
 -- ============================================================================
--- [130/228] sp_pr_obtener_datosgenerales_trabajador_web.sql
+-- [133/231] sp_pr_obtener_datosgenerales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18136,7 +18371,7 @@ GO
 
 
 -- ============================================================================
--- [131/228] sp_pr_obtener_datoslaborales_trabajador_web.sql
+-- [134/231] sp_pr_obtener_datoslaborales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18244,7 +18479,7 @@ GO
 
 
 -- ============================================================================
--- [132/228] sp_pr_obtener_pensiones_trabajador_web.sql
+-- [135/231] sp_pr_obtener_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18300,7 +18535,7 @@ GO
 
 
 -- ============================================================================
--- [133/228] sp_pr_obtenerasignacionconcepto_web.sql
+-- [136/231] sp_pr_obtenerasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -18363,7 +18598,7 @@ GO
 
 
 -- ============================================================================
--- [134/228] sp_pr_obtenerbankaccount_web.sql
+-- [137/231] sp_pr_obtenerbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -18405,7 +18640,7 @@ GO
 
 
 -- ============================================================================
--- [135/228] sp_pr_obtenerconcepto_web.sql
+-- [138/231] sp_pr_obtenerconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -18457,7 +18692,7 @@ GO
 
 
 -- ============================================================================
--- [136/228] sp_pr_obtenerformula_web.sql
+-- [139/231] sp_pr_obtenerformula_web.sql
 -- ============================================================================
 
 /*
@@ -18559,7 +18794,7 @@ GO
 
 
 -- ============================================================================
--- [137/228] sp_pr_obtenerimportconcept_web.sql
+-- [140/231] sp_pr_obtenerimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -18608,7 +18843,7 @@ GO
 
 
 -- ============================================================================
--- [138/228] sp_pr_obtenerpayrolltype_web.sql
+-- [141/231] sp_pr_obtenerpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -18643,7 +18878,7 @@ GO
 
 
 -- ============================================================================
--- [139/228] sp_pr_obtenerpersondocumenttype_web.sql
+-- [142/231] sp_pr_obtenerpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -18676,7 +18911,7 @@ GO
 
 
 -- ============================================================================
--- [140/228] sp_pr_obtenerposition_web.sql
+-- [143/231] sp_pr_obtenerposition_web.sql
 -- ============================================================================
 
 /*
@@ -18708,7 +18943,7 @@ GO
 
 
 -- ============================================================================
--- [141/228] sp_pr_obtenerreplicationunit_web.sql
+-- [144/231] sp_pr_obtenerreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -18736,7 +18971,7 @@ GO
 
 
 -- ============================================================================
--- [142/228] sp_pr_plame_sunat_eliminar_carga_web.sql
+-- [145/231] sp_pr_plame_sunat_eliminar_carga_web.sql
 -- ============================================================================
 
 /*
@@ -18762,7 +18997,7 @@ GO
 
 
 -- ============================================================================
--- [143/228] sp_pr_plame_sunat_obtener_carga_web.sql
+-- [146/231] sp_pr_plame_sunat_obtener_carga_web.sql
 -- ============================================================================
 
 /*
@@ -18803,7 +19038,7 @@ GO
 
 
 -- ============================================================================
--- [144/228] sp_pr_plame_validar_archivo14_web.sql
+-- [147/231] sp_pr_plame_validar_archivo14_web.sql
 -- ============================================================================
 
 /*
@@ -18950,7 +19185,7 @@ GO
 
 
 -- ============================================================================
--- [145/228] sp_pr_plame_validar_archivo18_web.sql
+-- [148/231] sp_pr_plame_validar_archivo18_web.sql
 -- ============================================================================
 
 /*
@@ -19342,7 +19577,7 @@ GO
 
 
 -- ============================================================================
--- [146/228] sp_pr_plame_validar_neto_r01_web.sql
+-- [149/231] sp_pr_plame_validar_neto_r01_web.sql
 -- ============================================================================
 
 /*
@@ -19765,7 +20000,7 @@ GO
 
 
 -- ============================================================================
--- [147/228] sp_pr_plame_validar_r04_web.sql
+-- [150/231] sp_pr_plame_validar_r04_web.sql
 -- ============================================================================
 
 /*
@@ -20217,7 +20452,7 @@ GO
 
 
 -- ============================================================================
--- [148/228] sp_pr_plame_validar_r05_web.sql
+-- [151/231] sp_pr_plame_validar_r05_web.sql
 -- ============================================================================
 
 /*
@@ -20598,7 +20833,7 @@ GO
 
 
 -- ============================================================================
--- [149/228] sp_pr_r019_vacationdetail_web.sql
+-- [152/231] sp_pr_r019_vacationdetail_web.sql
 -- ============================================================================
 
 /*
@@ -20665,7 +20900,7 @@ GO
 
 
 -- ============================================================================
--- [150/228] sp_pr_replicar_formula_cia.sql
+-- [153/231] sp_pr_replicar_formula_cia.sql
 -- ============================================================================
 
 /*
@@ -20852,7 +21087,7 @@ GO
 
 
 -- ============================================================================
--- [151/228] sp_pr_replicar_nuevo_concepto_nemonico.sql
+-- [154/231] sp_pr_replicar_nuevo_concepto_nemonico.sql
 -- ============================================================================
 
 /*
@@ -21028,7 +21263,7 @@ GO
 
 
 -- ============================================================================
--- [152/228] sp_pr_reporte_asiento_contable_web.sql
+-- [155/231] sp_pr_reporte_asiento_contable_web.sql
 -- ============================================================================
 
 /*
@@ -21263,7 +21498,7 @@ GO
 
 
 -- ============================================================================
--- [153/228] sp_pr_reportelistadopagos_web.sql
+-- [156/231] sp_pr_reportelistadopagos_web.sql
 -- ============================================================================
 
 /*
@@ -21399,7 +21634,7 @@ GO
 
 
 -- ============================================================================
--- [154/228] sp_pr_reportelog_calculo_web.sql
+-- [157/231] sp_pr_reportelog_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -21493,7 +21728,7 @@ GO
 
 
 -- ============================================================================
--- [155/228] sp_pr_reporteplame_total_web.sql
+-- [158/231] sp_pr_reporteplame_total_web.sql
 -- ============================================================================
 
 /*
@@ -21961,7 +22196,7 @@ GO
 
 
 -- ============================================================================
--- [156/228] sp_pr_reporteplamevertical_web.sql
+-- [159/231] sp_pr_reporteplamevertical_web.sql
 -- ============================================================================
 
 /*
@@ -22305,7 +22540,7 @@ GO
 
 
 -- ============================================================================
--- [157/228] sp_pr_reporteplanillaporconceptos_web.sql
+-- [160/231] sp_pr_reporteplanillaporconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -22391,7 +22626,7 @@ GO
 
 
 -- ============================================================================
--- [158/228] sp_pr_reportesdescansos_medicos_web.sql
+-- [161/231] sp_pr_reportesdescansos_medicos_web.sql
 -- ============================================================================
 
 /*
@@ -22454,7 +22689,7 @@ GO
 
 
 -- ============================================================================
--- [159/228] sp_pr_resumen_calculo_web.sql
+-- [162/231] sp_pr_resumen_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -22532,7 +22767,7 @@ GO
 
 
 -- ============================================================================
--- [160/228] sp_pr_resumen_declaracion_afp_web.sql
+-- [163/231] sp_pr_resumen_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -22773,7 +23008,7 @@ GO
 
 
 -- ============================================================================
--- [161/228] sp_pr_saldovacaciones_web.sql
+-- [164/231] sp_pr_saldovacaciones_web.sql
 -- ============================================================================
 
 /*
@@ -23049,7 +23284,7 @@ GO
 
 
 -- ============================================================================
--- [162/228] sp_pr_selectoraccount_web.sql
+-- [165/231] sp_pr_selectoraccount_web.sql
 -- ============================================================================
 
 /*
@@ -23093,7 +23328,7 @@ GO
 
 
 -- ============================================================================
--- [163/228] sp_pr_selectoraccountprofile_web.sql
+-- [166/231] sp_pr_selectoraccountprofile_web.sql
 -- ============================================================================
 
 /*
@@ -23119,7 +23354,7 @@ GO
 
 
 -- ============================================================================
--- [164/228] sp_pr_selectorafp_web.sql
+-- [167/231] sp_pr_selectorafp_web.sql
 -- ============================================================================
 
 /*
@@ -23150,7 +23385,7 @@ GO
 
 
 -- ============================================================================
--- [165/228] sp_pr_selectorbancos_consolidada_web.sql
+-- [168/231] sp_pr_selectorbancos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -23177,7 +23412,7 @@ GO
 
 
 -- ============================================================================
--- [166/228] sp_pr_selectorbancos_web.sql
+-- [169/231] sp_pr_selectorbancos_web.sql
 -- ============================================================================
 
 /*
@@ -23202,7 +23437,7 @@ GO
 
 
 -- ============================================================================
--- [167/228] sp_pr_selectorcareer_web.sql
+-- [170/231] sp_pr_selectorcareer_web.sql
 -- ============================================================================
 
 /*
@@ -23250,7 +23485,7 @@ GO
 
 
 -- ============================================================================
--- [168/228] sp_pr_selectorceasereason_web.sql
+-- [171/231] sp_pr_selectorceasereason_web.sql
 -- ============================================================================
 
 /*
@@ -23276,7 +23511,7 @@ GO
 
 
 -- ============================================================================
--- [169/228] sp_pr_selectorcompanias_web.sql
+-- [172/231] sp_pr_selectorcompanias_web.sql
 -- ============================================================================
 
 /*
@@ -23303,7 +23538,7 @@ GO
 
 
 -- ============================================================================
--- [170/228] sp_pr_selectorconceptoneto_web.sql
+-- [173/231] sp_pr_selectorconceptoneto_web.sql
 -- ============================================================================
 
 /*
@@ -23335,7 +23570,7 @@ GO
 
 
 -- ============================================================================
--- [171/228] sp_pr_selectorconceptos_contables_web.sql
+-- [174/231] sp_pr_selectorconceptos_contables_web.sql
 -- ============================================================================
 
 /*
@@ -23378,7 +23613,7 @@ GO
 
 
 -- ============================================================================
--- [172/228] sp_pr_selectorconceptos_web.sql
+-- [175/231] sp_pr_selectorconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -23404,7 +23639,7 @@ GO
 
 
 -- ============================================================================
--- [173/228] sp_pr_selectorconcepttype_web.sql
+-- [176/231] sp_pr_selectorconcepttype_web.sql
 -- ============================================================================
 
 /*
@@ -23443,7 +23678,7 @@ GO
 
 
 -- ============================================================================
--- [174/228] sp_pr_selectorcontractmodality_web.sql
+-- [177/231] sp_pr_selectorcontractmodality_web.sql
 -- ============================================================================
 
 /*
@@ -23469,7 +23704,7 @@ GO
 
 
 -- ============================================================================
--- [175/228] sp_pr_selectorcostcenter_web.sql
+-- [178/231] sp_pr_selectorcostcenter_web.sql
 -- ============================================================================
 
 /*
@@ -23501,7 +23736,7 @@ GO
 
 
 -- ============================================================================
--- [176/228] sp_pr_selectoremployeecategory_web.sql
+-- [179/231] sp_pr_selectoremployeecategory_web.sql
 -- ============================================================================
 
 /*
@@ -23527,7 +23762,7 @@ GO
 
 
 -- ============================================================================
--- [177/228] sp_pr_selectoremployeetype_web.sql
+-- [180/231] sp_pr_selectoremployeetype_web.sql
 -- ============================================================================
 
 /*
@@ -23553,7 +23788,7 @@ GO
 
 
 -- ============================================================================
--- [178/228] sp_pr_selectorformapago_web.sql
+-- [181/231] sp_pr_selectorformapago_web.sql
 -- ============================================================================
 
 /*
@@ -23578,7 +23813,7 @@ GO
 
 
 -- ============================================================================
--- [179/228] sp_pr_selectorgrupoformula_web.sql
+-- [182/231] sp_pr_selectorgrupoformula_web.sql
 -- ============================================================================
 
 /*
@@ -23605,7 +23840,7 @@ GO
 
 
 -- ============================================================================
--- [180/228] sp_pr_selectorinstitution_web.sql
+-- [183/231] sp_pr_selectorinstitution_web.sql
 -- ============================================================================
 
 /*
@@ -23634,7 +23869,7 @@ GO
 
 
 -- ============================================================================
--- [181/228] sp_pr_selectorinstructionlevel_web.sql
+-- [184/231] sp_pr_selectorinstructionlevel_web.sql
 -- ============================================================================
 
 /*
@@ -23665,7 +23900,7 @@ GO
 
 
 -- ============================================================================
--- [182/228] sp_pr_selectorocupation_web.sql
+-- [185/231] sp_pr_selectorocupation_web.sql
 -- ============================================================================
 
 /*
@@ -23691,7 +23926,7 @@ GO
 
 
 -- ============================================================================
--- [183/228] sp_pr_selectorparameter_web.sql
+-- [186/231] sp_pr_selectorparameter_web.sql
 -- ============================================================================
 
 /*
@@ -23718,7 +23953,7 @@ GO
 
 
 -- ============================================================================
--- [184/228] sp_pr_selectorparametroformula_web.sql
+-- [187/231] sp_pr_selectorparametroformula_web.sql
 -- ============================================================================
 
 /*
@@ -23741,7 +23976,7 @@ GO
 
 
 -- ============================================================================
--- [185/228] sp_pr_selectorpensiontype_web.sql
+-- [188/231] sp_pr_selectorpensiontype_web.sql
 -- ============================================================================
 
 /*
@@ -23770,7 +24005,7 @@ GO
 
 
 -- ============================================================================
--- [186/228] sp_pr_selectorperiodoactivo_planilla_web.sql
+-- [189/231] sp_pr_selectorperiodoactivo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -23797,7 +24032,7 @@ GO
 
 
 -- ============================================================================
--- [187/228] sp_pr_selectorperiodoactivo_web.sql
+-- [190/231] sp_pr_selectorperiodoactivo_web.sql
 -- ============================================================================
 
 /*
@@ -23831,7 +24066,7 @@ GO
 
 
 -- ============================================================================
--- [188/228] sp_pr_selectorperiodocalculo_web.sql
+-- [191/231] sp_pr_selectorperiodocalculo_web.sql
 -- ============================================================================
 
 /*
@@ -23869,7 +24104,7 @@ GO
 
 
 -- ============================================================================
--- [189/228] sp_pr_selectorperiodos_apertura_web.sql
+-- [192/231] sp_pr_selectorperiodos_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -23905,7 +24140,7 @@ GO
 
 
 -- ============================================================================
--- [190/228] sp_pr_selectorperiodos_asientos_web.sql
+-- [193/231] sp_pr_selectorperiodos_asientos_web.sql
 -- ============================================================================
 
 /*
@@ -23938,7 +24173,7 @@ GO
 
 
 -- ============================================================================
--- [191/228] sp_pr_selectorperiodos_cia_web.sql
+-- [194/231] sp_pr_selectorperiodos_cia_web.sql
 -- ============================================================================
 
 /*
@@ -23972,7 +24207,7 @@ GO
 
 
 -- ============================================================================
--- [192/228] sp_pr_selectorperiodos_consolidada_web.sql
+-- [195/231] sp_pr_selectorperiodos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24013,7 +24248,7 @@ GO
 
 
 -- ============================================================================
--- [193/228] sp_pr_selectorperiodos_generar_voucher_web.sql
+-- [196/231] sp_pr_selectorperiodos_generar_voucher_web.sql
 -- ============================================================================
 
 /*
@@ -24060,7 +24295,7 @@ GO
 
 
 -- ============================================================================
--- [194/228] sp_pr_selectorperiodos_plame_web.sql
+-- [197/231] sp_pr_selectorperiodos_plame_web.sql
 -- ============================================================================
 
 /*
@@ -24090,7 +24325,7 @@ GO
 
 
 -- ============================================================================
--- [195/228] sp_pr_selectorperiodos_web.sql
+-- [198/231] sp_pr_selectorperiodos_web.sql
 -- ============================================================================
 
 /*
@@ -24132,7 +24367,7 @@ GO
 
 
 -- ============================================================================
--- [196/228] sp_pr_selectorpersonas_consolidada_web.sql
+-- [199/231] sp_pr_selectorpersonas_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24160,7 +24395,7 @@ GO
 
 
 -- ============================================================================
--- [197/228] sp_pr_selectorpersondocumenttype_web.sql
+-- [200/231] sp_pr_selectorpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -24193,7 +24428,7 @@ GO
 
 
 -- ============================================================================
--- [198/228] sp_pr_selectorplanillas_consolidada_web.sql
+-- [201/231] sp_pr_selectorplanillas_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24219,7 +24454,7 @@ GO
 
 
 -- ============================================================================
--- [199/228] sp_pr_selectorplanillas_web.sql
+-- [202/231] sp_pr_selectorplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -24249,7 +24484,7 @@ GO
 
 
 -- ============================================================================
--- [200/228] sp_pr_selectorposition_web.sql
+-- [203/231] sp_pr_selectorposition_web.sql
 -- ============================================================================
 
 /*
@@ -24275,7 +24510,7 @@ GO
 
 
 -- ============================================================================
--- [201/228] sp_pr_selectorprocesos_consolidada_web.sql
+-- [204/231] sp_pr_selectorprocesos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24310,7 +24545,7 @@ GO
 
 
 -- ============================================================================
--- [202/228] sp_pr_selectorprocesos_contables_web.sql
+-- [205/231] sp_pr_selectorprocesos_contables_web.sql
 -- ============================================================================
 
 /*
@@ -24350,7 +24585,7 @@ GO
 
 
 -- ============================================================================
--- [203/228] sp_pr_selectorprocesos_web.sql
+-- [206/231] sp_pr_selectorprocesos_web.sql
 -- ============================================================================
 
 /*
@@ -24388,7 +24623,7 @@ GO
 
 
 -- ============================================================================
--- [204/228] sp_pr_selectorprocesoscalculo_web.sql
+-- [207/231] sp_pr_selectorprocesoscalculo_web.sql
 -- ============================================================================
 
 /*
@@ -24437,7 +24672,7 @@ GO
 
 
 -- ============================================================================
--- [205/228] sp_pr_selectorregimehealth_web.sql
+-- [208/231] sp_pr_selectorregimehealth_web.sql
 -- ============================================================================
 
 /*
@@ -24466,7 +24701,7 @@ GO
 
 
 -- ============================================================================
--- [206/228] sp_pr_selectorsctrpension_web.sql
+-- [209/231] sp_pr_selectorsctrpension_web.sql
 -- ============================================================================
 
 /*
@@ -24497,7 +24732,7 @@ GO
 
 
 -- ============================================================================
--- [207/228] sp_pr_selectorspecialstatus_web.sql
+-- [210/231] sp_pr_selectorspecialstatus_web.sql
 -- ============================================================================
 
 /*
@@ -24523,7 +24758,7 @@ GO
 
 
 -- ============================================================================
--- [208/228] sp_pr_selectortipocuenta_web.sql
+-- [211/231] sp_pr_selectortipocuenta_web.sql
 -- ============================================================================
 
 /*
@@ -24547,7 +24782,7 @@ GO
 
 
 -- ============================================================================
--- [209/228] sp_pr_selectortipos_dm_web.sql
+-- [212/231] sp_pr_selectortipos_dm_web.sql
 -- ============================================================================
 
 /*
@@ -24574,7 +24809,7 @@ GO
 
 
 -- ============================================================================
--- [210/228] sp_pr_selectorunidades_web.sql
+-- [213/231] sp_pr_selectorunidades_web.sql
 -- ============================================================================
 
 /*
@@ -24599,7 +24834,7 @@ GO
 
 
 -- ============================================================================
--- [211/228] sp_pr_selectorusuarios_web.sql
+-- [214/231] sp_pr_selectorusuarios_web.sql
 -- ============================================================================
 
 /*
@@ -24622,7 +24857,7 @@ GO
 
 
 -- ============================================================================
--- [212/228] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
+-- [215/231] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
 -- ============================================================================
 
 /*
@@ -24689,7 +24924,7 @@ GO
 
 
 -- ============================================================================
--- [213/228] sp_pr_tregistro_cuentas_web.sql
+-- [216/231] sp_pr_tregistro_cuentas_web.sql
 -- ============================================================================
 
 /*
@@ -24759,7 +24994,7 @@ GO
 
 
 -- ============================================================================
--- [214/228] sp_pr_tregistro_datos_personales_web.sql
+-- [217/231] sp_pr_tregistro_datos_personales_web.sql
 -- ============================================================================
 
 /*
@@ -24872,7 +25107,7 @@ GO
 
 
 -- ============================================================================
--- [215/228] sp_pr_tregistro_establecimiento_web.sql
+-- [218/231] sp_pr_tregistro_establecimiento_web.sql
 -- ============================================================================
 
 /*
@@ -24974,7 +25209,7 @@ GO
 
 
 -- ============================================================================
--- [216/228] sp_pr_tregistro_estudios_web.sql
+-- [219/231] sp_pr_tregistro_estudios_web.sql
 -- ============================================================================
 
 /*
@@ -25044,7 +25279,7 @@ GO
 
 
 -- ============================================================================
--- [217/228] sp_pr_tregistro_periodos_web.sql
+-- [220/231] sp_pr_tregistro_periodos_web.sql
 -- ============================================================================
 
 /*
@@ -25215,7 +25450,7 @@ GO
 
 
 -- ============================================================================
--- [218/228] sp_pr_tregistro_registrar_nuevos_web.sql
+-- [221/231] sp_pr_tregistro_registrar_nuevos_web.sql
 -- ============================================================================
 
 /*
@@ -25451,7 +25686,7 @@ GO
 
 
 -- ============================================================================
--- [219/228] sp_pr_tregistro_registrar_trabajador_nuevo_web.sql
+-- [222/231] sp_pr_tregistro_registrar_trabajador_nuevo_web.sql
 -- ============================================================================
 
 /*
@@ -26453,7 +26688,7 @@ GO
 
 
 -- ============================================================================
--- [220/228] sp_pr_tregistro_trabajador_web.sql
+-- [223/231] sp_pr_tregistro_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -26594,7 +26829,7 @@ GO
 
 
 -- ============================================================================
--- [221/228] sp_pr_vacaciones_eliminar_detalle_web.sql
+-- [224/231] sp_pr_vacaciones_eliminar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -26658,7 +26893,7 @@ GO
 
 
 -- ============================================================================
--- [222/228] sp_pr_vacaciones_guardar_detalle_web.sql
+-- [225/231] sp_pr_vacaciones_guardar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -26838,7 +27073,7 @@ GO
 
 
 -- ============================================================================
--- [223/228] sp_pr_vacaciones_listar_trabajadores_web.sql
+-- [226/231] sp_pr_vacaciones_listar_trabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -26901,7 +27136,7 @@ GO
 
 
 -- ============================================================================
--- [224/228] sp_pr_vacaciones_obtener_trabajador_web.sql
+-- [227/231] sp_pr_vacaciones_obtener_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -27014,7 +27249,7 @@ GO
 
 
 -- ============================================================================
--- [225/228] sp_pr_validar_calculo_web.sql
+-- [228/231] sp_pr_validar_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -27346,7 +27581,7 @@ GO
 
 
 -- ============================================================================
--- [226/228] sp_pr_validar_periodo_masivo_web.sql
+-- [229/231] sp_pr_validar_periodo_masivo_web.sql
 -- ============================================================================
 
 /*
@@ -27442,7 +27677,7 @@ GO
 
 
 -- ============================================================================
--- [227/228] sp_pr_validar_pre_calculo_web.sql
+-- [230/231] sp_pr_validar_pre_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -27691,7 +27926,7 @@ GO
 
 
 -- ============================================================================
--- [228/228] sp_pr_validarconceptos_cias_web.sql
+-- [231/231] sp_pr_validarconceptos_cias_web.sql
 -- ============================================================================
 
 /*

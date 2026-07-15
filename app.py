@@ -14271,6 +14271,131 @@ def enviar_boletas_masivo():
 
 
 # ==========================================
+# APIS ALERTAS DASHBOARD
+# ==========================================
+
+
+def _companias_activas_desde_cursor(cursor):
+    """sp_pr_selectorcompanias_web → lista {company, description, empresa}."""
+    cursor.execute('EXEC sp_pr_selectorcompanias_web')
+    rows = cursor.fetchall()
+    col_names = [str(c[0]).strip().lower() for c in (cursor.description or [])]
+    out = []
+    for row in rows:
+        rd = {}
+        for i, cname in enumerate(col_names):
+            rd[cname] = row[i]
+        company = str(rd.get('company') or '').strip()
+        if not company:
+            continue
+        description = str(rd.get('description') or '').strip()
+        empresa = description or company
+        out.append({
+            'company': company,
+            'description': description,
+            'empresa': empresa,
+        })
+    return out
+
+
+def _alerta_fila_json(row, empresa):
+    """Serializa una fila de alerta con campo empresa para el dashboard."""
+    data = {k: _jsonable_value(v) for k, v in row.items()}
+    data['empresa'] = empresa
+    if 'company' not in data and row.get('company') is not None:
+        data['company'] = _jsonable_value(row.get('company'))
+    return data
+
+
+@app.route('/api/alertas/vacaciones-pendientes', methods=['POST'])
+@login_required
+def api_alertas_vacaciones_pendientes():
+    """Consolida sp_pr_alertas_vacaciones_pendientes_web para todas las compañías activas."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        companias = _companias_activas_desde_cursor(cursor)
+        all_rows = []
+        trabajadores = set()
+        for cia in companias:
+            cursor.execute(
+                'EXEC sp_pr_alertas_vacaciones_pendientes_web '
+                '@company=?, @payrolltype=?, @fecha_corte=NULL, @dias_umbral=?',
+                (cia['company'], '0', 28),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            for row in rows:
+                all_rows.append(_alerta_fila_json(row, cia['empresa']))
+                person = str(row.get('person') or '').strip()
+                company = str(row.get('company') or cia['company']).strip()
+                if person:
+                    trabajadores.add((company, person))
+        all_rows.sort(
+            key=lambda r: (
+                str(r.get('empresa') or ''),
+                -(float(r.get('dias_acumulados') or 0)),
+                str(r.get('nombre') or ''),
+            )
+        )
+        return jsonify({
+            'total_trabajadores': len(trabajadores),
+            'total_registros': len(all_rows),
+            'rows': all_rows,
+        })
+    except Exception as e:
+        logging.exception('api_alertas_vacaciones_pendientes')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/alertas/liquidacion-cese-pendiente', methods=['POST'])
+@login_required
+def api_alertas_liquidacion_cese_pendiente():
+    """Consolida sp_pr_alertas_liquidacion_cese_pendiente_web para todas las compañías activas."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        companias = _companias_activas_desde_cursor(cursor)
+        all_rows = []
+        for cia in companias:
+            cursor.execute(
+                'EXEC sp_pr_alertas_liquidacion_cese_pendiente_web '
+                '@company=?, @payrolltype=?, @fecha_corte=NULL, @dias_limite=?',
+                (cia['company'], '0', 2),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            for row in rows:
+                all_rows.append(_alerta_fila_json(row, cia['empresa']))
+        all_rows.sort(
+            key=lambda r: (
+                str(r.get('empresa') or ''),
+                -(int(r.get('dias_desde_cese') or 0)),
+                str(r.get('nombre') or ''),
+            )
+        )
+        return jsonify({
+            'total_trabajadores': len(all_rows),
+            'rows': all_rows,
+        })
+    except Exception as e:
+        logging.exception('api_alertas_liquidacion_cese_pendiente')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# ==========================================
 # APIS PARA SELECTORES EN CASCADA (stored procedures)
 # ==========================================
 

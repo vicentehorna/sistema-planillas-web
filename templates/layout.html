@@ -242,6 +242,43 @@
             text-align: center;
         }
 
+        /* Alertas: resalta en el menú para llamar la atención */
+        #sidebar ul li.sidebar-alertas > a {
+            margin: 4px 10px 8px;
+            padding: 11px 14px;
+            border-radius: 8px;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.28) 0%, rgba(239, 68, 68, 0.22) 100%);
+            border: 1px solid rgba(245, 158, 11, 0.55);
+            color: #fde68a;
+            font-weight: 600;
+            letter-spacing: 0.02em;
+            box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.12), 0 4px 12px rgba(0, 0, 0, 0.18);
+        }
+
+        #sidebar ul li.sidebar-alertas > a i {
+            color: #fbbf24;
+            font-size: 1.05rem;
+        }
+
+        #sidebar ul li.sidebar-alertas > a:hover,
+        #sidebar ul li.sidebar-alertas.active > a {
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.45) 0%, rgba(239, 68, 68, 0.35) 100%);
+            border-color: rgba(251, 191, 36, 0.85);
+            color: #fff;
+            box-shadow: 0 0 14px rgba(245, 158, 11, 0.35);
+        }
+
+        #sidebar ul li.sidebar-alertas.active > a i,
+        #sidebar ul li.sidebar-alertas > a:hover i {
+            color: #fde68a;
+        }
+
+        body.sidebar-collapsed #sidebar ul li.sidebar-alertas > a {
+            margin: 4px 8px 8px;
+            padding: 12px 8px;
+            justify-content: center;
+        }
+
         body.sidebar-collapsed #sidebar {
             width: var(--sidebar-collapsed-width);
         }
@@ -503,8 +540,14 @@
             </div>
 
             <ul class="list-unstyled components">
+                <li class="sidebar-alertas {{ 'active' if request.endpoint == 'dashboard' else '' }}">
+                    <a href="{{ url_for('dashboard') }}" title="Alertas">
+                        <i class="bi bi-exclamation-triangle-fill"></i><span class="sidebar-link-text">Alertas</span>
+                    </a>
+                </li>
+
                 <li class="py-0">
-                    <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
+                    <p class="sidebar-section-title px-3 mt-3 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
                 {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page') %}

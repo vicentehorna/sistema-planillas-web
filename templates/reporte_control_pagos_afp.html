@@ -103,7 +103,7 @@
             <table class="table table-bordered table-sm table-hover table-control-pagos-afp align-middle">
                 <thead>
                     <tr>
-                        <th>Tipo planilla</th>
+                        <th id="thTipoPlanilla">Tipo planilla</th>
                         <th>AFP</th>
                         <th class="col-cantidad">Nro. afiliados</th>
                         <th class="col-monto">Aporte</th>
@@ -191,10 +191,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         return acc;
     }
 
-    function filaSubtotalHtml(tipo, acc, cssClass) {
+    function filaSubtotalHtml(tipo, acc, cssClass, payrollAll) {
         return `
             <tr class="${cssClass}">
-                <td colspan="2">${escapeHtml(tipo || 'Subtotal')}</td>
+                <td colspan="${payrollAll ? 1 : 2}">${escapeHtml(tipo || 'Subtotal')}</td>
                 <td class="col-cantidad">${formatEntero(acc.cantidad)}</td>
                 <td class="col-monto">${formatMonto(acc.aporte)}</td>
                 <td class="col-monto">${formatMonto(acc.retenciones)}</td>
@@ -204,10 +204,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             </tr>`;
     }
 
-    function filaDetalleHtml(row) {
+    function filaDetalleHtml(row, payrollAll) {
         return `
             <tr>
-                <td>${escapeHtml(row.tipoplanilla)}</td>
+                ${payrollAll ? '' : `<td>${escapeHtml(row.tipoplanilla)}</td>`}
                 <td>${escapeHtml(row.afpname)}</td>
                 <td class="col-cantidad">${formatEntero(row.cantidad)}</td>
                 <td class="col-monto">${formatMonto(row.aporte)}</td>
@@ -218,14 +218,29 @@ document.addEventListener('DOMContentLoaded', async function () {
             </tr>`;
     }
 
-    function renderTabla(rows) {
+    function renderTabla(rows, payrollAll) {
         const tbody = document.getElementById('tbodyControlPagosAfp');
+        document.getElementById('thTipoPlanilla').classList.toggle('d-none', payrollAll);
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros para los filtros seleccionados.</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${payrollAll ? 7 : 8}" class="text-center text-muted py-3">Sin registros para los filtros seleccionados.</td></tr>`;
             return;
         }
 
         let html = '';
+        if (payrollAll) {
+            const totalGeneral = {
+                cantidad: 0, aporte: 0, retenciones: 0,
+                insuredamountlo: 0, arcomisionamountlo: 0, total: 0
+            };
+            rows.forEach((row) => {
+                html += filaDetalleHtml(row, true);
+                acumularSubtotal(totalGeneral, row);
+            });
+            html += filaSubtotalHtml('TOTALES', totalGeneral, 'fila-total-general', true);
+            tbody.innerHTML = html;
+            return;
+        }
+
         let grupoActual = null;
         let subtotal = null;
         const totalGeneral = {
@@ -236,7 +251,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         rows.forEach((row) => {
             const tipo = String(row.tipoplanilla || '').trim();
             if (grupoActual !== null && tipo !== grupoActual) {
-                html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal');
+                html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal', false);
                 subtotal = null;
             }
             if (grupoActual === null || tipo !== grupoActual) {
@@ -246,15 +261,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                     insuredamountlo: 0, arcomisionamountlo: 0, total: 0
                 };
             }
-            html += filaDetalleHtml(row);
+            html += filaDetalleHtml(row, false);
             acumularSubtotal(subtotal, row);
             acumularSubtotal(totalGeneral, row);
         });
 
         if (subtotal) {
-            html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal');
+            html += filaSubtotalHtml('Subtotal ' + grupoActual, subtotal, 'fila-subtotal', false);
         }
-        html += filaSubtotalHtml('TOTALES', totalGeneral, 'fila-total-general');
+        html += filaSubtotalHtml('TOTALES', totalGeneral, 'fila-total-general', false);
         tbody.innerHTML = html;
     }
 
@@ -285,6 +300,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function agregarOpcionTodasPlanillas() {
+        if (optionExists(document.getElementById('cboTipoPlanilla'), 'TODOS')) return;
+        const opt = document.createElement('option');
+        opt.value = 'TODOS';
+        opt.textContent = 'Todos';
+        document.getElementById('cboTipoPlanilla').insertBefore(
+            opt,
+            document.getElementById('cboTipoPlanilla').options[1] || null
+        );
+    }
+
     async function cargarPeriodos(cia, payrolltype, periodoPreferido) {
         const cboPeriodo = document.getElementById('cboPeriodo');
         cboPeriodo.disabled = true;
@@ -292,9 +318,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!cia || !payrolltype) return;
 
         try {
-            const res = await fetch(
-                `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
-            );
+            const url = payrolltype === 'TODOS'
+                ? `/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`
+                : `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`;
+            const res = await fetch(url);
             const data = await res.json();
             const vistos = new Set();
             (Array.isArray(data) ? data : []).forEach((item) => {
@@ -341,6 +368,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
         const period = document.getElementById('cboPeriodo').value.trim();
+        const payrollAll = payroll_type === 'TODOS';
 
         if (filtrosPersist) filtrosPersist.guardar();
 
@@ -363,10 +391,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 ? payload.meta.period_label
                 : (period.length === 6 ? `${period.slice(0, 4)}-${period.slice(4, 6)}` : period);
             actualizarMeta(periodLabel);
-            renderTabla(rows);
+            renderTabla(rows, payrollAll);
 
             lastExport = {
                 rows,
+                payrollAll,
                 meta: {
                     compania: selectedText('cboCompania'),
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
@@ -391,10 +420,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        const headers = [
-            'Tipo planilla', 'AFP', 'Nro. afiliados', 'Aporte',
-            'Retenciones y retribuciones', 'Seguro', 'Comisión', 'Total'
-        ];
+        const payrollAll = !!lastExport.payrollAll;
+        const headers = payrollAll
+            ? ['AFP', 'Nro. afiliados', 'Aporte', 'Retenciones y retribuciones', 'Seguro', 'Comisión', 'Total']
+            : ['Tipo planilla', 'AFP', 'Nro. afiliados', 'Aporte', 'Retenciones y retribuciones', 'Seguro', 'Comisión', 'Total'];
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Pagos AFP');
         const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
@@ -431,16 +460,30 @@ document.addEventListener('DOMContentLoaded', async function () {
             const r = ws.addRow(vals);
             r.eachCell({ includeEmpty: true }, (cell, col) => {
                 cell.border = allBorders;
-                if (col >= 3) {
+                if (col >= (payrollAll ? 2 : 3)) {
                     cell.alignment = { horizontal: 'right' };
                     if (typeof cell.value === 'number') {
-                        cell.numFmt = col === 3 ? '0' : '#,##0.00';
+                        cell.numFmt = col === (payrollAll ? 2 : 3) ? '0' : '#,##0.00';
                     }
                 }
                 if (bold) cell.font = { bold: true };
             });
         };
 
+        if (payrollAll) {
+            lastExport.rows.forEach((row) => {
+                addDataRow([
+                    row.afpname, num(row.cantidad), num(row.aporte), num(row.retenciones),
+                    num(row.insuredamountlo), num(row.arcomisionamountlo), num(row.total)
+                ], false);
+                acumularSubtotal(totalGeneral, row);
+            });
+            addDataRow([
+                'TOTALES', totalGeneral.cantidad, totalGeneral.aporte,
+                totalGeneral.retenciones, totalGeneral.insuredamountlo,
+                totalGeneral.arcomisionamountlo, totalGeneral.total
+            ], true);
+        } else {
         lastExport.rows.forEach((row) => {
             const tipo = String(row.tipoplanilla || '').trim();
             if (grupoActual !== null && tipo !== grupoActual) {
@@ -475,10 +518,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             'TOTALES', '', totalGeneral.cantidad, totalGeneral.aporte,
             totalGeneral.retenciones, totalGeneral.insuredamountlo, totalGeneral.arcomisionamountlo, totalGeneral.total
         ], true);
+        }
 
-        ws.getColumn(1).width = 28;
-        ws.getColumn(2).width = 24;
-        for (let c = 3; c <= headers.length; c++) ws.getColumn(c).width = 16;
+        ws.getColumn(1).width = payrollAll ? 24 : 28;
+        if (!payrollAll) ws.getColumn(2).width = 24;
+        for (let c = payrollAll ? 2 : 3; c <= headers.length; c++) ws.getColumn(c).width = 16;
 
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -502,12 +546,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {
         cboCia.value = guardado.cia;
         await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(guardado.cia)}`, cboPlanilla);
+        agregarOpcionTodasPlanillas();
         if (guardado.payroll && optionExists(cboPlanilla, guardado.payroll)) {
             cboPlanilla.value = guardado.payroll;
             await cargarPeriodos(guardado.cia, guardado.payroll, guardado.period);
         }
     } else if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
         await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value)}`, cboPlanilla);
+        agregarOpcionTodasPlanillas();
     }
 
     if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
@@ -517,6 +563,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cboPeriodo = document.getElementById('cboPeriodo');
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+            agregarOpcionTodasPlanillas();
         } else {
             cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanilla.disabled = true;
@@ -528,8 +575,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboPlanilla.addEventListener('change', async function () {
         const cia = cboCia.value.trim();
         const pt = this.value.trim();
+        const periodoActual = document.getElementById('cboPeriodo').value.trim();
         if (cia && pt) {
-            await cargarPeriodos(cia, pt, null);
+            await cargarPeriodos(cia, pt, periodoActual || null);
         } else {
             const cboPeriodo = document.getElementById('cboPeriodo');
             cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';

@@ -1,0 +1,482 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte Asiento Contable{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-asiento-contable {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-asiento-contable th,
+    .table-asiento-contable td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-asiento-contable thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-asiento-contable .col-importe {
+        min-width: 6.5rem;
+        text-align: right;
+    }
+
+    .table-asiento-contable tr.reporte-fila-totales td {
+        background-color: #f1f3f5;
+        font-weight: 600;
+    }
+
+    .reporte-cabecera-titulo {
+        font-size: 1.05rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .reporte-cabecera-sub {
+        font-size: 0.95rem;
+        color: #495057;
+    }
+
+    .reporte-diferencia-ok {
+        color: #198754;
+        font-weight: 700;
+    }
+
+    .reporte-diferencia-bad {
+        color: #dc3545;
+        font-weight: 700;
+    }
+
+    .box-motivo-diff {
+        border-radius: 0.35rem;
+        padding: 0.65rem 0.85rem;
+        font-size: 0.85rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .box-motivo-diff.is-ok {
+        background: #d1e7dd;
+        border: 1px solid #a3cfbb;
+        color: #0f5132;
+    }
+
+    .box-motivo-diff.is-error {
+        background: #f8d7da;
+        border: 1px solid #f1aeb5;
+        color: #842029;
+    }
+
+    .box-motivo-diff .motivo-lista {
+        margin: 0.35rem 0 0;
+        padding-left: 1.1rem;
+    }
+
+    .reporte-estado-carga:not(:empty) {
+        min-height: 1rem;
+        margin-top: 0.25rem;
+        color: #1a4b84;
+        font-weight: 600;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body pt-3">
+        <form id="frmReporteAsientoContable" class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo de planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo <span class="text-danger">*</span></label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <span class="btn-consultar-label"><i class="bi bi-search"></i> Consultar</span>
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+            <div class="col-12">
+                <div id="lblEstadoCarga" class="reporte-estado-carga small" aria-live="polite"></div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body pt-3">
+        <div class="text-center mb-3">
+            <div class="reporte-cabecera-titulo fw-bold" id="lblTituloReporte">—</div>
+        </div>
+        <div id="boxMotivo" class="box-motivo-diff d-none" role="status"></div>
+        <div class="table-scroll-container" id="scrollReporte">
+            <table class="table table-bordered table-sm table-hover table-asiento-contable align-middle">
+                <thead>
+                    <tr>
+                        <th>Cuenta</th>
+                        <th>Cuenta - Descripción</th>
+                        <th>Concepto</th>
+                        <th class="col-importe">Debe</th>
+                        <th class="col-importe">Haber</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyReporte"></tbody>
+                <tfoot>
+                    <tr class="reporte-fila-totales">
+                        <td colspan="3" class="text-end">Total</td>
+                        <td class="col-importe" id="lblTotalDebe">0.00</td>
+                        <td class="col-importe" id="lblTotalHaber">0.00</td>
+                    </tr>
+                    <tr>
+                        <td colspan="3" class="text-end fw-semibold">Diferencia</td>
+                        <td colspan="2" class="text-end" id="lblDiferencia">0.00</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+(function () {
+    const DEFAULT_CIA = 'BGT';
+    const frm = document.getElementById('frmReporteAsientoContable');
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const btnConsultar = document.getElementById('btnConsultar');
+    const btnExport = document.getElementById('btnExportExcel');
+    const cardResultado = document.getElementById('cardResultado');
+    const lblEstado = document.getElementById('lblEstadoCarga');
+    const lblRowCount = document.getElementById('lblRowCount');
+    let lastExport = null;
+
+    function fmtNum(n) {
+        const x = Number(n || 0);
+        return x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function num(n) {
+        const x = Number(n);
+        return Number.isFinite(x) ? x : 0;
+    }
+
+    function seleccionarInsensitive(sel, value) {
+        if (!value) return;
+        const v = String(value).toUpperCase();
+        for (const opt of sel.options) {
+            if (String(opt.value).toUpperCase() === v) {
+                sel.value = opt.value;
+                return;
+            }
+        }
+    }
+
+    async function poblarSelect(url, sel, placeholder) {
+        sel.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al cargar selector');
+        (data || []).forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.text || item.id;
+            sel.appendChild(opt);
+        });
+    }
+
+    async function obtenerPeriodoActivo(cia, payrolltype, processtype) {
+        try {
+            const url = `/api/selectores/periodo-activo?cia=${encodeURIComponent(cia)}`
+                + `&payrolltype=${encodeURIComponent(payrolltype)}`
+                + `&processtype=${encodeURIComponent(processtype)}`;
+            const res = await fetch(url);
+            const data = await res.json();
+            return data && data.prperiod ? String(data.prperiod).trim() : '';
+        } catch (e) {
+            return '';
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value;
+        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboPlanilla.disabled = true;
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!cia) return;
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        cboPlanilla.disabled = false;
+        for (const opt of cboPlanilla.options) {
+            if (/empleado/i.test(opt.textContent)) {
+                cboPlanilla.value = opt.value;
+                break;
+            }
+        }
+        await cargarProcesos();
+    }
+
+    async function cargarProcesos() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!cia || !payroll) return;
+        await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+            cboProceso
+        );
+        cboProceso.disabled = false;
+        await cargarPeriodos();
+    }
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        const proceso = cboProceso.value;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!cia || !payroll || !proceso) return;
+        await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}`
+            + `&payrolltype=${encodeURIComponent(payroll)}`
+            + `&processtype=${encodeURIComponent(proceso)}`,
+            cboPeriodo
+        );
+        cboPeriodo.disabled = false;
+        const activo = await obtenerPeriodoActivo(cia, payroll, proceso);
+        if (activo) {
+            for (const opt of cboPeriodo.options) {
+                if (String(opt.value) === activo) {
+                    cboPeriodo.value = activo;
+                    break;
+                }
+            }
+        }
+    }
+
+    function setBusy(busy, msg) {
+        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo].forEach(el => {
+            if (el) el.disabled = !!busy;
+        });
+        if (busy) {
+            lblEstado.textContent = msg || 'Consultando…';
+            const label = btnConsultar.querySelector('.btn-consultar-label');
+            if (label) label.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando…';
+        } else {
+            lblEstado.textContent = '';
+            const label = btnConsultar.querySelector('.btn-consultar-label');
+            if (label) label.innerHTML = '<i class="bi bi-search"></i> Consultar';
+        }
+    }
+
+    const MESES = [
+        '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    function tituloPeriodo(period) {
+        const digits = String(period || '').replace(/\D/g, '');
+        if (digits.length >= 6) {
+            const anio = digits.slice(0, 4);
+            const mes = parseInt(digits.slice(4, 6), 10);
+            const nombreMes = MESES[mes] || digits.slice(4, 6);
+            return `${nombreMes} ${anio}`;
+        }
+        return String(period || '').trim() || '—';
+    }
+
+    function tituloCaso(s) {
+        const t = String(s || '').trim();
+        if (!t) return '';
+        return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+    }
+
+    function armarTitulo(meta) {
+        const planilla = tituloCaso(meta.payrolltypename);
+        const proceso = tituloCaso(meta.processname);
+        const periodo = tituloPeriodo(meta.period || meta.periodo_fmt);
+        return [planilla, proceso, periodo].filter(Boolean).join(' - ') || '—';
+    }
+
+    function pintarResultado(payload) {
+        const rows = payload.rows || [];
+        const meta = payload.meta || {};
+        const problemas = payload.problemas || [];
+        document.getElementById('lblTituloReporte').textContent = armarTitulo(meta);
+
+        const boxMotivo = document.getElementById('boxMotivo');
+        const diff = num(meta.diferencia);
+        const cuadra = Math.abs(diff) < 0.005;
+        boxMotivo.classList.remove('d-none', 'is-ok', 'is-error');
+        boxMotivo.classList.add(cuadra ? 'is-ok' : 'is-error');
+        if (cuadra) {
+            boxMotivo.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>${meta.motivo || 'Asiento cuadrado.'}`;
+        } else {
+            let html = `<div><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Motivo de la diferencia (${fmtNum(diff)})</strong></div>`;
+            if (problemas.length) {
+                html += '<ul class="motivo-lista">' + problemas.map(p => {
+                    const cta = [p.cuenta_debe ? `Debe ${p.cuenta_debe}` : '', p.cuenta_haber ? `Haber ${p.cuenta_haber}` : '']
+                        .filter(Boolean).join(', ');
+                    return `<li><strong>${p.conceptname || ''}</strong>: ${p.problema || ''}`
+                        + ` — monto ${fmtNum(p.monto)}`
+                        + (cta ? ` (${cta})` : '')
+                        + ` — impacto estimado ${fmtNum(p.impacto_estimado)}</li>`;
+                }).join('') + '</ul>';
+                html += '<div class="mt-1 small">Corrija las cuentas en <strong>Asientos → Configurar Conceptos</strong>.</div>';
+            } else {
+                html += `<div class="mt-1">${meta.motivo || 'No se identificó el concepto causante.'}</div>`;
+            }
+            boxMotivo.innerHTML = html;
+        }
+
+        const tbody = document.getElementById('tbodyReporte');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin registros</td></tr>';
+        } else {
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td>${r.account || ''}</td>
+                    <td>${r.accountname || ''}</td>
+                    <td>${r.conceptname || ''}</td>
+                    <td class="col-importe">${fmtNum(r.conceptvaluedebe)}</td>
+                    <td class="col-importe">${fmtNum(r.conceptvaluehaber)}</td>
+                </tr>
+            `).join('');
+        }
+
+        const tDebe = num(meta.total_debe);
+        const tHaber = num(meta.total_haber);
+        document.getElementById('lblTotalDebe').textContent = fmtNum(tDebe);
+        document.getElementById('lblTotalHaber').textContent = fmtNum(tHaber);
+        const lblDiff = document.getElementById('lblDiferencia');
+        lblDiff.textContent = fmtNum(diff);
+        lblDiff.className = cuadra ? 'text-end reporte-diferencia-ok' : 'text-end reporte-diferencia-bad';
+
+        lblRowCount.textContent = String(rows.length);
+        cardResultado.classList.remove('d-none');
+        btnExport.disabled = !rows.length;
+        lastExport = { rows, meta, problemas };
+    }
+
+    async function exportExcel() {
+        if (!lastExport || !lastExport.rows.length || typeof ExcelJS === 'undefined') return;
+        const { rows, meta } = lastExport;
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Asiento contable');
+        ws.addRow([armarTitulo(meta)]);
+        ws.addRow([]);
+        ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Debe', 'Haber']);
+        rows.forEach(r => {
+            ws.addRow([r.account, r.accountname, r.conceptname, num(r.conceptvaluedebe), num(r.conceptvaluehaber)]);
+        });
+        ws.addRow(['', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
+        ws.addRow(['', '', 'Diferencia', num(meta.diferencia), '']);
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `asiento_contable_${meta.period || 'reporte'}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    frm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        const body = {
+            cia: cboCia.value,
+            payrolltype: cboPlanilla.value,
+            processtype: cboProceso.value,
+            period: cboPeriodo.value,
+            currency: 'LO'
+        };
+        if (!body.cia || !body.payrolltype || !body.processtype || !body.period) {
+            if (window.HmUi) HmUi.advertencia('Complete compañía, planilla, proceso y periodo.');
+            else alert('Complete compañía, planilla, proceso y periodo.');
+            return;
+        }
+        setBusy(true);
+        cardResultado.classList.add('d-none');
+        btnExport.disabled = true;
+        try {
+            const res = await fetch('/api/asientos/reporte-contable', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al consultar reporte');
+            pintarResultado(data);
+        } catch (e) {
+            if (window.HmUi) HmUi.error(e.message || String(e));
+            else alert(e.message || e);
+        } finally {
+            setBusy(false);
+        }
+    });
+
+    btnExport.addEventListener('click', exportExcel);
+    cboCia.addEventListener('change', cargarPlanillas);
+    cboPlanilla.addEventListener('change', cargarProcesos);
+    cboProceso.addEventListener('change', cargarPeriodos);
+
+    (async function init() {
+        try {
+            await poblarSelect('/api/selectores/companias', cboCia);
+            seleccionarInsensitive(cboCia, DEFAULT_CIA);
+            if (cboCia.value) await cargarPlanillas();
+        } catch (e) {
+            if (window.HmUi) HmUi.error(e.message || String(e));
+            else alert(e.message || e);
+        }
+    })();
+})();
+</script>
+{% endblock %}

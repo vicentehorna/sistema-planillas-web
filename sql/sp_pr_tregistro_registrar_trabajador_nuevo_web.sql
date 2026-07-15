@@ -96,6 +96,8 @@ BEGIN
     DECLARE @is_unionized           CHAR(1);
     DECLARE @flag_mixta             CHAR(1);
     DECLARE @tiene_afp              CHAR(1);
+    DECLARE @afp_id                 VARCHAR(20);
+    DECLARE @pension_pdt            VARCHAR(20);
     DECLARE @es_construccion        CHAR(1);
     DECLARE @concept_rembasica      VARCHAR(20);
     DECLARE @concept_afp_flujo      VARCHAR(20);
@@ -457,6 +459,7 @@ BEGIN
          OR (@txt LIKE '%INTEGRA%' AND pt.pdt = '21')
          OR (@txt LIKE '%PROFUTURO%' AND pt.pdt = '23')
          OR (@txt LIKE '%PRIMA%' AND @txt NOT LIKE '%ONP%' AND @txt NOT LIKE '%19990%' AND pt.pdt = '24')
+         OR ((@txt LIKE '%HABITAT%' OR @txt LIKE '%HORIZONTE%') AND pt.pdt = '25')
       )
     ORDER BY
         CASE
@@ -572,6 +575,52 @@ BEGIN
            AND @txt NOT LIKE '%ONP%'
            AND @txt NOT LIKE '%19990%'
             SET @tiene_afp = 'Y';
+    END;
+
+    /*
+        Campo PR_Employee.AFP: se resuelve desde PR_AFP (mismo pdt del régimen).
+        ONP / sin AFP → NULL. No inventar AFP si el régimen no es SPP.
+    */
+    SET @afp_id = NULL;
+    SET @pension_pdt = NULL;
+    IF @tiene_afp = 'Y'
+    BEGIN
+        IF @pension_type_id IS NOT NULL
+            SELECT @pension_pdt = LTRIM(RTRIM(ISNULL(pt.pdt, '')))
+            FROM pr_pensiontype pt (NOLOCK)
+            WHERE pt.pensiontype = @pension_type_id;
+
+        IF @pension_pdt IN ('21', '23', '24', '25')
+        BEGIN
+            SELECT TOP 1 @afp_id = a.afp
+            FROM pr_afp a (NOLOCK)
+            WHERE a.company = @cia
+              AND LTRIM(RTRIM(ISNULL(a.pdt, ''))) = @pension_pdt
+            ORDER BY
+                CASE WHEN a.afp LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                a.afp;
+        END;
+
+        /* Respaldo por nombre si el pdt del régimen no matcheó (catálogo incompleto) */
+        IF @afp_id IS NULL
+        BEGIN
+            SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_pension, ''))));
+            SELECT TOP 1 @afp_id = a.afp
+            FROM pr_afp a (NOLOCK)
+            WHERE a.company = @cia
+              AND (
+                    (@txt LIKE '%INTEGRA%' AND (a.pdt = '21' OR UPPER(a.description) LIKE '%INTEGRA%'))
+                 OR (@txt LIKE '%PROFUTURO%' AND (a.pdt = '23' OR UPPER(a.description) LIKE '%PROFUTURO%'))
+                 OR (@txt LIKE '%PRIMA%' AND @txt NOT LIKE '%ONP%' AND (a.pdt = '24' OR UPPER(a.description) LIKE '%PRIMA%'))
+                 OR (
+                        (@txt LIKE '%HABITAT%' OR @txt LIKE '%HORIZONTE%')
+                    AND (a.pdt = '25' OR UPPER(a.description) LIKE '%HABITAT%' OR UPPER(a.description) LIKE '%HORIZONTE%')
+                    )
+              )
+            ORDER BY
+                CASE WHEN a.afp LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                a.afp;
+        END;
     END;
 
     /* --- Salud --- */
@@ -734,7 +783,7 @@ BEGIN
             otherincomerenttax, isunionized, affiliatedowneps, relievedrenttax,
             specialstatus, collectionform, workingdaystype, professionalcategory,
             pensionmembership, ocupation, regimehealth, accidentinsurance,
-            confirmcessation, rembasica, salary, afpcard, flagmixta
+            confirmcessation, rembasica, salary, afpcard, flagmixta, afp
         )
         VALUES (
             @person, @cia, @person, @employee_type_id, @employee_category_id,
@@ -748,7 +797,7 @@ BEGIN
             '0', @is_unionized, '0', '0',
             @special_status_id, @collection_form_id, 'S', @prof_category_id,
             '0', @ocupation_id, @regime_health_id, '0',
-            'N', @rembasica, @rembasica, NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), ''), @flag_mixta
+            'N', @rembasica, @rembasica, NULLIF(LTRIM(RTRIM(ISNULL(@cuspp, ''))), ''), @flag_mixta, @afp_id
         );
 
         /*

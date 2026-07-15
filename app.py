@@ -5608,6 +5608,18 @@ def asientos_interfaz_page():
     return render_template('asientos_interfaz.html')
 
 
+@app.route('/asientos/generar-voucher')
+@login_required
+def asientos_generar_voucher_page():
+    return render_template('asientos_generar_voucher.html')
+
+
+@app.route('/asientos/reporte-contable')
+@login_required
+def asientos_reporte_contable_page():
+    return render_template('asientos_reporte_contable.html')
+
+
 @app.route('/cargos')
 @login_required
 def cargos_page():
@@ -7235,6 +7247,276 @@ def api_asientos_interfaz_generar_archivo():
         return jsonify({"error": str(e)}), 400
     except Exception as e:
         logging.exception("api_asientos_interfaz_generar_archivo")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/generar-voucher/periodos', methods=['GET'])
+@login_required
+def api_asientos_generar_voucher_periodos():
+    """Periodos de planilla para Generar Voucher (text = YYYY-MM)."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    payrolltype = str(request.args.get('payrolltype') or request.args.get('payroll') or '').strip()
+    processtype = str(request.args.get('processtype') or request.args.get('proceso') or '').strip()
+    if not cia or not payrolltype or not processtype:
+        return jsonify({"error": "Indique compañía, planilla y proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorperiodos_generar_voucher_web "
+            "@cia=?, @payrolltype=?, @processtype=?",
+            (cia, payrolltype, processtype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = [
+            {
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+            }
+            for r in rows
+            if r.get('id') is not None
+        ]
+        return jsonify(items)
+    except Exception as e:
+        logging.exception("api_asientos_generar_voucher_periodos")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/generar-voucher', methods=['POST'])
+@login_required
+def api_asientos_generar_voucher():
+    """Genera voucher contable de planilla (modo General)."""
+    from datetime import datetime as _dt
+
+    from voucher_generate import generar_voucher_general
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    currency = str(body.get('currency') or 'LO').strip() or 'LO'
+    try:
+        exchangerate = float(body.get('exchangerate') or body.get('tc') or 1)
+    except (TypeError, ValueError):
+        exchangerate = 1.0
+    voucher_date_raw = str(body.get('voucher_date') or body.get('fecha') or '').strip()
+    save = bool(body.get('save', True))
+    confirm_reverse = bool(
+        body.get('confirm_reverse')
+        or body.get('confirm_extorno')
+        or body.get('confirm_anulacion')
+    )
+    replicationunit = str(body.get('replicationunit') or 'LIMA').strip() or 'LIMA'
+    user_id = _xlastuser_id() or 'web'
+
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Complete compañía, planilla, proceso y periodo."}), 400
+
+    voucher_date = None
+    if voucher_date_raw:
+        try:
+            voucher_date = _dt.strptime(voucher_date_raw[:10], '%Y-%m-%d')
+        except ValueError:
+            return jsonify({"error": "Fecha de generación inválida."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        result = generar_voucher_general(
+            cursor,
+            company=cia,
+            payrolltype=payrolltype,
+            processtype=processtype,
+            period_pr=period,
+            currency=currency,
+            exchangerate=exchangerate,
+            voucher_date=voucher_date,
+            replicationunit=replicationunit,
+            user_id=user_id,
+            confirm_reverse=confirm_reverse,
+            save=save,
+        )
+        if result.ok and save and not result.needs_confirm_reverse:
+            conn.commit()
+        else:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+
+        payload = {
+            'ok': result.ok,
+            'status': result.status,
+            'voucher': result.voucher,
+            'voucherno': result.voucherno,
+            'title': result.title,
+            'period_ac': result.period_ac,
+            'period_pr': result.period_pr,
+            'errors': result.errors,
+            'header': result.header,
+            'details': result.details,
+            'totals': result.totals,
+            'existing': result.existing,
+            'needs_confirm_reverse': result.needs_confirm_reverse,
+            'message': result.message,
+        }
+        status_code = 200
+        if result.needs_confirm_reverse:
+            status_code = 409
+        elif (not result.ok) and not result.header:
+            status_code = 400
+        return jsonify(payload), status_code
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_asientos_generar_voucher")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/reporte-contable', methods=['POST'])
+@login_required
+def api_asientos_reporte_contable():
+    """sp_pr_reporte_asiento_contable_web — verificación cuenta por concepto."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Complete compañía, planilla, proceso y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            "EXEC sp_pr_reporte_asiento_contable_web "
+            "@company=?, @payrolltype=?, @processtype=?, @period=?, @currency=?",
+            (cia, payrolltype, processtype, period, currency),
+        )
+
+        # Resultset 1: detalle asiento; Resultset 2: problemas de configuración
+        sets = []
+        while True:
+            if cursor.description:
+                cols = [str(c[0]).strip() for c in cursor.description]
+                sets.append((cols, cursor.fetchall()))
+            if not cursor.nextset():
+                break
+
+        detail_cols, detail_rows = sets[0] if sets else ([], [])
+        problem_cols, problem_rows = sets[1] if len(sets) > 1 else ([], [])
+
+        out_rows = []
+        total_debe = total_haber = 0.0
+        payrolltypename = processname = ''
+        for row in detail_rows:
+            rd = _row_dict_from_columns(detail_cols, row)
+            debe = _float_sp_cell(rd.get('conceptvaluedebe'))
+            haber = _float_sp_cell(rd.get('conceptvaluehaber'))
+            total_debe += debe
+            total_haber += haber
+            if not payrolltypename:
+                payrolltypename = str(rd.get('payrolltypename') or '').strip()
+            if not processname:
+                processname = str(rd.get('processname') or '').strip()
+            out_rows.append({
+                'account': str(rd.get('account') or '').strip(),
+                'accountname': str(rd.get('accountname') or '').strip(),
+                'conceptname': str(rd.get('conceptname') or '').strip(),
+                'conceptvaluedebe': debe,
+                'conceptvaluehaber': haber,
+            })
+
+        problemas = []
+        for row in problem_rows:
+            rd = _row_dict_from_columns(problem_cols, row)
+            problemas.append({
+                'concept': str(rd.get('concept') or '').strip(),
+                'conceptname': str(rd.get('conceptname') or '').strip(),
+                'tiposhort': str(rd.get('tiposhort') or '').strip(),
+                'tiponame': str(rd.get('tiponame') or '').strip(),
+                'monto': _float_sp_cell(rd.get('monto')),
+                'cuenta_debe': str(rd.get('cuenta_debe') or '').strip(),
+                'cuenta_haber': str(rd.get('cuenta_haber') or '').strip(),
+                'problema': str(rd.get('problema') or '').strip(),
+                'impacto_estimado': _float_sp_cell(rd.get('impacto_estimado')),
+            })
+
+        diferencia = round(abs(total_debe) - abs(total_haber), 2)
+        motivo = ''
+        if abs(diferencia) >= 0.005:
+            if problemas:
+                partes = []
+                for p in problemas[:5]:
+                    partes.append(
+                        f"{p['conceptname']}: {p['problema']} "
+                        f"(monto {p['monto']:,.2f}; impacto estimado {p['impacto_estimado']:,.2f})"
+                    )
+                motivo = (
+                    f"El asiento no cuadra (diferencia {diferencia:,.2f}). "
+                    "Revisar configuración de cuentas en Asientos → Configurar Conceptos. "
+                    + " | ".join(partes)
+                )
+            else:
+                motivo = (
+                    f"El asiento no cuadra (diferencia {diferencia:,.2f}). "
+                    "No se detectaron conceptos I/D/A sin cuenta o con lado incorrecto; "
+                    "revise otras causas (perfiles distintos por trabajador, auxiliares, etc.)."
+                )
+        else:
+            motivo = 'Asiento cuadrado: débitos y créditos coinciden.'
+
+        periodo_fmt = period
+        if len(period) == 8 and period.isdigit():
+            periodo_fmt = f"{period[:4]}-{period[4:6]}-{period[6:8]}"
+        elif len(period) == 6 and period.isdigit():
+            periodo_fmt = f"{period[:4]}-{period[4:6]}"
+
+        return jsonify({
+            'rows': out_rows,
+            'problemas': problemas,
+            'meta': {
+                'payrolltypename': payrolltypename,
+                'processname': processname,
+                'period': period,
+                'periodo_fmt': periodo_fmt,
+                'total_debe': round(total_debe, 2),
+                'total_haber': round(total_haber, 2),
+                'diferencia': diferencia,
+                'motivo': motivo,
+            },
+        })
+    except Exception as e:
+        logging.exception("api_asientos_reporte_contable")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
@@ -9545,13 +9827,14 @@ def reporte_control_pagos_afp_post():
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    payroll_all = not payroll_type or payroll_type.upper() in ('TODOS', 'TODAS', 'T', '0')
+    if payroll_all:
+        payroll_type = ''
     period_raw = str(body.get('period') or '').strip().replace('-', '').replace('/', '')
     period = period_raw[:6] if len(period_raw) >= 6 else period_raw
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
-    if not payroll_type:
-        return jsonify({"error": "Debe indicar tipo de planilla."}), 400
     if not period or len(period) != 6 or not period.isdigit():
         return jsonify({"error": "Debe indicar un periodo válido (YYYYMM)."}), 400
 
@@ -9596,6 +9879,7 @@ def reporte_control_pagos_afp_post():
             "meta": {
                 "period": period,
                 "period_label": f"{period[:4]}-{period[4:6]}",
+                "payroll_all": payroll_all,
             },
         })
     except Exception as e:

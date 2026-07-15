@@ -272,8 +272,17 @@ BEGIN
                 MAX(C.costcentername) AS costcentername,
                 MAX(C.payrolltype) AS payrolltype,
                 MAX(C.afpcard) AS afpcard,
-                MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.ceasedate END) AS ceasedate,
-                MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.entrydate END) AS entrydate,
+                /* Preferir FIN_DE_MES; si no hay, LIQUIDACION / SEMANAL (obreros). */
+                COALESCE(
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.ceasedate END),
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'LIQUIDACION' THEN C.ceasedate END),
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'SEMANAL' THEN C.ceasedate END)
+                ) AS ceasedate,
+                COALESCE(
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN C.entrydate END),
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'LIQUIDACION' THEN C.entrydate END),
+                    MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'SEMANAL' THEN C.entrydate END)
+                ) AS entrydate,
                 SUM(CASE
                     WHEN C.concept IN (
                         @AFPFixedAmountConcept, @AFPVariableAmountConcept,

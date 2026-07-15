@@ -51,11 +51,20 @@ BEGIN
       AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
       AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp);
 
+    /* Fechas: preferir FIN_DE_MES; si no hay, LIQUIDACION / SEMANAL. */
     INSERT INTO #PlanillaFechas (person, entrydate, ceasedate)
     SELECT
         LTRIM(RTRIM(EP.Person)),
-        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.EntryDate END),
-        MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.CeaseDate END)
+        COALESCE(
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.EntryDate END),
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'LIQUIDACION' THEN EP.EntryDate END),
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'SEMANAL' THEN EP.EntryDate END)
+        ),
+        COALESCE(
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES' THEN EP.CeaseDate END),
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'LIQUIDACION' THEN EP.CeaseDate END),
+            MAX(CASE WHEN LTRIM(RTRIM(PT.ShortName)) = 'SEMANAL' THEN EP.CeaseDate END)
+        )
     FROM PR_EmployeePayRoll EP (NOLOCK)
         INNER JOIN PR_ProcessType PT (NOLOCK)
             ON PT.ProcessType = EP.ProcessType
@@ -63,7 +72,7 @@ BEGIN
     WHERE EP.Company = @cia
       AND LEFT(EP.PRPeriod, 6) = @period
       AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
-      AND LTRIM(RTRIM(PT.ShortName)) = 'FIN_DE_MES'
+      AND LTRIM(RTRIM(PT.ShortName)) IN ('FIN_DE_MES', 'LIQUIDACION', 'SEMANAL')
       AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
       AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp)
     GROUP BY LTRIM(RTRIM(EP.Person));

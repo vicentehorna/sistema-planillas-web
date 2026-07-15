@@ -1,0 +1,563 @@
+{% extends "layout.html" %}
+
+{% block title %}Generar Voucher{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gv-section {
+        border: 1px solid #dee2e6;
+        border-radius: .5rem;
+        background: #fff;
+        overflow: hidden;
+        box-shadow: 0 .05rem .2rem rgba(0,0,0,.04);
+    }
+    .gv-section-head {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        padding: .55rem .9rem;
+        border-bottom: 1px solid #e9ecef;
+        font-size: .9rem;
+        font-weight: 600;
+        color: #212529;
+        flex-wrap: wrap;
+    }
+    .gv-section-head i { opacity: .85; }
+    .gv-section-params {
+        background: linear-gradient(180deg, #f4f8ff 0%, #eef4fc 100%);
+        border-color: #cfe2ff;
+    }
+    .gv-section-params .gv-section-head {
+        background: #e7f1ff;
+        border-bottom-color: #cfe2ff;
+        color: #0b5ed7;
+    }
+    .gv-section-result .gv-section-head {
+        background: #f8f9fa;
+    }
+    .gv-grilla { max-height: 220px; overflow: auto; }
+    .gv-grilla-detail { max-height: 340px; overflow: auto; }
+    .table-gv { font-size: 12px; margin-bottom: 0; white-space: nowrap; }
+    .table-gv th, .table-gv td { padding: .28rem .4rem; vertical-align: middle; }
+    .table-gv thead th {
+        position: sticky; top: 0; background: #eef2f6; z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6; font-weight: 600; color: #495057;
+    }
+    .table-gv .num { text-align: right; font-variant-numeric: tabular-nums; }
+    .gv-status-A { color: #198754; font-weight: 600; }
+    .gv-status-E { color: #dc3545; font-weight: 600; }
+    .gv-totales {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem 1.25rem;
+        padding: .55rem .9rem;
+        background: #f1f3f5;
+        border-top: 1px solid #dee2e6;
+        font-size: .8rem;
+        color: #495057;
+    }
+    .gv-totales strong {
+        color: #212529;
+        font-variant-numeric: tabular-nums;
+    }
+    .gv-totales .gv-diff-ok { color: #198754; }
+    .gv-totales .gv-diff-bad { color: #dc3545; }
+    .gv-errores {
+        min-height: 64px;
+        border-radius: 0 0 .5rem .5rem;
+        padding: .75rem .9rem;
+        white-space: pre-wrap;
+        font-size: 13px;
+        border-top: 1px solid #e9ecef;
+    }
+    .gv-errores.is-empty {
+        background: #f8f9fa;
+        color: #6c757d;
+    }
+    .gv-errores.is-ok {
+        background: #d1e7dd;
+        color: #0f5132;
+        border-top-color: #badbcc;
+    }
+    .gv-errores.is-error {
+        background: #f8d7da;
+        color: #842029;
+        border-top-color: #f5c2c7;
+    }
+    .gv-hint {
+        font-size: .78rem;
+        font-weight: 400;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="gv-section gv-section-params mb-3">
+    <div class="gv-section-head">
+        <i class="bi bi-sliders"></i>
+        <span>Parámetros de generación</span>
+        <span class="gv-hint ms-1">Complete los filtros y pulse Generar</span>
+    </div>
+    <div class="py-3 px-3">
+        <form id="frmGenerarVoucher">
+            <div class="row g-2 align-items-end">
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                    <select id="cboCompania" class="form-select form-select-sm" required>
+                        <option value="">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="cboPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo de Planilla</label>
+                    <select id="cboPlanilla" class="form-select form-select-sm" required>
+                        <option value="">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2 col-lg-1">
+                    <label for="txtCCosto" class="form-label small fw-bold text-muted mb-1">C. Costo</label>
+                    <input id="txtCCosto" type="text" class="form-control form-control-sm" maxlength="20" placeholder="">
+                </div>
+                <div class="col-12 col-md-4 col-lg-3">
+                    <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                    <select id="cboProceso" class="form-select form-select-sm" required>
+                        <option value="">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label class="form-label small fw-bold text-muted mb-1">Tipo de cálculo</label>
+                    <input type="text" class="form-control form-control-sm bg-white" value="General" readonly>
+                </div>
+            </div>
+            <div class="row g-2 align-items-end mt-1">
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                    <select id="cboPeriodo" class="form-select form-select-sm" required>
+                        <option value="">Seleccione...</option>
+                    </select>
+                </div>
+                <div class="col-6 col-md-2 col-lg-1">
+                    <label class="form-label small fw-bold text-muted mb-1">Moneda</label>
+                    <input type="text" class="form-control form-control-sm bg-white" value="Local" readonly>
+                </div>
+                <div class="col-6 col-md-2 col-lg-1">
+                    <label for="txtTC" class="form-label small fw-bold text-muted mb-1">T.C.</label>
+                    <input id="txtTC" type="number" step="0.001" min="0.001" class="form-control form-control-sm" value="1.000">
+                </div>
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label for="txtFecha" class="form-label small fw-bold text-muted mb-1">F. Generación</label>
+                    <input id="txtFecha" type="date" class="form-control form-control-sm" required>
+                </div>
+                <div class="col-auto ms-auto d-flex gap-2">
+                    <button type="submit" id="btnGenerar" class="btn btn-primary btn-sm px-4">
+                        <i class="bi bi-play-circle"></i> Generar
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="gv-section gv-section-result mb-3">
+    <div class="gv-section-head">
+        <i class="bi bi-table text-secondary"></i>
+        <span>Resultado del voucher</span>
+        <span class="gv-hint ms-1">Cabecera, líneas contables y cuadre</span>
+    </div>
+
+    <div class="px-3 pt-3 pb-1">
+        <div class="small fw-semibold text-muted mb-1">Cabecera</div>
+        <div class="border rounded gv-grilla bg-white">
+            <table class="table table-bordered table-sm table-gv">
+                <thead>
+                    <tr>
+                        <th>No</th>
+                        <th>Título</th>
+                        <th>Moneda</th>
+                        <th>Estado</th>
+                        <th>Voucher</th>
+                    </tr>
+                </thead>
+                <tbody id="tbHeader">
+                    <tr><td colspan="5" class="text-center text-muted py-3">Sin resultados</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="px-3 pt-3">
+        <div class="small fw-semibold text-muted mb-1">Detalle del voucher</div>
+        <div class="border rounded gv-grilla-detail bg-white">
+            <table class="table table-bordered table-sm table-gv">
+                <thead>
+                    <tr>
+                        <th>Cuenta</th>
+                        <th>Moneda</th>
+                        <th>Comentario</th>
+                        <th>Documento</th>
+                        <th class="text-end">Importe Local</th>
+                        <th class="text-end">Extranjero</th>
+                        <th>C.Cos</th>
+                    </tr>
+                </thead>
+                <tbody id="tbDetail">
+                    <tr><td colspan="7" class="text-center text-muted py-3">Sin resultados</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="gv-totales mt-3">
+        <span>Líneas: <strong id="lblLineas">0</strong></span>
+        <span>Total Créditos: <strong id="lblCreditos">0.00</strong></span>
+        <span>Débitos: <strong id="lblDebitos">0.00</strong></span>
+        <span>Diferencia: <strong id="lblDiff" class="gv-diff-ok">0.00</strong></span>
+    </div>
+</div>
+
+<div class="gv-section mb-3">
+    <div class="gv-section-head">
+        <i class="bi bi-exclamation-octagon text-secondary" id="icoErrores"></i>
+        <span>Detalle errores</span>
+    </div>
+    <div id="boxErrores" class="gv-errores is-empty">Sin errores.</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const DEFAULT_CIA = 'BGT';
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const txtTC = document.getElementById('txtTC');
+    const txtFecha = document.getElementById('txtFecha');
+    const frm = document.getElementById('frmGenerarVoucher');
+    const boxErrores = document.getElementById('boxErrores');
+    const icoErrores = document.getElementById('icoErrores');
+
+    function hoyISO() {
+        const d = new Date();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${d.getFullYear()}-${m}-${day}`;
+    }
+    txtFecha.value = hoyISO();
+
+    function seleccionarInsensitive(sel, value) {
+        if (!value) return;
+        const v = String(value).toUpperCase();
+        for (const opt of sel.options) {
+            if (String(opt.value).toUpperCase() === v) {
+                sel.value = opt.value;
+                return;
+            }
+        }
+    }
+
+    async function poblarSelect(url, sel, placeholder) {
+        sel.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al cargar selector');
+        (data || []).forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.text || item.id;
+            sel.appendChild(opt);
+        });
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value;
+        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia) return;
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        for (const opt of cboPlanilla.options) {
+            if (/empleado/i.test(opt.textContent)) {
+                cboPlanilla.value = opt.value;
+                break;
+            }
+        }
+        await cargarProcesos();
+    }
+
+    async function cargarProcesos() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia || !payroll) return;
+        await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+            cboProceso
+        );
+        await cargarPeriodos();
+    }
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        const proceso = cboProceso.value;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia || !payroll || !proceso) return;
+        await poblarSelect(
+            `/api/asientos/generar-voucher/periodos?cia=${encodeURIComponent(cia)}`
+            + `&payrolltype=${encodeURIComponent(payroll)}`
+            + `&processtype=${encodeURIComponent(proceso)}`,
+            cboPeriodo
+        );
+    }
+
+    function fmtNum(n) {
+        const x = Number(n || 0);
+        return x.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function estadoLabel(st) {
+        if (st === 'A') return '<span class="gv-status-A">Aprobado</span>';
+        if (st === 'E') return '<span class="gv-status-E">Errado</span>';
+        return st || '';
+    }
+
+    function setErroresBox(mode, text) {
+        boxErrores.classList.remove('is-empty', 'is-ok', 'is-error');
+        boxErrores.classList.add(mode);
+        boxErrores.textContent = text;
+        if (icoErrores) {
+            icoErrores.className = mode === 'is-error'
+                ? 'bi bi-exclamation-octagon-fill text-danger'
+                : mode === 'is-ok'
+                    ? 'bi bi-check-circle-fill text-success'
+                    : 'bi bi-exclamation-octagon text-secondary';
+        }
+    }
+
+    function limpiarResultado(opts) {
+        const options = opts || {};
+        const msg = options.mensaje || 'Sin resultados';
+        document.getElementById('tbHeader').innerHTML =
+            `<tr><td colspan="5" class="text-center text-muted py-3">${msg}</td></tr>`;
+        document.getElementById('tbDetail').innerHTML =
+            `<tr><td colspan="7" class="text-center text-muted py-3">${msg}</td></tr>`;
+        document.getElementById('lblLineas').textContent = '0';
+        document.getElementById('lblCreditos').textContent = '0.00';
+        document.getElementById('lblDebitos').textContent = '0.00';
+        const lblDiff = document.getElementById('lblDiff');
+        lblDiff.textContent = '0.00';
+        lblDiff.classList.add('gv-diff-ok');
+        lblDiff.classList.remove('gv-diff-bad');
+        setErroresBox(options.errorMode || 'is-empty', options.errorText || 'Sin errores.');
+    }
+
+    function setBusy(busy, texto) {
+        const btnGen = document.getElementById('btnGenerar');
+        [btnGen, cboCia, cboPlanilla, cboProceso, cboPeriodo, txtTC, txtFecha].forEach((el) => {
+            if (el) el.disabled = !!busy;
+        });
+        const cc = document.getElementById('txtCCosto');
+        if (cc) cc.disabled = !!busy;
+        if (busy) {
+            const label = texto || 'Generando voucher…';
+            const spinner = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${label}`;
+            document.getElementById('tbHeader').innerHTML =
+                `<tr><td colspan="5" class="text-center text-primary py-3">${spinner}</td></tr>`;
+            document.getElementById('tbDetail').innerHTML =
+                `<tr><td colspan="7" class="text-center text-primary py-3">${spinner}</td></tr>`;
+            document.getElementById('lblLineas').textContent = '0';
+            document.getElementById('lblCreditos').textContent = '0.00';
+            document.getElementById('lblDebitos').textContent = '0.00';
+            const lblDiff = document.getElementById('lblDiff');
+            lblDiff.textContent = '0.00';
+            lblDiff.classList.add('gv-diff-ok');
+            lblDiff.classList.remove('gv-diff-bad');
+            setErroresBox('is-empty', label + ' Espere un momento.');
+            if (btnGen) {
+                btnGen.dataset._html = btnGen.innerHTML;
+                btnGen.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando…';
+            }
+        } else {
+            if (btnGen && btnGen.dataset._html) btnGen.innerHTML = btnGen.dataset._html;
+        }
+    }
+
+    function pintarResultado(data) {
+        const header = data.header || {};
+        const details = data.details || [];
+        const totals = data.totals || {};
+        const errors = data.errors || [];
+        const diff = Number(totals.diff_lo || 0);
+
+        document.getElementById('tbHeader').innerHTML = `
+            <tr>
+                <td>1</td>
+                <td>${header.title || data.title || ''}</td>
+                <td>${(header.currency || 'LO') === 'LO' ? 'Local' : header.currency}</td>
+                <td>${estadoLabel(header.status || data.status)}</td>
+                <td>${header.voucherno || data.voucherno || ''}</td>
+            </tr>`;
+
+        if (!details.length) {
+            document.getElementById('tbDetail').innerHTML =
+                '<tr><td colspan="7" class="text-center text-muted py-3">Sin detalle</td></tr>';
+        } else {
+            document.getElementById('tbDetail').innerHTML = details.map(d => `
+                <tr>
+                    <td>${d.accountcode || ''}</td>
+                    <td>${(d.accurrency || 'LO') === 'LO' ? 'Local' : d.accurrency}</td>
+                    <td>${d.comments || ''}</td>
+                    <td>${d.docno || ''}</td>
+                    <td class="num">${fmtNum(d.amountlo)}</td>
+                    <td class="num">${fmtNum(d.amountex)}</td>
+                    <td>${d.costcentercode || ''}</td>
+                </tr>
+            `).join('');
+        }
+
+        document.getElementById('lblLineas').textContent = totals.lines || details.length || 0;
+        document.getElementById('lblCreditos').textContent = fmtNum(totals.totalcreditlo);
+        document.getElementById('lblDebitos').textContent = fmtNum(totals.totaldebitlo);
+        const lblDiff = document.getElementById('lblDiff');
+        lblDiff.textContent = fmtNum(diff);
+        lblDiff.classList.toggle('gv-diff-ok', Math.abs(diff) < 0.005);
+        lblDiff.classList.toggle('gv-diff-bad', Math.abs(diff) >= 0.005);
+
+        if (errors.length) {
+            setErroresBox(
+                'is-error',
+                'Detalle del voucher:\n' + errors.map(e => '- ' + e).join('\n')
+            );
+        } else if (data.ok) {
+            setErroresBox('is-ok', data.message || 'Voucher cuadrado correctamente.');
+        } else if (data.message) {
+            setErroresBox('is-error', data.message);
+        } else {
+            setErroresBox('is-empty', 'Sin errores.');
+        }
+    }
+
+    function payloadBase() {
+        return {
+            cia: cboCia.value,
+            payrolltype: cboPlanilla.value,
+            processtype: cboProceso.value,
+            period: cboPeriodo.value,
+            currency: 'LO',
+            exchangerate: Number(txtTC.value || 1),
+            voucher_date: txtFecha.value,
+            costcenter: document.getElementById('txtCCosto').value || ''
+        };
+    }
+
+    async function ejecutar(save, confirmReverse) {
+        const body = Object.assign(payloadBase(), {
+            save: !!save,
+            confirm_reverse: !!confirmReverse
+        });
+        if (!body.cia || !body.payrolltype || !body.processtype || !body.period) {
+            if (window.HmUi) HmUi.advertencia('Complete compañía, planilla, proceso y periodo.');
+            else alert('Complete compañía, planilla, proceso y periodo.');
+            return;
+        }
+
+        // Limpiar resultado anterior de inmediato para que el usuario vea el nuevo proceso
+        limpiarResultado({
+            mensaje: 'Generando voucher…',
+            errorMode: 'is-empty',
+            errorText: 'Preparando generación…',
+        });
+        setBusy(true, 'Generando voucher…');
+
+        try {
+            const res = await fetch('/api/asientos/generar-voucher', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await res.json();
+
+            if (data.needs_confirm_reverse) {
+                setBusy(false);
+                limpiarResultado({
+                    mensaje: 'Pendiente de confirmación',
+                    errorMode: 'is-empty',
+                    errorText: data.message || 'Confirme si desea anular el voucher existente.',
+                });
+                const ok = window.HmUi
+                    ? await HmUi.confirmar({
+                        titulo: 'Voucher existente',
+                        mensaje: data.message
+                            || 'Ya existe un voucher para este proceso. ¿Desea anularlo/extornarlo y generar uno nuevo?',
+                        textoOk: 'Anular y generar',
+                        textoCancelar: 'Cancelar',
+                        variant: 'warning',
+                    })
+                    : window.confirm(data.message || '¿Anular/extornar el voucher existente y generar uno nuevo?');
+                if (ok) {
+                    await ejecutar(save, true);
+                } else {
+                    limpiarResultado({
+                        mensaje: 'Operación cancelada',
+                        errorMode: 'is-empty',
+                        errorText: 'No se regeneró el voucher.',
+                    });
+                }
+                return;
+            }
+
+            setBusy(false);
+            if (!res.ok && !data.header) {
+                const msg = data.error || data.message || 'Error al generar voucher';
+                limpiarResultado({
+                    mensaje: 'Sin resultados',
+                    errorMode: 'is-error',
+                    errorText: msg,
+                });
+                if (window.HmUi) HmUi.error(msg);
+                else alert(msg);
+                return;
+            }
+            pintarResultado(data);
+        } catch (e) {
+            setBusy(false);
+            const msg = e.message || String(e);
+            limpiarResultado({
+                mensaje: 'Sin resultados',
+                errorMode: 'is-error',
+                errorText: msg,
+            });
+            if (window.HmUi) HmUi.error(msg);
+            else alert(msg);
+        }
+    }
+
+    function onFiltroChangeClear() {
+        limpiarResultado();
+    }
+
+    cboCia.addEventListener('change', () => { onFiltroChangeClear(); cargarPlanillas(); });
+    cboPlanilla.addEventListener('change', () => { onFiltroChangeClear(); cargarProcesos(); });
+    cboProceso.addEventListener('change', () => { onFiltroChangeClear(); cargarPeriodos(); });
+    cboPeriodo.addEventListener('change', onFiltroChangeClear);
+    frm.addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        ejecutar(true, false);
+    });
+
+    (async function init() {
+        try {
+            await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
+            seleccionarInsensitive(cboCia, DEFAULT_CIA);
+            if (cboCia.value) await cargarPlanillas();
+        } catch (e) {
+            if (window.HmUi) HmUi.error(e.message || String(e));
+            else alert(e.message || e);
+        }
+    })();
+})();
+</script>
+{% endblock %}

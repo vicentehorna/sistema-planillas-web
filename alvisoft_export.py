@@ -38,9 +38,9 @@ def _title_flags(title: str) -> Dict[str, bool]:
 
 
 def _tipo_override(flags: Dict[str, bool]) -> Optional[str]:
-    if not (flags['provgrati'] or flags['vacas'] or flags['pcts']):
-        return None
-    return 'PV' if flags['pcts'] else 'LP'
+    # No forzar PV/LP: los SP PARTE* ya emiten PLL y coinciden con el TXT del sistema antiguo
+    # (liqui/provisiones). El override a PV en PROVISION CTS rompía la igualdad vs legado.
+    return None
 
 
 def _row_dict(cols: Sequence[str], row: Sequence[Any]) -> Dict[str, Any]:

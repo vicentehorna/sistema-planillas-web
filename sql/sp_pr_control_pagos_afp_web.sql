@@ -6,7 +6,7 @@
 
     Parámetros:
       @company    — código de compañía
-      @payrolltype — tipo de planilla (obligatorio)
+      @payrolltype — tipo de planilla; vacío / NULL / TODOS = todas
       @period     — periodo YYYYMM (6 dígitos)
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_control_pagos_afp_web]
@@ -21,8 +21,15 @@ BEGIN
     SET @payrolltype = LTRIM(RTRIM(ISNULL(@payrolltype, '')));
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
 
+    IF UPPER(@payrolltype) IN ('TODOS', 'TODAS', 'T', '0')
+        SET @payrolltype = '';
+
+    /*
+        Cuando se consultan todas las planillas, la descripción queda vacía y
+        el GROUP BY consolida EMPLEADOS + CONSTRUCCIÓN (u otras) por AFP.
+    */
     SELECT
-        P.description AS tipoplanilla,
+        CASE WHEN @payrolltype = '' THEN '' ELSE MAX(P.description) END AS tipoplanilla,
         A.description AS afpname,
         COUNT(*) AS cantidad,
         SUM(ROUND(F.fixedamountlo, 2)) AS fixedamountlo,
@@ -46,13 +53,13 @@ BEGIN
         INNER JOIN PR_PayRollType P (NOLOCK)
             ON E.payrolltype = P.payrolltype
     WHERE H.company = @company
-      AND H.payrolltype = @payrolltype
+      AND (@payrolltype = '' OR H.payrolltype = @payrolltype)
       AND LEFT(H.prperiod, 6) = @period
     GROUP BY
-        P.description,
+        CASE WHEN @payrolltype = '' THEN '' ELSE P.description END,
         A.description
     ORDER BY
-        P.description,
+        CASE WHEN @payrolltype = '' THEN '' ELSE P.description END,
         A.description;
 END
 GO

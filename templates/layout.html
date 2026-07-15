@@ -834,7 +834,7 @@
                     </ul>
                 </li>
 
-                {% set asientos_active = request.endpoint in ('asientos_configurar_conceptos_page', 'asientos_interfaz_page') %}
+                {% set asientos_active = request.endpoint in ('asientos_configurar_conceptos_page', 'asientos_interfaz_page', 'asientos_generar_voucher_page', 'asientos_reporte_contable_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if asientos_active else '' }}">
                     <a href="#submenuAsientos"
                        class="sidebar-parent-link"
@@ -849,6 +849,16 @@
                         <li class="{{ 'active' if request.endpoint == 'asientos_configurar_conceptos_page' else '' }}">
                             <a href="{{ url_for('asientos_configurar_conceptos_page') }}" title="Configurar Conceptos">
                                 <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Configurar Conceptos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'asientos_reporte_contable_page' else '' }}">
+                            <a href="{{ url_for('asientos_reporte_contable_page') }}" title="Reporte Asiento Contable">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte Asiento Contable</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'asientos_generar_voucher_page' else '' }}">
+                            <a href="{{ url_for('asientos_generar_voucher_page') }}" title="Generar Voucher">
+                                <i class="bi bi-journal-plus"></i><span class="sidebar-link-text">Generar Voucher</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'asientos_interfaz_page' else '' }}">

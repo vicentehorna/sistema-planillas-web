@@ -36,7 +36,7 @@ BEGIN
         SELECT
             epc.Person,
             c.FormulaCode,
-            MIN(epc.periodbegin) AS periodbegin
+            MIN(epc.PeriodBegin) AS periodbegin
         FROM PR_EmployeePayRollConcept epc
         INNER JOIN PR_Concept c
             ON c.Company = epc.Company

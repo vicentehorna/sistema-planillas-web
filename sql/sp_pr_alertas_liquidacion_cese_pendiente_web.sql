@@ -7,6 +7,8 @@
       - Están activos en ficha (PR_Employee.Status = 'N').
       - Tienen fecha de cese en ficha (PR_Employee.CeaseDate).
       - Han pasado >= @dias_limite días desde el cese (default 2 = 48 horas).
+      - La diferencia entre ISNULL(ReEntryDate, EntryDate) y CeaseDate es > 30 días
+        (si el vínculo laboral del ciclo actual no supera 30 días, no corresponde liquidar).
       - Aún no tienen cálculo del proceso LIQUIDACION correspondiente a ese cese,
         identificado por PR_EmployeePayRoll.CeaseDate = PR_Employee.CeaseDate
         con concepto FormulaCode = LIQ_NETO en PR_EmployeePayRollConcept.
@@ -68,8 +70,15 @@ BEGIN
             sp.DocumentNumber AS documento,
             pt.ShortName AS tipoplanilla,
             pt.Description AS tipoplanilla_desc,
+            CONVERT(DATE, e.EntryDate) AS fecha_ingreso_original,
+            CONVERT(DATE, e.ReEntryDate) AS fecha_reingreso,
             CONVERT(DATE, ISNULL(e.ReEntryDate, e.EntryDate)) AS fecha_ingreso,
             CONVERT(DATE, e.CeaseDate) AS fecha_cese,
+            DATEDIFF(
+                DAY,
+                CONVERT(DATE, ISNULL(e.ReEntryDate, e.EntryDate)),
+                CONVERT(DATE, e.CeaseDate)
+            ) AS dias_entre_ingreso_cese,
             e.CeaseReason AS ceasereason_id,
             ISNULL(cr.Description, '') AS motivo_cese,
             e.Status AS status_empleado,
@@ -86,8 +95,15 @@ BEGIN
         WHERE e.Company = @company
           AND e.Status = 'N'
           AND e.CeaseDate IS NOT NULL
+          AND ISNULL(e.ReEntryDate, e.EntryDate) IS NOT NULL
           AND CONVERT(DATE, e.CeaseDate) <= @fecha_corte
           AND DATEDIFF(DAY, CONVERT(DATE, e.CeaseDate), @fecha_corte) >= @dias_limite
+          /* Solo alerta si el ciclo laboral (reingreso/ingreso → cese) supera 30 días. */
+          AND DATEDIFF(
+                DAY,
+                CONVERT(DATE, ISNULL(e.ReEntryDate, e.EntryDate)),
+                CONVERT(DATE, e.CeaseDate)
+              ) > 30
           AND (@payrolltype = '0' OR e.PayRollType = @payrolltype)
     )
     SELECT
@@ -99,8 +115,11 @@ BEGIN
         c.payrolltype,
         c.tipoplanilla,
         c.tipoplanilla_desc,
+        c.fecha_ingreso_original,
+        c.fecha_reingreso,
         c.fecha_ingreso,
         c.fecha_cese,
+        c.dias_entre_ingreso_cese,
         c.motivo_cese,
         c.status_empleado,
         c.periodo_cese_yyyymm,

@@ -192,10 +192,15 @@ BEGIN
     SET @birthdate_dt = NULL;
     IF NULLIF(LTRIM(RTRIM(ISNULL(@fecha_nac, ''))), '') IS NOT NULL
     BEGIN
-        IF CHARINDEX('/', @fecha_nac) > 0
-            SET @birthdate_dt = TRY_CONVERT(DATETIME, @fecha_nac, 103);
-        ELSE IF ISDATE(@fecha_nac) = 1
-            SET @birthdate_dt = CONVERT(DATETIME, @fecha_nac, 120);
+        BEGIN TRY
+            IF CHARINDEX('/', @fecha_nac) > 0
+                SET @birthdate_dt = CONVERT(DATETIME, @fecha_nac, 103);
+            ELSE IF ISDATE(@fecha_nac) = 1
+                SET @birthdate_dt = CONVERT(DATETIME, @fecha_nac, 120);
+        END TRY
+        BEGIN CATCH
+            SET @birthdate_dt = NULL;
+        END CATCH;
 
         IF @birthdate_dt IS NULL
         BEGIN
@@ -207,10 +212,15 @@ BEGIN
     SET @entrydate_dt = NULL;
     IF NULLIF(LTRIM(RTRIM(ISNULL(@fecha_ingreso, ''))), '') IS NOT NULL
     BEGIN
-        IF CHARINDEX('/', @fecha_ingreso) > 0
-            SET @entrydate_dt = TRY_CONVERT(DATETIME, @fecha_ingreso, 103);
-        ELSE IF ISDATE(@fecha_ingreso) = 1
-            SET @entrydate_dt = CONVERT(DATETIME, @fecha_ingreso, 120);
+        BEGIN TRY
+            IF CHARINDEX('/', @fecha_ingreso) > 0
+                SET @entrydate_dt = CONVERT(DATETIME, @fecha_ingreso, 103);
+            ELSE IF ISDATE(@fecha_ingreso) = 1
+                SET @entrydate_dt = CONVERT(DATETIME, @fecha_ingreso, 120);
+        END TRY
+        BEGIN CATCH
+            SET @entrydate_dt = NULL;
+        END CATCH;
 
         IF @entrydate_dt IS NULL
         BEGIN
@@ -222,10 +232,15 @@ BEGIN
     SET @pensiondate_dt = NULL;
     IF NULLIF(LTRIM(RTRIM(ISNULL(@regimen_pension_fec, ''))), '') IS NOT NULL
     BEGIN
-        IF CHARINDEX('/', @regimen_pension_fec) > 0
-            SET @pensiondate_dt = TRY_CONVERT(DATETIME, @regimen_pension_fec, 103);
-        ELSE IF ISDATE(@regimen_pension_fec) = 1
-            SET @pensiondate_dt = CONVERT(DATETIME, @regimen_pension_fec, 120);
+        BEGIN TRY
+            IF CHARINDEX('/', @regimen_pension_fec) > 0
+                SET @pensiondate_dt = CONVERT(DATETIME, @regimen_pension_fec, 103);
+            ELSE IF ISDATE(@regimen_pension_fec) = 1
+                SET @pensiondate_dt = CONVERT(DATETIME, @regimen_pension_fec, 120);
+        END TRY
+        BEGIN CATCH
+            SET @pensiondate_dt = NULL;
+        END CATCH;
     END;
     IF @pensiondate_dt IS NULL
         SET @pensiondate_dt = @entrydate_dt;
@@ -233,15 +248,21 @@ BEGIN
     SET @healthdate_dt = NULL;
     IF NULLIF(LTRIM(RTRIM(ISNULL(@regimen_salud_fec, ''))), '') IS NOT NULL
     BEGIN
-        IF CHARINDEX('/', @regimen_salud_fec) > 0
-            SET @healthdate_dt = TRY_CONVERT(DATETIME, @regimen_salud_fec, 103);
-        ELSE IF ISDATE(@regimen_salud_fec) = 1
-            SET @healthdate_dt = CONVERT(DATETIME, @regimen_salud_fec, 120);
+        BEGIN TRY
+            IF CHARINDEX('/', @regimen_salud_fec) > 0
+                SET @healthdate_dt = CONVERT(DATETIME, @regimen_salud_fec, 103);
+            ELSE IF ISDATE(@regimen_salud_fec) = 1
+                SET @healthdate_dt = CONVERT(DATETIME, @regimen_salud_fec, 120);
+        END TRY
+        BEGIN CATCH
+            SET @healthdate_dt = NULL;
+        END CATCH;
     END;
 
     SET @rembasica = NULL;
     IF NULLIF(LTRIM(RTRIM(ISNULL(@remun_bas, ''))), '') IS NOT NULL
-        SET @rembasica = TRY_CONVERT(NUMERIC(18, 4), REPLACE(@remun_bas, ',', ''));
+       AND ISNUMERIC(REPLACE(@remun_bas, ',', '')) = 1
+        SET @rembasica = CONVERT(NUMERIC(18, 4), REPLACE(@remun_bas, ',', ''));
 
     SET @is_unionized = CASE
         WHEN UPPER(LTRIM(RTRIM(ISNULL(@sindicalizado, '')))) IN ('SI', 'S', '1', 'X') THEN '1'

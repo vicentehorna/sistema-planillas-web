@@ -5,7 +5,8 @@
     Tablas: PR_ImportConcept, PR_ImportConceptDetail
     Usado por: sp_pr_guardarimportconcept_web, POST /api/plantillas-importacion/guardar
 */
-IF EXISTS (
+IF OBJECT_ID(N'dbo.PR_ImportConcept', N'U') IS NOT NULL
+   AND EXISTS (
     SELECT 1
     FROM sys.columns c
         INNER JOIN sys.tables t ON t.object_id = c.object_id
@@ -16,12 +17,12 @@ IF EXISTS (
       AND c.max_length <> 20
 )
 BEGIN
-    ALTER TABLE dbo.PR_ImportConcept
-        ALTER COLUMN XlastUser VARCHAR(20) NULL;
+    EXEC('ALTER TABLE dbo.PR_ImportConcept ALTER COLUMN XlastUser VARCHAR(20) NULL');
 END
 GO
 
-IF EXISTS (
+IF OBJECT_ID(N'dbo.PR_ImportConceptDetail', N'U') IS NOT NULL
+   AND EXISTS (
     SELECT 1
     FROM sys.columns c
         INNER JOIN sys.tables t ON t.object_id = c.object_id
@@ -32,7 +33,6 @@ IF EXISTS (
       AND c.max_length <> 20
 )
 BEGIN
-    ALTER TABLE dbo.PR_ImportConceptDetail
-        ALTER COLUMN XlastUser VARCHAR(20) NULL;
+    EXEC('ALTER TABLE dbo.PR_ImportConceptDetail ALTER COLUMN XlastUser VARCHAR(20) NULL');
 END
 GO

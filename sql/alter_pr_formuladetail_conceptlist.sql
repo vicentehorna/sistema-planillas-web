@@ -3,14 +3,9 @@
     Valores separados por |, ej: BGT 000000000130|BGT 000000000069
     Si es NULL, se usa el campo Concept (compatibilidad hacia atrás).
 */
-IF NOT EXISTS (
-    SELECT 1
-    FROM sys.columns
-    WHERE object_id = OBJECT_ID(N'dbo.PR_FormulaDetail')
-      AND name = 'ConceptList'
-)
+IF OBJECT_ID(N'dbo.PR_FormulaDetail', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PR_FormulaDetail', 'ConceptList') IS NULL
 BEGIN
-    ALTER TABLE dbo.PR_FormulaDetail
-        ADD ConceptList VARCHAR(500) NULL;
+    EXEC('ALTER TABLE dbo.PR_FormulaDetail ADD ConceptList VARCHAR(500) NULL');
 END
 GO

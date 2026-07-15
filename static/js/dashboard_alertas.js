@@ -97,7 +97,7 @@
         const tbody = el('tbodyDetalleLiquidacion');
         if (!tbody) return;
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin registros</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin registros</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map((r) => `
@@ -105,6 +105,7 @@
                 <td>${escHtml(r.empresa)}</td>
                 <td>${escHtml(r.documento)}</td>
                 <td>${escHtml(r.nombre)}</td>
+                <td>${escHtml(r.fecha_ingreso)}</td>
                 <td>${escHtml(r.fecha_cese)}</td>
                 <td class="text-end">${escHtml(r.dias_desde_cese)}</td>
                 <td>${escHtml(r.motivo_cese)}</td>

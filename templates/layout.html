@@ -712,7 +712,7 @@
                     </ul>
                 </li>
 
-                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
                        class="sidebar-parent-link"
@@ -742,6 +742,11 @@
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo26_page' else '' }}">
                             <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.toc)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.toc)</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivos_7_20_page' else '' }}">
+                            <a href="{{ url_for('plame_archivos_7_20_page') }}" title="Archivos 7,20 (.ps4 / .4ta)">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivos 7,20</span>
                             </a>
                         </li>
                         <li class="{{ 'active' if request.endpoint == 'plame_tregistro_page' else '' }}">

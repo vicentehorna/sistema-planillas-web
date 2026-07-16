@@ -1,0 +1,487 @@
+{% extends "layout.html" %}
+
+{% block title %}PLAME Archivos 7,20{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-plame720 {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-plame720 th,
+    .table-plame720 td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-plame720 thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-plame720 .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+
+    .plame-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .plame-info code {
+        font-size: 0.78rem;
+    }
+
+    .plame-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-compania {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .plame-filtro-compania {
+            flex: 0 0 40%;
+            max-width: 40%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .plame-filtro-compania {
+            flex: 0 0 30%;
+            max-width: 30%;
+        }
+    }
+
+    .plame-filtro-periodo {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-periodo {
+            flex: 0 0 10rem;
+            max-width: 10rem;
+        }
+    }
+
+    .row-fuera-periodo {
+        background-color: #fff8e1;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border plame-info mb-3" role="note">
+    <strong>Archivos 7 y 20 — Prestadores de servicios 4ta categoría (SUNAT).</strong>
+    Importe TXT de recibos por honorarios descargado de SUNAT; se generan:
+    <code>0601AAAAMM###########.ps4</code> (personas) y
+    <code>0601AAAAMM###########.4ta</code> (comprobantes) en un ZIP.
+    Defaults: tipo doc <code>06</code> (RUC), domiciliado <code>1</code>, convenio <code>0</code>,
+    régimen pensiones <code>3</code>, fecha pago = emisión, retención 4ta si Impuesto &gt; 0.
+    Se excluyen estados ANULADO / REVERTIDO.
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmPlame720" class="row g-3">
+            <div class="col-12 col-sm-6 plame-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-auto plame-filtro-periodo">
+                <label for="cboPeriodoTributario" class="form-label small fw-bold text-muted">Periodo tributario</label>
+                <select id="cboPeriodoTributario" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto">
+                <label for="fileTxtRh" class="form-label small fw-bold text-muted">TXT SUNAT (RH)</label>
+                <input type="file" id="fileTxtRh" class="form-control form-control-sm" accept=".txt,text/plain">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnImportarPlame720">
+                    <i class="bi bi-upload"></i> Importar TXT
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarPlame720" disabled>
+                    <i class="bi bi-file-earmark-zip"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountPlame720">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosPlame720">0</span>
+                    · Omitidos: <span id="lblOmitidosPlame720">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoPlame720">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">PLAME — Archivos 7 (.ps4) y 20 (.4ta)</h5>
+        <div id="avisoFueraPeriodo" class="alert alert-warning py-2 px-3 small d-none" role="alert"></div>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-plame720 align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="checkAllPlame720" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th>Documento</th>
+                        <th>Nombre</th>
+                        <th>Comprobante</th>
+                        <th class="text-end">Importe</th>
+                        <th>Fecha emisión</th>
+                        <th>Ret. 4ta</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-plame720"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.plameArchivos720
+        ? window.FiltrosPlanillasReportes.plameArchivos720()
+        : null;
+
+    const URL_IMPORTAR = {{ url_for('api_plame_archivos_7_20_importar') | tojson }};
+    const URL_GENERAR = {{ url_for('api_plame_archivos_7_20_generar_txt') | tojson }};
+    let lastRowsPlame720 = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatMonto(n) {
+        const v = Number(n);
+        if (!Number.isFinite(v)) return '0.00';
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function periodoTributarioYyyymm() {
+        return document.getElementById('cboPeriodoTributario').value.trim();
+    }
+
+    function periodoTributarioEsValido() {
+        return /^\d{6}$/.test(periodoTributarioYyyymm());
+    }
+
+    function rowKey(row) {
+        return String(row.row_id || `${row.documentnumber}|${row.nro_doc_emitido}`).trim();
+    }
+
+    function obtenerSeleccionados() {
+        const mapa = new Map((lastRowsPlame720 || []).map((r) => [rowKey(r), r]));
+        const seleccionados = [];
+        document.querySelectorAll('.check-plame720:checked').forEach((cb) => {
+            const row = mapa.get(String(cb.value || '').trim());
+            if (row) seleccionados.push(row);
+        });
+        return seleccionados;
+    }
+
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-plame720').length;
+        const sel = obtenerSeleccionados().length;
+        document.getElementById('lblRowCountPlame720').textContent = String(total);
+        document.getElementById('lblSeleccionadosPlame720').textContent = String(sel);
+        document.getElementById('btnGenerarPlame720').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAll() {
+        const all = document.querySelectorAll('.check-plame720');
+        const chk = document.getElementById('checkAllPlame720');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let marcados = 0;
+        all.forEach((x) => { if (x.checked) marcados++; });
+        chk.checked = marcados === all.length;
+        chk.indeterminate = marcados > 0 && marcados < all.length;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-plame720');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+        let fuera = 0;
+
+        filas.forEach((row) => {
+            const tr = document.createElement('tr');
+            if (row.fuera_periodo) {
+                tr.classList.add('row-fuera-periodo');
+                fuera += 1;
+            }
+            const key = rowKey(row);
+            const comprobante = `${row.tipo_doc_emitido || ''} ${row.nro_doc_emitido || ''}`.trim();
+            tr.innerHTML = `
+                <td class="text-center">
+                    <input type="checkbox" class="check-plame720 form-check-input" value="${escapeHtml(key)}" checked>
+                </td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td>${escapeHtml(comprobante)}</td>
+                <td class="text-end">${escapeHtml(formatMonto(row.monto))}</td>
+                <td>${escapeHtml(row.fecha_emision)}</td>
+                <td class="text-center">${escapeHtml(row.retencion_4ta)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const aviso = document.getElementById('avisoFueraPeriodo');
+        if (fuera > 0) {
+            aviso.textContent = `${fuera} registro(s) tienen fecha de emisión fuera del periodo tributario seleccionado (resaltados).`;
+            aviso.classList.remove('d-none');
+        } else {
+            aviso.classList.add('d-none');
+            aviso.textContent = '';
+        }
+
+        tbody.querySelectorAll('.check-plame720').forEach((cb) => {
+            cb.addEventListener('change', function () {
+                sincronizarCheckAll();
+                actualizarContadores();
+            });
+        });
+
+        sincronizarCheckAll();
+        actualizarContadores();
+    }
+
+    async function poblarPeriodosPlame(cia, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = true;
+        }
+    }
+
+    async function poblarSelect(url, selectElement) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    async function importarTxt() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        const fileInput = document.getElementById('fileTxtRh');
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+        if (!fileInput.files || !fileInput.files.length) {
+            alert('Seleccione el archivo TXT de SUNAT.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        const fd = new FormData();
+        fd.append('archivo', fileInput.files[0]);
+        fd.append('period', period);
+        fd.append('cia', cia);
+
+        document.getElementById('btnImportarPlame720').disabled = true;
+        try {
+            const res = await fetch(URL_IMPORTAR, { method: 'POST', body: fd });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoPlame720').classList.add('d-none');
+                alert(payload.error || 'Error al importar el archivo.');
+                return;
+            }
+            lastRowsPlame720 = Array.isArray(payload.rows) ? payload.rows : [];
+            document.getElementById('lblOmitidosPlame720').textContent = String(payload.omitidos_total || 0);
+            renderizarTabla(lastRowsPlame720);
+            document.getElementById('cardResultadoPlame720').classList.remove('d-none');
+            if (!lastRowsPlame720.length) {
+                alert('No se obtuvieron registros válidos' +
+                    (payload.omitidos_total ? ` (omitidos: ${payload.omitidos_total}).` : '.'));
+            }
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoPlame720').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        } finally {
+            document.getElementById('btnImportarPlame720').disabled = false;
+        }
+    }
+
+    async function generarTxt() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const period = periodoTributarioYyyymm();
+        const seleccionados = obtenerSeleccionados();
+        if (!cia || !periodoTributarioEsValido()) {
+            alert('Seleccione compañía y periodo tributario.');
+            return;
+        }
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un registro.');
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, period, rows: seleccionados })
+            });
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                } catch (e) {}
+                alert(msg);
+                return;
+            }
+
+            const blob = await res.blob();
+            let filename = 'PLAME_7_20.zip';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el ZIP de archivos 7 y 20.');
+        }
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodo = document.getElementById('cboPeriodoTributario');
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    async function onCompaniaChange(cia, periodoRestaurar) {
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (cia) {
+            await poblarPeriodosPlame(cia, cboPeriodo);
+            if (periodoRestaurar && optionExists(cboPeriodo, periodoRestaurar)) {
+                cboPeriodo.value = periodoRestaurar;
+            }
+            if (filtrosPersist) filtrosPersist.guardar();
+        }
+    }
+
+    if (filtrosPersist) {
+        const guardado = filtrosPersist.leer();
+        if (guardado && guardado.cia) {
+            if (!seleccionarCompaniaInsensitive(cboCia, guardado.cia)) {
+                if (optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+            }
+            const periodoGuardado = guardado.period != null ? String(guardado.period).trim() : '';
+            await onCompaniaChange(cboCia.value.trim(), periodoGuardado);
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+        cboPeriodo.addEventListener('change', () => filtrosPersist.guardar());
+    } else {
+        cboCia.addEventListener('change', function () {
+            onCompaniaChange(this.value.trim(), '');
+        });
+    }
+
+    document.getElementById('btnImportarPlame720').addEventListener('click', importarTxt);
+    document.getElementById('btnGenerarPlame720').addEventListener('click', generarTxt);
+    document.getElementById('checkAllPlame720').addEventListener('change', function () {
+        const marcar = this.checked;
+        document.querySelectorAll('.check-plame720').forEach((cb) => { cb.checked = marcar; });
+        this.indeterminate = false;
+        actualizarContadores();
+    });
+});
+</script>
+{% endblock %}

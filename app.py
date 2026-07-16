@@ -1466,11 +1466,20 @@ def _normalize_replicationunit_asig(raw):
 
 
 PLAME_ARCHIVO_EXTENSION = {
+    '7': 'ps4',
     '14': 'jor',
     '15': 'snl',
     '18': 'rem',
+    '20': '4ta',
     '26': 'toc',
 }
+
+PLAME_RH_TIPO_COMPROBANTE = {
+    'RH': 'R',
+    'NC': 'N',
+}
+
+PLAME_RH_ESTADOS_EXCLUIR = ('ANULADO', 'REVERTIDO')
 
 
 def _plame_period_yyyymm(period_raw):
@@ -1578,6 +1587,337 @@ def _plame_rows_archivo26_from_json(body):
             'documentnumber': doc_num,
             'pensionmembership': indicator,
         })
+    return resultado
+
+
+def _plame_rh_fecha_ddmmyyyy(valor):
+    s = str(valor or '').strip()
+    if not s:
+        return ''
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', s)
+    if m:
+        return s
+    m = re.match(r'^(\d{4})-(\d{2})-(\d{2})$', s)
+    if m:
+        return f'{m.group(3)}/{m.group(2)}/{m.group(1)}'
+    return s
+
+
+def _plame_rh_fecha_yyyymm(fecha_ddmmyyyy):
+    s = _plame_rh_fecha_ddmmyyyy(fecha_ddmmyyyy)
+    m = re.match(r'^(\d{2})/(\d{2})/(\d{4})$', s)
+    if not m:
+        return ''
+    return f'{m.group(3)}{m.group(2)}'
+
+
+def _plame_rh_estado_excluir(estado):
+    e = str(estado or '').strip().upper()
+    if not e:
+        return False
+    if 'REVERTIDO' in e:
+        return True
+    if 'ANULADO' in e and 'NO ANULADO' not in e:
+        return True
+    return False
+
+
+def _plame_rh_tipo_doc_prestador(tipo_emisor, nro_doc):
+    t = str(tipo_emisor or '').strip().upper()
+    digits = ''.join(ch for ch in str(nro_doc or '') if ch.isdigit())
+    if t == 'RUC' or len(digits) == 11:
+        return '06'
+    if t in ('DNI', 'DOC. NACIONAL DE IDENTIDAD', 'LE', 'LIBRETA ELECTORAL'):
+        return '01'
+    if t in ('CE', 'CARNET DE EXTRANJERIA', 'CARNET DE EXTRANJERÍA'):
+        return '04'
+    if t == 'PASAPORTE':
+        return '07'
+    if digits and len(digits) == 8:
+        return '01'
+    if digits and len(digits) == 11:
+        return '06'
+    return '06'
+
+
+def _plame_rh_split_nombre(nombre):
+    partes = [p for p in str(nombre or '').split() if p]
+    if not partes:
+        return '', '', ''
+    if len(partes) == 1:
+        return '', '', partes[0]
+    if len(partes) == 2:
+        return partes[0], '', partes[1]
+    return partes[0], partes[1], ' '.join(partes[2:])
+
+
+def _plame_rh_split_serie_numero(nro_doc_emitido):
+    raw = str(nro_doc_emitido or '').strip()
+    if not raw:
+        return '', ''
+    if '-' in raw:
+        serie, numero = raw.split('-', 1)
+    else:
+        serie, numero = raw[:4], raw[4:]
+    serie = serie.strip().upper()[:4]
+    numero_digits = ''.join(ch for ch in numero if ch.isdigit())
+    if not numero_digits:
+        numero_digits = ''.join(ch for ch in numero if ch.isalnum())
+    return serie, numero_digits.zfill(8)[-8:]
+
+
+def _plame_rh_format_monto(valor):
+    if valor is None or valor == '':
+        return '0'
+    try:
+        v = float(str(valor).replace(',', '').strip())
+    except (TypeError, ValueError):
+        return '0'
+    redondeado = round(v, 2)
+    if abs(redondeado - round(redondeado)) < 0.00005:
+        return str(int(round(redondeado)))
+    return f'{redondeado:.2f}'
+
+
+def _plame_rh_parse_float(valor):
+    try:
+        return float(str(valor or '').replace(',', '').strip() or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _plame_rh_recomponer_lineas(texto):
+    lineas = re.split(r'\r?\n', texto or '')
+    resultado = []
+    buffer = ''
+    inicio_fila = re.compile(r'^\d{2}/\d{2}/\d{4}\|')
+    for linea in lineas:
+        s = linea.rstrip('\r')
+        if not s.strip():
+            continue
+        if inicio_fila.match(s):
+            if buffer:
+                resultado.append(buffer)
+            buffer = s
+        elif buffer:
+            buffer += ' ' + s
+        else:
+            buffer = s
+    if buffer:
+        resultado.append(buffer)
+    return resultado
+
+
+def _plame_rh_parse_txt_sunat(texto, period=None):
+    """Parsea TXT SUNAT de recibos por honorarios (export RH)."""
+    columnas = (
+        'fecha_emision', 'tipo_doc_emitido', 'nro_doc_emitido', 'estado',
+        'tipo_doc_emisor', 'nro_doc_emisor', 'nombre_emisor', 'tipo_renta',
+        'gratuito', 'descripcion', 'observacion', 'moneda',
+        'renta_bruta', 'impuesto', 'renta_neta', 'monto_neto_pendiente',
+    )
+    filas = []
+    omitidos = []
+    lineas = _plame_rh_recomponer_lineas(texto)
+    for idx, linea in enumerate(lineas, start=1):
+        if idx == 1 and 'fecha' in linea.lower() and 'emis' in linea.lower():
+            continue
+        partes = linea.split('|')
+        if partes and partes[-1] == '':
+            partes = partes[:-1]
+        if len(partes) < 14:
+            omitidos.append({
+                'linea': idx,
+                'motivo': f'Columnas insuficientes ({len(partes)})',
+                'texto': linea[:120],
+            })
+            continue
+
+        data = {}
+        for i, col in enumerate(columnas):
+            data[col] = partes[i].strip() if i < len(partes) else ''
+
+        estado = data.get('estado', '')
+        if _plame_rh_estado_excluir(estado):
+            omitidos.append({
+                'linea': idx,
+                'motivo': f'Estado excluido: {estado}',
+                'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+            })
+            continue
+
+        nro_doc = ''.join(ch for ch in data.get('nro_doc_emisor', '') if ch.isdigit())
+        if not nro_doc:
+            omitidos.append({
+                'linea': idx,
+                'motivo': 'Sin número de documento del emisor',
+                'nombre': data.get('nombre_emisor', ''),
+            })
+            continue
+
+        doc_type = _plame_rh_tipo_doc_prestador(
+            data.get('tipo_doc_emisor'),
+            nro_doc,
+        )
+        if doc_type == '11':
+            omitidos.append({
+                'linea': idx,
+                'motivo': 'Tipo documento 11 no aplica',
+                'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+            })
+            continue
+
+        fecha_emision = _plame_rh_fecha_ddmmyyyy(data.get('fecha_emision'))
+        tipo_comp = PLAME_RH_TIPO_COMPROBANTE.get(
+            str(data.get('tipo_doc_emitido') or '').strip().upper(),
+            '',
+        )
+        if not tipo_comp:
+            omitidos.append({
+                'linea': idx,
+                'motivo': f'Tipo comprobante no soportado: {data.get("tipo_doc_emitido")}',
+                'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+            })
+            continue
+
+        serie, numero = _plame_rh_split_serie_numero(data.get('nro_doc_emitido'))
+        if not serie or not numero:
+            omitidos.append({
+                'linea': idx,
+                'motivo': 'Serie o número de comprobante inválido',
+                'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+            })
+            continue
+
+        impuesto = _plame_rh_parse_float(data.get('impuesto'))
+        renta_bruta = _plame_rh_parse_float(data.get('renta_bruta'))
+        ap_paterno, ap_materno, nombres = _plame_rh_split_nombre(data.get('nombre_emisor'))
+        periodo_fila = _plame_rh_fecha_yyyymm(fecha_emision)
+        fuera_periodo = bool(period and periodo_fila and periodo_fila != period)
+
+        filas.append({
+            'row_id': f'{nro_doc}|{data.get("tipo_doc_emitido", "")}|{data.get("nro_doc_emitido", "")}',
+            'fecha_emision': fecha_emision,
+            'tipo_doc_emitido': str(data.get('tipo_doc_emitido') or '').strip().upper(),
+            'nro_doc_emitido': str(data.get('nro_doc_emitido') or '').strip().upper(),
+            'estado': estado,
+            'documenttype': doc_type,
+            'documentnumber': nro_doc[:15],
+            'name': str(data.get('nombre_emisor') or '').strip(),
+            'apellido_paterno': ap_paterno,
+            'apellido_materno': ap_materno,
+            'nombres': nombres,
+            'tipo_comprobante': tipo_comp,
+            'serie': serie,
+            'numero': numero,
+            'monto': renta_bruta,
+            'monto_fmt': _plame_rh_format_monto(renta_bruta),
+            'impuesto': impuesto,
+            'retencion_4ta': '1' if impuesto > 0 else '0',
+            'domiciliado': '1',
+            'convenio': '0',
+            'regimen_pensiones': '3',
+            'aporte_pension': '',
+            'periodo_fila': periodo_fila,
+            'fuera_periodo': fuera_periodo,
+        })
+    return filas, omitidos
+
+
+def _plame_rows_archivos_7_20_from_json(body):
+    rows = body.get('rows')
+    if not isinstance(rows, list):
+        return []
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        nro_comp = str(r.get('nro_doc_emitido') or '').strip()
+        if not doc_num or not nro_comp:
+            continue
+        resultado.append(r)
+    return resultado
+
+
+def _plame_linea_archivo7(row):
+    """PLAME Archivo 7 (.ps4): TT|DOC|AP_PAT|AP_MAT|NOMBRES|DOM|CONV|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    if doc_type == '06':
+        doc_num = ''.join(ch for ch in doc_num if ch.isdigit())[:11]
+    ap_pat = str(row.get('apellido_paterno') or '').strip()[:40]
+    ap_mat = str(row.get('apellido_materno') or '').strip()[:40]
+    nombres = str(row.get('nombres') or row.get('name') or '').strip()[:40]
+    domiciliado = str(row.get('domiciliado') or '1').strip()
+    if domiciliado not in ('1', '2'):
+        domiciliado = '1'
+    convenio = str(row.get('convenio') or '0').strip()[:1]
+    return '|'.join([
+        doc_type,
+        doc_num,
+        ap_pat,
+        ap_mat,
+        nombres,
+        domiciliado,
+        convenio,
+    ]) + '|'
+
+
+def _plame_linea_archivo20(row):
+    """PLAME Archivo 20 (.4ta): TT|DOC|TC|SERIE|NUM|MONTO|F_EM|F_PAG|RET4|REG_PEN|APORTE|"""
+    doc_type = str(row.get('documenttype') or '').strip()
+    if doc_type.isdigit():
+        doc_type = doc_type.zfill(2)
+    doc_num = str(row.get('documentnumber') or '').strip()
+    if doc_type == '06':
+        doc_num = ''.join(ch for ch in doc_num if ch.isdigit())[:11]
+    tipo_comp = str(row.get('tipo_comprobante') or '').strip().upper()[:1]
+    serie = str(row.get('serie') or '').strip().upper()[:4]
+    numero = str(row.get('numero') or '').strip()
+    numero_digits = ''.join(ch for ch in numero if ch.isdigit())
+    numero = numero_digits.zfill(8)[-8:] if numero_digits else numero.zfill(8)[-8:]
+    monto = _plame_rh_format_monto(row.get('monto'))
+    fecha_emision = _plame_rh_fecha_ddmmyyyy(row.get('fecha_emision'))
+    fecha_pago = _plame_rh_fecha_ddmmyyyy(row.get('fecha_pago') or row.get('fecha_emision'))
+    retencion = str(row.get('retencion_4ta') or '0').strip()
+    if retencion not in ('0', '1'):
+        retencion = '1' if _plame_rh_parse_float(row.get('impuesto')) > 0 else '0'
+    regimen = str(row.get('regimen_pensiones') or '3').strip()
+    if regimen not in ('1', '2', '3'):
+        regimen = '3'
+    aporte = ''
+    if regimen in ('1', '2'):
+        aporte = _plame_rh_format_monto(row.get('aporte_pension'))
+    return '|'.join([
+        doc_type,
+        doc_num,
+        tipo_comp,
+        serie,
+        numero,
+        monto,
+        fecha_emision,
+        fecha_pago,
+        retencion,
+        regimen,
+        aporte,
+    ]) + '|'
+
+
+def _plame_archivo7_personas_unicas(filas):
+    vistos = set()
+    resultado = []
+    for row in filas:
+        key = (
+            str(row.get('documenttype') or '').strip(),
+            str(row.get('documentnumber') or '').strip(),
+        )
+        if not key[1] or key in vistos:
+            continue
+        vistos.add(key)
+        resultado.append(row)
     return resultado
 
 
@@ -2548,7 +2888,7 @@ def _plame_filename(ruc, yyyymm, codigo_archivo):
     yyyy = yyyymm[:4]
     mm = yyyymm[4:6]
     ext = PLAME_ARCHIVO_EXTENSION.get(str(codigo_archivo), 'txt')
-    if str(codigo_archivo) in ('14', '15', '18', '26'):
+    if str(codigo_archivo) in ('7', '14', '15', '18', '20', '26'):
         return f'0601{yyyy}{mm}{ruc11}.{ext}'
     return f'RP_{ruc11}_{yyyy}_{mm}_{codigo_archivo}.{ext}'
 
@@ -10034,6 +10374,12 @@ def plame_archivo26_page():
     return render_template('plame_archivo26.html')
 
 
+@app.route('/plame/archivos-7-20')
+@login_required
+def plame_archivos_7_20_page():
+    return render_template('plame_archivos_7_20.html')
+
+
 @app.route('/plame/t-registro')
 @login_required
 def plame_tregistro_page():
@@ -11470,6 +11816,104 @@ def api_plame_archivo26_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_plame_archivo26_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivos-7-20/importar', methods=['POST'])
+@login_required
+def api_plame_archivos_7_20_importar():
+    """Importa TXT SUNAT de recibos por honorarios y normaliza filas para PLAME 7/20."""
+    period = _plame_period_yyyymm(
+        request.form.get('period') or request.form.get('periodo') or ''
+    )
+    archivo = request.files.get('archivo') or request.files.get('file')
+    if archivo is None or not getattr(archivo, 'filename', None):
+        return jsonify({"error": "Seleccione un archivo TXT de recibos por honorarios."}), 400
+
+    raw = archivo.read() or b''
+    if not raw:
+        return jsonify({"error": "El archivo está vacío."}), 400
+
+    texto = None
+    for enc in ('utf-8-sig', 'utf-8', 'cp1252', 'latin-1'):
+        try:
+            texto = raw.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    if texto is None:
+        texto = raw.decode('latin-1', errors='replace')
+
+    try:
+        filas, omitidos = _plame_rh_parse_txt_sunat(texto, period=period or None)
+        fuera = sum(1 for r in filas if r.get('fuera_periodo'))
+        return jsonify({
+            "rows": filas,
+            "total": len(filas),
+            "omitidos": omitidos,
+            "omitidos_total": len(omitidos),
+            "fuera_periodo": fuera,
+            "period": period,
+        })
+    except Exception as e:
+        logging.exception("api_plame_archivos_7_20_importar")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/plame/archivos-7-20/generar-txt', methods=['POST'])
+@login_required
+def api_plame_archivos_7_20_generar_txt():
+    """Genera ZIP PLAME Archivos 7 (.ps4) y 20 (.4ta) desde filas importadas."""
+    body = request.get_json(silent=True) or {}
+    p = _plame_params_from_json(body)
+    err = _plame_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _plame_rows_archivos_7_20_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        ruc = _obtener_ruc_compania(cursor, p['cia'])
+        if not ruc:
+            return jsonify({"error": "No se encontró el RUC de la compañía en SY_Company."}), 400
+
+        personas = _plame_archivo7_personas_unicas(filas)
+        lineas7 = [_plame_linea_archivo7(row) for row in personas]
+        lineas20 = [_plame_linea_archivo20(row) for row in filas]
+
+        contenido7 = '\r\n'.join(lineas7)
+        if lineas7:
+            contenido7 += '\r\n'
+        contenido20 = '\r\n'.join(lineas20)
+        if lineas20:
+            contenido20 += '\r\n'
+
+        filename7 = _plame_filename(ruc, p['period'], '7')
+        filename20 = _plame_filename(ruc, p['period'], '20')
+        zip_name = f'PLAME_7_20_{p["period"]}_{"".join(ch for ch in ruc if ch.isdigit())[-11:] or "00000000000"}.zip'
+
+        mem = io.BytesIO()
+        with zipfile.ZipFile(mem, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr(filename7, contenido7.encode('latin-1', errors='replace'))
+            zf.writestr(filename20, contenido20.encode('latin-1', errors='replace'))
+        mem.seek(0)
+
+        resp = Response(mem.getvalue(), mimetype='application/zip')
+        resp.headers['Content-Disposition'] = f'attachment; filename="{zip_name}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_plame_archivos_7_20_generar_txt")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

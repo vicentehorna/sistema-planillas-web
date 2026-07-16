@@ -1830,7 +1830,7 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
             'retencion_4ta': '1' if impuesto > 0 else '0',
             'domiciliado': '1',
             'convenio': '0',
-            'regimen_pensiones': '3',
+            'regimen_pensiones': '',
             'aporte_pension': '',
             'periodo_fila': periodo_fila,
             'fuera_periodo': fuera_periodo,
@@ -1920,12 +1920,15 @@ def _plame_linea_archivo20(row):
     retencion = str(row.get('retencion_4ta') or '0').strip()
     if retencion not in ('0', '1'):
         retencion = '1' if _plame_rh_parse_float(row.get('impuesto')) > 0 else '0'
-    regimen = str(row.get('regimen_pensiones') or '3').strip()
-    if regimen not in ('1', '2', '3'):
-        regimen = '3'
+    # Campo 10 (régimen pensionario): vacío por disposición vigente; aporte (11) solo si 1 o 2.
+    regimen = str(row.get('regimen_pensiones') or '').strip()
+    if regimen not in ('1', '2', '3', ''):
+        regimen = ''
     aporte = ''
     if regimen in ('1', '2'):
         aporte = _plame_rh_format_monto(row.get('aporte_pension'))
+    else:
+        regimen = ''
     return '|'.join([
         doc_type,
         doc_num,

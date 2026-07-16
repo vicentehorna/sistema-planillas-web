@@ -1616,9 +1616,9 @@ def _plame_rh_estado_excluir(estado):
     if not e:
         return False
     if 'REVERTIDO' in e:
-        return True
+        return 'REV'
     if 'ANULADO' in e and 'NO ANULADO' not in e:
-        return True
+        return 'ANU'
     return False
 
 
@@ -1738,11 +1738,24 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
             data[col] = partes[i].strip() if i < len(partes) else ''
 
         estado = data.get('estado', '')
-        if _plame_rh_estado_excluir(estado):
+        motivo_estado = _plame_rh_estado_excluir(estado)
+        if motivo_estado:
             omitidos.append({
                 'linea': idx,
                 'motivo': f'Estado excluido: {estado}',
                 'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+                'tipo_omitido': motivo_estado,
+            })
+            continue
+
+        tipo_doc_emitido = str(data.get('tipo_doc_emitido') or '').strip().upper()
+        if tipo_doc_emitido == 'NC':
+            omitidos.append({
+                'linea': idx,
+                'motivo': 'Nota de crédito (NC) excluida de archivos 7 y 20',
+                'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+                'nombre': str(data.get('nombre_emisor') or '').strip(),
+                'tipo_omitido': 'NC',
             })
             continue
 
@@ -1752,6 +1765,7 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
                 'linea': idx,
                 'motivo': 'Sin número de documento del emisor',
                 'nombre': data.get('nombre_emisor', ''),
+                'tipo_omitido': 'OTRO',
             })
             continue
 
@@ -1764,19 +1778,18 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
                 'linea': idx,
                 'motivo': 'Tipo documento 11 no aplica',
                 'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+                'tipo_omitido': 'OTRO',
             })
             continue
 
         fecha_emision = _plame_rh_fecha_ddmmyyyy(data.get('fecha_emision'))
-        tipo_comp = PLAME_RH_TIPO_COMPROBANTE.get(
-            str(data.get('tipo_doc_emitido') or '').strip().upper(),
-            '',
-        )
+        tipo_comp = PLAME_RH_TIPO_COMPROBANTE.get(tipo_doc_emitido, '')
         if not tipo_comp:
             omitidos.append({
                 'linea': idx,
                 'motivo': f'Tipo comprobante no soportado: {data.get("tipo_doc_emitido")}',
                 'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+                'tipo_omitido': 'OTRO',
             })
             continue
 
@@ -1786,6 +1799,7 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
                 'linea': idx,
                 'motivo': 'Serie o número de comprobante inválido',
                 'nro_doc_emitido': data.get('nro_doc_emitido', ''),
+                'tipo_omitido': 'OTRO',
             })
             continue
 
@@ -1796,9 +1810,9 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
         fuera_periodo = bool(period and periodo_fila and periodo_fila != period)
 
         filas.append({
-            'row_id': f'{nro_doc}|{data.get("tipo_doc_emitido", "")}|{data.get("nro_doc_emitido", "")}',
+            'row_id': f'{nro_doc}|{tipo_doc_emitido}|{data.get("nro_doc_emitido", "")}',
             'fecha_emision': fecha_emision,
-            'tipo_doc_emitido': str(data.get('tipo_doc_emitido') or '').strip().upper(),
+            'tipo_doc_emitido': tipo_doc_emitido,
             'nro_doc_emitido': str(data.get('nro_doc_emitido') or '').strip().upper(),
             'estado': estado,
             'documenttype': doc_type,
@@ -1824,6 +1838,23 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
     return filas, omitidos
 
 
+def _plame_rh_advertencias_suspension(filas, umbral=1500.0):
+    """Advertencias: trabajadores con algún importe de RH > umbral."""
+    vistos = set()
+    mensajes = []
+    for row in filas or []:
+        monto = _plame_rh_parse_float(row.get('monto'))
+        if monto <= umbral:
+            continue
+        key = str(row.get('documentnumber') or '').strip()
+        if not key or key in vistos:
+            continue
+        vistos.add(key)
+        nombre = str(row.get('name') or '').strip() or key
+        mensajes.append(f'{nombre} requiere suspensión de cuarta')
+    return mensajes
+
+
 def _plame_rows_archivos_7_20_from_json(body):
     rows = body.get('rows')
     if not isinstance(rows, list):
@@ -1834,7 +1865,11 @@ def _plame_rows_archivos_7_20_from_json(body):
             continue
         doc_num = str(r.get('documentnumber') or '').strip()
         nro_comp = str(r.get('nro_doc_emitido') or '').strip()
+        tipo_doc = str(r.get('tipo_doc_emitido') or '').strip().upper()
+        tipo_comp = str(r.get('tipo_comprobante') or '').strip().upper()
         if not doc_num or not nro_comp:
+            continue
+        if tipo_doc == 'NC' or tipo_comp == 'N':
             continue
         resultado.append(r)
     return resultado
@@ -2177,7 +2212,15 @@ def _afpnet_limpia_texto(valor):
 
 
 def _cuspp_afpnet_es_valido(cuspp):
-    return bool(re.fullmatch(r'[A-Za-z0-9Ññ]{12}', str(cuspp or '').strip()))
+    """CUSPP AFPnet: 12 caracteres alfanuméricos con al menos una letra y un dígito."""
+    s = str(cuspp or '').strip()
+    if not re.fullmatch(r'[A-Za-z0-9Ññ]{12}', s):
+        return False
+    if not re.search(r'[A-Za-zÑñ]', s):
+        return False
+    if not re.search(r'\d', s):
+        return False
+    return True
 
 
 def _fecha_ddmmyyyy_en_periodo(fecha_txt, period_yyyymm):
@@ -2231,12 +2274,12 @@ def _declaracion_afp_validar_fila_afpnet(row, period, fila=None):
     if excepcion not in ('J', 'I', 'O', 'L', 'U', 'P') and not _cuspp_afpnet_es_valido(cuspp):
         errores.append(
             f'{etiqueta}: CUSPP inválido o vacío («{cuspp or "vacío"}»). '
-            'Debe tener exactamente 12 caracteres alfanuméricos (incluye Ñ).'
+            'Debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).'
         )
     elif cuspp and not _cuspp_afpnet_es_valido(cuspp):
         errores.append(
             f'{etiqueta}: CUSPP inválido («{cuspp}»). '
-            'Debe tener exactamente 12 caracteres alfanuméricos (incluye Ñ).'
+            'Debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).'
         )
 
     inicio = str(row.get('inicio_relacion') or '').strip().upper()
@@ -11853,11 +11896,19 @@ def api_plame_archivos_7_20_importar():
     try:
         filas, omitidos = _plame_rh_parse_txt_sunat(texto, period=period or None)
         fuera = sum(1 for r in filas if r.get('fuera_periodo'))
+        omitidos_nc = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'NC')
+        omitidos_rev = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'REV')
+        omitidos_anu = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'ANU')
+        advertencias = _plame_rh_advertencias_suspension(filas)
         return jsonify({
             "rows": filas,
             "total": len(filas),
             "omitidos": omitidos,
             "omitidos_total": len(omitidos),
+            "omitidos_nc": omitidos_nc,
+            "omitidos_rev": omitidos_rev,
+            "omitidos_anu": omitidos_anu,
+            "advertencias": advertencias,
             "fuera_periodo": fuera,
             "period": period,
         })

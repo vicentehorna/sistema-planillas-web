@@ -846,9 +846,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (frmPensiones && txtCuspp) {
             frmPensiones.addEventListener('submit', function (e) {
                 const cuspp = (txtCuspp.value || '').trim();
-                if (cuspp && !/^[A-Z0-9Ñ]{12}$/.test(cuspp)) {
+                if (cuspp && (!/^[A-Z0-9Ñ]{12}$/.test(cuspp) || !/[A-ZÑ]/.test(cuspp) || !/\d/.test(cuspp))) {
                     e.preventDefault();
-                    alert('El CUSPP debe tener exactamente 12 caracteres alfanuméricos.');
+                    alert('El CUSPP debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).');
                     txtCuspp.focus();
                 }
             });

@@ -395,13 +395,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
-        if (person === '0') {
-            const ok = window.confirm(
-                'Consultar todos los trabajadores puede tardar varios minutos y afectar el servicio web. '
-                + '¿Desea continuar? (Recomendado: seleccione un trabajador.)'
-            );
-            if (!ok) return;
-        }
         const fecha = document.getElementById('txtFecha').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
 

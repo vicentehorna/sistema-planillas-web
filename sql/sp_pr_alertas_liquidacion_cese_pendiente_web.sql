@@ -21,6 +21,10 @@
       @fecha_corte  — fecha de corte; NULL = hoy.
       @dias_limite  — días mínimos desde el cese (default 2).
 
+    Exclusiones:
+      - No incluye planillas de Construcción Civil (ShortName/Description
+        con CONSTRUCCION, p.ej. CONSTRUCCION CIVIL).
+
     Ejemplo:
       EXEC sp_pr_alertas_liquidacion_cese_pendiente_web
            @company = 'BGT',
@@ -105,6 +109,9 @@ BEGIN
                 CONVERT(DATE, e.CeaseDate)
               ) > 30
           AND (@payrolltype = '0' OR e.PayRollType = @payrolltype)
+          /* Construcción Civil no aplica a esta alerta. */
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) NOT LIKE '%CONSTRUCCION%'
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) NOT LIKE '%CONSTRUCCION%'
     )
     SELECT
         c.company,

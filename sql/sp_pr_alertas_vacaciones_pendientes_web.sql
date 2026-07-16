@@ -28,6 +28,10 @@
       @fecha_corte  — fecha de corte; NULL = hoy.
       @dias_umbral  — umbral de alerta (default 28).
 
+    Exclusiones:
+      - No incluye planillas de Construcción Civil (ShortName/Description
+        con CONSTRUCCION, p.ej. CONSTRUCCION CIVIL).
+
     Ejemplo:
       EXEC sp_pr_alertas_vacaciones_pendientes_web
            @company = 'BGT',
@@ -151,6 +155,9 @@ BEGIN
           AND fb.fecha_base IS NOT NULL
           AND fb.fecha_base <= @fecha_corte
           AND (@payrolltype = '0' OR e.PayRollType = @payrolltype)
+          /* Construcción Civil no aplica a esta alerta. */
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) NOT LIKE '%CONSTRUCCION%'
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) NOT LIKE '%CONSTRUCCION%'
           /* Solo periodos del ciclo laboral actual (desde reingreso/ingreso). */
           AND CONVERT(DATE, v.DateBeginProvision) >= fb.fecha_base
           AND CONVERT(DATE, v.DateBeginProvision) <= @fecha_corte

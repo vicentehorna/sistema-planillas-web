@@ -9,7 +9,8 @@
       - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
       - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
       - Respeta flag PDT por planilla/proceso cuando está configurado
-      - En liquidación: FormulaCode LIQ_NETO; en CTS: FormulaCode CTS; resto: NETO
+      - En liquidación: FormulaCode LIQ_NETO; en CTS: FormulaCode CTS;
+        en UTILIDADES: FormulaCode UTILIDAD; resto: NETO
       - Excluye planilla PRACTICANTES (no se declara en PLAME R01/R04/R05)
 
     Parámetros:
@@ -153,7 +154,11 @@ BEGIN
       )
       AND (
             (
-                EPC.ProcessType NOT IN (M.CTSProcessType, M.LiquidacionProcess)
+                EPC.ProcessType NOT IN (
+                    M.CTSProcessType,
+                    M.LiquidacionProcess,
+                    (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                )
                 AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
             )
          OR (
@@ -163,6 +168,10 @@ BEGIN
          OR (
                 EPC.ProcessType = M.CTSProcessType
                 AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'CTS'
+            )
+         OR (
+                EPC.ProcessType = (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'UTILIDAD'
             )
       )
       AND EPC.ProcessType IN (
@@ -309,7 +318,11 @@ BEGIN
                   AND LEFT(EPC.PRPeriod, 6) = @period
                   AND (
                         (
-                            EPC.ProcessType NOT IN (M.CTSProcessType, M.LiquidacionProcess)
+                            EPC.ProcessType NOT IN (
+                                M.CTSProcessType,
+                                M.LiquidacionProcess,
+                                (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                            )
                             AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'NETO'
                         )
                      OR (
@@ -319,6 +332,10 @@ BEGIN
                      OR (
                             EPC.ProcessType = M.CTSProcessType
                             AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'CTS'
+                        )
+                     OR (
+                            EPC.ProcessType = (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                            AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = 'UTILIDAD'
                         )
                   )
                   AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)

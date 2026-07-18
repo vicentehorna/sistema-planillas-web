@@ -550,7 +550,7 @@
                     <p class="sidebar-section-title px-3 mt-3 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page') %}
+                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page', 'comparar_planillas_page', 'comparar_planillas_resultado_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if generales_active else '' }}">
                     <a href="#submenuGenerales"
                        class="sidebar-parent-link"
@@ -580,6 +580,11 @@
                         <li class="{{ 'active' if request.endpoint == 'usuarios_empresa_page' else '' }}">
                             <a href="{{ url_for('usuarios_empresa_page') }}" title="Usuarios por Empresa">
                                 <i class="bi bi-people"></i><span class="sidebar-link-text">Usuarios por Empresa</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint in ('comparar_planillas_page', 'comparar_planillas_resultado_page') else '' }}">
+                            <a href="{{ url_for('comparar_planillas_page') }}" title="Comparar Planillas">
+                                <i class="bi bi-arrow-left-right"></i><span class="sidebar-link-text">Comparar Planillas</span>
                             </a>
                         </li>
                     </ul>

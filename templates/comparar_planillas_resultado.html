@@ -1,0 +1,158 @@
+{% extends "layout.html" %}
+
+{% block title %}Resultado comparación planillas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-diff {
+        font-size: 11px;
+        white-space: nowrap;
+    }
+    .table-diff th, .table-diff td {
+        padding: 0.25rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-diff thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+    }
+    .col-monto { text-align: right; font-variant-numeric: tabular-nums; }
+    .diff-neg { color: #b02a37; }
+    .diff-pos { color: #146c43; }
+    .scroll-diff { max-height: 75vh; overflow: auto; border: 1px solid #dee2e6; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+            <div>
+                <h5 class="mb-1 fw-bold text-secondary"><i class="bi bi-table"></i> Resultado — Comparar planillas</h5>
+                <div class="small text-muted" id="lblMeta">Cargando…</div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnExportCsv">
+                    <i class="bi bi-download"></i> CSV
+                </button>
+                <button type="button" class="btn btn-secondary btn-sm" onclick="window.close()">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body pt-2">
+        <div class="scroll-diff">
+            <table class="table table-bordered table-sm table-hover table-diff mb-0">
+                <thead>
+                    <tr>
+                        <th>DNI</th>
+                        <th>Nombre</th>
+                        <th>Concepto (actual)</th>
+                        <th class="col-monto">Importe actual</th>
+                        <th>Concepto (referencia)</th>
+                        <th class="col-monto">Importe referencia</th>
+                        <th class="col-monto">Diferencia</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyDiff">
+                    <tr><td colspan="7" class="text-center text-muted py-4">Cargando…</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-2 small text-muted fw-bold">
+            <span id="lblCount">0 diferencias</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const params = new URLSearchParams(window.location.search);
+    const id = (params.get('id') || '').trim();
+    const URL_DATA = {{ url_for('api_comparar_planillas_resultado') | tojson }};
+    const tbody = document.getElementById('tbodyDiff');
+    let rowsCache = [];
+
+    function fmt(n) {
+        return (Number(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function esc(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+    }
+
+    if (!id) {
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Falta id de comparación.</td></tr>';
+        return;
+    }
+
+    try {
+        const res = await fetch(`${URL_DATA}?id=${encodeURIComponent(id)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No se pudo cargar el resultado.');
+
+        const m = data.meta || {};
+        document.getElementById('lblMeta').innerHTML =
+            `BD actual: <code>${esc(m.bd_actual)}</code> · Referencia: <code>${esc(m.bd_referencia)}</code>`
+            + ` · Cia: <b>${esc(m.cia)}</b>`
+            + ` · Planilla: ${esc(m.payroll_type)}`
+            + ` · Proceso: ${esc(m.processtype)}`
+            + ` · Periodo: <b>${esc(m.period)}</b>`
+            + ` · Trabajadores: ${m.num_trabajadores || 0}`;
+
+        rowsCache = Array.isArray(data.diferencias) ? data.diferencias : [];
+        document.getElementById('lblCount').textContent =
+            rowsCache.length === 1 ? '1 diferencia' : `${rowsCache.length} diferencias`;
+
+        if (!rowsCache.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-success py-4">Sin diferencias de importe.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rowsCache.map((r) => {
+            const diff = Number(r.diferencia) || 0;
+            const cls = diff > 0 ? 'diff-pos' : (diff < 0 ? 'diff-neg' : '');
+            return `<tr>
+                <td class="font-monospace">${esc(r.person)}</td>
+                <td>${esc(r.nombre)}</td>
+                <td>${esc(r.concepto_actual || r.formulacode || '')}</td>
+                <td class="col-monto">${fmt(r.importe_actual)}</td>
+                <td>${esc(r.concepto_referencia || r.formulacode || '')}</td>
+                <td class="col-monto">${fmt(r.importe_referencia)}</td>
+                <td class="col-monto ${cls}">${fmt(diff)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-4">${esc(e.message)}</td></tr>`;
+    }
+
+    document.getElementById('btnExportCsv').addEventListener('click', function () {
+        if (!rowsCache.length) return;
+        const header = ['DNI','Nombre','ConceptoActual','ImporteActual','ConceptoReferencia','ImporteReferencia','Diferencia','FormulaCode'];
+        const lines = [header.join(';')];
+        rowsCache.forEach((r) => {
+            lines.push([
+                r.person, r.nombre,
+                r.concepto_actual || '',
+                Number(r.importe_actual) || 0,
+                r.concepto_referencia || '',
+                Number(r.importe_referencia) || 0,
+                Number(r.diferencia) || 0,
+                r.formulacode || '',
+            ].map((x) => `"${String(x).replace(/"/g, '""')}"`).join(';'));
+        });
+        const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `comparar_planillas_${id}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+});
+</script>
+{% endblock %}

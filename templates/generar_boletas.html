@@ -121,6 +121,12 @@
                         <input class="form-check-input" type="radio" name="modoProceso" id="radioEnviar" value="mail">
                         <label class="form-check-label small" for="radioEnviar">Enviar por Email</label>
                     </div>
+                    {% if mostrar_subir_portal %}
+                    <div class="form-check form-check-inline m-0" id="wrapSubirPortal">
+                        <input class="form-check-input" type="radio" name="modoProceso" id="radioPortal" value="portal">
+                        <label class="form-check-label small" for="radioPortal">Subir Portal</label>
+                    </div>
+                    {% endif %}
                     <button type="button" class="btn btn-danger btn-sm px-4" id="btnEjecutarBoletas" disabled>
                         <i class="bi bi-play-fill"></i> Ejecutar Acción
                     </button>
@@ -168,6 +174,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_MASIVO = {{ url_for('procesar_boletas_masivo') | tojson }};
     const URL_DESCARGA_ZIP = {{ url_for('descargar_zip_boletas') | tojson }};
     const URL_ENVIO_MASIVO = {{ url_for('enviar_boletas_masivo') | tojson }};
+    const URL_SUBIR_PORTAL = {{ url_for('subir_boletas_portal') | tojson }};
+    const MOSTRAR_SUBIR_PORTAL = {{ (mostrar_subir_portal|default(false)) | tojson }};
 
     const cboCia = document.getElementById('cboCompania');
     const cboPt = document.getElementById('cboTipoPlanilla');
@@ -525,6 +533,42 @@ document.addEventListener('DOMContentLoaded', async function () {
                 document.body.removeChild(a);
                 window.URL.revokeObjectURL(url);
                 Swal.fire('Completado', 'ZIP generado correctamente.', 'success');
+                return;
+            }
+
+            if (modo === 'portal') {
+                if (!MOSTRAR_SUBIR_PORTAL) {
+                    Swal.fire('No disponible', 'La acción Subir Portal solo aplica en hm_aci.', 'warning');
+                    return;
+                }
+                const confirm = await Swal.fire({
+                    title: 'Subir Portal',
+                    html: `Se registrarán <b>${ids.length}</b> boleta(s) en <code>PR_DocumentPerson</code> (tipo BOL).<br>No se generará ni enviará PDF.`,
+                    icon: 'question',
+                    showCancelButton: true,
+                    confirmButtonText: 'Registrar',
+                    cancelButtonText: 'Cancelar',
+                });
+                if (!confirm.isConfirmed) return;
+
+                const resPortal = await fetch(URL_SUBIR_PORTAL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...filtros,
+                        trabajadores: ids,
+                    }),
+                });
+                const dataPortal = await resPortal.json().catch(() => ({}));
+                if (!resPortal.ok) {
+                    Swal.fire('Error', dataPortal.error || 'No se pudo registrar en el portal.', 'error');
+                    return;
+                }
+                Swal.fire({
+                    icon: dataPortal.errores ? 'warning' : 'success',
+                    title: 'Subir Portal',
+                    html: dataPortal.message || 'Registro completado.',
+                });
                 return;
             }
 

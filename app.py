@@ -7,6 +7,9 @@ import logging
 import io
 import zipfile
 import base64
+import unicodedata
+import uuid
+import threading
 import xml.etree.ElementTree as ET
 from datetime import date, datetime
 from decimal import Decimal
@@ -952,11 +955,40 @@ def _validar_rango_periodos_reporte(desde_raw, hasta_raw, max_meses=12):
     return desde_yyyymm, hasta_yyyymm, None
 
 
-def _boleta_pdf_filename(person, period_raw):
-    """Nombre estándar: boleta_{person}_{yyyymmdd}.pdf"""
-    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
-    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
-    return f'boleta_{person_safe}_{period_safe}.pdf'
+def _boleta_filename_token(text, fallback='X'):
+    """Normaliza texto para nombre de archivo: MAYÚSCULAS, sin acentos, solo A-Z0-9_."""
+    raw = str(text or '').strip()
+    if not raw:
+        return fallback
+    normalized = unicodedata.normalize('NFKD', raw)
+    ascii_txt = ''.join(c for c in normalized if not unicodedata.combining(c)).upper()
+    safe = re.sub(r'[^A-Z0-9]+', '_', ascii_txt).strip('_')
+    while '__' in safe:
+        safe = safe.replace('__', '_')
+    return safe or fallback
+
+
+def _boleta_period_label(period_raw):
+    """Convierte periodo yyyymmdd/yyyymm a etiqueta JUNIO2026."""
+    meses = {
+        '01': 'ENERO', '02': 'FEBRERO', '03': 'MARZO', '04': 'ABRIL',
+        '05': 'MAYO', '06': 'JUNIO', '07': 'JULIO', '08': 'AGOSTO',
+        '09': 'SEPTIEMBRE', '10': 'OCTUBRE', '11': 'NOVIEMBRE', '12': 'DICIEMBRE',
+    }
+    period = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw) or '')
+    if len(period) >= 6:
+        return f"{meses.get(period[4:6], 'MES')}{period[:4]}"
+    return period or 'PERIODO'
+
+
+def _boleta_pdf_filename(person, period_raw, nombre=None):
+    """Nombre: boleta_JUAN_PEREZ_70978388_JUNIO2026.pdf"""
+    name_part = _boleta_filename_token(nombre, fallback='')
+    person_part = _boleta_filename_token(person, fallback='PREVIEW')
+    period_part = _boleta_period_label(period_raw)
+    if name_part:
+        return f'boleta_{name_part}_{person_part}_{period_part}.pdf'
+    return f'boleta_{person_part}_{period_part}.pdf'
 
 
 def _certificado_quinta_pdf_filename(person, anio):
@@ -3704,7 +3736,7 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
             "attachments": [
                 {
                     "content": pdf_base64,
-                    "filename": _boleta_pdf_filename(person or nombre_empleado, periodo),
+                    "filename": _boleta_pdf_filename(person, periodo, nombre=nombre_empleado),
                 }
             ],
         }
@@ -5624,6 +5656,18 @@ def procesar_planilla_page():
 @login_required
 def procesar_planilla_masivo_page():
     return render_template('procesar_planilla_masivo.html')
+
+
+@app.route('/comparar_planillas')
+@login_required
+def comparar_planillas_page():
+    return render_template('comparar_planillas.html')
+
+
+@app.route('/comparar_planillas/resultado')
+@login_required
+def comparar_planillas_resultado_page():
+    return render_template('comparar_planillas_resultado.html')
 
 
 @app.route('/aperturar-periodos')
@@ -12845,7 +12889,13 @@ def api_pago_haberes_banbif_generar_txt():
 @app.route('/generar_boletas')
 @login_required
 def generar_boletas_page():
-    return render_template('generar_boletas.html')
+    from database import get_active_database
+    client_db = (get_active_database() or '').strip().lower()
+    return render_template(
+        'generar_boletas.html',
+        mostrar_subir_portal=(client_db == 'hm_aci'),
+        client_database=client_db,
+    )
 
 
 @app.route('/documentos/formato_utilidades')
@@ -14537,6 +14587,7 @@ def preview_boleta():
     params = request.args
     person = str(params.get('person') or '').strip()
     period = _normalize_pr_period(params.get('period'))
+    nombre = str(params.get('nombre') or '').strip()
     try:
         pdf_buffer = generar_pdf_en_memoria(params)
     except ValueError as e:
@@ -14548,7 +14599,7 @@ def preview_boleta():
         pdf_buffer,
         mimetype='application/pdf',
         as_attachment=False,
-        download_name=_boleta_pdf_filename(person, period),
+        download_name=_boleta_pdf_filename(person, period, nombre=nombre),
     )
 
 
@@ -14581,6 +14632,14 @@ def procesar_boletas_masivo():
         period_yyyymm = period[:6] if len(period) >= 6 else period
         safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
         nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}.zip'
+
+        empleados_periodo = get_listado_generar_boletas(cia, payroll_type, process, period, '0')
+        by_person = {}
+        for e in empleados_periodo or []:
+            pid_map = str(e.get('person') or e.get('employeecode') or '').strip()
+            if pid_map:
+                by_person[pid_map] = e
+
         memory_file = io.BytesIO()
         with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
             for pid in ids:
@@ -14593,7 +14652,12 @@ def procesar_boletas_masivo():
                         'period': period,
                     }
                 )
-                zf.writestr(_boleta_pdf_filename(pid, period), pdf_data.getvalue())
+                emp = by_person.get(pid, {})
+                emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
+                zf.writestr(
+                    _boleta_pdf_filename(pid, period, nombre=emp_nombre),
+                    pdf_data.getvalue(),
+                )
         memory_file.seek(0)
         return send_file(
             memory_file,
@@ -14656,7 +14720,8 @@ def descargar_zip_boletas():
                     'person': person_id,
                 }
                 pdf_io = generar_pdf_en_memoria(params)
-                nombre_pdf = _boleta_pdf_filename(person_id, period)
+                emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
+                nombre_pdf = _boleta_pdf_filename(person_id, period, nombre=emp_nombre)
                 zip_file.writestr(nombre_pdf, pdf_io.getvalue())
             except Exception as e:
                 logging.exception('descargar_zip_boletas persona=%s', person_id)
@@ -14766,6 +14831,161 @@ def enviar_boletas_masivo():
             'X-Accel-Buffering': 'no',
         },
     )
+
+
+@app.route('/subir_boletas_portal', methods=['POST'])
+@login_required
+def subir_boletas_portal():
+    """
+    Registra en PR_DocumentPerson (Tipodocumento=BOL) los nombres de PDF
+    de las boletas seleccionadas. Solo permitido en BD hm_aci.
+    No genera ni envía PDF.
+    """
+    from database import get_active_database
+
+    ensure_user_session()
+    client_db = (get_active_database() or '').strip().lower()
+    if client_db != 'hm_aci':
+        return jsonify({'error': 'La acción Subir Portal solo está disponible en hm_aci.'}), 403
+
+    data = request.get_json(silent=True) or {}
+    cia = str(data.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(data.get('payroll_type') or '').strip()
+    process = str(data.get('process') or '').strip()
+    period = _normalize_pr_period(data.get('period'))
+    seleccionados = data.get('trabajadores') or data.get('empleados') or []
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe seleccionar al menos un trabajador.'}), 400
+    if not (cia and payroll_type and process and period):
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
+
+    ids = [str(x).strip() for x in seleccionados if str(x).strip()]
+    if not ids:
+        return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
+
+    # Periodo en portal histórico: yyyymm (6 dígitos).
+    period_portal = period[:6] if len(period) >= 6 else period
+    userid = _xlastuser_id() or 'WEB'
+
+    empleados_periodo = get_listado_generar_boletas(cia, payroll_type, process, period, '0')
+    by_person = {}
+    for e in empleados_periodo or []:
+        pid = str(e.get('person') or e.get('employeecode') or '').strip()
+        if pid:
+            by_person[pid] = e
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Reemplazo: borra BOL previo del mismo DNI + compañía + periodo.
+        placeholders = ','.join('?' for _ in ids)
+        cursor.execute(
+            f"""
+            DELETE FROM PR_DocumentPerson
+            WHERE Company = ?
+              AND Tipodocumento = 'BOL'
+              AND period = ?
+              AND Person IN ({placeholders})
+            """,
+            [cia, period_portal, *ids],
+        )
+        eliminados = int(cursor.rowcount or 0)
+
+        cursor.execute(
+            """
+            SELECT ISNULL(MAX(Line), 0)
+            FROM PR_DocumentPerson WITH (UPDLOCK, HOLDLOCK)
+            WHERE Company = ? AND Tipodocumento = 'BOL'
+            """,
+            (cia,),
+        )
+        row = cursor.fetchone()
+        next_line = int(row[0] or 0) + 1
+
+        insert_sql = """
+            INSERT INTO PR_DocumentPerson (
+                Person, Company, Line, Tipodocumento, Fileroot, Filename,
+                xlastuser, xlastdate, registerdate, period,
+                flagdescarga, fechadescarga, payrolltype, processtype,
+                FechaEnvio, longitud
+            ) VALUES (
+                ?, ?, ?, 'BOL', NULL, ?,
+                ?, CONVERT(varchar(20), GETDATE(), 100), GETDATE(), ?,
+                NULL, NULL, ?, ?,
+                NULL, 0
+            )
+        """
+
+        registrados = []
+        errores = []
+        for emp_code in ids:
+            emp = by_person.get(emp_code, {})
+            emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
+            filename = _boleta_pdf_filename(emp_code, period, nombre=emp_nombre)
+            try:
+                cursor.execute(
+                    insert_sql,
+                    (
+                        emp_code,
+                        cia,
+                        next_line,
+                        filename,
+                        userid,
+                        period_portal,
+                        payroll_type,
+                        process,
+                    ),
+                )
+                registrados.append(
+                    {
+                        'person': emp_code,
+                        'nombre': emp_nombre,
+                        'filename': filename,
+                        'line': next_line,
+                    }
+                )
+            except Exception as ex:
+                logging.exception('subir_boletas_portal person=%s', emp_code)
+                errores.append({'person': emp_code, 'nombre': emp_nombre, 'error': str(ex)})
+
+        conn.commit()
+        msg = (
+            f'Se registraron {len(registrados)} boleta(s) en el portal '
+            f'(Line={next_line}).'
+        )
+        if eliminados:
+            msg += f' Se reemplazaron {eliminados} registro(s) previo(s).'
+        if errores:
+            msg += f' Errores: {len(errores)}.'
+        return jsonify(
+            {
+                'ok': True,
+                'line': next_line,
+                'registrados': len(registrados),
+                'eliminados': eliminados,
+                'errores': len(errores),
+                'detalle_registrados': registrados,
+                'detalle_errores': errores,
+                'message': msg,
+            }
+        )
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('subir_boletas_portal')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 # ==========================================
@@ -18439,6 +18659,439 @@ def ejecutar_calculo_streaming():
             'Connection': 'keep-alive',
             'X-Accel-Buffering': 'no',
         },
+    )
+
+
+# ==========================================
+# Comparar planillas (BD actual vs referencia)
+# ==========================================
+
+_COMPARE_PLANILLA_CACHE = {}
+_COMPARE_PLANILLA_LOCK = threading.Lock()
+_COMPARE_PLANILLA_TTL_SEC = 3600
+_COMPARE_AMOUNT_EPS = 0.009  # tolerancia centavos
+
+
+def _sanitize_sql_database_name(name):
+    """Solo letras, números y underscore (nombre de BD ODBC)."""
+    raw = str(name or '').strip()
+    if not raw or not re.fullmatch(r'[A-Za-z0-9_]+', raw):
+        return ''
+    if len(raw) > 64:
+        return ''
+    return raw
+
+
+def _compare_cache_put(payload):
+    compare_id = uuid.uuid4().hex
+    now = time.time()
+    with _COMPARE_PLANILLA_LOCK:
+        stale = [
+            k for k, v in _COMPARE_PLANILLA_CACHE.items()
+            if now - float(v.get('created_at') or 0) > _COMPARE_PLANILLA_TTL_SEC
+        ]
+        for k in stale:
+            _COMPARE_PLANILLA_CACHE.pop(k, None)
+        _COMPARE_PLANILLA_CACHE[compare_id] = {
+            'created_at': now,
+            **payload,
+        }
+    return compare_id
+
+
+def _compare_cache_get(compare_id):
+    compare_id = str(compare_id or '').strip()
+    if not compare_id:
+        return None
+    with _COMPARE_PLANILLA_LOCK:
+        item = _COMPARE_PLANILLA_CACHE.get(compare_id)
+        if not item:
+            return None
+        if time.time() - float(item.get('created_at') or 0) > _COMPARE_PLANILLA_TTL_SEC:
+            _COMPARE_PLANILLA_CACHE.pop(compare_id, None)
+            return None
+        return item
+
+
+def _float_concept_amount(row):
+    for key in ('importe', 'ConceptValueLo', 'conceptvaluelo', 'ConceptValue', 'conceptvalue'):
+        if key in row and row.get(key) is not None:
+            try:
+                return float(row.get(key))
+            except (TypeError, ValueError):
+                pass
+    return 0.0
+
+
+def _fetch_payroll_concepts_map(conn, cia, payroll_type, processtype, period, persons):
+    """
+    Devuelve dict[(person, concept)] = {importe, description, formulacode, nombre}.
+    Consulta simple con IN (sin temp tables / hilos / fast_executemany).
+    """
+    if not persons:
+        return {}
+
+    chunks = [persons[i:i + 80] for i in range(0, len(persons), 80)]
+    out = {}
+    names = {}
+    cur = conn.cursor()
+
+    for chunk in chunks:
+        ph = ','.join('?' for _ in chunk)
+        cur.execute(
+            f"""
+            SELECT
+                Person,
+                LTRIM(RTRIM(ISNULL(LastName1, ''))) + ' ' +
+                LTRIM(RTRIM(ISNULL(LastName2, ''))) + ' ' +
+                LTRIM(RTRIM(ISNULL(Name1, ''))) + ' ' +
+                LTRIM(RTRIM(ISNULL(Name2, ''))) AS nombre
+            FROM SY_Person
+            WHERE Person IN ({ph})
+            """,
+            chunk,
+        )
+        for r in cur.fetchall():
+            if r and r[0]:
+                names[str(r[0]).strip()] = str(r[1] or '').strip()
+
+        cur.execute(
+            f"""
+            SELECT
+                E.Person,
+                E.Concept,
+                ISNULL(C.Description, E.Concept) AS description,
+                ISNULL(C.FormulaCode, '') AS formulacode,
+                CAST(ISNULL(E.ConceptValueLo, E.ConceptValue) AS FLOAT) AS importe
+            FROM PR_EmployeePayRollConcept E WITH (NOLOCK)
+                LEFT JOIN PR_Concept C WITH (NOLOCK)
+                    ON C.Company = E.Company AND C.Concept = E.Concept
+            WHERE E.Company = ?
+              AND E.PayRollType = ?
+              AND E.ProcessType = ?
+              AND E.PRPeriod = ?
+              AND E.Person IN ({ph})
+            """,
+            [cia, payroll_type, processtype, period, *chunk],
+        )
+        for person_raw, concept_raw, description, formulacode, importe in cur.fetchall():
+            person = str(person_raw or '').strip()
+            concept = str(concept_raw or '').strip()
+            if not person or not concept:
+                continue
+            try:
+                imp = float(importe or 0)
+            except (TypeError, ValueError):
+                imp = 0.0
+            out[(person, concept)] = {
+                'person': person,
+                'concept': concept,
+                'description': str(description or concept).strip(),
+                'formulacode': str(formulacode or '').strip(),
+                'importe': imp,
+                'nombre': names.get(person, ''),
+            }
+    return out
+
+
+def _comparar_planillas_conceptos(map_actual, map_ref):
+    """Solo diferencias de importe. Concepto = Description (nombre), nunca FormulaCode."""
+    keys = set(map_actual.keys()) | set(map_ref.keys())
+    diffs = []
+    for key in sorted(keys, key=lambda k: (k[0], k[1])):
+        a = map_actual.get(key)
+        b = map_ref.get(key)
+        imp_a = float(a['importe']) if a else 0.0
+        imp_b = float(b['importe']) if b else 0.0
+        if abs(imp_a - imp_b) <= _COMPARE_AMOUNT_EPS:
+            continue
+        person = key[0]
+        nombre = (a or b or {}).get('nombre') or ''
+        # Nombre descriptivo (Description), nunca FormulaCode/nemónico.
+        desc_a = str((a or {}).get('description') or '').strip()
+        desc_b = str((b or {}).get('description') or '').strip()
+        nombre_concepto = desc_a or desc_b or key[1]
+        diffs.append({
+            'person': person,
+            'nombre': nombre,
+            'concept': key[1],
+            'formulacode': (a or b or {}).get('formulacode') or '',
+            'concepto_actual': desc_a or nombre_concepto,
+            'importe_actual': round(imp_a, 4),
+            'concepto_referencia': desc_b or nombre_concepto,
+            'importe_referencia': round(imp_b, 4),
+            'diferencia': round(imp_a - imp_b, 4),
+            'solo_actual': a is not None and b is None,
+            'solo_referencia': a is None and b is not None,
+        })
+    return diffs
+
+
+def _fetch_concepts_pair(db_actual, db_ref, cia, payroll_type, processtype, period, persons):
+    """Lee ambas BD en secuencia (seguro con ODBC legacy; 3–N trabajadores es rápido)."""
+    map_act = {}
+    map_ref = {}
+    conn_act = None
+    conn_ref = None
+    try:
+        conn_act = get_db_connection(database=db_actual)
+        map_act = _fetch_payroll_concepts_map(
+            conn_act, cia, payroll_type, processtype, period, persons
+        )
+    finally:
+        if conn_act:
+            try:
+                conn_act.close()
+            except Exception:
+                pass
+    try:
+        conn_ref = get_db_connection(database=db_ref)
+        map_ref = _fetch_payroll_concepts_map(
+            conn_ref, cia, payroll_type, processtype, period, persons
+        )
+    finally:
+        if conn_ref:
+            try:
+                conn_ref.close()
+            except Exception:
+                pass
+    return map_act, map_ref
+
+
+@app.route('/ejecutar_comparar_planilla_streaming', methods=['POST'])
+@login_required
+def ejecutar_comparar_planilla_streaming():
+    """
+    1) Calcula planilla en BD actual (mismo SP que Procesar planilla).
+    2) Compara PR_EmployeePayRollConcept (e existencia en PR_EmployeePayRoll)
+       contra la BD de referencia.
+    """
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    processtype = str(body.get('processtype') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    bd_ref = _sanitize_sql_database_name(body.get('bd_referencia') or body.get('bd_ref') or '')
+    seleccionados = body.get('trabajadores') or []
+
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'Debe enviar una lista no vacía de trabajadores.'}), 400
+    if not cia or not processtype or not payroll_type or not period:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
+    if not bd_ref:
+        return jsonify({'error': 'BD referencia inválida. Use solo letras, números y _ (ej. hm_aci).'}), 400
+
+    try:
+        user_id = current_user.id
+    except AttributeError:
+        return jsonify({'error': 'Usuario no identificado.'}), 401
+
+    lista = [str(x).strip() for x in seleccionados if str(x).strip()]
+    total = len(lista)
+    if total == 0:
+        return jsonify({'error': 'No hay IDs de trabajador válidos.'}), 400
+
+    from database import get_active_database
+    try:
+        client_db = get_active_database(required=True)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    if client_db.strip().lower() == bd_ref.lower():
+        return jsonify({'error': 'La BD referencia no puede ser igual a la BD actual.'}), 400
+
+    # Verifica que la BD referencia exista / sea reachable
+    try:
+        conn_probe = get_db_connection(database=bd_ref)
+        conn_probe.close()
+    except Exception as e:
+        return jsonify({'error': f'No se pudo conectar a BD referencia "{bd_ref}": {e}'}), 400
+
+    tc = 3.0
+
+    def generar():
+        conn = None
+        try:
+            conn = get_db_connection(database=client_db)
+            cursor = conn.cursor()
+            _set_cursor_timeout_payroll(cursor)
+            sp_name, proceso_desc = _resolve_payroll_calc_procedure(cursor, cia, processtype)
+            if not sp_name:
+                yield (
+                    'data: '
+                    + json.dumps(
+                        {
+                            'error': (
+                                f'El proceso "{proceso_desc}" no tiene procedimiento de cálculo '
+                                f'(ProcedureName).'
+                            )
+                        }
+                    )
+                    + '\n\n'
+                )
+                return
+
+            _drain_pyodbc_cursor(cursor)
+            try:
+                pre_validaciones = _validar_pre_calculo_planilla_mensajes(
+                    cursor, cia, payroll_type, processtype
+                )
+            except Exception:
+                logging.exception('comparar_planilla pre-validacion')
+                pre_validaciones = []
+            if pre_validaciones:
+                yield (
+                    'data: '
+                    + json.dumps(
+                        {
+                            'error': 'No se puede calcular: hay validaciones previas.',
+                            'validaciones_pre': pre_validaciones,
+                        }
+                    )
+                    + '\n\n'
+                )
+                return
+
+            exitos = 0
+            errores = []
+            call_sql = f'{{CALL {sp_name} (?, ?, ?, ?, ?, ?, ?)}}'
+            for index, pid in enumerate(lista):
+                try:
+                    cursor.execute(
+                        call_sql,
+                        (cia, payroll_type, processtype, period, pid, user_id, tc),
+                    )
+                    _drain_pyodbc_cursor(cursor)
+                    conn.commit()
+                    exitos += 1
+                    yield (
+                        'data: '
+                        + json.dumps(
+                            {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'fase': 'calculando',
+                            }
+                        )
+                        + '\n\n'
+                    )
+                except Exception as e_individual:
+                    conn.rollback()
+                    errores.append({'person': pid, 'error': str(e_individual)})
+                    logging.warning(
+                        'comparar_planilla calc persona %s: %s', pid, e_individual
+                    )
+                    yield (
+                        'data: '
+                        + json.dumps(
+                            {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'fase': 'calculando',
+                                'detalle': f'{pid}: {e_individual}',
+                            }
+                        )
+                        + '\n\n'
+                    )
+
+            yield 'data: ' + json.dumps({'fase': 'comparando', 'actual': total, 'total': total}) + '\n\n'
+
+            # Cierra conexión de cálculo antes de comparar (libera locks / pool).
+            try:
+                conn.close()
+            except Exception:
+                pass
+            conn = None
+
+            t0 = time.time()
+            logging.info(
+                'comparar_planilla: inicio lectura conceptos act=%s ref=%s personas=%s',
+                client_db, bd_ref, len(lista),
+            )
+            map_act, map_ref = _fetch_concepts_pair(
+                client_db, bd_ref, cia, payroll_type, processtype, period, lista
+            )
+            diffs = _comparar_planillas_conceptos(map_act, map_ref)
+            elapsed_cmp = round(time.time() - t0, 2)
+            logging.info(
+                'comparar_planilla: fin comparación en %ss (act=%s ref=%s diffs=%s)',
+                elapsed_cmp, len(map_act), len(map_ref), len(diffs),
+            )
+
+            compare_id = _compare_cache_put(
+                {
+                    'meta': {
+                        'bd_actual': client_db,
+                        'bd_referencia': bd_ref,
+                        'cia': cia,
+                        'payroll_type': payroll_type,
+                        'processtype': processtype,
+                        'period': period,
+                        'num_trabajadores': total,
+                        'exitos': exitos,
+                        'errores_calculo': len(errores),
+                        'segundos_comparacion': elapsed_cmp,
+                        'filas_actual': len(map_act),
+                        'filas_referencia': len(map_ref),
+                    },
+                    'diferencias': diffs,
+                    'user_id': str(user_id),
+                }
+            )
+
+            yield (
+                'data: '
+                + json.dumps(
+                    {
+                        'done': True,
+                        'compare_id': compare_id,
+                        'exitos': exitos,
+                        'errores_calculo': len(errores),
+                        'diferencias': len(diffs),
+                        'bd_actual': client_db,
+                        'bd_referencia': bd_ref,
+                        'segundos_comparacion': elapsed_cmp,
+                    }
+                )
+                + '\n\n'
+            )
+        except Exception as e:
+            logging.exception('ejecutar_comparar_planilla_streaming')
+            yield f'data: {json.dumps({"error": str(e)})}\n\n'
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return Response(
+        stream_with_context(generar()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
+@app.route('/api/comparar-planillas/resultado')
+@login_required
+def api_comparar_planillas_resultado():
+    compare_id = str(request.args.get('id') or '').strip()
+    item = _compare_cache_get(compare_id)
+    if not item:
+        return jsonify({'error': 'Resultado no encontrado o expirado. Vuelva a comparar.'}), 404
+    return jsonify(
+        {
+            'meta': item.get('meta') or {},
+            'diferencias': item.get('diferencias') or [],
+            'total': len(item.get('diferencias') or []),
+        }
     )
 
 

@@ -18723,11 +18723,52 @@ def _float_concept_amount(row):
     return 0.0
 
 
+def _fetch_formulacodes_tipo_shortname(conn, cia, shortnames):
+    """FormulaCodes de la cia cuyo PR_ConceptType.ShortName está en shortnames (ej. X=Auxiliares)."""
+    names = [
+        str(s or '').strip().upper()
+        for s in (shortnames or [])
+        if str(s or '').strip()
+    ]
+    if not names:
+        return set()
+    ph = ','.join('?' for _ in names)
+    cur = conn.cursor()
+    cur.execute(
+        f"""
+        SELECT DISTINCT UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))))
+        FROM PR_Concept C WITH (NOLOCK)
+            INNER JOIN PR_ConceptType CT WITH (NOLOCK)
+                ON CT.ConceptType = C.ConceptType
+        WHERE C.Company = ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(CT.ShortName, '')))) IN ({ph})
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+        """,
+        [cia, *names],
+    )
+    out = set()
+    for (fc,) in cur.fetchall():
+        fc = str(fc or '').strip().upper()
+        if fc:
+            out.add(fc)
+    return out
+
+
+def _filtrar_map_por_formulacodes_excluidos(concept_map, excluidos):
+    if not excluidos:
+        return concept_map
+    return {
+        k: v
+        for k, v in concept_map.items()
+        if str((v or {}).get('formulacode') or '').strip().upper() not in excluidos
+    }
+
+
 def _fetch_payroll_concepts_map(conn, cia, payroll_type, processtype, period, persons):
     """
     Devuelve dict[(person, concept)] = {importe, description, formulacode, nombre}.
-    Solo: tipos I/D/A (ingreso/descuento/aporte) o FormulaCode
-    TOTALINGRESO, TOTALEGRESOS, TOTALPATRONAL, NETO.
+    Solo: tipos I/D/A (ingreso/descuento/aporte vía PR_ConceptType.ShortName) o FormulaCode
+    TOTALINGRESO, TOTALEGRESOS, TOTALPATRONAL, NETO. Excluye auxiliares (X) y demás tipos.
     Consulta simple con IN (sin temp tables / hilos / fast_executemany).
     """
     if not persons:
@@ -18768,13 +18809,14 @@ def _fetch_payroll_concepts_map(conn, cia, payroll_type, processtype, period, pe
             FROM PR_EmployeePayRollConcept E WITH (NOLOCK)
                 INNER JOIN PR_Concept C WITH (NOLOCK)
                     ON C.Company = E.Company AND C.Concept = E.Concept
-                LEFT JOIN PR_ConceptType CT WITH (NOLOCK)
+                INNER JOIN PR_ConceptType CT WITH (NOLOCK)
                     ON CT.ConceptType = C.ConceptType
             WHERE E.Company = ?
               AND E.PayRollType = ?
               AND E.ProcessType = ?
               AND E.PRPeriod = ?
               AND E.Person IN ({ph})
+              AND UPPER(LTRIM(RTRIM(ISNULL(CT.ShortName, '')))) <> 'X'
               AND (
                     UPPER(LTRIM(RTRIM(ISNULL(CT.ShortName, '')))) IN ('I', 'D', 'A')
                  OR UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) IN (
@@ -18838,9 +18880,14 @@ def _comparar_planillas_conceptos(map_actual, map_ref):
 
 
 def _fetch_concepts_pair(db_actual, db_ref, cia, payroll_type, processtype, period, persons):
-    """Lee ambas BD en secuencia (seguro con ODBC legacy; 3–N trabajadores es rápido)."""
+    """
+    Lee ambas BD en secuencia.
+    Si un FormulaCode es Auxiliar (PR_ConceptType.ShortName=X) en alguna BD,
+    se excluye de ambas (evita falsos diffs cuando en referencia está mal tipado como I).
+    """
     map_act = {}
     map_ref = {}
+    aux_fc = set()
     conn_act = None
     conn_ref = None
     try:
@@ -18848,6 +18895,7 @@ def _fetch_concepts_pair(db_actual, db_ref, cia, payroll_type, processtype, peri
         map_act = _fetch_payroll_concepts_map(
             conn_act, cia, payroll_type, processtype, period, persons
         )
+        aux_fc |= _fetch_formulacodes_tipo_shortname(conn_act, cia, ['X'])
     finally:
         if conn_act:
             try:
@@ -18859,12 +18907,16 @@ def _fetch_concepts_pair(db_actual, db_ref, cia, payroll_type, processtype, peri
         map_ref = _fetch_payroll_concepts_map(
             conn_ref, cia, payroll_type, processtype, period, persons
         )
+        aux_fc |= _fetch_formulacodes_tipo_shortname(conn_ref, cia, ['X'])
     finally:
         if conn_ref:
             try:
                 conn_ref.close()
             except Exception:
                 pass
+    if aux_fc:
+        map_act = _filtrar_map_por_formulacodes_excluidos(map_act, aux_fc)
+        map_ref = _filtrar_map_por_formulacodes_excluidos(map_ref, aux_fc)
     return map_act, map_ref
 
 

@@ -18726,7 +18726,8 @@ def _float_concept_amount(row):
 def _fetch_payroll_concepts_map(conn, cia, payroll_type, processtype, period, persons):
     """
     Devuelve dict[(person, concept)] = {importe, description, formulacode, nombre}.
-    Solo conceptos con tipo ShortName I/D/A/T (ingreso, descuento, aporte, total).
+    Solo: tipos I/D/A (ingreso/descuento/aporte) o FormulaCode
+    TOTALINGRESO, TOTALEGRESOS, TOTALPATRONAL, NETO.
     Consulta simple con IN (sin temp tables / hilos / fast_executemany).
     """
     if not persons:
@@ -18767,14 +18768,19 @@ def _fetch_payroll_concepts_map(conn, cia, payroll_type, processtype, period, pe
             FROM PR_EmployeePayRollConcept E WITH (NOLOCK)
                 INNER JOIN PR_Concept C WITH (NOLOCK)
                     ON C.Company = E.Company AND C.Concept = E.Concept
-                INNER JOIN PR_ConceptType CT WITH (NOLOCK)
+                LEFT JOIN PR_ConceptType CT WITH (NOLOCK)
                     ON CT.ConceptType = C.ConceptType
             WHERE E.Company = ?
               AND E.PayRollType = ?
               AND E.ProcessType = ?
               AND E.PRPeriod = ?
               AND E.Person IN ({ph})
-              AND UPPER(LTRIM(RTRIM(ISNULL(CT.ShortName, '')))) IN ('I', 'D', 'A', 'T')
+              AND (
+                    UPPER(LTRIM(RTRIM(ISNULL(CT.ShortName, '')))) IN ('I', 'D', 'A')
+                 OR UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) IN (
+                        'TOTALINGRESO', 'TOTALEGRESOS', 'TOTALPATRONAL', 'NETO'
+                    )
+              )
             """,
             [cia, payroll_type, processtype, period, *chunk],
         )

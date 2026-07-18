@@ -244,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const modalResultado = modalResultadoEl ? new bootstrap.Modal(modalResultadoEl) : null;
 
     let ultimoCompareId = null;
+    let ultimoResultadoData = null;
     let rowsDiffCache = [];
 
     function escapeHtml(s) {
@@ -252,6 +253,24 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function formatearImporteNum(n) {
         return (Number(n) || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function limpiarResultadoComparacion() {
+        ultimoCompareId = null;
+        ultimoResultadoData = null;
+        rowsDiffCache = [];
+        btnResultado.disabled = true;
+    }
+
+    async function cargarResultadoEnMemoria(compareId) {
+        const id = String(compareId || '').trim();
+        if (!id) return null;
+        const res = await fetch(`${URL_RESULTADO_API}?id=${encodeURIComponent(id)}`);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'No se pudo cargar el resultado.');
+        ultimoCompareId = id;
+        ultimoResultadoData = data;
+        return data;
     }
 
     function renderModalResultado(data) {
@@ -301,16 +320,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function abrirResultadoModal() {
-        if (!ultimoCompareId || !modalResultado) return;
+        if (!modalResultado) return;
+        if (!ultimoCompareId && !ultimoResultadoData) return;
         const tbody = document.getElementById('tbodyResultadoComparar');
         if (tbody) {
             tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Cargando...</td></tr>';
         }
         modalResultado.show();
         try {
-            const res = await fetch(`${URL_RESULTADO_API}?id=${encodeURIComponent(ultimoCompareId)}`);
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'No se pudo cargar el resultado.');
+            // Preferir copia en memoria: el cache del servidor se pierde si Flask reinicia (debug=True).
+            if (ultimoResultadoData) {
+                renderModalResultado(ultimoResultadoData);
+                return;
+            }
+            const data = await cargarResultadoEnMemoria(ultimoCompareId);
             renderModalResultado(data);
         } catch (err) {
             console.error(err);
@@ -353,8 +376,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         chk.checked = false;
         chk.indeterminate = false;
         if (txtBuscar) txtBuscar.value = '';
-        ultimoCompareId = null;
-        btnResultado.disabled = true;
+        limpiarResultadoComparacion();
         document.getElementById('lblDiffCount').textContent = '—';
         actualizarContadores();
     }
@@ -479,8 +501,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('checkAll').checked = false;
         document.getElementById('checkAll').indeterminate = false;
         if (!preserveCompare) {
-            ultimoCompareId = null;
-            btnResultado.disabled = true;
+            limpiarResultadoComparacion();
             document.getElementById('lblDiffCount').textContent = '—';
         }
         try {
@@ -623,8 +644,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         resetBarra();
         container.classList.remove('d-none');
         btnComparar.disabled = true;
-        btnResultado.disabled = true;
-        ultimoCompareId = null;
+        limpiarResultadoComparacion();
         setUiBusy(true);
 
         try {
@@ -713,7 +733,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             ultimoCompareId = resultado.compare_id || null;
             const nDiff = Number(resultado.diferencias || 0);
             document.getElementById('lblDiffCount').textContent = String(nDiff);
-            btnResultado.disabled = !ultimoCompareId;
+
+            // Traer el detalle YA (antes de que Flask debug reinicie y pierda el cache en RAM).
+            if (ultimoCompareId) {
+                try {
+                    await cargarResultadoEnMemoria(ultimoCompareId);
+                } catch (ePrefetch) {
+                    console.warn('No se pudo precargar resultado:', ePrefetch);
+                    ultimoResultadoData = null;
+                }
+            }
+            btnResultado.disabled = !(ultimoCompareId || ultimoResultadoData);
 
             // Mostrar fin de inmediato; refrescar lista después (no bloquea el mensaje).
             Swal.fire({
@@ -726,7 +756,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     + (resultado.segundos_comparacion != null
                         ? `<br><span class="text-muted">Comparación: ${resultado.segundos_comparacion}s</span>`
                         : '')
-                    + (ultimoCompareId
+                    + ((ultimoCompareId || ultimoResultadoData)
                         ? '<br><br><button type="button" id="btnSwalResultado" class="swal2-confirm swal2-styled" style="display:inline-block;">Ver resultado</button>'
                         : ''),
                 didOpen: () => {
@@ -744,7 +774,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             } catch (eList) {
                 console.warn(eList);
             }
-            btnResultado.disabled = !ultimoCompareId;
+            btnResultado.disabled = !(ultimoCompareId || ultimoResultadoData);
         } catch (err) {
             console.error(err);
             alert(err.message || 'Error en la comparación.');
@@ -754,7 +784,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             setUiBusy(false);
             actualizarContadores();
             // Reafirma estado del botón Resultado (setUiBusy / listar no deben dejarlo muerto).
-            btnResultado.disabled = !ultimoCompareId;
+            btnResultado.disabled = !(ultimoCompareId || ultimoResultadoData);
         }
     }
 

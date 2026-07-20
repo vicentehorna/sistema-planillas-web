@@ -690,24 +690,33 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function cargarPeriodo(periodoPreferido) {
         const cia = cboCia.value.trim();
+        const payroll = cboPt.value.trim();
         const proc = cboProc.value.trim();
         const hid = document.getElementById('hidPeriodoCalculo');
         const txt = document.getElementById('txtPeriodoDesc');
         hid.value = '';
         txt.value = '';
         txt.title = '';
-        if (!cia || !proc) return;
+        if (!cia || !proc || !payroll) return;
         try {
             const res = await fetch(
-                `${URL_PERIODOS}?cia=${encodeURIComponent(cia)}&processtype=${encodeURIComponent(proc)}`
+                `${URL_PERIODOS}?cia=${encodeURIComponent(cia)}`
+                + `&processtype=${encodeURIComponent(proc)}`
+                + `&payrolltype=${encodeURIComponent(payroll)}`
             );
             const data = await res.json();
             const arr = Array.isArray(data) ? data : [];
-            let pick = arr[0] || null;
+            const esAbierto = (p) => {
+                const st = String((p && p.status) || '').trim().toUpperCase();
+                return st === 'A' || st === 'G';
+            };
+            // Mismo criterio que Aperturar Periodos: periodo abierto (A/G) de esta planilla.
+            let pick = arr.find(esAbierto) || arr[0] || null;
             if (periodoPreferido) {
                 const want = String(periodoPreferido).trim();
                 const found = arr.find((p) => String(p.id).trim() === want);
-                if (found) pick = found;
+                // Solo restaurar si sigue siendo el periodo abierto (evita junio cerrado/otra planilla).
+                if (found && esAbierto(found)) pick = found;
             }
             if (pick) {
                 hid.value = String(pick.id || '');

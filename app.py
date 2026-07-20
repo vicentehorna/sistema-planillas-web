@@ -17882,9 +17882,10 @@ def api_procesar_planilla_procesos():
 @app.route('/api/procesar-planilla/periodos-calculo')
 @login_required
 def api_procesar_planilla_periodos_list():
-    """sp_pr_selectorperiodocalculo_web @cia, @processtype → PRPERIOD, description (lista ordenada en SP)."""
+    """sp_pr_selectorperiodocalculo_web @cia, @processtype, @payrolltype → periodos de esa planilla."""
     cia = request.args.get('cia', '').strip()
     processtype = request.args.get('processtype', '').strip()
+    payrolltype = request.args.get('payrolltype', '').strip()
     if not cia or not processtype:
         return jsonify([])
     conn = None
@@ -17892,8 +17893,8 @@ def api_procesar_planilla_periodos_list():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_selectorperiodocalculo_web @cia=?, @processtype=?",
-            (cia, processtype),
+            "EXEC sp_pr_selectorperiodocalculo_web @cia=?, @processtype=?, @payrolltype=?",
+            (cia, processtype, payrolltype or None),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         data = []
@@ -17906,6 +17907,7 @@ def api_procesar_planilla_periodos_list():
                 {
                     "id": pid,
                     "text": str(r.get("description") or "").strip(),
+                    "status": str(r.get("status") or "").strip().upper(),
                 }
             )
         return jsonify(data)

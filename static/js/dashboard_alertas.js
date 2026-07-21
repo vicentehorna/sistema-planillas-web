@@ -1,6 +1,6 @@
 /**
  * Alertas del dashboard: vacaciones pendientes y cesados sin liquidación.
- * Consolida todas las empresas activas vía API.
+ * Resumen = solo conteos; detalle se pide al abrir el modal (evita JSON truncado).
  */
 (function () {
     const URL_VACACIONES = '/api/alertas/vacaciones-pendientes';
@@ -8,6 +8,8 @@
 
     let cacheVacaciones = [];
     let cacheLiquidacion = [];
+    let detalleVacCargado = false;
+    let detalleLiqCargado = false;
 
     function el(id) {
         return document.getElementById(id);
@@ -55,6 +57,11 @@
             btn.disabled = count <= 0;
             btn.classList.toggle('d-none', count <= 0);
         }
+    }
+
+    function setCardError(textoId, msg) {
+        const texto = el(textoId);
+        if (texto) texto.textContent = msg;
     }
 
     function escHtml(s) {
@@ -114,13 +121,23 @@
         `).join('');
     }
 
-    async function fetchAlerta(url) {
+    async function fetchAlerta(url, detalle) {
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: '{}',
+            body: JSON.stringify({ detalle: !!detalle }),
         });
-        const data = await res.json();
+        const text = await res.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (e) {
+            throw new Error(
+                'Respuesta inválida del servidor'
+                + (text && text.length ? ` (${text.length} bytes)` : '')
+                + '.'
+            );
+        }
         if (!res.ok) {
             throw new Error(data.error || 'Error al consultar alertas.');
         }
@@ -130,40 +147,71 @@
     async function cargarAlertas() {
         setCardLoading('cardAlertaVacaciones', true);
         setCardLoading('cardAlertaLiquidacion', true);
-        try {
-            const [vac, liq] = await Promise.all([
-                fetchAlerta(URL_VACACIONES),
-                fetchAlerta(URL_LIQUIDACION),
-            ]);
-            cacheVacaciones = vac.rows || [];
-            cacheLiquidacion = liq.rows || [];
+        detalleVacCargado = false;
+        detalleLiqCargado = false;
+        cacheVacaciones = [];
+        cacheLiquidacion = [];
+
+        const results = await Promise.allSettled([
+            fetchAlerta(URL_VACACIONES, false),
+            fetchAlerta(URL_LIQUIDACION, false),
+        ]);
+
+        const vac = results[0];
+        const liq = results[1];
+
+        if (vac.status === 'fulfilled') {
             setCardState(
                 'cardAlertaVacaciones',
                 'textoAlertaVacaciones',
                 'btnDetalleVacaciones',
-                vac.total_trabajadores || 0,
+                vac.value.total_trabajadores || 0,
                 textoVacaciones,
                 'alerta-card-warn'
             );
+        } else {
+            console.error(vac.reason);
+            setCardError(
+                'textoAlertaVacaciones',
+                (vac.reason && vac.reason.message) || 'No se pudieron cargar las alertas.'
+            );
+        }
+
+        if (liq.status === 'fulfilled') {
             setCardState(
                 'cardAlertaLiquidacion',
                 'textoAlertaLiquidacion',
                 'btnDetalleLiquidacion',
-                liq.total_trabajadores || 0,
+                liq.value.total_trabajadores || 0,
                 textoLiquidacion,
                 'alerta-card-danger'
             );
-        } catch (e) {
-            console.error(e);
-            const msg = e.message || 'No se pudieron cargar las alertas.';
-            const tv = el('textoAlertaVacaciones');
-            const tl = el('textoAlertaLiquidacion');
-            if (tv) tv.textContent = msg;
-            if (tl) tl.textContent = msg;
-        } finally {
-            setCardLoading('cardAlertaVacaciones', false);
-            setCardLoading('cardAlertaLiquidacion', false);
+        } else {
+            console.error(liq.reason);
+            setCardError(
+                'textoAlertaLiquidacion',
+                (liq.reason && liq.reason.message) || 'No se pudieron cargar las alertas.'
+            );
         }
+
+        setCardLoading('cardAlertaVacaciones', false);
+        setCardLoading('cardAlertaLiquidacion', false);
+    }
+
+    async function cargarDetalleVacaciones() {
+        if (detalleVacCargado) return cacheVacaciones;
+        const data = await fetchAlerta(URL_VACACIONES, true);
+        cacheVacaciones = data.rows || [];
+        detalleVacCargado = true;
+        return cacheVacaciones;
+    }
+
+    async function cargarDetalleLiquidacion() {
+        if (detalleLiqCargado) return cacheLiquidacion;
+        const data = await fetchAlerta(URL_LIQUIDACION, true);
+        cacheLiquidacion = data.rows || [];
+        detalleLiqCargado = true;
+        return cacheLiquidacion;
     }
 
     function initModales() {
@@ -174,17 +222,43 @@
 
         const btnVac = el('btnDetalleVacaciones');
         if (btnVac && modalVac) {
-            btnVac.addEventListener('click', () => {
-                renderTablaVacaciones(cacheVacaciones);
+            btnVac.addEventListener('click', async () => {
+                const tbody = el('tbodyDetalleVacaciones');
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Cargando...</td></tr>';
+                }
                 modalVac.show();
+                try {
+                    const rows = await cargarDetalleVacaciones();
+                    renderTablaVacaciones(rows);
+                } catch (e) {
+                    console.error(e);
+                    if (tbody) {
+                        tbody.innerHTML =
+                            `<tr><td colspan="8" class="text-center text-danger py-3">${escHtml(e.message || 'Error')}</td></tr>`;
+                    }
+                }
             });
         }
 
         const btnLiq = el('btnDetalleLiquidacion');
         if (btnLiq && modalLiq) {
-            btnLiq.addEventListener('click', () => {
-                renderTablaLiquidacion(cacheLiquidacion);
+            btnLiq.addEventListener('click', async () => {
+                const tbody = el('tbodyDetalleLiquidacion');
+                if (tbody) {
+                    tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Cargando...</td></tr>';
+                }
                 modalLiq.show();
+                try {
+                    const rows = await cargarDetalleLiquidacion();
+                    renderTablaLiquidacion(rows);
+                } catch (e) {
+                    console.error(e);
+                    if (tbody) {
+                        tbody.innerHTML =
+                            `<tr><td colspan="8" class="text-center text-danger py-3">${escHtml(e.message || 'Error')}</td></tr>`;
+                    }
+                }
             });
         }
     }

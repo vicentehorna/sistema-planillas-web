@@ -32,8 +32,7 @@ LEGACY_NEXT = ["SP_PR_EjecutarFormula.sql"]
 
 NOTA_ERP = """\
   NOTA: algunos SP usados por app.py no estan en sql/ (ya existen en ERP):
-    sp_pr_selectorpersonas_web, sp_pr_selectortipos_dm_web,
-    sp_pr_selectorperiodos_asig_web
+    sp_pr_selectorpersonas_web, sp_pr_selectortipos_dm_web
 
   IMPORTANTE: no incluir alter_pr_mapping2_hm_atilio.sql (tiene USE hm_atilio).
   Antes de los SP se ejecutan todos los ALTER de esquema web."""

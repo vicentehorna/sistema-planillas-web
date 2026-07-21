@@ -1,0 +1,121 @@
+{% extends "layout.html" %}
+
+{% block title %}Receta{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-3">
+    <div class="d-flex align-items-center justify-content-between mb-3">
+        <div>
+            <h4 class="mb-1 fw-semibold">Receta</h4>
+            <p class="text-muted small mb-0">
+                Seleccione un archivo TXT para generar el PDF de receta (mitad de hoja A4).
+            </p>
+        </div>
+    </div>
+
+    <div class="card shadow-sm border-0" style="max-width: 640px;">
+        <div class="card-body">
+            <form id="frmReceta" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <label for="archivoReceta" class="form-label fw-semibold">Archivo TXT</label>
+                    <input type="file"
+                           class="form-control"
+                           id="archivoReceta"
+                           name="archivo"
+                           accept=".txt,text/plain"
+                           required>
+                    <div class="form-text">El contenido del archivo se imprimirá en el cuerpo de la receta.</div>
+                </div>
+                <div id="alertaReceta" class="alert d-none mb-3" role="alert"></div>
+                <button type="submit" class="btn btn-primary" id="btnGenerarReceta">
+                    <i class="bi bi-file-earmark-pdf me-1"></i>Generar PDF
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const form = document.getElementById('frmReceta');
+    const input = document.getElementById('archivoReceta');
+    const btn = document.getElementById('btnGenerarReceta');
+    const alerta = document.getElementById('alertaReceta');
+
+    function showAlert(msg, ok) {
+        alerta.textContent = msg;
+        alerta.classList.remove('d-none', 'alert-danger', 'alert-success');
+        alerta.classList.add(ok ? 'alert-success' : 'alert-danger');
+    }
+
+    function hideAlert() {
+        alerta.classList.add('d-none');
+        alerta.textContent = '';
+    }
+
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        hideAlert();
+        if (!input.files || !input.files.length) {
+            showAlert('Seleccione un archivo TXT.', false);
+            return;
+        }
+        const file = input.files[0];
+        const name = (file.name || '').toLowerCase();
+        if (!name.endsWith('.txt')) {
+            showAlert('Solo se permiten archivos .txt.', false);
+            return;
+        }
+
+        const fd = new FormData();
+        fd.append('archivo', file);
+
+        btn.disabled = true;
+        const prev = btn.innerHTML;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generando...';
+
+        try {
+            const res = await fetch('{{ url_for("api_receta_generar_pdf") }}', {
+                method: 'POST',
+                body: fd,
+            });
+            const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
+            if (!res.ok || !ctype.includes('application/pdf')) {
+                let err = 'No se pudo generar el PDF.';
+                const bodyText = await res.text();
+                try {
+                    const data = JSON.parse(bodyText);
+                    if (data && data.error) err = data.error;
+                } catch (_) {
+                    if (bodyText) err = bodyText.slice(0, 200);
+                }
+                throw new Error(err);
+            }
+            const blob = await res.blob();
+            const cd = res.headers.get('Content-Disposition') || '';
+            let filename = 'receta.pdf';
+            const m = /filename\*?=(?:UTF-8'')?\"?([^\";]+)\"?/i.exec(cd);
+            if (m && m[1]) filename = decodeURIComponent(m[1].trim());
+
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+            showAlert('PDF generado y descargado.', true);
+        } catch (err) {
+            console.error(err);
+            showAlert(err.message || 'Error al generar la receta.', false);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = prev;
+        }
+    });
+})();
+</script>
+{% endblock %}

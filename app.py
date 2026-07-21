@@ -5670,6 +5670,113 @@ def comparar_planillas_resultado_page():
     return render_template('comparar_planillas_resultado.html')
 
 
+@app.route('/receta')
+@login_required
+def receta_page():
+    return render_template('receta.html')
+
+
+def _receta_decode_txt(raw_bytes):
+    """Decodifica TXT de receta con encodings comunes."""
+    if raw_bytes is None:
+        return ''
+    raw = bytes(raw_bytes)
+    if not raw:
+        return ''
+    for enc in ('utf-8-sig', 'utf-8', 'cp1252', 'latin-1'):
+        try:
+            return raw.decode(enc)
+        except UnicodeDecodeError:
+            continue
+    return raw.decode('latin-1', errors='replace')
+
+
+def _receta_whatsapp_icon_data_uri():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'img', 'whatsapp.svg')
+    try:
+        with open(path, 'rb') as fh:
+            b64 = base64.b64encode(fh.read()).decode('ascii')
+        return f'data:image/svg+xml;base64,{b64}'
+    except OSError:
+        # Fallback mínimo si falta el archivo
+        svg = (
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">'
+            '<circle cx="12" cy="12" r="10" fill="#25D366"/></svg>'
+        )
+        b64 = base64.b64encode(svg.encode('utf-8')).decode('ascii')
+        return f'data:image/svg+xml;base64,{b64}'
+
+
+def generar_pdf_receta(contenido_txt):
+    """Genera PDF de receta médica (tamaño mitad A4 / A5 vertical)."""
+    if not WEASYPRINT_AVAILABLE:
+        raise RuntimeError(
+            'WeasyPrint no está disponible en el servidor; no se puede generar el PDF de receta.'
+            + (f' Motivo: {_WEASYPRINT_IMPORT_ERROR}' if '_WEASYPRINT_IMPORT_ERROR' in globals() else '')
+        )
+    texto = str(contenido_txt or '').replace('\r\n', '\n').replace('\r', '\n')
+    # Quita solo espacios al final de cada línea; conserva saltos
+    lineas = [ln.rstrip() for ln in texto.split('\n')]
+    while lineas and not lineas[0].strip():
+        lineas.pop(0)
+    while lineas and not lineas[-1].strip():
+        lineas.pop()
+    texto = '\n'.join(lineas)
+    if not texto.strip():
+        raise ValueError('El archivo TXT está vacío.')
+
+    firma_path = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), 'static', 'img', 'firma_receta.png'
+    )
+    html_renderizado = render_template(
+        'receta_pdf.html',
+        contenido=texto,
+        whatsapp_icon_src=_receta_whatsapp_icon_data_uri(),
+        firma_src=_image_data_uri(firma_path),
+    )
+    pdf_io = io.BytesIO()
+    HTML(string=html_renderizado).write_pdf(pdf_io)
+    pdf_io.seek(0)
+    return pdf_io
+
+
+@app.route('/api/receta/generar-pdf', methods=['POST'])
+@login_required
+def api_receta_generar_pdf():
+    """Recibe un TXT y descarga el PDF de receta con encabezado médico."""
+    archivo = request.files.get('archivo') or request.files.get('file')
+    if archivo is None or not getattr(archivo, 'filename', None):
+        return jsonify({'error': 'Seleccione un archivo TXT.'}), 400
+
+    nombre = str(archivo.filename or '').strip()
+    if not nombre.lower().endswith('.txt'):
+        return jsonify({'error': 'Solo se permiten archivos .txt.'}), 400
+
+    raw = archivo.read() or b''
+    if not raw:
+        return jsonify({'error': 'El archivo está vacío.'}), 400
+    if len(raw) > 512 * 1024:
+        return jsonify({'error': 'El archivo supera el tamaño máximo permitido (512 KB).'}), 400
+
+    try:
+        texto = _receta_decode_txt(raw)
+        pdf_buffer = generar_pdf_receta(texto)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('api_receta_generar_pdf')
+        return jsonify({'error': str(e)}), 500
+
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    download_name = f'receta_{stamp}.pdf'
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=True,
+        download_name=download_name,
+    )
+
+
 @app.route('/aperturar-periodos')
 @login_required
 def aperturar_periodos_page():
@@ -15025,17 +15132,49 @@ def _alerta_fila_json(row, empresa):
     return data
 
 
+_ALERTA_VAC_DETAIL_KEYS = (
+    'company', 'person', 'documento', 'nombre', 'periodo_vacacional',
+    'dias_acumulados', 'dias_gozados', 'estado_periodo', 'fecha_reingreso',
+    'tipoplanilla', 'tipoplanilla_desc',
+)
+_ALERTA_LIQ_DETAIL_KEYS = (
+    'company', 'person', 'documento', 'nombre', 'fecha_ingreso', 'fecha_cese',
+    'dias_desde_cese', 'motivo_cese', 'tipoplanilla', 'tipoplanilla_desc',
+)
+
+
+def _alerta_fila_detalle(row, empresa, keys):
+    """Solo columnas del modal: evita JSON enorme que el proxy trunca (~54KB)."""
+    data = {k: _jsonable_value(row.get(k)) for k in keys}
+    data['empresa'] = empresa
+    return data
+
+
+def _body_alerta_detalle():
+    body = request.get_json(silent=True) or {}
+    raw = body.get('detalle', False)
+    if isinstance(raw, str):
+        return raw.strip().lower() in ('1', 'true', 's', 'si', 'yes')
+    return bool(raw)
+
+
 @app.route('/api/alertas/vacaciones-pendientes', methods=['POST'])
 @login_required
 def api_alertas_vacaciones_pendientes():
-    """Consolida sp_pr_alertas_vacaciones_pendientes_web para todas las compañías activas."""
+    """Consolida sp_pr_alertas_vacaciones_pendientes_web para todas las compañías activas.
+
+    Sin detalle=true solo devuelve conteos (tarjeta del dashboard).
+    Con detalle=true incluye filas reducidas para el modal.
+    """
     conn = None
     try:
+        incluir_detalle = _body_alerta_detalle()
         conn = get_db_connection()
         cursor = conn.cursor()
         companias = _companias_activas_desde_cursor(cursor)
         all_rows = []
         trabajadores = set()
+        total_registros = 0
         for cia in companias:
             cursor.execute(
                 'EXEC sp_pr_alertas_vacaciones_pendientes_web '
@@ -15043,22 +15182,27 @@ def api_alertas_vacaciones_pendientes():
                 (cia['company'], '0', 28),
             )
             rows = _dicts_first_nonempty_resultset(cursor)
+            total_registros += len(rows)
             for row in rows:
-                all_rows.append(_alerta_fila_json(row, cia['empresa']))
                 person = str(row.get('person') or '').strip()
                 company = str(row.get('company') or cia['company']).strip()
                 if person:
                     trabajadores.add((company, person))
-        all_rows.sort(
-            key=lambda r: (
-                str(r.get('empresa') or ''),
-                -(float(r.get('dias_acumulados') or 0)),
-                str(r.get('nombre') or ''),
+                if incluir_detalle:
+                    all_rows.append(
+                        _alerta_fila_detalle(row, cia['empresa'], _ALERTA_VAC_DETAIL_KEYS)
+                    )
+        if incluir_detalle:
+            all_rows.sort(
+                key=lambda r: (
+                    str(r.get('empresa') or ''),
+                    -(float(r.get('dias_acumulados') or 0)),
+                    str(r.get('nombre') or ''),
+                )
             )
-        )
         return jsonify({
             'total_trabajadores': len(trabajadores),
-            'total_registros': len(all_rows),
+            'total_registros': total_registros,
             'rows': all_rows,
         })
     except Exception as e:
@@ -15075,13 +15219,18 @@ def api_alertas_vacaciones_pendientes():
 @app.route('/api/alertas/liquidacion-cese-pendiente', methods=['POST'])
 @login_required
 def api_alertas_liquidacion_cese_pendiente():
-    """Consolida sp_pr_alertas_liquidacion_cese_pendiente_web para todas las compañías activas."""
+    """Consolida sp_pr_alertas_liquidacion_cese_pendiente_web para todas las compañías activas.
+
+    Sin detalle=true solo conteo; con detalle=true filas del modal.
+    """
     conn = None
     try:
+        incluir_detalle = _body_alerta_detalle()
         conn = get_db_connection()
         cursor = conn.cursor()
         companias = _companias_activas_desde_cursor(cursor)
         all_rows = []
+        total = 0
         for cia in companias:
             cursor.execute(
                 'EXEC sp_pr_alertas_liquidacion_cese_pendiente_web '
@@ -15089,17 +15238,22 @@ def api_alertas_liquidacion_cese_pendiente():
                 (cia['company'], '0', 2),
             )
             rows = _dicts_first_nonempty_resultset(cursor)
-            for row in rows:
-                all_rows.append(_alerta_fila_json(row, cia['empresa']))
-        all_rows.sort(
-            key=lambda r: (
-                str(r.get('empresa') or ''),
-                -(int(r.get('dias_desde_cese') or 0)),
-                str(r.get('nombre') or ''),
+            total += len(rows)
+            if incluir_detalle:
+                for row in rows:
+                    all_rows.append(
+                        _alerta_fila_detalle(row, cia['empresa'], _ALERTA_LIQ_DETAIL_KEYS)
+                    )
+        if incluir_detalle:
+            all_rows.sort(
+                key=lambda r: (
+                    str(r.get('empresa') or ''),
+                    -(int(r.get('dias_desde_cese') or 0)),
+                    str(r.get('nombre') or ''),
+                )
             )
-        )
         return jsonify({
-            'total_trabajadores': len(all_rows),
+            'total_trabajadores': total,
             'rows': all_rows,
         })
     except Exception as e:

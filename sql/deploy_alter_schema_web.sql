@@ -1,11 +1,11 @@
 /*
   ALTER SCHEMA WEB - columnas/tablas requeridas por SPs web
-  Generado: 2026-07-15 15:56
+  Generado: 2026-07-20 18:41
 
   Ejecutar PRIMERO sobre la BD destino (hm_alamo, hm_aci, ...)
   antes o como parte de deploy_planillas_web_completo.sql.
 
-  Archivos (10):
+  Archivos (11):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
     - alter_pr_processtype_add_procedurename.sql
@@ -16,13 +16,14 @@
     - alter_pr_formuladetail_conceptlist.sql
     - alter_pr_formuladetail_divisor.sql
     - tables_pr_plame_sunat_web.sql
+    - tables_pr_parametroformula_web.sql
 */
 
 SET NOCOUNT ON;
 GO
 
 
--- [1/10] alter_pr_mapping_add_banbifbank.sql
+-- [1/11] alter_pr_mapping_add_banbifbank.sql
 
 /*
     Agrega la columna BanbifBank en PR_Mapping y la inicializa
@@ -56,7 +57,7 @@ GO
 
 
 
--- [2/10] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [2/11] alter_pr_payrolltype_add_diasvacaciones.sql
 
 /*
     Agrega dias anuales de vacaciones por tipo de planilla.
@@ -78,7 +79,7 @@ GO
 
 
 
--- [3/10] alter_pr_processtype_add_procedurename.sql
+-- [3/11] alter_pr_processtype_add_procedurename.sql
 
 /*
     Agrega la columna ProcedureName en PR_ProcessType y asigna el SP de cálculo
@@ -117,7 +118,7 @@ GO
 
 
 
--- [4/10] alter_pr_importconcept_xlastuser_20.sql
+-- [4/11] alter_pr_importconcept_xlastuser_20.sql
 
 /*
     Amplía XlastUser de VARCHAR(4) a VARCHAR(20) en plantillas de importación.
@@ -160,7 +161,7 @@ GO
 
 
 
--- [5/10] alter_sy_company_add_logoname_signaturename.sql
+-- [5/11] alter_sy_company_add_logoname_signaturename.sql
 
 /*
     Agrega columnas de logo y firma por compañía en SY_Company.
@@ -182,7 +183,7 @@ GO
 
 
 
--- [6/10] alter_sy_person_add_nacionalidad.sql
+-- [6/11] alter_sy_person_add_nacionalidad.sql
 
 /*
     Agrega campo de texto Nacionalidad en SY_Person.
@@ -197,7 +198,7 @@ GO
 
 
 
--- [7/10] alter_pr_concept_add_flagafectoutilidad.sql
+-- [7/11] alter_pr_concept_add_flagafectoutilidad.sql
 
 /*
     Agrega flag afecto a utilidades en PR_Concept (maestro Conceptos).
@@ -212,7 +213,7 @@ GO
 
 
 
--- [8/10] alter_pr_formuladetail_conceptlist.sql
+-- [8/11] alter_pr_formuladetail_conceptlist.sql
 
 /*
     Lista de conceptos para líneas SumaConc (tipo S).
@@ -228,7 +229,7 @@ GO
 
 
 
--- [9/10] alter_pr_formuladetail_divisor.sql
+-- [9/11] alter_pr_formuladetail_divisor.sql
 
 /*
     Divisor fijo para líneas Promedio Vac (tipo M) y Promedio Grati (tipo H).
@@ -244,7 +245,7 @@ GO
 
 
 
--- [10/10] tables_pr_plame_sunat_web.sql
+-- [10/11] tables_pr_plame_sunat_web.sql
 
 /*
     Tablas para carga de archivos XML SUNAT (R01, R04, R5) — validación PLAME.
@@ -312,6 +313,34 @@ IF NOT EXISTS (
 BEGIN
     CREATE INDEX IX_PR_PlameSunatFila_Document
         ON dbo.PR_PlameSunatFila (CargaId, DocumentNumber);
+END
+GO
+
+
+
+-- [11/11] tables_pr_parametroformula_web.sql
+
+/*
+    Catálogo de parámetros de fórmula (validación tipo V).
+    Usado por: sp_pr_obtenerformula_web, sp_pr_selectorparametroformula_web.
+*/
+IF OBJECT_ID(N'dbo.PR_ParametroFormula', N'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PR_ParametroFormula (
+        ParametroFormula VARCHAR(20) NOT NULL,
+        Name             VARCHAR(50) NULL,
+        XLastUser        VARCHAR(20) NULL,
+        XLastDate        DATETIME NULL,
+        CONSTRAINT PK_PR_ParametroFormula PRIMARY KEY (ParametroFormula)
+    );
+END
+GO
+
+/* Columna en cabecera de fórmula (referenciada por sp_pr_obtenerformula_web). */
+IF OBJECT_ID(N'dbo.PR_FormulaHeader', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.PR_FormulaHeader', N'parametroformula') IS NULL
+BEGIN
+    EXEC(N'ALTER TABLE dbo.PR_FormulaHeader ADD parametroformula VARCHAR(20) NULL');
 END
 GO
 

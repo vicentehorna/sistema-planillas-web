@@ -150,9 +150,14 @@ BEGIN
               AND ImportConcept = @importconcept;
         END;
 
+        /* Legacy: Detail.Company puede ser NULL; borrar por ImportConcept + cia/vacío. */
         DELETE FROM PR_ImportConceptDetail
-        WHERE Company = @company
-          AND ImportConcept = @importconcept;
+        WHERE ImportConcept = @importconcept
+          AND (
+                Company = @company
+             OR Company IS NULL
+             OR LTRIM(RTRIM(Company)) = ''
+          );
 
         IF @detalle_xml IS NOT NULL AND LTRIM(RTRIM(@detalle_xml)) <> ''
         BEGIN

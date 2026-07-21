@@ -4,6 +4,9 @@
 
     Resultset 1: cabecera
     Resultset 2: detalle (líneas)
+
+    Nota: en datos legacy PR_ImportConceptDetail.Company puede ser NULL;
+    se aceptan filas sin compañía o con la compañía de la cabecera.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_obtenerimportconcept_web]
     @company       VARCHAR(4),
@@ -33,10 +36,13 @@ BEGIN
         LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) AS formulacode
     FROM PR_ImportConceptDetail d (NOLOCK)
         LEFT JOIN PR_Concept c (NOLOCK)
-            ON c.Company = d.Company
-           AND c.Concept = d.Concept
-    WHERE d.Company = @company
-      AND d.ImportConcept = @importconcept
+            ON c.Concept = d.Concept
+           AND c.Company = @company
+    WHERE d.ImportConcept = @importconcept
+      AND (
+            ISNULL(LTRIM(RTRIM(d.Company)), '') = ''
+         OR d.Company = @company
+      )
     ORDER BY d.Line ASC;
 END
 GO

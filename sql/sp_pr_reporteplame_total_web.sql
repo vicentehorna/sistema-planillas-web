@@ -461,8 +461,19 @@ BEGIN
     SELECT #Temporal.*
     FROM #Temporal
         INNER JOIN PR_ConceptType
-            ON #Temporal.Tipo = PR_ConceptType.Description
+            ON UPPER(LTRIM(RTRIM(#Temporal.Tipo))) = UPPER(LTRIM(RTRIM(PR_ConceptType.Description)))
            AND PR_ConceptType.Company = @cia
-    ORDER BY PR_ConceptType.ORDEN, 3;
+    ORDER BY
+        CASE LTRIM(RTRIM(PR_ConceptType.ShortName))
+            WHEN 'I' THEN 1
+            WHEN 'D' THEN 2
+            WHEN 'T' THEN 3
+            WHEN 'A' THEN 4
+            WHEN 'G' THEN 5
+            WHEN 'X' THEN 6
+            ELSE 9
+        END,
+        ISNULL(PR_ConceptType.ORDEN, 99),
+        #Temporal.Concepto;
 END
 GO

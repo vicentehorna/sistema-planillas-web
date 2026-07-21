@@ -1,6 +1,9 @@
 /*
     Listado de plantillas de importación de conceptos (PR_ImportConcept).
     Usado por: POST /api/plantillas-importacion/listado
+
+    Nota: en datos legacy PR_ImportConceptDetail.Company puede ser NULL;
+    el conteo de líneas incluye esas filas.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listarimportconcept_web]
     @company  VARCHAR(4),
@@ -22,7 +25,10 @@ BEGIN
             SELECT COUNT(*)
             FROM PR_ImportConceptDetail d (NOLOCK)
             WHERE d.ImportConcept = ic.ImportConcept
-              AND d.Company = ic.Company
+              AND (
+                    ISNULL(LTRIM(RTRIM(d.Company)), '') = ''
+                 OR d.Company = ic.Company
+              )
         ), 0) AS lineas
     FROM PR_ImportConcept ic (NOLOCK)
     WHERE ic.Company = @company

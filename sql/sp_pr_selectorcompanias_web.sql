@@ -15,6 +15,6 @@ BEGIN
         description
     FROM SY_Company (NOLOCK)
     WHERE UPPER(LTRIM(RTRIM(ISNULL([status], '')))) = 'A'
-    ORDER BY Company ASC;
+    ORDER BY description ASC;
 END
 GO

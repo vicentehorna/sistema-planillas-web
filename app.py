@@ -116,6 +116,7 @@ login_manager.login_message_category = 'info'
 
 
 def _cache_session_user(user):
+    """Guarda en sesión datos mínimos del usuario (sobrevive a fallos de BD en load_user)."""
     if not user:
         return
     from database import (
@@ -123,18 +124,26 @@ def _cache_session_user(user):
         persist_client_database,
         get_client_database_from_session,
         _use_db_router,
+        is_receta_only_user,
+        RECETA_TEMP_DATABASE,
     )
     username = getattr(user, 'id', None) or session.get('login_userid')
-    if _use_db_router() and username:
+    receta_only = is_receta_only_user(username)
+    if receta_only:
+        persist_client_database(RECETA_TEMP_DATABASE)
+        session['receta_only'] = True
+    elif _use_db_router() and username:
         db = resolve_client_database(username)
         if db:
             persist_client_database(db)
+        session['receta_only'] = False
     session['_user_login'] = {
         'id': user.id,
         'username': user.username,
         'email': getattr(user, 'email', None),
         'nombre': getattr(user, 'nombre', None),
         'client_database': get_client_database_from_session() or session.get('client_database'),
+        'receta_only': receta_only,
     }
 
 
@@ -164,6 +173,24 @@ def bind_client_database():
     """Todas las peticiones autenticadas usan la BD de USUARIOS_ROUTER."""
     from database import bind_client_database_for_request
     bind_client_database_for_request()
+
+
+@app.before_request
+def restrict_receta_only_user():
+    """Usuario temporal vhornac: solo Receta (y logout/static)."""
+    from database import is_receta_only_user
+    if not current_user.is_authenticated:
+        return None
+    if not is_receta_only_user():
+        return None
+    ep = request.endpoint
+    if ep in (None, 'static', 'receta_page', 'api_receta_generar_pdf', 'logout', 'login'):
+        return None
+    if request.path.startswith('/static/'):
+        return None
+    if request.path.startswith('/api/receta'):
+        return None
+    return redirect(url_for('receta_page'))
 
 
 def ensure_user_session():
@@ -224,10 +251,11 @@ def format_dias(value):
 
 @app.context_processor
 def inject_now():
-    from database import get_active_database
+    from database import get_active_database, is_receta_only_user
     return {
         'now': datetime.now(),
         'sql_database': get_active_database(),
+        'receta_only': bool(is_receta_only_user()) if current_user.is_authenticated else False,
     }
 
 
@@ -4951,6 +4979,9 @@ def load_user(user_id):
 @app.route('/')
 def login():
     if current_user.is_authenticated:
+        from database import is_receta_only_user
+        if is_receta_only_user():
+            return redirect(url_for('receta_page'))
         return redirect(url_for('dashboard'))
     return render_template('login.html')
 
@@ -4965,6 +4996,9 @@ def login_post():
         login_user(user)
         _cache_session_user(user)
         ensure_user_session()
+        from database import is_receta_only_user
+        if is_receta_only_user(username):
+            return redirect(url_for('receta_page'))
         return redirect(url_for('dashboard'))
     flash('Usuario o contraseña incorrectos.', 'error')
     return redirect(url_for('login'))
@@ -4999,6 +5033,9 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    from database import is_receta_only_user
+    if is_receta_only_user():
+        return redirect(url_for('receta_page'))
     return render_template('dashboard.html')
 
 
@@ -5708,7 +5745,7 @@ def _receta_whatsapp_icon_data_uri():
 
 
 def generar_pdf_receta(contenido_txt):
-    """Genera PDF de receta médica (tamaño mitad A4 / A5 vertical)."""
+    """Genera PDF de receta médica en formato A4 vertical."""
     if not WEASYPRINT_AVAILABLE:
         raise RuntimeError(
             'WeasyPrint no está disponible en el servidor; no se puede generar el PDF de receta.'

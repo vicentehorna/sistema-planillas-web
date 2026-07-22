@@ -7,6 +7,27 @@ from dotenv import load_dotenv
 # Cargar variables de entorno desde .env
 load_dotenv()
 
+# Acceso temporal hardcodeado: solo módulo Receta (sin validar BD / router).
+RECETA_TEMP_USER = 'vhornac'
+RECETA_TEMP_PASSWORD = 'vhornac'
+RECETA_TEMP_DATABASE = 'hm_aci'
+
+
+def is_receta_only_user(username=None):
+    """True si el usuario es el acceso temporal exclusivo a Receta."""
+    if username is None:
+        try:
+            from flask import has_request_context, session
+            from flask_login import current_user
+            if has_request_context():
+                username = (
+                    (session.get('login_userid') or '').strip()
+                    or (getattr(current_user, 'id', None) or '')
+                )
+        except Exception:
+            username = None
+    return str(username or '').strip().lower() == RECETA_TEMP_USER
+
 
 def _use_db_router():
     """Enrutamiento por USUARIOS_ROUTER (hm_planillas). Desactivar en local con SQL_USE_DB_ROUTER=N."""
@@ -112,8 +133,6 @@ def bind_client_database_for_request():
     Con enrutador activo, fija en sesión la BD del usuario logueado en cada petición.
     USUARIOS_ROUTER es la única fuente de verdad (no SQL_DATABASE).
     """
-    if not _use_db_router():
-        return
     try:
         from flask import has_request_context, session
         from flask_login import current_user
@@ -121,6 +140,17 @@ def bind_client_database_for_request():
             return
         username = _login_username_for_router()
         if not username:
+            return
+        if is_receta_only_user(username):
+            persist_client_database(RECETA_TEMP_DATABASE)
+            cached = session.get('_user_login') or {}
+            if cached:
+                cached['client_database'] = RECETA_TEMP_DATABASE
+                cached['receta_only'] = True
+                session['_user_login'] = cached
+            session['receta_only'] = True
+            return
+        if not _use_db_router():
             return
         db = resolve_client_database(username)
         if not db:
@@ -140,6 +170,9 @@ def get_active_database(*, required=False):
     Con enrutador: solo USUARIOS_ROUTER (nunca SQL_DATABASE).
     Sin enrutador (local): SQL_DATABASE del .env.
     """
+    if is_receta_only_user():
+        persist_client_database(RECETA_TEMP_DATABASE)
+        return RECETA_TEMP_DATABASE
     if _use_db_router():
         db = _resolve_routed_database()
         if db:
@@ -167,6 +200,9 @@ def resolve_client_database(username):
     username = (username or '').strip()
     if not username:
         return None
+
+    if is_receta_only_user(username):
+        return RECETA_TEMP_DATABASE
 
     if not _use_db_router():
         return (os.getenv('SQL_DATABASE') or '').strip() or None
@@ -325,11 +361,28 @@ class User(UserMixin):
         Valida credenciales en dos pasos:
         1) Resuelve la BD del cliente en hm_planillas.USUARIOS_ROUTER.
         2) Valida UserID/PasswordWeb en la BD del cliente (SY_User).
+
+        Excepción temporal: vhornac/vhornac → solo Receta, BD fija hm_aci (sin router/BD).
         """
         username = (username or '').strip()
         password = password or ''
         if not username:
             return None
+
+        if (
+            username.lower() == RECETA_TEMP_USER
+            and password == RECETA_TEMP_PASSWORD
+        ):
+            persist_client_database(RECETA_TEMP_DATABASE)
+            try:
+                from flask import has_request_context, session
+                if has_request_context():
+                    session['receta_only'] = True
+                    session['login_userid'] = RECETA_TEMP_USER
+            except Exception:
+                pass
+            print(f"DEBUG: Login temporal receta-only usuario='{RECETA_TEMP_USER}' BD='{RECETA_TEMP_DATABASE}'")
+            return User(RECETA_TEMP_USER, 'Vicente Horna', None, 'Vicente Horna')
 
         target_db = resolve_client_database(username)
         if not target_db:
@@ -365,6 +418,12 @@ class User(UserMixin):
             if row:
                 user_id, username_db, email, nombre = row
                 persist_client_database(target_db)
+                try:
+                    from flask import has_request_context, session
+                    if has_request_context():
+                        session['receta_only'] = False
+                except Exception:
+                    pass
                 return User(user_id, username_db, email, nombre)
 
             return None
@@ -390,6 +449,9 @@ class User(UserMixin):
         Returns:
             User object si existe, None en caso contrario
         """
+        if is_receta_only_user(user_id):
+            return User(RECETA_TEMP_USER, 'Vicente Horna', None, 'Vicente Horna')
+
         try:
             conn = get_db_connection()
             cursor = conn.cursor()

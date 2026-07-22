@@ -540,6 +540,13 @@
             </div>
 
             <ul class="list-unstyled components">
+                {% if receta_only %}
+                <li class="{{ 'active' if request.endpoint == 'receta_page' else '' }}">
+                    <a href="{{ url_for('receta_page') }}" title="Receta">
+                        <i class="bi bi-prescription2"></i><span class="sidebar-link-text">Receta</span>
+                    </a>
+                </li>
+                {% else %}
                 <li class="sidebar-alertas {{ 'active' if request.endpoint == 'dashboard' else '' }}">
                     <a href="{{ url_for('dashboard') }}" title="Alertas">
                         <i class="bi bi-exclamation-triangle-fill"></i><span class="sidebar-link-text">Alertas</span>
@@ -1025,6 +1032,7 @@
                         <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">Constancia de Utilidades</span>
                     </a>
                 </li>
+                {% endif %}
 
                 <hr class="mx-3 opacity-25 mt-4">
 

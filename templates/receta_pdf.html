@@ -50,8 +50,11 @@
             font-size: 10pt;
             font-weight: 700;
             letter-spacing: 0.6px;
-            margin: 0 0 6px 0;
+            margin: 0 0 2px 0;
             color: #111;
+        }
+        .doctor-cmp:last-of-type {
+            margin: 0 0 6px 0;
         }
         .contact {
             width: 100%;
@@ -62,21 +65,15 @@
             color: #222;
             table-layout: fixed;
         }
-        .contact col.col-left,
         .labels col.col-left {
             width: 52%;
         }
-        .contact col.col-right,
         .labels col.col-right {
             width: 48%;
         }
         .contact td {
             padding: 0;
             vertical-align: middle;
-        }
-        .contact .addr {
-            text-align: left;
-            white-space: nowrap;
         }
         .contact .mailwa {
             text-align: center;
@@ -149,15 +146,11 @@
             <p class="doctor-name">Vicente Horna Cortez</p>
             <p class="doctor-title">MÉDICO CIRUJANO</p>
             <p class="doctor-cmp">CMP 12708</p>
+            <p class="doctor-cmp">CONSEJO REGIONAL III LIMA</p>
         </div>
 
         <table class="contact">
-            <colgroup>
-                <col class="col-left">
-                <col class="col-right">
-            </colgroup>
             <tr>
-                <td class="addr">Santa Luzmila - Lima</td>
                 <td class="mailwa">
                     E-mail: vicentehornac@gmail.com
                     <img class="wa-icon" src="{{ whatsapp_icon_src }}" alt="WhatsApp">
@@ -175,7 +168,7 @@
             </colgroup>
             <tr>
                 <td class="label-rp">Rp.</td>
-                <td class="label-ind">Indicaciones</td>
+                <td class="label-ind"></td>
             </tr>
         </table>
 

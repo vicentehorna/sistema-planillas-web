@@ -77,6 +77,21 @@ BEGIN
     IF @flagtruncate NOT IN ('Y', 'N')
         SET @flagtruncate = 'N';
 
+    DECLARE @xml XML = NULL;
+    DECLARE @cant_detalle INT = 0;
+
+    IF @detalle_xml IS NOT NULL AND LTRIM(RTRIM(@detalle_xml)) <> ''
+        SET @xml = TRY_CAST(@detalle_xml AS XML);
+
+    IF @xml IS NOT NULL
+        SET @cant_detalle = ISNULL(@xml.value('count(/root/l)', 'int'), 0);
+
+    IF ISNULL(@cant_detalle, 0) = 0
+    BEGIN
+        RAISERROR('La fórmula debe tener al menos una línea de detalle.', 16, 1);
+        RETURN;
+    END;
+
     BEGIN TRY
         BEGIN TRANSACTION;
 
@@ -151,39 +166,32 @@ BEGIN
         DELETE FROM PR_FormulaDetail
         WHERE FormulaHeader = @formulaheader;
 
-        IF @detalle_xml IS NOT NULL AND LTRIM(RTRIM(@detalle_xml)) <> ''
-        BEGIN
-            DECLARE @xml XML = TRY_CAST(@detalle_xml AS XML);
-            IF @xml IS NOT NULL
-            BEGIN
-                INSERT INTO PR_FormulaDetail (
-                    FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
-                    XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-                    NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
-                )
-                SELECT
-                    @formulaheader,
-                    ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), ROW_NUMBER() OVER (ORDER BY (SELECT 1))),
-                    @company,
-                    NULLIF(LTRIM(RTRIM(x.value('(tipo)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(operador)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(concept)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(grupo)[1]', 'char(1)'))), ''),
-                    NULLIF(x.value('(valor)[1]', 'decimal(18,4)'), 0),
-                    @xlastuser,
-                    GETDATE(),
-                    NULLIF(LTRIM(RTRIM(x.value('(parameter)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(process)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(periodoini)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(periodofin)[1]', 'varchar(20)'))), ''),
-                    NULLIF(x.value('(numberini)[1]', 'decimal(18,0)'), 0),
-                    NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
-                    NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
-                    NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
-                FROM @xml.nodes('/root/l') AS T(x);
-            END;
-        END;
+        INSERT INTO PR_FormulaDetail (
+            FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
+            XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
+            NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
+        )
+        SELECT
+            @formulaheader,
+            ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), ROW_NUMBER() OVER (ORDER BY (SELECT 1))),
+            @company,
+            NULLIF(LTRIM(RTRIM(x.value('(tipo)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(operador)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(concept)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(grupo)[1]', 'char(1)'))), ''),
+            NULLIF(x.value('(valor)[1]', 'decimal(18,4)'), 0),
+            @xlastuser,
+            GETDATE(),
+            NULLIF(LTRIM(RTRIM(x.value('(parameter)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(process)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(periodoini)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(periodofin)[1]', 'varchar(20)'))), ''),
+            NULLIF(x.value('(numberini)[1]', 'decimal(18,0)'), 0),
+            NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
+            NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
+            NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
+        FROM @xml.nodes('/root/l') AS T(x);
 
         COMMIT TRANSACTION;
 

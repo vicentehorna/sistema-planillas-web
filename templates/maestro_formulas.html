@@ -1403,6 +1403,10 @@
             alert('Seleccione el concepto de la fórmula.');
             return;
         }
+        if (!Array.isArray(payload.detalle) || payload.detalle.length === 0) {
+            alert('La fórmula debe tener al menos una línea de detalle. Use Agregar antes de guardar.');
+            return;
+        }
         const btn = document.getElementById('btnGuardarFormula');
         const txt = btn.innerHTML;
         btn.disabled = true;

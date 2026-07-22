@@ -9569,13 +9569,19 @@ def api_formulas_guardar():
     if not payrolltype or not proccestype or not concept:
         return jsonify({"error": "Complete planilla, proceso y concepto."}), 400
 
+    detalle_lineas = body.get('detalle') or []
+    if not isinstance(detalle_lineas, list) or len(detalle_lineas) == 0:
+        return jsonify({
+            "error": "La fórmula debe tener al menos una línea de detalle.",
+        }), 400
+
     orden = body.get('orden')
     try:
         orden = int(orden) if orden not in (None, '') else None
     except Exception:
         orden = None
 
-    detalle_xml = _formulas_detalle_to_xml(body.get('detalle') or [])
+    detalle_xml = _formulas_detalle_to_xml(detalle_lineas)
 
     conn = None
     try:

@@ -1,0 +1,492 @@
+{% extends "layout.html" %}
+
+{% block title %}Generar Contratos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .gc-table-scroll {
+        max-height: 52vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+    .gc-table {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .gc-table th, .gc-table td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+    .gc-table thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .gc-marcadores {
+        font-size: 0.78rem;
+        max-height: 8.5rem;
+        overflow: auto;
+    }
+    .gc-marcadores code {
+        font-size: 0.72rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmGenerarContratos" class="row g-3" onsubmit="return false;">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboPlantilla" class="form-label small fw-bold text-muted">Plantilla Word</label>
+                <div class="input-group input-group-sm">
+                    <select id="cboPlantilla" class="form-select form-select-sm" disabled>
+                        <option value="">Seleccione...</option>
+                    </select>
+                    <button type="button" class="btn btn-outline-secondary" id="btnSubirPlantilla" disabled title="Subir .docx">
+                        <i class="bi bi-upload"></i>
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" id="btnEliminarPlantilla" disabled title="Eliminar plantilla">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </div>
+                <input type="file" id="filePlantilla" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document" class="d-none">
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="N" selected>No</option>
+                    <option value="Y">Sí</option>
+                    <option value="T">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <label for="txtBusqueda" class="form-label small fw-bold text-muted">Buscar</label>
+                <input type="text" id="txtBusqueda" class="form-control form-control-sm" placeholder="Nombre / DNI" maxlength="80" autocomplete="off">
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboFormato" class="form-label small fw-bold text-muted">Formato</label>
+                <select id="cboFormato" class="form-select form-select-sm">
+                    <option value="docx" selected>Word (.docx)</option>
+                    <option value="pdf">PDF</option>
+                </select>
+                <div class="form-text small" id="lblPdfHint"></div>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnConsultar" disabled>
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerar" disabled>
+                    <i class="bi bi-file-earmark-zip"></i> Generar
+                </button>
+                <span class="ms-auto text-muted small fw-bold">Seleccionados: <span id="lblSelected">0</span> / <span id="lblRowCount">0</span></span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-2">
+        <div class="d-flex align-items-start justify-content-between flex-wrap gap-2">
+            <div>
+                <strong class="small">Marcadores de plantilla</strong>
+                <span class="text-muted small"> — escriba en el Word: <code>{{'{{'}} trabajador {{'}}'}}</code>, <code>{{'{{'}} dni {{'}}'}}</code>, etc.</span>
+            </div>
+            <button type="button" class="btn btn-link btn-sm p-0" data-bs-toggle="collapse" data-bs-target="#collapseMarcadores">Ver lista</button>
+        </div>
+        <div class="collapse mt-2" id="collapseMarcadores">
+            <div class="gc-marcadores border rounded p-2 bg-light" id="listaMarcadores"></div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-3">TRABAJADORES PARA CONTRATO</h4>
+        <div class="gc-table-scroll">
+            <table class="table table-bordered table-sm table-hover gc-table align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width:2.2rem;">
+                            <input type="checkbox" id="chkAll" title="Seleccionar todos">
+                        </th>
+                        <th>Código</th>
+                        <th>Trabajador</th>
+                        <th>Documento</th>
+                        <th>F. ingreso</th>
+                        <th>Tipo planilla</th>
+                        <th class="text-center">Contrato activo</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTrabajadores"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
+    const URL_TRABAJADORES = {{ url_for('api_contratos_trabajadores') | tojson }};
+    const URL_PLANTILLAS = {{ url_for('api_contratos_plantillas_listar') | tojson }};
+    const URL_SUBIR = {{ url_for('api_contratos_plantillas_subir') | tojson }};
+    const URL_ELIMINAR = {{ url_for('api_contratos_plantillas_eliminar') | tojson }};
+    const URL_GENERAR = {{ url_for('api_contratos_generar') | tojson }};
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlantilla = document.getElementById('cboPlantilla');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboCesados = document.getElementById('cboCesados');
+    const cboFormato = document.getElementById('cboFormato');
+    const txtBusqueda = document.getElementById('txtBusqueda');
+    const btnConsultar = document.getElementById('btnConsultar');
+    const btnGenerar = document.getElementById('btnGenerar');
+    const btnSubir = document.getElementById('btnSubirPlantilla');
+    const btnEliminar = document.getElementById('btnEliminarPlantilla');
+    const filePlantilla = document.getElementById('filePlantilla');
+    const tbody = document.getElementById('tbodyTrabajadores');
+    const card = document.getElementById('cardResultado');
+    const chkAll = document.getElementById('chkAll');
+    const lblSelected = document.getElementById('lblSelected');
+    const lblRowCount = document.getElementById('lblRowCount');
+    const lblPdfHint = document.getElementById('lblPdfHint');
+
+    let pdfDisponible = false;
+    let filas = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
+    function toastErr(m) { if (window.HmUi) HmUi.error(m); else alert(m); }
+    function toastWarn(m) { if (window.HmUi) HmUi.advertencia(m); else alert(m); }
+    async function confirmar(opts) {
+        if (window.HmUi) return HmUi.confirmar(opts);
+        return confirm(opts.mensaje || '¿Continuar?');
+    }
+
+    function seleccionarInsensitive(select, codigo) {
+        const want = String(codigo || '').trim().toUpperCase();
+        if (!want || !select) return false;
+        const opt = Array.from(select.options).find(
+            (o) => String(o.value || '').trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, select, firstOption) {
+        select.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            const items = Array.isArray(data) ? data : [];
+            select.innerHTML = '';
+            if (firstOption) {
+                const o0 = document.createElement('option');
+                o0.value = firstOption.value;
+                o0.textContent = firstOption.text;
+                select.appendChild(o0);
+            }
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+        } catch (err) {
+            console.error(err);
+            select.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function actualizarPdfHint() {
+        if (cboFormato.value === 'pdf' && !pdfDisponible) {
+            lblPdfHint.textContent = 'PDF requiere LibreOffice en el servidor. Use Word si no está instalado.';
+            lblPdfHint.className = 'form-text small text-warning';
+        } else {
+            lblPdfHint.textContent = '';
+            lblPdfHint.className = 'form-text small';
+        }
+    }
+
+    function actualizarSeleccion() {
+        const checks = Array.from(tbody.querySelectorAll('.chk-persona'));
+        const n = checks.filter((c) => c.checked).length;
+        lblSelected.textContent = String(n);
+        btnGenerar.disabled = n === 0 || !cboPlantilla.value;
+        if (chkAll) {
+            chkAll.checked = checks.length > 0 && n === checks.length;
+            chkAll.indeterminate = n > 0 && n < checks.length;
+        }
+    }
+
+    async function cargarPlantillas() {
+        const cia = cboCia.value.trim();
+        cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboPlantilla.disabled = !cia;
+        btnSubir.disabled = !cia;
+        btnEliminar.disabled = true;
+        if (!cia) return;
+        try {
+            const res = await fetch(`${URL_PLANTILLAS}?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudieron cargar plantillas.');
+            pdfDisponible = !!data.pdf_disponible;
+            actualizarPdfHint();
+            const rows = Array.isArray(data.rows) ? data.rows : [];
+            rows.forEach((r) => {
+                const opt = document.createElement('option');
+                opt.value = r.id || r.archivo || '';
+                opt.textContent = r.nombre || opt.value;
+                cboPlantilla.appendChild(opt);
+            });
+            cboPlantilla.disabled = false;
+            if (rows.length === 1) cboPlantilla.value = rows[0].id || rows[0].archivo || '';
+            btnEliminar.disabled = !cboPlantilla.value;
+
+            const marc = Array.isArray(data.marcadores) ? data.marcadores : [];
+            document.getElementById('listaMarcadores').innerHTML = marc.length
+                ? `<div class="row g-1">${marc.map((m) =>
+                    `<div class="col-md-4"><code>{{'{{'}} ${escapeHtml(m.id)} {{'}}'}}</code> — ${escapeHtml(m.text)}</div>`
+                ).join('')}</div>`
+                : '<span class="text-muted">Sin marcadores.</span>';
+        } catch (err) {
+            console.error(err);
+            toastErr(err.message || String(err));
+        }
+        actualizarSeleccion();
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value.trim();
+        cboPt.innerHTML = '<option value="0">Todos</option>';
+        cboPt.disabled = !cia;
+        btnConsultar.disabled = !cia;
+        if (!cia) return;
+        try {
+            const res = await fetch(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`);
+            const items = await res.json();
+            (Array.isArray(items) ? items : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                cboPt.appendChild(opt);
+            });
+            cboPt.value = '0';
+            cboPt.disabled = false;
+        } catch (e) {
+            console.error(e);
+            cboPt.disabled = false;
+        }
+    }
+
+    function renderTabla(rows) {
+        filas = Array.isArray(rows) ? rows : [];
+        tbody.innerHTML = '';
+        filas.forEach((t) => {
+            const tr = document.createElement('tr');
+            const activo = String(t.contrato_activo || '').toUpperCase() === 'Y';
+            tr.innerHTML = `
+                <td class="text-center">
+                    <input type="checkbox" class="chk-persona" value="${escapeHtml(t.person || '')}">
+                </td>
+                <td class="font-monospace">${escapeHtml(t.codigo || t.person || '')}</td>
+                <td>${escapeHtml(t.nombre || '')}</td>
+                <td>${escapeHtml(t.documento || '')}</td>
+                <td class="text-center">${escapeHtml(t.fechaingreso || '')}</td>
+                <td>${escapeHtml(t.tipoplanilla || '')}</td>
+                <td class="text-center">${activo ? '<span class="text-success fw-bold">Sí</span>' : '<span class="text-muted">No</span>'}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        lblRowCount.textContent = String(filas.length);
+        card.classList.toggle('d-none', filas.length === 0);
+        chkAll.checked = false;
+        actualizarSeleccion();
+    }
+
+    async function consultar() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            toastWarn('Seleccione una compañía.');
+            return;
+        }
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Consultando...</td></tr>';
+        card.classList.remove('d-none');
+        try {
+            const res = await fetch(URL_TRABAJADORES, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype: cboPt.value.trim() || '0',
+                    cesados: cboCesados.value || 'N',
+                    busqueda: txtBusqueda.value.trim(),
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al consultar');
+            renderTabla(data.rows || []);
+        } catch (err) {
+            console.error(err);
+            toastErr(err.message || String(err));
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escapeHtml(err.message || err)}</td></tr>`;
+        }
+    }
+
+    async function generar() {
+        const cia = cboCia.value.trim();
+        const plantilla_id = cboPlantilla.value.trim();
+        const formato = cboFormato.value || 'docx';
+        const persons = Array.from(tbody.querySelectorAll('.chk-persona:checked')).map((c) => c.value).filter(Boolean);
+        if (!cia || !plantilla_id || !persons.length) {
+            toastWarn('Seleccione compañía, plantilla y al menos un trabajador.');
+            return;
+        }
+        if (formato === 'pdf' && !pdfDisponible) {
+            toastWarn('PDF no disponible: instale LibreOffice o genere en Word.');
+            return;
+        }
+        const ok = await confirmar({
+            titulo: 'Generar contratos',
+            mensaje: `Se generarán ${persons.length} contrato(s) en formato ${formato.toUpperCase()} y se descargarán en un ZIP.`,
+            textoOk: 'Generar',
+            textoCancelar: 'Cancelar',
+            variant: 'primary',
+        });
+        if (!ok) return;
+
+        const texto = btnGenerar.innerHTML;
+        btnGenerar.disabled = true;
+        btnGenerar.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, plantilla_id, formato, persons }),
+            });
+            const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
+            if (!res.ok || ctype.includes('application/json')) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || 'No se pudo generar.');
+            }
+            const blob = await res.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `contratos_${cia}.zip`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+            toastOk('Contratos generados.');
+        } catch (err) {
+            console.error(err);
+            toastErr(err.message || String(err));
+        } finally {
+            btnGenerar.innerHTML = texto;
+            actualizarSeleccion();
+        }
+    }
+
+    cboCia.addEventListener('change', async () => {
+        await Promise.all([cargarPlantillas(), cargarPlanillas()]);
+        filas = [];
+        renderTabla([]);
+        card.classList.add('d-none');
+    });
+    cboPlantilla.addEventListener('change', () => {
+        btnEliminar.disabled = !cboPlantilla.value;
+        actualizarSeleccion();
+    });
+    cboFormato.addEventListener('change', actualizarPdfHint);
+    btnConsultar.addEventListener('click', consultar);
+    btnGenerar.addEventListener('click', generar);
+    chkAll.addEventListener('change', () => {
+        tbody.querySelectorAll('.chk-persona').forEach((c) => { c.checked = chkAll.checked; });
+        actualizarSeleccion();
+    });
+    tbody.addEventListener('change', (ev) => {
+        if (ev.target.classList.contains('chk-persona')) actualizarSeleccion();
+    });
+    btnSubir.addEventListener('click', () => filePlantilla.click());
+    filePlantilla.addEventListener('change', async () => {
+        const file = filePlantilla.files && filePlantilla.files[0];
+        filePlantilla.value = '';
+        const cia = cboCia.value.trim();
+        if (!file || !cia) return;
+        if (!String(file.name || '').toLowerCase().endsWith('.docx')) {
+            toastWarn('Solo se admiten archivos .docx');
+            return;
+        }
+        const fd = new FormData();
+        fd.append('cia', cia);
+        fd.append('archivo', file);
+        try {
+            const res = await fetch(URL_SUBIR, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo subir.');
+            toastOk('Plantilla subida.');
+            await cargarPlantillas();
+            if (data.plantilla && data.plantilla.id) cboPlantilla.value = data.plantilla.id;
+            btnEliminar.disabled = !cboPlantilla.value;
+            actualizarSeleccion();
+        } catch (err) {
+            toastErr(err.message || String(err));
+        }
+    });
+    btnEliminar.addEventListener('click', async () => {
+        const cia = cboCia.value.trim();
+        const id = cboPlantilla.value.trim();
+        if (!cia || !id) return;
+        const ok = await confirmar({
+            titulo: 'Eliminar plantilla',
+            mensaje: `¿Eliminar la plantilla "${cboPlantilla.options[cboPlantilla.selectedIndex].text}"?`,
+            textoOk: 'Eliminar',
+            variant: 'danger',
+        });
+        if (!ok) return;
+        try {
+            const res = await fetch(URL_ELIMINAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, plantilla_id: id }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo eliminar.');
+            toastOk('Plantilla eliminada.');
+            await cargarPlantillas();
+        } catch (err) {
+            toastErr(err.message || String(err));
+        }
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia, { value: '', text: 'Seleccione...' });
+    if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
+    if (cboCia.value) {
+        await Promise.all([cargarPlantillas(), cargarPlanillas()]);
+    }
+});
+</script>
+{% endblock %}

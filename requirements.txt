@@ -82,6 +82,8 @@ webencodings==0.5.1
 websockets==16.0
 Werkzeug==3.1.5
 zopfli==0.4.1
+python-docx==1.1.2
+docxtpl==0.19.1
 
 # WeasyPrint en Windows también requiere librerías nativas Pango/GTK.
 # Ver scripts/setup_weasyprint_windows.ps1 y scripts/check_weasyprint.py

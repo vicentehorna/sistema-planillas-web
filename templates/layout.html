@@ -939,7 +939,7 @@
                     </ul>
                 </li>
 
-                {% set contratos_active = request.endpoint in ('registro_contratos_page', 'reporte_contratos_page') %}
+                {% set contratos_active = request.endpoint in ('registro_contratos_page', 'reporte_contratos_page', 'generar_contratos_page') %}
                 <li class="sidebar-menu-parent {{ 'active' if contratos_active else '' }}">
                     <a href="#submenuContratos"
                        class="sidebar-parent-link"
@@ -959,6 +959,11 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_contratos_page' else '' }}">
                             <a href="{{ url_for('reporte_contratos_page') }}" title="Reporte de Contratos">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte de Contratos</span>
+                            </a>
+                        </li>
+                        <li class="{{ 'active' if request.endpoint == 'generar_contratos_page' else '' }}">
+                            <a href="{{ url_for('generar_contratos_page') }}" title="Generar Contratos">
+                                <i class="bi bi-file-earmark-word"></i><span class="sidebar-link-text">Generar Contratos</span>
                             </a>
                         </li>
                     </ul>

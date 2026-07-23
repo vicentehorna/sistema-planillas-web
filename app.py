@@ -5188,6 +5188,85 @@ def _empleado_generales_desde_form(form):
     }
 
 
+def _resolver_employeedocumenttype_cia(cursor, cia, employeedocumenttype, tipos_documento=None):
+    """
+    SY_PersonDocumentType es por compañía (IDs distintos: LIMASB01… vs LIMASB21…).
+    Si el trabajador viene de otra empresa o se comparte SY_Person, el ID guardado
+    puede no existir en el catálogo de la cia actual. Resuelve por PDT (y luego
+    por descripción) al tipo equivalente de @cia.
+    """
+    current = str(employeedocumenttype or '').strip()
+    if not current:
+        return ''
+
+    ids = set()
+    if tipos_documento:
+        ids = {str(t.get('id') or '').strip() for t in tipos_documento if t.get('id') is not None}
+        if current in ids:
+            return current
+
+    cursor.execute(
+        """
+        SELECT TOP 1 1
+        FROM SY_PersonDocumentType (NOLOCK)
+        WHERE Company = ?
+          AND PersonDocumentType = ?
+        """,
+        (cia, current),
+    )
+    if cursor.fetchone():
+        return current
+
+    cursor.execute(
+        """
+        SELECT TOP 1
+            LTRIM(RTRIM(ISNULL(PDT, ''))) AS pdt,
+            UPPER(LTRIM(RTRIM(ISNULL(Description, '')))) AS description
+        FROM SY_PersonDocumentType (NOLOCK)
+        WHERE PersonDocumentType = ?
+        """,
+        (current,),
+    )
+    src = cursor.fetchone()
+    if not src:
+        return current
+
+    pdt = str(src[0] or '').strip()
+    desc = str(src[1] or '').strip()
+
+    if pdt:
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(PersonDocumentType))
+            FROM SY_PersonDocumentType (NOLOCK)
+            WHERE Company = ?
+              AND LTRIM(RTRIM(ISNULL(PDT, ''))) = ?
+            ORDER BY PersonDocumentType
+            """,
+            (cia, pdt),
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+
+    if desc:
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(PersonDocumentType))
+            FROM SY_PersonDocumentType (NOLOCK)
+            WHERE Company = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(Description, '')))) = ?
+            ORDER BY PersonDocumentType
+            """,
+            (cia, desc),
+        )
+        row = cursor.fetchone()
+        if row and row[0]:
+            return str(row[0]).strip()
+
+    return current
+
+
 def _empleado_generales_para_form(empleado):
     """Fechas en YYYY-MM-DD para <input type=\"date\"> (pyodbc devuelve datetime)."""
     if not empleado:
@@ -5196,6 +5275,7 @@ def _empleado_generales_para_form(empleado):
     out['birthdate'] = _sql_date_str_param(out.get('birthdate'))
     sex = str(out.get('sex') or '').strip()
     out['sex'] = sex if sex in ('1', '2') else ''
+    out['employeedocumenttype'] = str(out.get('employeedocumenttype') or '').strip()
     return out
 
 
@@ -5366,6 +5446,10 @@ def trabajadores_editar(person_id):
 
         if request.method == 'POST' and seccion == 'generales':
             datos = _empleado_generales_desde_form(request.form)
+            tipos_documento_post, _, _ = _cargar_selectores_generales(cursor, cia)
+            datos['employeedocumenttype'] = _resolver_employeedocumenttype_cia(
+                cursor, cia, datos['employeedocumenttype'], tipos_documento_post
+            )
             cursor.execute(
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
@@ -5582,6 +5666,13 @@ def trabajadores_editar(person_id):
         bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
         pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
         tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
+        if seccion == 'generales':
+            empleado['employeedocumenttype'] = _resolver_employeedocumenttype_cia(
+                cursor,
+                cia,
+                empleado.get('employeedocumenttype'),
+                tipos_documento,
+            )
         labor_selectors = _cargar_selectores_laborales(cursor, cia)
         instruction_levels, institutions, careers = _cargar_selectores_educacion(
             cursor, cia, (empleado.get('costcenter1') if seccion == 'educacion' else None)
@@ -5848,6 +5939,12 @@ def registro_contratos_page():
 @login_required
 def reporte_contratos_page():
     return render_template('reporte_contratos.html')
+
+
+@app.route('/generar-contratos')
+@login_required
+def generar_contratos_page():
+    return render_template('generar_contratos.html')
 
 
 DESCANSOS_MEDICOS_UPLOAD_DIR = os.path.join(
@@ -17902,6 +17999,176 @@ def api_contratos_eliminar():
                 conn.rollback()
         except Exception:
             pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/contratos/plantillas', methods=['GET'])
+@login_required
+def api_contratos_plantillas_listar():
+    """Lista plantillas .docx de la compañía (uploads/contratos_plantillas)."""
+    import contratos_docs as ctdocs
+
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    try:
+        ctdocs.asegurar_plantilla_ejemplo(cia)
+        rows = ctdocs.listar_plantillas(cia)
+        return jsonify({
+            "rows": rows,
+            "total": len(rows),
+            "marcadores": [{"id": m[0], "text": m[1]} for m in ctdocs.MARCADORES_AYUDA],
+            "pdf_disponible": ctdocs.libreoffice_disponible(),
+        })
+    except Exception as e:
+        logging.exception("api_contratos_plantillas_listar")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/contratos/plantillas', methods=['POST'])
+@login_required
+def api_contratos_plantillas_subir():
+    """Sube una plantilla .docx para la compañía."""
+    import contratos_docs as ctdocs
+
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    f = request.files.get('archivo') or request.files.get('file') or request.files.get('plantilla')
+    if not f or not f.filename:
+        return jsonify({"error": "Seleccione un archivo .docx."}), 400
+    filename = str(f.filename or '')
+    if not filename.lower().endswith('.docx'):
+        return jsonify({"error": "Solo se admiten archivos .docx."}), 400
+    content = f.read()
+    if not content:
+        return jsonify({"error": "El archivo está vacío."}), 400
+    if len(content) > 15 * 1024 * 1024:
+        return jsonify({"error": "El archivo supera el límite de 15 MB."}), 400
+    try:
+        row = ctdocs.guardar_plantilla(cia, filename, content)
+        return jsonify({"ok": True, "plantilla": row})
+    except Exception as e:
+        logging.exception("api_contratos_plantillas_subir")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/contratos/plantillas/eliminar', methods=['POST'])
+@login_required
+def api_contratos_plantillas_eliminar():
+    """Elimina una plantilla .docx de la compañía."""
+    import contratos_docs as ctdocs
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    plantilla_id = str(body.get('plantilla_id') or body.get('id') or body.get('archivo') or '').strip()
+    if not cia or not plantilla_id:
+        return jsonify({"error": "Indique compañía y plantilla."}), 400
+    try:
+        ok = ctdocs.eliminar_plantilla(cia, plantilla_id)
+        if not ok:
+            return jsonify({"error": "No se encontró la plantilla."}), 404
+        return jsonify({"ok": True})
+    except Exception as e:
+        logging.exception("api_contratos_plantillas_eliminar")
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route('/api/contratos/generar', methods=['POST'])
+@login_required
+def api_contratos_generar():
+    """Genera contratos Word/PDF (ZIP) desde plantilla docxtpl + sp_pr_generarcontrato_datos_web."""
+    import contratos_docs as ctdocs
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    plantilla_id = str(body.get('plantilla_id') or body.get('plantilla') or '').strip()
+    formato = str(body.get('formato') or 'docx').strip().lower()
+    if formato in ('word', 'doc'):
+        formato = 'docx'
+    if formato not in ('docx', 'pdf'):
+        formato = 'docx'
+    persons_raw = body.get('persons') or body.get('personas') or []
+    if isinstance(persons_raw, str):
+        persons = [p.strip() for p in persons_raw.split(',') if p.strip()]
+    else:
+        persons = [str(p or '').strip() for p in persons_raw if str(p or '').strip()]
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not plantilla_id:
+        return jsonify({"error": "Seleccione una plantilla."}), 400
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+    if len(persons) > 200:
+        return jsonify({"error": "Máximo 200 trabajadores por generación."}), 400
+
+    plantilla_path = ctdocs.ruta_plantilla(cia, plantilla_id)
+    if not plantilla_path:
+        ctdocs.asegurar_plantilla_ejemplo(cia)
+        plantilla_path = ctdocs.ruta_plantilla(cia, plantilla_id)
+    if not plantilla_path:
+        return jsonify({"error": "No se encontró la plantilla indicada."}), 404
+
+    if formato == 'pdf' and not ctdocs.libreoffice_disponible():
+        return jsonify({
+            "error": (
+                "PDF requiere LibreOffice instalado en el servidor "
+                "(o configure SOFFICE_PATH). Puede generar en Word (.docx)."
+            ),
+        }), 400
+
+    conn = None
+    archivos = []
+    errores = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        for person in persons:
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_generarcontrato_datos_web @cia=?, @person=?",
+                    (cia, person),
+                )
+                rows = _dicts_first_nonempty_resultset(cursor)
+                if not rows:
+                    errores.append({"person": person, "error": "Trabajador no encontrado."})
+                    continue
+                ctx = ctdocs.contexto_desde_fila(rows[0])
+                docx_bytes = ctdocs.render_contrato_docx(plantilla_path, ctx)
+                nombre_base = f"{ctx.get('dni') or person}_{ctx.get('trabajador') or person}"
+                if formato == 'pdf':
+                    content = ctdocs.docx_a_pdf(docx_bytes)
+                else:
+                    content = docx_bytes
+                archivos.append((nombre_base, content))
+            except Exception as ex_item:
+                logging.exception("api_contratos_generar person=%s", person)
+                errores.append({"person": person, "error": str(ex_item)})
+
+        if not archivos:
+            return jsonify({
+                "error": "No se generó ningún contrato.",
+                "errores": errores,
+            }), 400
+
+        zip_bytes = ctdocs.build_zip_contratos(archivos, formato)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M')
+        filename = f"contratos_{cia}_{stamp}.zip"
+        return send_file(
+            io.BytesIO(zip_bytes),
+            mimetype='application/zip',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logging.exception("api_contratos_generar")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

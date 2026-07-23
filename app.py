@@ -5838,6 +5838,18 @@ def registro_descansos_medicos_page():
     return render_template('registro_descansos_medicos.html')
 
 
+@app.route('/registro-contratos')
+@login_required
+def registro_contratos_page():
+    return render_template('registro_contratos.html')
+
+
+@app.route('/reporte-contratos')
+@login_required
+def reporte_contratos_page():
+    return render_template('reporte_contratos.html')
+
+
 DESCANSOS_MEDICOS_UPLOAD_DIR = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
     'uploads',
@@ -10943,6 +10955,164 @@ def api_tregistro_importacion_registrar():
                 pass
         logging.exception('api_tregistro_importacion_registrar')
         return jsonify({"error": str(ex)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _tregistro_yn(raw, default='N'):
+    s = str(raw or default).strip().upper()[:1]
+    return s if s in ('Y', 'N') else default
+
+
+@app.route('/api/tregistro-importacion/campos-nuevos/listar', methods=['POST'])
+@login_required
+def api_tregistro_campos_nuevos_listar():
+    """Lista trabajadores recién registrados con los campos a completar post T-Registro."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    persons_raw = body.get('persons') or body.get('personas') or []
+    if isinstance(persons_raw, str):
+        persons = [p.strip() for p in persons_raw.split(',') if p.strip()]
+    else:
+        persons = [str(p or '').strip() for p in persons_raw if str(p or '').strip()]
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not persons:
+        return jsonify({"error": "No hay trabajadores nuevos para actualizar."}), 400
+
+    # Limitar tamaño razonable
+    persons = persons[:500]
+    placeholders = ','.join('?' for _ in persons)
+    sql = f"""
+        SELECT
+            e.Person AS person,
+            ISNULL(NULLIF(LTRIM(RTRIM(e.EmployeeCode)), ''), e.Person) AS codigo,
+            ISNULL(p.DocumentNumber, e.Person) AS documento,
+            LTRIM(RTRIM(ISNULL(p.Name, ''))) AS nombre,
+            LTRIM(RTRIM(ISNULL(e.Position, ''))) AS position,
+            LTRIM(RTRIM(ISNULL(e.CostCenter, ''))) AS costcenter,
+            LTRIM(RTRIM(ISNULL(e.AccountProfile, ''))) AS accountprofile,
+            CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(e.FlagAsigFamiliar, 'N')))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar,
+            CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(e.FlagMixta, 'N')))) = 'Y' THEN 'Y' ELSE 'N' END AS flagmixta
+        FROM PR_Employee e (NOLOCK)
+        INNER JOIN SY_Person p (NOLOCK) ON p.Person = e.Person
+        WHERE e.Company = ?
+          AND e.Person IN ({placeholders})
+        ORDER BY p.Name, e.Person
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(sql, [cia] + persons)
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                'person': _jsonable_value(r.get('person')),
+                'codigo': _jsonable_value(r.get('codigo')),
+                'documento': _jsonable_value(r.get('documento')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'position': _jsonable_value(r.get('position')) or '',
+                'costcenter': _jsonable_value(r.get('costcenter')) or '',
+                'accountprofile': _jsonable_value(r.get('accountprofile')) or '',
+                'flagasigfamiliar': _tregistro_yn(r.get('flagasigfamiliar')),
+                'flagmixta': _tregistro_yn(r.get('flagmixta')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_tregistro_campos_nuevos_listar")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tregistro-importacion/campos-nuevos/guardar', methods=['POST'])
+@login_required
+def api_tregistro_campos_nuevos_guardar():
+    """sp_pr_tregistro_actualizar_campos_nuevos_web: actualiza cargo/CC/perfil/asig fam/AFP mixta."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    items = body.get('items') or body.get('filas') or []
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": "No hay filas para guardar."}), 400
+
+    conn = None
+    ok_count = 0
+    errores = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        xuser = _xlastuser_id()
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            person = str(item.get('person') or '').strip()
+            if not person:
+                errores.append({"fila": idx + 1, "person": "", "error": "Falta person."})
+                continue
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_tregistro_actualizar_campos_nuevos_web "
+                    "@cia=?, @person=?, @position=?, @costcenter=?, @accountprofile=?, "
+                    "@flagasigfamiliar=?, @flagmixta=?, @xlastuser=?",
+                    (
+                        cia,
+                        person,
+                        str(item.get('position') or '').strip() or None,
+                        str(item.get('costcenter') or '').strip() or None,
+                        str(item.get('accountprofile') or '').strip() or None,
+                        _tregistro_yn(item.get('flagasigfamiliar')),
+                        _tregistro_yn(item.get('flagmixta')),
+                        xuser,
+                    ),
+                )
+                # drain result
+                _dicts_first_nonempty_resultset(cursor)
+                ok_count += 1
+            except Exception as ex_item:
+                logging.exception("api_tregistro_campos_nuevos_guardar item %s", person)
+                errores.append({
+                    "fila": idx + 1,
+                    "person": person,
+                    "nombre": str(item.get('nombre') or '').strip(),
+                    "error": str(ex_item),
+                })
+        conn.commit()
+        if ok_count == 0 and errores:
+            return jsonify({
+                "error": "No se pudo guardar ninguna fila.",
+                "errores": errores,
+            }), 400
+        return jsonify({
+            "ok": True,
+            "guardados": ok_count,
+            "errores": errores,
+            "mensaje": (
+                f"Se actualizaron {ok_count} trabajador(es)."
+                if not errores
+                else f"Actualizados: {ok_count}. Con error: {len(errores)}."
+            ),
+        })
+    except Exception as e:
+        logging.exception("api_tregistro_campos_nuevos_guardar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn:
             try:
@@ -16121,10 +16291,72 @@ def api_trabajadores_listado():
             rows_meta.append({
                 'person': str(r.get('person') or '').strip(),
                 'codigo': str(r.get('codigo') or '').strip(),
+                'nombre': str(r.get('nombre') or '').strip(),
             })
         return jsonify({"headers": headers_es, "data": resultado, "rows": rows_meta})
     except Exception as e:
         logging.exception("api_trabajadores_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/trabajadores/eliminar', methods=['POST'])
+@login_required
+def api_trabajadores_eliminar():
+    """sp_pr_deletepersoncompany_web: elimina trabajador solo de la compañía indicada."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione el trabajador a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_deletepersoncompany_web @cia=?, @person=?",
+            (cia, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        if not rows:
+            return jsonify({"ok": True, "mensaje": "Trabajador eliminado de la compañía."})
+        row = rows[0]
+        borro_sy = str(row.get('borro_sy_person') or 'N').strip().upper()
+        if borro_sy == 'Y':
+            mensaje = "Trabajador eliminado completamente del sistema."
+        else:
+            mensaje = (
+                "Trabajador eliminado de la compañía. "
+                "Se conservaron sus datos generales porque existe en otra empresa."
+            )
+        return jsonify({
+            "ok": True,
+            "mensaje": mensaje,
+            "borro_sy_person": _jsonable_value(row.get('borro_sy_person')),
+            "person": _jsonable_value(row.get('person')),
+            "cia": _jsonable_value(row.get('cia')),
+            "nombre": _jsonable_value(row.get('nombre')),
+        })
+    except Exception as e:
+        logging.exception("api_trabajadores_eliminar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:
@@ -16158,6 +16390,83 @@ def api_trabajadores():
                 conn.close()
             except Exception:
                 pass
+
+
+@app.route('/api/selectores/contractmodality')
+@login_required
+def api_contractmodality():
+    """sp_pr_selectorcontractmodality_web @cia → id, text"""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorcontractmodality_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        data = []
+        for r in rows:
+            item_id = r.get('id') if isinstance(r, dict) else None
+            text = r.get('text') if isinstance(r, dict) else None
+            if item_id is None and not isinstance(r, dict):
+                continue
+            if item_id is None:
+                item_id = r.get('ContractModality') or r.get('contractmodality')
+            if text is None:
+                text = r.get('Description') or r.get('description') or item_id
+            data.append({"id": _jsonable_value(item_id), "text": _jsonable_value(text)})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_contractmodality")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _api_selector_id_text(sp_name, cia):
+    """Helper GET selector → [{id, text}] vía SP @cia."""
+    if not cia:
+        return []
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        return _selector_items_from_sp(cursor, f'EXEC {sp_name} @cia=?', (cia,))
+    except Exception:
+        logging.exception("_api_selector_id_text %s", sp_name)
+        return []
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/position')
+@login_required
+def api_selector_position():
+    """sp_pr_selectorposition_web @cia → id, text"""
+    return jsonify(_api_selector_id_text('sp_pr_selectorposition_web', request.args.get('cia')))
+
+
+@app.route('/api/selectores/costcenter')
+@login_required
+def api_selector_costcenter():
+    """sp_pr_selectorcostcenter_web @cia → id, text"""
+    return jsonify(_api_selector_id_text('sp_pr_selectorcostcenter_web', request.args.get('cia')))
+
+
+@app.route('/api/selectores/accountprofile')
+@login_required
+def api_selector_accountprofile():
+    """sp_pr_selectoraccountprofile_web @cia → id, text"""
+    return jsonify(_api_selector_id_text('sp_pr_selectoraccountprofile_web', request.args.get('cia')))
 
 
 @app.route('/api/selectores/tipos-descanso-medico')
@@ -16954,6 +17263,78 @@ def reporte_saldo_vacaciones_post():
                 pass
 
 
+@app.route('/reporte_contratos', methods=['POST'])
+@login_required
+def reporte_contratos_post():
+    """sp_pr_reportecontratos_web: listado de contratos (migración PB9)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '0').strip() or '0'
+    person = str(body.get('person') or '0').strip() or '0'
+    cesados = str(body.get('cesados') or 'T').strip().upper()[:1] or 'T'
+    if cesados not in ('T', 'Y', 'N'):
+        cesados = 'T'
+    contractmodality = str(
+        body.get('contractmodality') or body.get('modalidad') or '0'
+    ).strip() or '0'
+    filtro_contrato = str(
+        body.get('filtro_contrato') or body.get('contrato') or 'T'
+    ).strip().upper()[:1] or 'T'
+    if filtro_contrato not in ('A', 'S', 'T'):
+        filtro_contrato = 'T'
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    headers_es = [
+        'Código',
+        'Trabajador',
+        'F. Ingreso',
+        'Cargo',
+        'C.C.',
+        'Estado',
+        'Inicio',
+        'Término',
+        'F. Cese',
+        'Modalidad',
+    ]
+    keys_datos = [
+        'codigo', 'trabajador', 'f_ingreso', 'cargo', 'cc',
+        'estado', 'inicio', 'termino', 'f_cese', 'modalidad',
+    ]
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            "EXEC sp_pr_reportecontratos_web "
+            "@cia=?, @payrolltype=?, @person=?, @cesados=?, "
+            "@contractmodality=?, @filtro_contrato=?",
+            (cia, payroll_type, person, cesados, contractmodality, filtro_contrato),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            fila = [_jsonable_value(r.get(key)) for key in keys_datos]
+            resultado.append(fila)
+        return jsonify({
+            "headers": headers_es,
+            "data": resultado,
+            "meta": {"total": len(resultado)},
+        })
+    except Exception as e:
+        logging.exception("reporte_contratos_post")
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/asignacion-conceptos/listado', methods=['POST'])
 @login_required
 def api_asignacion_conceptos_listado():
@@ -17215,6 +17596,319 @@ def _vacacion_detalle_dict(row):
         'usuario': _jsonable_value(row.get('usuario')),
         'fecha_modificacion': _jsonable_datetime(row.get('fecha_modificacion')),
     }
+
+
+@app.route('/api/contratos/trabajadores', methods=['POST'])
+@login_required
+def api_contratos_trabajadores():
+    """Lista trabajadores para Registro de Contratos (panel izquierdo)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    # Cesados (como Procesar planilla): T=Todos, Y=Sí (Status Y), N=No (Status N / activos).
+    # Por defecto N = solo activos.
+    cesados = str(body.get('cesados') or body.get('status') or 'N').strip().upper() or 'N'
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if cesados not in ('N', 'Y', 'T'):
+        cesados = 'N'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        sql = """
+            SELECT
+                e.Person AS person,
+                e.Person AS codigo,
+                LTRIM(RTRIM(
+                    ISNULL(p.LastName1, '') + ' ' +
+                    ISNULL(p.LastName2, '') + ' ' +
+                    ISNULL(p.Name1, '') + ' ' +
+                    ISNULL(p.Name2, '')
+                )) AS nombre,
+                ISNULL(p.DocumentNumber, e.Person) AS documento,
+                CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS fechaingreso,
+                e.PayRollType AS payrolltype,
+                ISNULL(pt.Description, e.PayRollType) AS tipoplanilla,
+                CASE
+                    WHEN EXISTS (
+                        SELECT 1
+                        FROM PR_PersonContract pc
+                        WHERE pc.Company = e.Company
+                          AND pc.Person = e.Person
+                          AND LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
+                          AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
+                    ) THEN 'Y'
+                    ELSE 'N'
+                END AS contrato_activo
+            FROM PR_Employee e
+            INNER JOIN SY_Person p ON p.Person = e.Person
+            LEFT JOIN PR_PayRollType pt
+                ON pt.Company = e.Company AND pt.PayRollType = e.PayRollType
+            WHERE e.Company = ?
+              AND (? = '0' OR e.PayRollType = ?)
+              AND (
+                    ? = 'T'
+                    OR (? = 'N' AND e.Status = 'N')
+                    OR (? = 'Y' AND e.Status = 'Y')
+              )
+              AND (
+                    ? = ''
+                    OR e.Person LIKE '%' + ? + '%'
+                    OR ISNULL(p.DocumentNumber, '') LIKE '%' + ? + '%'
+                    OR (
+                        ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' ' +
+                        ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
+                    ) LIKE '%' + ? + '%'
+              )
+            ORDER BY 3, 1
+        """
+        cursor.execute(
+            sql,
+            (
+                cia,
+                payrolltype, payrolltype,
+                cesados, cesados, cesados,
+                busqueda, busqueda, busqueda, busqueda,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                'person': _jsonable_value(r.get('person')),
+                'codigo': _jsonable_value(r.get('codigo')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'documento': _jsonable_value(r.get('documento')),
+                'fechaingreso': _jsonable_value(r.get('fechaingreso')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+                'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+                'contrato_activo': _jsonable_value(r.get('contrato_activo')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_contratos_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/contratos/listar', methods=['POST'])
+@login_required
+def api_contratos_listar():
+    """Lista contratos de un trabajador desde PR_PersonContract."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    if not cia or not person:
+        return jsonify({"error": "Faltan compañía o persona."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                Contractno AS contractno,
+                CONVERT(varchar(10), startdate, 23) AS startdate,
+                CONVERT(varchar(10), enddate, 23) AS enddate,
+                LTRIM(RTRIM(ISNULL(Status, 'I'))) AS status,
+                PAYROLLTYPE AS payrolltype
+            FROM PR_PersonContract
+            WHERE Company = ? AND Person = ?
+            ORDER BY
+                CASE WHEN startdate IS NULL THEN 1 ELSE 0 END,
+                startdate DESC,
+                Contractno DESC
+            """,
+            (cia, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                'contractno': _jsonable_value(r.get('contractno')),
+                'startdate': _jsonable_value(r.get('startdate')),
+                'enddate': _jsonable_value(r.get('enddate')),
+                'status': _jsonable_value(r.get('status')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_contratos_listar")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/contratos/guardar', methods=['POST'])
+@login_required
+def api_contratos_guardar():
+    """Alta de contrato en PR_PersonContract (interfaz inicial)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip() or None
+    startdate = str(body.get('startdate') or '').strip()[:10]
+    enddate = str(body.get('enddate') or '').strip()[:10] or None
+    status = str(body.get('status') or 'A').strip().upper()[:1] or 'A'
+
+    if not cia or not person or not startdate:
+        return jsonify({"error": "Compañía, persona y fecha inicio son obligatorios."}), 400
+    if status not in ('A', 'I'):
+        status = 'A'
+    if enddate and enddate < startdate:
+        return jsonify({"error": "La fecha fin no puede ser menor que la fecha inicio."}), 400
+    # Vencido => inactivo
+    if enddate and enddate < date.today().isoformat():
+        status = 'I'
+
+    try:
+        user_id = str(getattr(current_user, 'id', None) or session.get('username') or 'web')[:20]
+    except Exception:
+        user_id = 'web'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # No permitir cruces de rango con otro contrato del mismo trabajador.
+        # NULL enddate se trata como abierto (sin fin).
+        cursor.execute(
+            """
+            SELECT TOP 1
+                Contractno,
+                CONVERT(varchar(10), startdate, 23) AS startdate,
+                CONVERT(varchar(10), enddate, 23) AS enddate
+            FROM PR_PersonContract
+            WHERE Company = ?
+              AND Person = ?
+              AND startdate IS NOT NULL
+              AND CONVERT(date, startdate) <= CONVERT(date, ISNULL(?, '99991231'))
+              AND CONVERT(date, ISNULL(enddate, '99991231')) >= CONVERT(date, ?)
+            ORDER BY startdate DESC, Contractno DESC
+            """,
+            (cia, person, enddate or '9999-12-31', startdate),
+        )
+        cruce = cursor.fetchone()
+        if cruce:
+            c_ini = cruce[1] or '—'
+            c_fin = cruce[2] or 'sin fin'
+            return jsonify({
+                "error": (
+                    f"El rango de fechas se cruza con otro contrato del trabajador "
+                    f"({c_ini} a {c_fin})."
+                )
+            }), 400
+
+        cursor.execute(
+            """
+            SELECT ISNULL(MAX(Contractno), 0) + 1
+            FROM PR_PersonContract
+            WHERE Company = ? AND Person = ?
+            """,
+            (cia, person),
+        )
+        next_no = cursor.fetchone()[0]
+
+        # Si el nuevo queda Activo, pasar los demás a Inactivo
+        if status == 'A':
+            cursor.execute(
+                """
+                UPDATE PR_PersonContract
+                SET Status = 'I', xlastuser = ?, xlastdate = GETDATE()
+                WHERE Company = ? AND Person = ? AND ISNULL(Status, 'I') = 'A'
+                """,
+                (user_id, cia, person),
+            )
+
+        cursor.execute(
+            """
+            INSERT INTO PR_PersonContract (
+                Person, Company, Contractno, startdate, enddate,
+                Status, PAYROLLTYPE, xlastuser, xlastdate
+            ) VALUES (
+                ?, ?, ?, ?, ?,
+                ?, ?, ?, GETDATE()
+            )
+            """,
+            (
+                person, cia, next_no,
+                startdate, enddate if enddate else None,
+                status, payrolltype, user_id,
+            ),
+        )
+        conn.commit()
+        return jsonify({"ok": True, "contractno": int(next_no), "status": status})
+    except Exception as e:
+        logging.exception("api_contratos_guardar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/contratos/eliminar', methods=['POST'])
+@login_required
+def api_contratos_eliminar():
+    """Elimina un contrato de PR_PersonContract."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    contractno = body.get('contractno')
+    if not cia or not person or contractno is None or str(contractno).strip() == '':
+        return jsonify({"error": "Faltan compañía, persona o nro. de contrato."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM PR_PersonContract
+            WHERE Company = ? AND Person = ? AND Contractno = ?
+            """,
+            (cia, person, contractno),
+        )
+        if cursor.rowcount <= 0:
+            return jsonify({"error": "No se encontró el contrato."}), 404
+        conn.commit()
+        return jsonify({"ok": True})
+    except Exception as e:
+        logging.exception("api_contratos_eliminar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/vacaciones/trabajadores', methods=['POST'])

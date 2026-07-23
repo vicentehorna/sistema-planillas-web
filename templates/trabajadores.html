@@ -189,6 +189,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         : null;
 
     const URL_LISTADO = {{ url_for('api_trabajadores_listado') | tojson }};
+    const URL_ELIMINAR = {{ url_for('api_trabajadores_eliminar') | tojson }};
     const IDX_STICKY_1 = 1;
     const IDX_STICKY_2 = 2;
     const IDX_CENTRO = new Set([6, 7]);
@@ -200,6 +201,28 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/"/g, '&quot;');
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        return confirm(opciones.mensaje || opciones.message || '¿Continuar?');
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmExito(mensaje) {
+        if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    function etiquetaCompaniaSeleccionada() {
+        const cbo = document.getElementById('cboCompania');
+        if (!cbo || !cbo.value) return '';
+        const opt = cbo.options[cbo.selectedIndex];
+        return opt ? String(opt.textContent || '').trim() : '';
     }
 
     function optionExists(select, value) {
@@ -313,8 +336,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                     const editUrl = person
                         ? `/trabajadores/editar/${encodeURIComponent(person)}?cia=${encodeURIComponent(ciaActual)}`
                         : '#';
-                    const btn = person
-                        ? `<a href="${editUrl}" class="text-decoration-none" title="Editar trabajador"><i class="bi bi-pencil-fill text-success"></i></a>`
+                    const nombre = String(meta.nombre || '').trim();
+                    const btnEdit = person
+                        ? `<a href="${editUrl}" class="text-decoration-none btn-editar-trabajador" title="Editar trabajador"><i class="bi bi-pencil-fill text-success"></i></a>`
+                        : '';
+                    const btnDel = person
+                        ? `<button type="button" class="btn btn-link btn-sm p-0 ms-2 btn-eliminar-trabajador" title="Eliminar de la empresa" data-person="${escapeHtml(person)}" data-nombre="${escapeHtml(nombre)}"><i class="bi bi-trash-fill text-danger"></i></button>`
+                        : '';
+                    const btn = (btnEdit || btnDel)
+                        ? `${btnEdit}${btnDel}`
                         : '<span class="text-muted">—</span>';
                     htmlBody += `<td class="text-center">${btn}</td>`;
                     return;
@@ -667,10 +697,52 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
-    document.getElementById('tbody-trabajadores').addEventListener('click', function (ev) {
+    document.getElementById('tbody-trabajadores').addEventListener('click', async function (ev) {
         const link = ev.target.closest('a[href*="/trabajadores/editar/"]');
         if (link && filtrosPersist) {
             filtrosPersist.guardar();
+        }
+
+        const btnDel = ev.target.closest('.btn-eliminar-trabajador');
+        if (!btnDel) return;
+
+        ev.preventDefault();
+        const person = String(btnDel.getAttribute('data-person') || '').trim();
+        const nombre = String(btnDel.getAttribute('data-nombre') || '').trim();
+        const cia = document.getElementById('cboCompania').value.trim();
+        const ciaTxt = etiquetaCompaniaSeleccionada() || cia;
+        if (!person || !cia) {
+            hmError('Seleccione compañía y trabajador.');
+            return;
+        }
+
+        const ok = await hmConfirmar({
+            titulo: 'Eliminar trabajador',
+            mensaje:
+                `Se eliminará completamente el registro del trabajador${nombre ? ` "${nombre}"` : ''} ` +
+                `de la empresa "${ciaTxt}".\n\nEsta acción no se podrá revertir.`,
+            textoOk: 'Eliminar',
+            textoCancelar: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        btnDel.disabled = true;
+        try {
+            const res = await fetch(URL_ELIMINAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, person }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el trabajador.');
+            hmExito(data.mensaje || 'Trabajador eliminado.');
+            await ejecutarConsultaTrabajadores();
+        } catch (err) {
+            console.error(err);
+            hmError(err.message || String(err));
+        } finally {
+            btnDel.disabled = false;
         }
     });
 

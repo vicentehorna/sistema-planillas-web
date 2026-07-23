@@ -147,9 +147,56 @@
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnRegistrarNuevos" disabled>
                     <i class="bi bi-person-plus"></i> Registrar nuevos
                 </button>
+                <button type="button" class="btn btn-outline-primary btn-sm px-4" id="btnActualizarNuevos" disabled title="Disponible después de registrar nuevos">
+                    <i class="bi bi-pencil-square"></i> Actualizar nuevos
+                </button>
                 <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los cinco ZIP.</span>
             </div>
         </form>
+    </div>
+</div>
+
+<div class="modal fade" id="modalActualizarNuevos" tabindex="-1" aria-labelledby="modalActualizarNuevosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fw-bold" id="modalActualizarNuevosLabel">
+                    <i class="bi bi-pencil-square me-1"></i> Actualizar campos de trabajadores nuevos
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Complete cargo, centro de costo, perfil contable, asignación familiar y AFP mixta.
+                    Estos campos no vienen del T-Registro y se graban igual que en la ficha.
+                </p>
+                <div class="table-responsive" style="max-height: 60vh;">
+                    <table class="table table-bordered table-sm align-middle table-tregistro-import">
+                        <thead>
+                            <tr>
+                                <th>Documento</th>
+                                <th>Trabajador</th>
+                                <th style="min-width: 10rem;">Cargo</th>
+                                <th style="min-width: 10rem;">Centro de costo</th>
+                                <th style="min-width: 10rem;">Perfil contable</th>
+                                <th class="text-center" style="min-width: 6.5rem;">Asig. familiar</th>
+                                <th class="text-center" style="min-width: 6.5rem;">AFP mixta</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyActualizarNuevos">
+                            <tr><td colspan="7" class="text-center text-muted py-3">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="me-auto small text-muted" id="lblActualizarNuevosCount">0 trabajador(es)</span>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-3" id="btnGrabarActualizarNuevos">
+                    <i class="bi bi-save"></i> Grabar
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -203,6 +250,8 @@
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_RESUMEN = {{ url_for('api_tregistro_importacion_resumen') | tojson }};
     const URL_REGISTRAR = {{ url_for('api_tregistro_importacion_registrar') | tojson }};
+    const URL_CAMPOS_LISTAR = {{ url_for('api_tregistro_campos_nuevos_listar') | tojson }};
+    const URL_CAMPOS_GUARDAR = {{ url_for('api_tregistro_campos_nuevos_guardar') | tojson }};
     const DEFAULT_CIA = 'BGT';
     const ORDEN_TIPOS = ['IDE', 'DIR', 'TRA', 'SSA', 'SET'];
     const CAMPOS_FORM = {
@@ -224,6 +273,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     let filtroActual = 'TODOS';
     let resumenActual = null;
     let archivosTxtPorTipo = {};
+    let nuevosParaActualizar = [];
+    let selectoresLaborales = { position: [], costcenter: [], accountprofile: [] };
+    let modalActualizarInstance = null;
 
     function escapeHtml(text) {
         const div = document.createElement('div');
@@ -308,6 +360,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             ? 'Listos los 5 TXT. Puede analizar.'
             : 'Seleccione la compañía y los cinco ZIP.';
         document.getElementById('btnRegistrarNuevos').disabled = true;
+        document.getElementById('btnActualizarNuevos').disabled = nuevosParaActualizar.length === 0;
         resumenActual = null;
         filasResumen = [];
         document.getElementById('cardResumenTregistro').classList.add('d-none');
@@ -641,6 +694,19 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (errores.length) {
                     toastWarn(errores.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n'));
                 }
+                nuevosParaActualizar = data.filas
+                    .filter((f) => f.estado === 'OK' && String(f.person || '').trim())
+                    .map((f) => ({
+                        person: String(f.person || '').trim(),
+                        num_doc: String(f.num_doc || '').trim(),
+                        nombre: String(f.nombre || '').trim(),
+                    }));
+            } else {
+                nuevosParaActualizar = [];
+            }
+            document.getElementById('btnActualizarNuevos').disabled = nuevosParaActualizar.length === 0;
+            if (nuevosParaActualizar.length) {
+                toastOk(`Puede completar Cargo / C.C. / Perfil con "Actualizar nuevos" (${nuevosParaActualizar.length}).`);
             }
 
             document.getElementById('btnAnalizarArchivos').click();
@@ -653,7 +719,174 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
+    function optionsHtmlSelect(items, selected, firstOption) {
+        const parts = [];
+        if (firstOption) {
+            parts.push(`<option value="${escapeHtml(firstOption.value)}">${escapeHtml(firstOption.text)}</option>`);
+        }
+        (items || []).forEach((it) => {
+            const id = String(it.id != null ? it.id : '');
+            const text = String(it.text != null ? it.text : id);
+            const sel = String(selected || '') === id ? ' selected' : '';
+            parts.push(`<option value="${escapeHtml(id)}"${sel}>${escapeHtml(text)}</option>`);
+        });
+        return parts.join('');
+    }
+
+    async function cargarSelectoresLaborales(cia) {
+        const urls = {
+            position: `/api/selectores/position?cia=${encodeURIComponent(cia)}`,
+            costcenter: `/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`,
+            accountprofile: `/api/selectores/accountprofile?cia=${encodeURIComponent(cia)}`,
+        };
+        const entries = await Promise.all(
+            Object.entries(urls).map(async ([key, url]) => {
+                const res = await fetch(url);
+                const data = await res.json();
+                return [key, Array.isArray(data) ? data : []];
+            })
+        );
+        selectoresLaborales = Object.fromEntries(entries);
+    }
+
+    async function abrirModalActualizarNuevos() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        if (!cia) {
+            toastWarn('Seleccione una compañía.');
+            return;
+        }
+        if (!nuevosParaActualizar.length) {
+            toastWarn('Primero registre trabajadores nuevos.');
+            return;
+        }
+
+        const tbody = document.getElementById('tbodyActualizarNuevos');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Cargando...</td></tr>';
+        document.getElementById('lblActualizarNuevosCount').textContent = '0 trabajador(es)';
+
+        if (!modalActualizarInstance) {
+            modalActualizarInstance = new bootstrap.Modal(document.getElementById('modalActualizarNuevos'));
+        }
+        modalActualizarInstance.show();
+
+        try {
+            await cargarSelectoresLaborales(cia);
+            const persons = nuevosParaActualizar.map((n) => n.person);
+            const res = await fetch(URL_CAMPOS_LISTAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, persons }),
+            });
+            const data = await leerRespuestaJson(res, 'Listar campos nuevos');
+            if (!res.ok || data.error) {
+                throw new Error(data.error || 'No se pudo cargar la lista.');
+            }
+            const rows = Array.isArray(data.rows) ? data.rows : [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No se encontraron trabajadores.</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map((r) => {
+                const person = escapeHtml(r.person || '');
+                const nombre = escapeHtml(r.nombre || '');
+                const doc = escapeHtml(r.documento || '');
+                return `
+                    <tr data-person="${person}" data-nombre="${nombre}">
+                        <td class="font-monospace">${doc}</td>
+                        <td class="text-truncate" style="max-width: 14rem;" title="${nombre}">${nombre}</td>
+                        <td>
+                            <select class="form-select form-select-sm tri-position">
+                                ${optionsHtmlSelect(selectoresLaborales.position, r.position, { value: '', text: '—' })}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm tri-costcenter">
+                                ${optionsHtmlSelect(selectoresLaborales.costcenter, r.costcenter, { value: '', text: '—' })}
+                            </select>
+                        </td>
+                        <td>
+                            <select class="form-select form-select-sm tri-accountprofile">
+                                ${optionsHtmlSelect(selectoresLaborales.accountprofile, r.accountprofile, { value: '', text: '—' })}
+                            </select>
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm tri-asigfam">
+                                <option value="N"${String(r.flagasigfamiliar || 'N').toUpperCase() === 'Y' ? '' : ' selected'}>No</option>
+                                <option value="Y"${String(r.flagasigfamiliar || 'N').toUpperCase() === 'Y' ? ' selected' : ''}>Sí</option>
+                            </select>
+                        </td>
+                        <td class="text-center">
+                            <select class="form-select form-select-sm tri-mixta">
+                                <option value="N"${String(r.flagmixta || 'N').toUpperCase() === 'Y' ? '' : ' selected'}>No</option>
+                                <option value="Y"${String(r.flagmixta || 'N').toUpperCase() === 'Y' ? ' selected' : ''}>Sí</option>
+                            </select>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            document.getElementById('lblActualizarNuevosCount').textContent = `${rows.length} trabajador(es)`;
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escapeHtml(err.message || err)}</td></tr>`;
+            toastErr(err.message || 'Error al cargar trabajadores.');
+        }
+    }
+
+    async function grabarActualizarNuevos() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const rows = Array.from(document.querySelectorAll('#tbodyActualizarNuevos tr[data-person]'));
+        if (!cia || !rows.length) {
+            toastWarn('No hay filas para grabar.');
+            return;
+        }
+
+        const items = rows.map((tr) => ({
+            person: tr.getAttribute('data-person') || '',
+            nombre: tr.getAttribute('data-nombre') || '',
+            position: (tr.querySelector('.tri-position') || {}).value || '',
+            costcenter: (tr.querySelector('.tri-costcenter') || {}).value || '',
+            accountprofile: (tr.querySelector('.tri-accountprofile') || {}).value || '',
+            flagasigfamiliar: (tr.querySelector('.tri-asigfam') || {}).value || 'N',
+            flagmixta: (tr.querySelector('.tri-mixta') || {}).value || 'N',
+        }));
+
+        const btn = document.getElementById('btnGrabarActualizarNuevos');
+        const textoOriginal = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Grabando...';
+        try {
+            const res = await fetch(URL_CAMPOS_GUARDAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, items }),
+            });
+            const data = await leerRespuestaJson(res, 'Guardar campos nuevos');
+            if (!res.ok || data.error) {
+                throw new Error(data.error || 'No se pudo guardar.');
+            }
+            toastOk(data.mensaje || 'Campos actualizados.');
+            if (Array.isArray(data.errores) && data.errores.length) {
+                toastWarn(data.errores.map((e) => `${e.person || e.fila}: ${e.error}`).join('\n'));
+            } else if (modalActualizarInstance) {
+                modalActualizarInstance.hide();
+            }
+        } catch (err) {
+            console.error(err);
+            toastErr(err.message || 'Error al grabar.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = textoOriginal;
+        }
+    }
+
+    document.getElementById('btnActualizarNuevos').addEventListener('click', abrirModalActualizarNuevos);
+    document.getElementById('btnGrabarActualizarNuevos').addEventListener('click', grabarActualizarNuevos);
+
     const cboCia = document.getElementById('cboCompania');
+    cboCia.addEventListener('change', function () {
+        nuevosParaActualizar = [];
+        document.getElementById('btnActualizarNuevos').disabled = true;
+    });
     await poblarSelect('/api/selectores/companias', cboCia);
     seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
     renderListaTxt();

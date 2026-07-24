@@ -547,17 +547,21 @@
                     </a>
                 </li>
                 {% else %}
+                {% if can_menu('alertas') %}
                 <li class="sidebar-alertas {{ 'active' if request.endpoint == 'dashboard' else '' }}">
                     <a href="{{ url_for('dashboard') }}" title="Alertas">
                         <i class="bi bi-exclamation-triangle-fill"></i><span class="sidebar-link-text">Alertas</span>
                     </a>
                 </li>
+                {% endif %}
 
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-3 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page', 'comparar_planillas_page', 'comparar_planillas_resultado_page', 'receta_page') %}
+                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page', 'comparar_planillas_page', 'comparar_planillas_resultado_page', 'perfiles_acceso_page', 'asignar_perfiles_page') or (mostrar_menu_receta and request.endpoint == 'receta_page') %}
+                {% set show_generales = can_menu('conceptos') or can_menu('tipos_planilla') or can_menu('formulas') or can_menu('usuarios_empresa') or can_menu('comparar_planillas') or can_menu('perfiles_acceso') or can_menu('asignar_perfiles') or (mostrar_menu_receta and can_menu('receta')) %}
+                {% if show_generales %}
                 <li class="sidebar-menu-parent {{ 'active' if generales_active else '' }}">
                     <a href="#submenuGenerales"
                        class="sidebar-parent-link"
@@ -569,40 +573,69 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if generales_active else '' }}" id="submenuGenerales">
+                        {% if can_menu('conceptos') %}
                         <li class="{{ 'active' if request.endpoint == 'conceptos_page' else '' }}">
                             <a href="{{ url_for('conceptos_page') }}" title="Conceptos">
                                 <i class="bi bi-box-seam"></i><span class="sidebar-link-text">Conceptos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('tipos_planilla') %}
                         <li class="{{ 'active' if request.endpoint == 'tipos_planilla_page' else '' }}">
                             <a href="{{ url_for('tipos_planilla_page') }}" title="Tipo de Planillas">
                                 <i class="bi bi-calendar3"></i><span class="sidebar-link-text">Tipo de Planillas</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('formulas') %}
                         <li class="{{ 'active' if request.endpoint == 'formulas_page' else '' }}">
                             <a href="{{ url_for('formulas_page') }}" title="Fórmulas">
                                 <i class="bi bi-calculator"></i><span class="sidebar-link-text">Fórmulas</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('usuarios_empresa') %}
                         <li class="{{ 'active' if request.endpoint == 'usuarios_empresa_page' else '' }}">
                             <a href="{{ url_for('usuarios_empresa_page') }}" title="Usuarios por Empresa">
                                 <i class="bi bi-people"></i><span class="sidebar-link-text">Usuarios por Empresa</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('comparar_planillas') %}
                         <li class="{{ 'active' if request.endpoint in ('comparar_planillas_page', 'comparar_planillas_resultado_page') else '' }}">
                             <a href="{{ url_for('comparar_planillas_page') }}" title="Comparar Planillas">
                                 <i class="bi bi-arrow-left-right"></i><span class="sidebar-link-text">Comparar Planillas</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('perfiles_acceso') %}
+                        <li class="{{ 'active' if request.endpoint == 'perfiles_acceso_page' else '' }}">
+                            <a href="{{ url_for('perfiles_acceso_page') }}" title="Perfiles de acceso">
+                                <i class="bi bi-shield-lock"></i><span class="sidebar-link-text">Perfiles de acceso</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('asignar_perfiles') %}
+                        <li class="{{ 'active' if request.endpoint == 'asignar_perfiles_page' else '' }}">
+                            <a href="{{ url_for('asignar_perfiles_page') }}" title="Asignar perfiles">
+                                <i class="bi bi-person-check"></i><span class="sidebar-link-text">Asignar perfiles</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if mostrar_menu_receta and can_menu('receta') %}
                         <li class="{{ 'active' if request.endpoint == 'receta_page' else '' }}">
                             <a href="{{ url_for('receta_page') }}" title="Receta">
                                 <i class="bi bi-prescription2"></i><span class="sidebar-link-text">Receta</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
-                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'tipos_documento_page', 'unidades_page') %}
+                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'centros_costo_page', 'tipos_documento_page', 'unidades_page') %}
+                {% set show_tablas = can_menu('cuentas_bancarias') or can_menu('cargos') or can_menu('centros_costo') or can_menu('tipos_documento') or can_menu('unidades') %}
+                {% if show_tablas %}
                 <li class="sidebar-menu-parent {{ 'active' if tablas_active else '' }}">
                     <a href="#submenuTablas"
                        class="sidebar-parent-link"
@@ -614,58 +647,84 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if tablas_active else '' }}" id="submenuTablas">
+                        {% if can_menu('cuentas_bancarias') %}
                         <li class="{{ 'active' if request.endpoint == 'cuentas_bancarias_page' else '' }}">
                             <a href="{{ url_for('cuentas_bancarias_page') }}" title="Cuentas Bancarias">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Cuentas Bancarias</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('cargos') %}
                         <li class="{{ 'active' if request.endpoint == 'cargos_page' else '' }}">
                             <a href="{{ url_for('cargos_page') }}" title="Cargos">
                                 <i class="bi bi-briefcase"></i><span class="sidebar-link-text">Cargos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('centros_costo') %}
+                        <li class="{{ 'active' if request.endpoint == 'centros_costo_page' else '' }}">
+                            <a href="{{ url_for('centros_costo_page') }}" title="Centros de Costo">
+                                <i class="bi bi-bounding-box"></i><span class="sidebar-link-text">Centros de Costo</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tipos_documento') %}
                         <li class="{{ 'active' if request.endpoint == 'tipos_documento_page' else '' }}">
                             <a href="{{ url_for('tipos_documento_page') }}" title="Tipos de Documentos">
                                 <i class="bi bi-card-text"></i><span class="sidebar-link-text">Tipos de Documentos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('unidades') %}
                         <li class="{{ 'active' if request.endpoint == 'unidades_page' else '' }}">
                             <a href="{{ url_for('unidades_page') }}" title="Unidades">
                                 <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Unidades</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Administración</p>
                 </li>
 
+                {% if can_menu('trabajadores') %}
                 <li class="{{ 'active' if request.endpoint in ('trabajadores_page', 'trabajadores_editar') else '' }}">
                     <a href="{{ url_for('trabajadores_page') }}" title="Trabajadores">
                         <i class="bi bi-people-fill"></i><span class="sidebar-link-text">Trabajadores</span>
                     </a>
                 </li>
+                {% endif %}
 
+                {% if can_menu('asignacion_conceptos') %}
                 <li class="{{ 'active' if request.endpoint == 'asignacion_conceptos_page' else '' }}">
                     <a href="{{ url_for('asignacion_conceptos_page') }}" title="Asignación de Conceptos">
                         <i class="bi bi-tags"></i><span class="sidebar-link-text">Asignación de Conceptos</span>
                     </a>
                 </li>
+                {% endif %}
 
+                {% if can_menu('registro_vacaciones') %}
                 <li class="{{ 'active' if request.endpoint == 'registro_vacaciones_page' else '' }}">
                     <a href="{{ url_for('registro_vacaciones_page') }}" title="Registro de Vacaciones">
                         <i class="bi bi-calendar2-week"></i><span class="sidebar-link-text">Registro de Vacaciones</span>
                     </a>
                 </li>
+                {% endif %}
 
+                {% if can_menu('registro_descansos_medicos') %}
                 <li class="{{ 'active' if request.endpoint == 'registro_descansos_medicos_page' else '' }}">
                     <a href="{{ url_for('registro_descansos_medicos_page') }}" title="Registro de Descansos Médicos">
                         <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Registro de Descansos Médicos</span>
                     </a>
                 </li>
+                {% endif %}
 
                 {% set carga_masiva_active = request.endpoint in ('plantillas_importacion_page', 'importacion_conceptos_page') %}
+                {% set show_carga_masiva = can_menu('plantillas_importacion') or can_menu('importacion_conceptos') %}
+                {% if show_carga_masiva %}
                 <li class="sidebar-menu-parent {{ 'active' if carga_masiva_active else '' }}">
                     <a href="#submenuCargaMasiva"
                        class="sidebar-parent-link"
@@ -677,24 +736,31 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if carga_masiva_active else '' }}" id="submenuCargaMasiva">
+                        {% if can_menu('plantillas_importacion') %}
                         <li class="{{ 'active' if request.endpoint == 'plantillas_importacion_page' else '' }}">
                             <a href="{{ url_for('plantillas_importacion_page') }}" title="Plantillas de Importación">
                                 <i class="bi bi-file-earmark-arrow-down"></i><span class="sidebar-link-text">Plantillas de Importación</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('importacion_conceptos') %}
                         <li class="{{ 'active' if request.endpoint == 'importacion_conceptos_page' else '' }}">
                             <a href="{{ url_for('importacion_conceptos_page') }}" title="Importación de Conceptos">
                                 <i class="bi bi-box-arrow-in-down"></i><span class="sidebar-link-text">Importación de Conceptos</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>
 
                 {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'procesar_planilla_page', 'procesar_planilla_masivo_page', 'reporte_log_calculo_page') %}
+                {% set show_calculos = can_menu('aperturar_periodos') or can_menu('procesar_planilla') or can_menu('procesar_planilla_masivo') or can_menu('log_calculo') %}
+                {% if show_calculos %}
                 <li class="sidebar-menu-parent {{ 'active' if calculos_active else '' }}">
                     <a href="#submenuCalculos"
                        class="sidebar-parent-link"
@@ -706,30 +772,41 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if calculos_active else '' }}" id="submenuCalculos">
+                        {% if can_menu('aperturar_periodos') %}
                         <li class="{{ 'active' if request.endpoint == 'aperturar_periodos_page' else '' }}">
                             <a href="{{ url_for('aperturar_periodos_page') }}" title="Aperturar Periodos">
                                 <i class="bi bi-calendar2-check"></i><span class="sidebar-link-text">Aperturar Periodos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('procesar_planilla') %}
                         <li class="{{ 'active' if request.endpoint == 'procesar_planilla_page' else '' }}">
                             <a href="{{ url_for('procesar_planilla_page') }}" title="Procesar Planilla">
                                 <i class="bi bi-gear-wide-connected"></i><span class="sidebar-link-text">Procesar Planilla</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('procesar_planilla_masivo') %}
                         <li class="{{ 'active' if request.endpoint == 'procesar_planilla_masivo_page' else '' }}">
                             <a href="{{ url_for('procesar_planilla_masivo_page') }}" title="Procesar Planilla Masivo">
                                 <i class="bi bi-layers"></i><span class="sidebar-link-text">Procesar Planilla Masivo</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('log_calculo') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_log_calculo_page' else '' }}">
                             <a href="{{ url_for('reporte_log_calculo_page') }}" title="Log de Cálculo de Planillas">
                                 <i class="bi bi-journal-text"></i><span class="sidebar-link-text">Log de Cálculo de Planillas</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
+                {% set show_plame = can_menu('plame_archivo_14') or can_menu('plame_archivo_15') or can_menu('plame_archivo_18') or can_menu('plame_archivo_26') or can_menu('plame_archivos_4ta') or can_menu('plame_tregistro') or can_menu('plame_validar') or can_menu('tregistro_importar') %}
+                {% if show_plame %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
                        class="sidebar-parent-link"
@@ -741,50 +818,69 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if plame_active else '' }}" id="submenuPlame">
+                        {% if can_menu('plame_archivo_14') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo14_page' else '' }}">
                             <a href="{{ url_for('plame_archivo14_page') }}" title="Archivo 14 (.jor)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 14 (.jor)</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_archivo_15') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo15_page' else '' }}">
                             <a href="{{ url_for('plame_archivo15_page') }}" title="Archivo 15 (.snl)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 15 (.snl)</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_archivo_18') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo18_page' else '' }}">
                             <a href="{{ url_for('plame_archivo18_page') }}" title="Archivo 18 (.rem)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 18 (.rem)</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_archivo_26') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo26_page' else '' }}">
                             <a href="{{ url_for('plame_archivo26_page') }}" title="Archivo 26 (.toc)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 26 (.toc)</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_archivos_4ta') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_archivos_7_20_page' else '' }}">
                             <a href="{{ url_for('plame_archivos_7_20_page') }}" title="Archivos 4ta Categoría (.ps4 / .4ta)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivos 4ta Categoría</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_tregistro') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_tregistro_page' else '' }}">
                             <a href="{{ url_for('plame_tregistro_page') }}" title="Archivo T-Registro">
                                 <i class="bi bi-person-vcard"></i><span class="sidebar-link-text">Archivo T-Registro</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('plame_validar') %}
                         <li class="{{ 'active' if request.endpoint == 'plame_validar_page' else '' }}">
                             <a href="{{ url_for('plame_validar_page') }}" title="Validar PLAME">
                                 <i class="bi bi-shield-check"></i><span class="sidebar-link-text">Validar PLAME</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('tregistro_importar') %}
                         <li class="{{ 'active' if request.endpoint == 'tregistro_importar_page' else '' }}">
                             <a href="{{ url_for('tregistro_importar_page') }}" title="Importar T-Registro">
                                 <i class="bi bi-box-arrow-in-down"></i><span class="sidebar-link-text">Importar T-Registro</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set afp_active = request.endpoint in ('declaracion_afp_page', 'control_pagos_afp_page') %}
+                {% set show_afp = can_menu('afpnet') or can_menu('control_pagos_afp') %}
+                {% if show_afp %}
                 <li class="sidebar-menu-parent {{ 'active' if afp_active else '' }}">
                     <a href="#submenuAfp"
                        class="sidebar-parent-link"
@@ -796,20 +892,27 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if afp_active else '' }}" id="submenuAfp">
+                        {% if can_menu('afpnet') %}
                         <li class="{{ 'active' if request.endpoint == 'declaracion_afp_page' else '' }}">
                             <a href="{{ url_for('declaracion_afp_page') }}" title="AFPnet">
                                 <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">AFPnet</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('control_pagos_afp') %}
                         <li class="{{ 'active' if request.endpoint == 'control_pagos_afp_page' else '' }}">
                             <a href="{{ url_for('control_pagos_afp_page') }}" title="Control de Pagos AFP">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Control de Pagos AFP</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page') %}
+                {% set show_pago_haberes = can_menu('pago_telecredito') or can_menu('pago_interbank') or can_menu('pago_continental') or can_menu('pago_banbif') %}
+                {% if show_pago_haberes %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"
                        class="sidebar-parent-link"
@@ -821,30 +924,41 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if pago_haberes_active else '' }}" id="submenuPagoHaberes">
+                        {% if can_menu('pago_telecredito') %}
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_telecredito_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_telecredito_page') }}" title="Archivo Telecrédito">
                                 <i class="bi bi-bank2"></i><span class="sidebar-link-text">Archivo Telecrédito</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('pago_interbank') %}
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_interbank_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_interbank_page') }}" title="Archivo Interbank">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Interbank</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('pago_continental') %}
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_bbva_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_bbva_page') }}" title="Archivo Continental">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Continental</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('pago_banbif') %}
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_banbif_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_banbif_page') }}" title="Archivo BANBIF">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo BANBIF</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set impuesto_renta_active = request.endpoint in ('certificado_quinta_page', 'calculo_quinta_trabajador_page') %}
+                {% set show_impuesto_renta = can_menu('certificado_quinta') or can_menu('calculo_quinta_trabajador') %}
+                {% if show_impuesto_renta %}
                 <li class="sidebar-menu-parent {{ 'active' if impuesto_renta_active else '' }}">
                     <a href="#submenuImpuestoRenta"
                        class="sidebar-parent-link"
@@ -856,20 +970,27 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if impuesto_renta_active else '' }}" id="submenuImpuestoRenta">
+                        {% if can_menu('certificado_quinta') %}
                         <li class="{{ 'active' if request.endpoint == 'certificado_quinta_page' else '' }}">
                             <a href="{{ url_for('certificado_quinta_page') }}" title="Certificado de Quinta">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Certificado de Quinta</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('calculo_quinta_trabajador') %}
                         <li class="{{ 'active' if request.endpoint == 'calculo_quinta_trabajador_page' else '' }}">
                             <a href="{{ url_for('calculo_quinta_trabajador_page') }}" title="Cálculo de 5ta por Trabajador">
                                 <i class="bi bi-calculator"></i><span class="sidebar-link-text">Cálculo de 5ta por Trabajador</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page', 'formato_liquidacion_page') %}
+                {% set show_liquidaciones = can_menu('certificado_trabajo') or can_menu('certificado_retiro_cts') or can_menu('formato_liquidacion') %}
+                {% if show_liquidaciones %}
                 <li class="sidebar-menu-parent {{ 'active' if liquidaciones_active else '' }}">
                     <a href="#submenuLiquidaciones"
                        class="sidebar-parent-link"
@@ -881,25 +1002,34 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if liquidaciones_active else '' }}" id="submenuLiquidaciones">
+                        {% if can_menu('certificado_trabajo') %}
                         <li class="{{ 'active' if request.endpoint == 'certificado_trabajo_page' else '' }}">
                             <a href="{{ url_for('certificado_trabajo_page') }}" title="Certificado de Trabajo">
                                 <i class="bi bi-person-vcard"></i><span class="sidebar-link-text">Certificado de Trabajo</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('certificado_retiro_cts') %}
                         <li class="{{ 'active' if request.endpoint == 'certificado_retiro_cts_page' else '' }}">
                             <a href="{{ url_for('certificado_retiro_cts_page') }}" title="Certificado Retiro CTS">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Certificado Retiro CTS</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('formato_liquidacion') %}
                         <li class="{{ 'active' if request.endpoint == 'formato_liquidacion_page' else '' }}">
                             <a href="{{ url_for('formato_liquidacion_page') }}" title="Formato de Liquidación">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de Liquidación</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
-                {% set asientos_active = request.endpoint in ('asientos_cuentas_contables_page', 'asientos_configurar_conceptos_page', 'asientos_interfaz_page', 'asientos_generar_voucher_page', 'asientos_reporte_contable_page') %}
+                {% set asientos_active = request.endpoint in ('asientos_cuentas_contables_page', 'asientos_distribucion_porcentual_page', 'asientos_configurar_conceptos_page', 'asientos_interfaz_page', 'asientos_generar_voucher_page', 'asientos_reporte_contable_page') %}
+                {% set show_asientos = can_menu('asientos_cuentas_contables') or can_menu('asientos_distribucion_porcentual') or can_menu('asientos_configurar_conceptos') or can_menu('asientos_reporte_contable') or can_menu('asientos_generar_voucher') or can_menu('asientos_interfaz') %}
+                {% if show_asientos %}
                 <li class="sidebar-menu-parent {{ 'active' if asientos_active else '' }}">
                     <a href="#submenuAsientos"
                        class="sidebar-parent-link"
@@ -911,35 +1041,55 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if asientos_active else '' }}" id="submenuAsientos">
+                        {% if can_menu('asientos_cuentas_contables') %}
                         <li class="{{ 'active' if request.endpoint == 'asientos_cuentas_contables_page' else '' }}">
                             <a href="{{ url_for('asientos_cuentas_contables_page') }}" title="Cuentas Contables">
                                 <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Cuentas Contables</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('asientos_distribucion_porcentual') %}
+                        <li class="{{ 'active' if request.endpoint == 'asientos_distribucion_porcentual_page' else '' }}">
+                            <a href="{{ url_for('asientos_distribucion_porcentual_page') }}" title="Distribución Porcentual">
+                                <i class="bi bi-percent"></i><span class="sidebar-link-text">Distribución Porcentual</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('asientos_configurar_conceptos') %}
                         <li class="{{ 'active' if request.endpoint == 'asientos_configurar_conceptos_page' else '' }}">
                             <a href="{{ url_for('asientos_configurar_conceptos_page') }}" title="Configurar Conceptos">
                                 <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Configurar Conceptos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('asientos_reporte_contable') %}
                         <li class="{{ 'active' if request.endpoint == 'asientos_reporte_contable_page' else '' }}">
                             <a href="{{ url_for('asientos_reporte_contable_page') }}" title="Reporte Asiento Contable">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte Asiento Contable</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('asientos_generar_voucher') %}
                         <li class="{{ 'active' if request.endpoint == 'asientos_generar_voucher_page' else '' }}">
                             <a href="{{ url_for('asientos_generar_voucher_page') }}" title="Generar Voucher">
                                 <i class="bi bi-journal-plus"></i><span class="sidebar-link-text">Generar Voucher</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('asientos_interfaz') %}
                         <li class="{{ 'active' if request.endpoint == 'asientos_interfaz_page' else '' }}">
                             <a href="{{ url_for('asientos_interfaz_page') }}" title="Interfaz Asientos">
                                 <i class="bi bi-list-check"></i><span class="sidebar-link-text">Interfaz Asientos</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set contratos_active = request.endpoint in ('registro_contratos_page', 'reporte_contratos_page', 'generar_contratos_page') %}
+                {% set show_contratos = can_menu('registro_contratos') or can_menu('reporte_contratos') or can_menu('generar_contratos') %}
+                {% if show_contratos %}
                 <li class="sidebar-menu-parent {{ 'active' if contratos_active else '' }}">
                     <a href="#submenuContratos"
                        class="sidebar-parent-link"
@@ -951,29 +1101,38 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if contratos_active else '' }}" id="submenuContratos">
+                        {% if can_menu('registro_contratos') %}
                         <li class="{{ 'active' if request.endpoint == 'registro_contratos_page' else '' }}">
                             <a href="{{ url_for('registro_contratos_page') }}" title="Registro de Contratos">
                                 <i class="bi bi-person-lines-fill"></i><span class="sidebar-link-text">Registro de Contratos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_contratos') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_contratos_page' else '' }}">
                             <a href="{{ url_for('reporte_contratos_page') }}" title="Reporte de Contratos">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte de Contratos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('generar_contratos') %}
                         <li class="{{ 'active' if request.endpoint == 'generar_contratos_page' else '' }}">
                             <a href="{{ url_for('generar_contratos_page') }}" title="Generar Contratos">
                                 <i class="bi bi-file-earmark-word"></i><span class="sidebar-link-text">Generar Contratos</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>
 
                 {% set vacaciones_descansos_active = request.endpoint in ('reporte_vacaciones_detalle_page', 'reporte_saldo_vacaciones_page', 'reporte_descansos_medicos_detalle_page') %}
+                {% set show_vacaciones_descansos = can_menu('reporte_vacaciones_detalle') or can_menu('reporte_saldo_vacaciones') or can_menu('reporte_descansos_detalle') %}
+                {% if show_vacaciones_descansos %}
                 <li class="sidebar-menu-parent {{ 'active' if vacaciones_descansos_active else '' }}">
                     <a href="#submenuVacacionesDescansos"
                        class="sidebar-parent-link"
@@ -985,25 +1144,34 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if vacaciones_descansos_active else '' }}" id="submenuVacacionesDescansos">
+                        {% if can_menu('reporte_vacaciones_detalle') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_vacaciones_detalle_page' else '' }}">
                             <a href="{{ url_for('reporte_vacaciones_detalle_page') }}" title="Detalle de Vacaciones">
                                 <i class="bi bi-calendar-range"></i><span class="sidebar-link-text">Detalle de Vacaciones</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_saldo_vacaciones') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
                             <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de Vacaciones">
                                 <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de Vacaciones</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_descansos_detalle') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_descansos_medicos_detalle_page' else '' }}">
                             <a href="{{ url_for('reporte_descansos_medicos_detalle_page') }}" title="Detalle de Descansos">
                                 <i class="bi bi-heart-pulse"></i><span class="sidebar-link-text">Detalle de Descansos</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page') %}
+                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') %}
+                {% if show_planillas_reportes %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
                        class="sidebar-parent-link"
@@ -1015,53 +1183,70 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if planillas_reportes_active else '' }}" id="submenuPlanillasReportes">
+                        {% if can_menu('reporte_resumen_total') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_resumen_total' else '' }}">
                             <a href="{{ url_for('reporte_resumen_total') }}" title="Resumen de Planilla Total">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Resumen de Planilla Total</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_planilla_vertical') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_vertical_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_vertical_page') }}" title="Planilla Vertical">
                                 <i class="bi bi-layout-text-sidebar-reverse"></i><span class="sidebar-link-text">Planilla Vertical</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_planilla_consolidada') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_consolidada_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_consolidada_page') }}" title="Planilla Consolidada">
                                 <i class="bi bi-layout-three-columns"></i><span class="sidebar-link-text">Planilla Consolidada</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_listado_pagos') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_listado_pagos_page' else '' }}">
                             <a href="{{ url_for('reporte_listado_pagos_page') }}" title="Listado de Pagos">
                                 <i class="bi bi-cash-stack"></i><span class="sidebar-link-text">Listado de Pagos</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_promedio_liquidaciones') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_liquidaciones' else '' }}">
                             <a href="{{ url_for('reporte_liquidaciones') }}" title="Promedio de Liquidaciones">
                                 <i class="bi bi-calculator"></i><span class="sidebar-link-text">Promedio de Liquidaciones</span>
                             </a>
                         </li>
+                        {% endif %}
+                        {% if can_menu('reporte_planilla_por_conceptos') %}
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_por_conceptos_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_por_conceptos_page') }}" title="Planilla por Conceptos">
                                 <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Planilla por Conceptos</span>
                             </a>
                         </li>
+                        {% endif %}
                     </ul>
                 </li>
+                {% endif %}
 
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Documentos</p>
                 </li>
 
+                {% if can_menu('generar_boletas') %}
                 <li class="{{ 'active' if request.endpoint == 'generar_boletas_page' else '' }}">
                     <a href="{{ url_for('generar_boletas_page') }}" title="Generar Boletas">
                         <i class="bi bi-file-earmark-pdf"></i><span class="sidebar-link-text">Generar Boletas</span>
                     </a>
                 </li>
+                {% endif %}
+                {% if can_menu('formato_utilidades') %}
                 <li class="{{ 'active' if request.endpoint == 'formato_utilidades_page' else '' }}">
                     <a href="{{ url_for('formato_utilidades_page') }}" title="Constancia de Utilidades">
                         <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">Constancia de Utilidades</span>
                     </a>
                 </li>
+                {% endif %}
                 {% endif %}
 
                 <hr class="mx-3 opacity-25 mt-4">

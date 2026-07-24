@@ -1,0 +1,479 @@
+{% extends "layout.html" %}
+
+{% block title %}Distribución Porcentual — Asientos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cc-grilla {
+        max-height: calc(100vh - 275px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-cc {
+        font-size: 12px;
+        margin-bottom: 0;
+    }
+    .table-cc th,
+    .table-cc td {
+        padding: 0.3rem 0.45rem;
+        vertical-align: middle;
+    }
+    .table-cc thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        color: #495057;
+    }
+    .table-cc tbody tr.dirty {
+        background: #fff8e6;
+    }
+    .table-cc tbody tr.nueva {
+        background: #eef8ff;
+    }
+    .table-cc .form-control-sm,
+    .table-cc .form-select-sm {
+        min-width: 0;
+        font-size: 12px;
+    }
+    .cc-msg {
+        min-height: 1.4rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">Distribución Porcentual</h5>
+                <div class="small text-muted">Distribución por orden de trabajo (unidades) para asientos.</div>
+            </div>
+        </div>
+        <form id="frmDistribucion" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="txtLocalizar" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                <input type="search" id="txtLocalizar" class="form-control form-control-sm"
+                       placeholder="DNI, nombres o código..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnAgregar" disabled>
+                    <i class="bi bi-plus-lg"></i> Agregar
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm px-3" id="btnGuardar" disabled>
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+                <span id="lblConteo" class="small text-muted ms-auto">0 registros</span>
+            </div>
+        </form>
+        <div id="msgDist" class="cc-msg small mt-2"></div>
+    </div>
+</div>
+
+<div class="cc-grilla">
+    <table class="table table-bordered table-sm table-hover table-cc align-middle">
+        <thead>
+            <tr>
+                <th style="width:8rem; min-width:7rem">DNI</th>
+                <th style="min-width:16rem">Nombres</th>
+                <th style="width:10rem; min-width:8rem">Código</th>
+                <th style="width:6rem; min-width:5rem">Valor</th>
+                <th style="width:4.5rem" class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyDist">
+            <tr>
+                <td colspan="5" class="text-center text-muted py-4">Seleccione compañía y periodo, luego pulse Consultar</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+    const cboCia = document.getElementById('cboCompania');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const txtLocalizar = document.getElementById('txtLocalizar');
+    const tbody = document.getElementById('tbodyDist');
+    const lblConteo = document.getElementById('lblConteo');
+    const msg = document.getElementById('msgDist');
+    const btnAgregar = document.getElementById('btnAgregar');
+    const btnGuardar = document.getElementById('btnGuardar');
+
+    let filas = [];
+    let unidades = [];
+
+    function escHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastOk(texto) {
+        if (window.HmUi) HmUi.exito(texto);
+        else alert(texto);
+    }
+
+    function toastErr(texto) {
+        if (window.HmUi) HmUi.error(texto);
+        else alert(texto);
+    }
+
+    async function confirmar(mensaje) {
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            return HmUi.confirmar({
+                titulo: 'Confirmar',
+                mensaje,
+                textoOk: 'Sí, replicar',
+                textoCancelar: 'Cancelar',
+                tipo: 'warning'
+            });
+        }
+        return window.confirm(mensaje);
+    }
+
+    async function postJson(url, body) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Error al procesar la solicitud.');
+        }
+        return data;
+    }
+
+    function opcionesUnidad(selected) {
+        const sel = String(selected || '').trim();
+        let html = '<option value="">Seleccione...</option>';
+        unidades.forEach((u) => {
+            const id = String(u.id || '').trim();
+            const text = String(u.text || id).trim();
+            const isSel = id === sel ? ' selected' : '';
+            html += `<option value="${escHtml(id)}"${isSel}>${escHtml(text)}</option>`;
+        });
+        if (sel && !unidades.some((u) => String(u.id || '').trim() === sel)) {
+            html += `<option value="${escHtml(sel)}" selected>${escHtml(sel)}</option>`;
+        }
+        return html;
+    }
+
+    function actualizarBotones() {
+        const hayFiltros = !!cboCia.value.trim() && !!cboPeriodo.value.trim();
+        const hayCambios = filas.some((fila) => fila.dirty);
+        btnAgregar.disabled = !hayFiltros;
+        btnGuardar.disabled = !hayFiltros || !hayCambios;
+        lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}`;
+    }
+
+    function mapRows(rows) {
+        return (Array.isArray(rows) ? rows : []).map((row) => ({
+            fila: row.fila != null ? Number(row.fila) : null,
+            dni: String(row.dni || '').trim(),
+            nombre: String(row.nombre || '').trim(),
+            codigo: String(row.codigo || '').trim(),
+            valor: row.valor != null && row.valor !== '' ? Number(row.valor) : '',
+            nueva: false,
+            dirty: false
+        }));
+    }
+
+    function renderizar() {
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Sin registros de distribución</td></tr>';
+            actualizarBotones();
+            return;
+        }
+
+        tbody.innerHTML = filas.map((fila, idx) => `
+            <tr class="${fila.nueva ? 'nueva' : ''} ${fila.dirty ? 'dirty' : ''}" data-index="${idx}">
+                <td>
+                    <input type="text" class="form-control form-control-sm cc-dni"
+                           value="${escHtml(fila.dni)}" maxlength="20" autocomplete="off">
+                </td>
+                <td>
+                    <input type="text" class="form-control form-control-sm cc-nombre"
+                           value="${escHtml(fila.nombre)}" maxlength="255" autocomplete="off">
+                </td>
+                <td>
+                    <select class="form-select form-select-sm cc-codigo">
+                        ${opcionesUnidad(fila.codigo)}
+                    </select>
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm cc-valor text-end"
+                           value="${escHtml(fila.valor === '' || fila.valor == null ? '' : fila.valor)}"
+                           min="1" max="100" step="1" autocomplete="off">
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-outline-danger btn-sm cc-eliminar"
+                            title="${fila.nueva ? 'Quitar fila' : 'Eliminar distribución'}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        tbody.querySelectorAll('tr[data-index]').forEach((tr) => {
+            const idx = Number(tr.dataset.index);
+            const markDirty = () => {
+                filas[idx].dirty = true;
+                tr.classList.add('dirty');
+                actualizarBotones();
+            };
+            tr.querySelector('.cc-dni').addEventListener('input', function () {
+                filas[idx].dni = this.value;
+                markDirty();
+            });
+            tr.querySelector('.cc-nombre').addEventListener('input', function () {
+                filas[idx].nombre = this.value;
+                markDirty();
+            });
+            tr.querySelector('.cc-codigo').addEventListener('change', function () {
+                filas[idx].codigo = this.value;
+                markDirty();
+            });
+            tr.querySelector('.cc-valor').addEventListener('input', function () {
+                filas[idx].valor = this.value;
+                markDirty();
+            });
+            tr.querySelector('.cc-eliminar').addEventListener('click', () => eliminarFila(idx));
+        });
+        actualizarBotones();
+    }
+
+    async function cargarListado(cia, period) {
+        const data = await postJson('/api/asientos/distribucion-porcentual/listado', {
+            cia,
+            period,
+            busqueda: txtLocalizar.value.trim()
+        });
+        filas = mapRows(data.rows);
+        renderizar();
+        return filas.length;
+    }
+
+    async function consultar() {
+        const cia = cboCia.value.trim();
+        const period = cboPeriodo.value.trim();
+        if (!cia || !period) {
+            toastErr('Seleccione compañía y periodo.');
+            return;
+        }
+        msg.textContent = 'Consultando...';
+        try {
+            const total = await cargarListado(cia, period);
+            msg.textContent = '';
+            if (total > 0) return;
+
+            const ok = await confirmar('Se va a replicar la distribución del periodo pasado');
+            if (!ok) {
+                toastOk('Consulta cancelada. No se replicó la distribución.');
+                return;
+            }
+
+            msg.textContent = 'Replicando distribución del periodo anterior...';
+            const data = await postJson('/api/asientos/distribucion-porcentual/replicar', {
+                cia,
+                period
+            });
+            await cargarListado(cia, period);
+            msg.textContent = '';
+            toastOk(data.mensaje || 'Distribución replicada correctamente.');
+        } catch (error) {
+            msg.textContent = '';
+            toastErr(error.message);
+        }
+    }
+
+    function agregarFila() {
+        filas.unshift({
+            fila: null,
+            dni: '',
+            nombre: '',
+            codigo: '',
+            valor: 100,
+            nueva: true,
+            dirty: true
+        });
+        renderizar();
+        const input = tbody.querySelector('.cc-dni');
+        if (input) input.focus();
+    }
+
+    async function eliminarFila(idx) {
+        const fila = filas[idx];
+        if (!fila) return;
+        if (fila.nueva || !fila.fila) {
+            filas.splice(idx, 1);
+            renderizar();
+            return;
+        }
+        if (!confirm(`¿Eliminar la distribución de ${fila.dni} - ${fila.nombre}?`)) return;
+
+        try {
+            const data = await postJson('/api/asientos/distribucion-porcentual/eliminar', {
+                cia: cboCia.value.trim(),
+                period: cboPeriodo.value.trim(),
+                fila: fila.fila
+            });
+            filas.splice(idx, 1);
+            renderizar();
+            toastOk(data.mensaje || 'Distribución eliminada.');
+        } catch (error) {
+            toastErr(error.message);
+        }
+    }
+
+    async function guardarCambios() {
+        const pendientes = filas.filter((fila) => fila.dirty);
+        if (!pendientes.length) return;
+
+        for (const fila of pendientes) {
+            fila.dni = String(fila.dni || '').trim();
+            fila.nombre = String(fila.nombre || '').trim();
+            fila.codigo = String(fila.codigo || '').trim();
+            const valorNum = parseInt(String(fila.valor), 10);
+            if (!fila.dni || !fila.nombre || !fila.codigo) {
+                toastErr('Complete DNI, nombres y código en todas las filas modificadas.');
+                return;
+            }
+            if (!Number.isInteger(valorNum) || valorNum < 1 || valorNum > 100) {
+                toastErr('El valor debe ser un entero entre 1 y 100.');
+                return;
+            }
+            fila.valor = valorNum;
+        }
+
+        btnGuardar.disabled = true;
+        msg.textContent = `Guardando ${pendientes.length} registro${pendientes.length === 1 ? '' : 's'}...`;
+        try {
+            const mensajes = [];
+            for (const fila of pendientes) {
+                const data = await postJson('/api/asientos/distribucion-porcentual/guardar', {
+                    cia: cboCia.value.trim(),
+                    period: cboPeriodo.value.trim(),
+                    modo: fila.nueva || !fila.fila ? 'I' : 'U',
+                    fila: fila.fila,
+                    dni: fila.dni,
+                    nombre: fila.nombre,
+                    codigo: fila.codigo,
+                    valor: fila.valor
+                });
+                fila.fila = data.fila != null ? Number(data.fila) : fila.fila;
+                fila.nueva = false;
+                fila.dirty = false;
+                if (data.mensaje) mensajes.push(String(data.mensaje));
+            }
+            renderizar();
+            msg.textContent = '';
+            toastOk(
+                pendientes.length === 1 && mensajes[0]
+                    ? mensajes[0]
+                    : 'Cambios guardados correctamente.'
+            );
+        } catch (error) {
+            msg.textContent = '';
+            renderizar();
+            toastErr(error.message);
+        }
+    }
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value.trim();
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = !cia;
+        if (!cia) return;
+        const response = await fetch(`/api/selectores/periodos-cia?cia=${encodeURIComponent(cia)}`);
+        const data = await response.json();
+        (Array.isArray(data) ? data : []).forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : (item.period != null ? String(item.period) : '');
+            opt.textContent = item.text != null ? String(item.text)
+                : (item.periodo != null ? String(item.periodo) : opt.value);
+            cboPeriodo.appendChild(opt);
+        });
+        if (cboPeriodo.options.length > 1) {
+            cboPeriodo.selectedIndex = 1;
+        }
+    }
+
+    async function poblarCompanias() {
+        const response = await fetch('/api/selectores/companias');
+        const data = await response.json();
+        cboCia.innerHTML = '<option value="">Seleccione...</option>';
+        (Array.isArray(data) ? data : []).forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : '';
+            opt.textContent = item.text != null ? String(item.text) : '';
+            cboCia.appendChild(opt);
+        });
+        const def = Array.from(cboCia.options).find(
+            (opt) => String(opt.value || '').trim().toUpperCase() === DEFAULT_CIA
+        );
+        if (def) cboCia.value = def.value;
+    }
+
+    async function cargarUnidades() {
+        const response = await fetch('/api/selectores/unidades');
+        const data = await response.json();
+        unidades = (Array.isArray(data) ? data : []).map((item) => {
+            const id = String(item.id || '').trim();
+            const desc = String(item.text || '').trim();
+            return {
+                id,
+                text: desc && desc !== id ? `${id} — ${desc}` : id
+            };
+        });
+    }
+
+    document.getElementById('frmDistribucion').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        await consultar();
+    });
+    btnAgregar.addEventListener('click', agregarFila);
+    btnGuardar.addEventListener('click', guardarCambios);
+    cboCia.addEventListener('change', async function () {
+        filas = [];
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Pulse Consultar para cargar la distribución</td></tr>';
+        await cargarPeriodos();
+        actualizarBotones();
+    });
+    cboPeriodo.addEventListener('change', function () {
+        filas = [];
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Pulse Consultar para cargar la distribución</td></tr>';
+        actualizarBotones();
+    });
+
+    await Promise.all([poblarCompanias(), cargarUnidades()]);
+    await cargarPeriodos();
+    actualizarBotones();
+});
+</script>
+{% endblock %}

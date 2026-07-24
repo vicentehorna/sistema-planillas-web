@@ -354,6 +354,102 @@ class User(UserMixin):
         self.username = username
         self.email = email
         self.nombre = nombre
+
+    @staticmethod
+    def _user_from_login_row(row):
+        if not row:
+            return None
+        user_id, username_db, email, nombre = row
+        display = (nombre or username_db or user_id or '').strip() or str(user_id)
+        return User(user_id, display, email, display)
+
+    @staticmethod
+    def _query_employee_login(cursor, username, password):
+        """Login clásico: usuario ligado a trabajador (PR_Employee)."""
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                p.Name,
+                p.email,
+                p.Name
+            FROM SY_User u
+            INNER JOIN SY_Person p ON p.UserID = u.UserID
+            INNER JOIN PR_Employee E ON (p.Person = e.Person AND e.Status = 'N')
+            INNER JOIN SY_Company c ON (E.Company = c.Company)
+            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
+            INNER JOIN PR_mapping2 M ON (c.Company = M.company)
+            WHERE u.UserID = ? AND u.PasswordWeb = ?
+            """,
+            (username, password),
+        )
+        return cursor.fetchone()
+
+    @staticmethod
+    def _query_empweb_login(cursor, username, password):
+        """
+        Login de usuarios de servicio / admin web (adminlumat, adminaci, ...):
+        SY_User + PasswordWeb + perfil EMPWEB, sin exigir PR_Employee.
+        """
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS Name,
+                p.email,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS DisplayName
+            FROM SY_User u
+            INNER JOIN SY_UserProfile up
+                ON up.UserID = u.UserID
+               AND UPPER(LTRIM(RTRIM(up.Profile))) = 'EMPWEB'
+            LEFT JOIN SY_Person p ON p.UserID = u.UserID
+            WHERE u.UserID = ?
+              AND u.PasswordWeb = ?
+            """,
+            (username, password),
+        )
+        return cursor.fetchone()
+
+    @staticmethod
+    def _query_employee_by_id(cursor, user_id):
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                p.Name,
+                p.email,
+                p.Name
+            FROM SY_User u
+            INNER JOIN SY_Person p ON p.UserID = u.UserID
+            INNER JOIN PR_Employee E ON (p.Person = e.Person AND e.Status = 'N')
+            INNER JOIN SY_Company c ON (E.Company = c.Company)
+            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
+            INNER JOIN PR_mapping2 M ON (c.Company = M.company)
+            WHERE u.UserID = ?
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone()
+
+    @staticmethod
+    def _query_empweb_by_id(cursor, user_id):
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS Name,
+                p.email,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS DisplayName
+            FROM SY_User u
+            INNER JOIN SY_UserProfile up
+                ON up.UserID = u.UserID
+               AND UPPER(LTRIM(RTRIM(up.Profile))) = 'EMPWEB'
+            LEFT JOIN SY_Person p ON p.UserID = u.UserID
+            WHERE u.UserID = ?
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone()
     
     @staticmethod
     def validate_user(username, password):
@@ -361,6 +457,10 @@ class User(UserMixin):
         Valida credenciales en dos pasos:
         1) Resuelve la BD del cliente en hm_planillas.USUARIOS_ROUTER.
         2) Valida UserID/PasswordWeb en la BD del cliente (SY_User).
+
+        Acepta:
+          - Usuario ligado a trabajador (PR_Employee), o
+          - Usuario EMPWEB sin ficha (adminlumat, adminaci, etc.).
 
         Excepción temporal: vhornac/vhornac → solo Receta, BD fija hm_aci (sin router/BD).
         """
@@ -394,37 +494,27 @@ class User(UserMixin):
             conn = DatabaseConfig.get_connection(database=target_db)
             cursor = conn.cursor()
 
-            query = """
-                SELECT
-                u.UserID,
-                p.Name,
-                p.email,
-                p.Name
-            FROM SY_User u
-            INNER JOIN SY_Person p ON p.UserID = u.UserID
-            INNER JOIN PR_Employee E on (p.Person = e.Person and e.Status = 'N')
-            INNER JOIN SY_Company c ON (E.Company = c.Company)
-            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
-            INNER JOIN PR_mapping2 M on (c.Company = M.company)
-            WHERE u.UserID = ? AND u.PasswordWeb = ?
-            """
+            row = User._query_employee_login(cursor, username, password)
+            login_mode = 'employee'
+            if not row:
+                row = User._query_empweb_login(cursor, username, password)
+                login_mode = 'empweb'
 
-            cursor.execute(query, (username, password))
-            row = cursor.fetchone()
             cursor.close()
 
-            print(f"DEBUG: Login usuario='{username}' BD='{target_db}'")
+            print(f"DEBUG: Login usuario='{username}' BD='{target_db}' mode='{login_mode}'")
 
-            if row:
-                user_id, username_db, email, nombre = row
+            user = User._user_from_login_row(row)
+            if user:
                 persist_client_database(target_db)
                 try:
                     from flask import has_request_context, session
                     if has_request_context():
                         session['receta_only'] = False
+                        session['web_login_mode'] = login_mode
                 except Exception:
                     pass
-                return User(user_id, username_db, email, nombre)
+                return user
 
             return None
 
@@ -455,37 +545,47 @@ class User(UserMixin):
         try:
             conn = get_db_connection()
             cursor = conn.cursor()
-            
-            query = """
-              SELECT 
-                u.UserID,
-                p.Name,
-                p.email,
-                p.Name
-            FROM SY_User u
-            INNER JOIN SY_Person p ON p.UserID = u.UserID 
-            INNER JOIN PR_Employee E on (p.Person = e.Person and e.Status = 'N')
-            INNER JOIN SY_Company c ON (E.Company = c.Company)
-            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
-            INNER JOIN PR_mapping2 M on (c.Company = M.company)
-            WHERE u.UserID = ?  
-            """
-            
-            cursor.execute(query, (user_id,))
-            row = cursor.fetchone()
-            
+
+            row = User._query_employee_by_id(cursor, user_id)
+            if not row:
+                row = User._query_empweb_by_id(cursor, user_id)
+
             cursor.close()
             conn.close()
-            
-            if row:
-                user_id_db, username, email, nombre = row
-                return User(user_id_db, username, email, nombre)
-            
-            return None
+
+            return User._user_from_login_row(row)
             
         except Exception as e:
             print(f"Error al obtener usuario: {e}")
             return None
+
+
+def _first_company_for_userid(userid):
+    """Primera compañía de SY_UserCompany (usuarios admin sin PR_Employee)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(Company))
+            FROM SY_UserCompany (NOLOCK)
+            WHERE UserID = ?
+            ORDER BY Company
+            """,
+            (userid,),
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return (row[0] if row and row[0] else None)
+    except Exception:
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def get_datos_usuario_web(userid):
@@ -523,7 +623,15 @@ def get_datos_usuario_web(userid):
         print(f'Buscando datos para: {userid}')
 
         if not row:
-            return None
+            # Usuario EMPWEB sin ficha de trabajador (adminlumat, etc.)
+            company = _first_company_for_userid(userid)
+            return {
+                'company': company or '',
+                'person': '',
+                'nombres': str(userid or ''),
+                'email': None,
+                'web_user_no_employee': True,
+            }
         return dict(zip(columns, row))
     except Exception as e:
         print(f"Error en get_datos_usuario_web: {e}")

@@ -194,12 +194,23 @@ def restrict_receta_only_user():
 
 
 def ensure_user_session():
-    """Asegura que company y person estén en sesión."""
-    if not session.get('company') or not session.get('person'):
-        info = get_datos_usuario_web(current_user.id)
-        if info:
-            session['company'], session['person'] = info['company'], info['person']
-            return info
+    """Asegura que company y person estén en sesión (admins EMPWEB pueden no tener person)."""
+    if session.get('web_session_loaded'):
+        return {'company': session.get('company'), 'person': session.get('person')}
+
+    info = get_datos_usuario_web(current_user.id)
+    if info:
+        session['company'] = info.get('company') or ''
+        session['person'] = info.get('person') or ''
+        session['web_session_loaded'] = True
+        if info.get('web_user_no_employee'):
+            session['web_user_no_employee'] = True
+        return info
+
+    # Evita reintentar en cada request si no hay datos
+    session.setdefault('company', '')
+    session.setdefault('person', '')
+    session['web_session_loaded'] = True
     return {'company': session.get('company'), 'person': session.get('person')}
 
 
@@ -252,11 +263,76 @@ def format_dias(value):
 @app.context_processor
 def inject_now():
     from database import get_active_database, is_receta_only_user
+    from web_access import session_can_menu
+
+    es_vhornac = bool(is_receta_only_user()) if current_user.is_authenticated else False
+
+    def can_menu(code):
+        if not current_user.is_authenticated:
+            return False
+        return session_can_menu(session, code)
+
     return {
         'now': datetime.now(),
         'sql_database': get_active_database(),
-        'receta_only': bool(is_receta_only_user()) if current_user.is_authenticated else False,
+        'receta_only': es_vhornac,
+        'mostrar_menu_receta': es_vhornac,
+        'web_admin': bool(session.get('web_admin')) if current_user.is_authenticated else False,
+        'web_access_unrestricted': bool(session.get('web_access_unrestricted', True))
+            if current_user.is_authenticated else True,
+        'can_menu': can_menu,
     }
+
+
+def _load_web_access_into_session(userid=None):
+    """Carga perfiles de menú en session (soft: falla → unrestricted)."""
+    from web_access import apply_access_to_session, load_user_web_access
+    uid = (userid or getattr(current_user, 'id', None) or session.get('login_userid') or '').strip()
+    state = load_user_web_access(uid, get_db_connection)
+    apply_access_to_session(session, state)
+    return state
+
+
+@app.before_request
+def ensure_and_enforce_web_access():
+    """Carga permisos si faltan y bloquea rutas sin menú asignado."""
+    from database import is_receta_only_user
+    from web_access import first_allowed_endpoint, resolve_menu_for_request, session_can_menu
+
+    if not current_user.is_authenticated:
+        return None
+    if is_receta_only_user():
+        return None
+
+    if 'web_access_unrestricted' not in session:
+        _load_web_access_into_session()
+
+    ep = request.endpoint
+    path = request.path or ''
+    if path.startswith('/static/'):
+        return None
+
+    menu_code = resolve_menu_for_request(ep, path)
+    if not menu_code:
+        return None
+    if session_can_menu(session, menu_code):
+        return None
+    # APIs de perfiles/asignación: quien tiene uno puede usar listados compartidos del otro
+    if path.startswith('/api/') and menu_code in ('perfiles_acceso', 'asignar_perfiles') and (
+        session_can_menu(session, 'perfiles_acceso') or session_can_menu(session, 'asignar_perfiles')
+    ):
+        return None
+
+    # APIs → 403 JSON; páginas → redirect
+    if path.startswith('/api/'):
+        return jsonify({"error": "No tiene permiso para esta opción."}), 403
+
+    flash('No tiene permiso para acceder a esa opción.', 'warning')
+    target = first_allowed_endpoint(session)
+    try:
+        return redirect(url_for(target))
+    except Exception:
+        return redirect(url_for('dashboard'))
 
 
 def _jsonable_value(value):
@@ -4995,11 +5071,15 @@ def login_post():
         session['login_userid'] = username
         login_user(user)
         _cache_session_user(user)
+        session.pop('web_session_loaded', None)
+        session.pop('web_user_no_employee', None)
         ensure_user_session()
+        _load_web_access_into_session(username)
         from database import is_receta_only_user
+        from web_access import first_allowed_endpoint
         if is_receta_only_user(username):
             return redirect(url_for('receta_page'))
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(first_allowed_endpoint(session)))
     flash('Usuario o contraseña incorrectos.', 'error')
     return redirect(url_for('login'))
 
@@ -5801,6 +5881,10 @@ def comparar_planillas_resultado_page():
 @app.route('/receta')
 @login_required
 def receta_page():
+    from database import is_receta_only_user
+    if not is_receta_only_user():
+        flash('No tiene permiso para acceder a Receta.', 'warning')
+        return redirect(url_for('dashboard'))
     return render_template('receta.html')
 
 
@@ -5872,6 +5956,10 @@ def generar_pdf_receta(contenido_txt):
 @login_required
 def api_receta_generar_pdf():
     """Recibe un TXT y descarga el PDF de receta con encabezado médico."""
+    from database import is_receta_only_user
+    if not is_receta_only_user():
+        return jsonify({'error': 'No tiene permiso para acceder a Receta.'}), 403
+
     archivo = request.files.get('archivo') or request.files.get('file')
     if archivo is None or not getattr(archivo, 'filename', None):
         return jsonify({'error': 'Seleccione un archivo TXT.'}), 400
@@ -6273,6 +6361,18 @@ def formulas_page():
     return render_template('maestro_formulas.html')
 
 
+@app.route('/perfiles-acceso')
+@login_required
+def perfiles_acceso_page():
+    return render_template('maestro_perfiles_acceso.html')
+
+
+@app.route('/asignar-perfiles')
+@login_required
+def asignar_perfiles_page():
+    return render_template('maestro_asignar_perfiles.html')
+
+
 @app.route('/cuentas-bancarias')
 @login_required
 def cuentas_bancarias_page():
@@ -6289,6 +6389,12 @@ def asientos_configurar_conceptos_page():
 @login_required
 def asientos_cuentas_contables_page():
     return render_template('asientos_cuentas_contables.html')
+
+
+@app.route('/asientos/distribucion-porcentual')
+@login_required
+def asientos_distribucion_porcentual_page():
+    return render_template('asientos_distribucion_porcentual.html')
 
 
 @app.route('/asientos/interfaz')
@@ -6313,6 +6419,12 @@ def asientos_reporte_contable_page():
 @login_required
 def cargos_page():
     return render_template('maestro_cargos.html')
+
+
+@app.route('/centros-costo')
+@login_required
+def centros_costo_page():
+    return render_template('maestro_centros_costo.html')
 
 
 @app.route('/tipos-documento')
@@ -7278,6 +7390,321 @@ def api_usuarios_empresa_guardar():
                 pass
 
 
+def _require_perfiles_acceso_admin(menu_code='perfiles_acceso'):
+    """Permite acceso a pantallas/APIs de perfiles (soft: unrestricted también)."""
+    from web_access import session_can_menu
+    if not current_user.is_authenticated:
+        return False
+    if session.get('web_access_unrestricted'):
+        return True
+    if session_can_menu(session, menu_code):
+        return True
+    # Quien administra perfiles también puede asignar, y viceversa si tiene uno de los dos
+    return session_can_menu(session, 'perfiles_acceso') or session_can_menu(session, 'asignar_perfiles')
+
+
+@app.route('/api/perfiles-acceso/menus', methods=['POST'])
+@login_required
+def api_perfiles_acceso_menus():
+    if not _require_perfiles_acceso_admin('perfiles_acceso'):
+        return jsonify({"error": "No tiene permiso para administrar perfiles."}), 403
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_web_listar_menu_options_web")
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "menucode": _jsonable_value(r.get('menucode')),
+                    "title": _jsonable_value(r.get('title')),
+                    "parentcode": _jsonable_value(r.get('parentcode')),
+                    "sortorder": _jsonable_value(r.get('sortorder')),
+                }
+                for r in rows
+            ]
+        })
+    except Exception as e:
+        logging.exception("api_perfiles_acceso_menus")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/perfiles/listado', methods=['POST'])
+@login_required
+def api_perfiles_acceso_listado():
+    if not _require_perfiles_acceso_admin('perfiles_acceso'):
+        return jsonify({"error": "No tiene permiso para administrar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_listar_access_profiles_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "profilecode": _jsonable_value(r.get('profilecode')),
+                    "name": _jsonable_value(r.get('name')),
+                    "flagadmin": _jsonable_value(r.get('flagadmin')),
+                    "menus": _jsonable_value(r.get('menus')),
+                    "usuarios": _jsonable_value(r.get('usuarios')),
+                }
+                for r in rows
+            ]
+        })
+    except Exception as e:
+        logging.exception("api_perfiles_acceso_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/perfiles/obtener', methods=['POST'])
+@login_required
+def api_perfiles_acceso_obtener():
+    if not _require_perfiles_acceso_admin('perfiles_acceso'):
+        return jsonify({"error": "No tiene permiso para administrar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    profilecode = str(body.get('profilecode') or '').strip().upper()
+    if not profilecode:
+        return jsonify({"error": "Indique el perfil."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_obtener_access_profile_web @profilecode=?",
+            (profilecode,),
+        )
+        perfil_rows = []
+        menu_rows = []
+        if cursor.description:
+            cols = [str(c[0]).strip().lower() for c in cursor.description]
+            for row in cursor.fetchall():
+                perfil_rows.append({cols[i]: row[i] for i in range(len(cols))})
+        if cursor.nextset() and cursor.description:
+            cols = [str(c[0]).strip().lower() for c in cursor.description]
+            for row in cursor.fetchall():
+                menu_rows.append({cols[i]: row[i] for i in range(len(cols))})
+        perfil = perfil_rows[0] if perfil_rows else {}
+        return jsonify({
+            "perfil": {
+                "profilecode": _jsonable_value(perfil.get('profilecode')),
+                "name": _jsonable_value(perfil.get('name')),
+                "flagadmin": _jsonable_value(perfil.get('flagadmin')),
+            },
+            "menus": [
+                {
+                    "menucode": _jsonable_value(m.get('menucode')),
+                    "title": _jsonable_value(m.get('title')),
+                    "parentcode": _jsonable_value(m.get('parentcode')),
+                    "selected": _jsonable_value(m.get('selected')),
+                }
+                for m in menu_rows
+            ],
+        })
+    except Exception as e:
+        logging.exception("api_perfiles_acceso_obtener")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/perfiles/guardar', methods=['POST'])
+@login_required
+def api_perfiles_acceso_guardar():
+    if not _require_perfiles_acceso_admin('perfiles_acceso'):
+        return jsonify({"error": "No tiene permiso para administrar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    modo = str(body.get('modo') or 'I').strip().upper()
+    profilecode = str(body.get('profilecode') or '').strip().upper()
+    name = str(body.get('name') or '').strip()
+    menus = str(body.get('menus') or '').strip()
+    if not profilecode or not name:
+        return jsonify({"error": "Indique código y nombre."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_guardar_access_profile_web "
+            "@modo=?, @profilecode=?, @name=?, @menus=?, @xlastuser=?",
+            (modo, profilecode, name, menus or None, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        # Refrescar permisos del usuario actual por si editó su propio perfil
+        _load_web_access_into_session()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "profilecode": _jsonable_value(row.get('profilecode')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Perfil guardado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_perfiles_acceso_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/perfiles/eliminar', methods=['POST'])
+@login_required
+def api_perfiles_acceso_eliminar():
+    if not _require_perfiles_acceso_admin('perfiles_acceso'):
+        return jsonify({"error": "No tiene permiso para administrar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    profilecode = str(body.get('profilecode') or '').strip().upper()
+    if not profilecode:
+        return jsonify({"error": "Indique el perfil."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_eliminar_access_profile_web @profilecode=?",
+            (profilecode,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "profilecode": _jsonable_value(row.get('profilecode')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Perfil eliminado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_perfiles_acceso_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/usuarios/listado', methods=['POST'])
+@login_required
+def api_perfiles_acceso_usuarios_listado():
+    if not _require_perfiles_acceso_admin('asignar_perfiles'):
+        return jsonify({"error": "No tiene permiso para asignar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_listar_usuarios_access_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "userid": _jsonable_value(r.get('userid')),
+                    "nombre": _jsonable_value(r.get('nombre')),
+                    "profilecode": _jsonable_value(r.get('profilecode')),
+                    "profilename": _jsonable_value(r.get('profilename')),
+                    "flagadmin": _jsonable_value(r.get('flagadmin')),
+                }
+                for r in rows
+            ]
+        })
+    except Exception as e:
+        logging.exception("api_perfiles_acceso_usuarios_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/perfiles-acceso/usuarios/asignar', methods=['POST'])
+@login_required
+def api_perfiles_acceso_usuarios_asignar():
+    if not _require_perfiles_acceso_admin('asignar_perfiles'):
+        return jsonify({"error": "No tiene permiso para asignar perfiles."}), 403
+    body = request.get_json(silent=True) or {}
+    userid = str(body.get('userid') or '').strip()
+    profile_raw = body.get('profilecode')
+    profilecode = str(profile_raw).strip().upper() if profile_raw not in (None, '') else None
+    if not userid:
+        return jsonify({"error": "Indique el usuario."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_web_asignar_user_access_profile_web "
+            "@userid=?, @profilecode=?, @xlastuser=?",
+            (userid, profilecode, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        # Si asignó al usuario actual, refrescar sesión
+        if userid.lower() == str(session.get('login_userid') or current_user.id or '').lower():
+            _load_web_access_into_session(userid)
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "userid": _jsonable_value(row.get('userid')),
+            "profilecode": _jsonable_value(row.get('profilecode')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Asignación guardada.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_perfiles_acceso_usuarios_asignar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _bankaccount_lista_dict(r):
     return {
         'bankaccount': _jsonable_value(r.get('bankaccount')),
@@ -7634,6 +8061,351 @@ def api_asientos_cuentas_contables_eliminar():
             except Exception:
                 pass
         logging.exception("api_asientos_cuentas_contables_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/centros-costo/listado', methods=['POST'])
+@login_required
+def api_centros_costo_listado():
+    """sp_ac_listar_centros_costo_web: listado del maestro AC_CostCenter."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_listar_centros_costo_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "costcenter": _jsonable_value(r.get('costcenter')),
+                    "abbrev": _jsonable_value(r.get('abbrev')),
+                    "description": _jsonable_value(r.get('description')),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_centros_costo_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/centros-costo/guardar', methods=['POST'])
+@login_required
+def api_centros_costo_guardar():
+    """sp_ac_guardar_centro_costo_web: alta / edición de AC_CostCenter."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    costcenter = str(body.get('costcenter') or '').strip()
+    modo = str(body.get('modo') or ('U' if costcenter else 'I')).strip().upper()
+    abbrev = str(body.get('abbrev') or '').strip()
+    description = str(body.get('description') or '').strip()
+    if not cia or not abbrev or not description:
+        return jsonify({"error": "Indique compañía, abreviatura y descripción."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_guardar_centro_costo_web "
+            "@modo=?, @company=?, @costcenter=?, @abbrev=?, @description=?, @xlastuser=?",
+            (modo, cia, costcenter or None, abbrev, description, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "costcenter": _jsonable_value(row.get('costcenter')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Centro de costo guardado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_centros_costo_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/centros-costo/eliminar', methods=['POST'])
+@login_required
+def api_centros_costo_eliminar():
+    """sp_ac_eliminar_centro_costo_web: elimina un centro sin dependencias."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    costcenter = str(body.get('costcenter') or '').strip()
+    if not cia or not costcenter:
+        return jsonify({"error": "Indique compañía y centro de costo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_ac_eliminar_centro_costo_web @company=?, @costcenter=?",
+            (cia, costcenter),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "costcenter": _jsonable_value(row.get('costcenter')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Centro de costo eliminado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_centros_costo_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/distribucion-porcentual/listado', methods=['POST'])
+@login_required
+def api_distribucion_porcentual_listado():
+    """sp_pr_listar_distribucion_voucher_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    if not cia or not period:
+        return jsonify({"error": "Seleccione compañía y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_distribucion_voucher_web @company=?, @period=?, @busqueda=?",
+            (cia, period, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "fila": _jsonable_value(r.get('fila')),
+                    "dni": _jsonable_value(r.get('dni')),
+                    "nombre": _jsonable_value(r.get('nombre')),
+                    "codigo": _jsonable_value(r.get('codigo')),
+                    "valor": _jsonable_value(r.get('valor')),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_distribucion_porcentual_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/distribucion-porcentual/replicar', methods=['POST'])
+@login_required
+def api_distribucion_porcentual_replicar():
+    """sp_pr_replicar_distribucion_voucher_web: copia periodo anterior + nuevos activos."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    if not cia or not period:
+        return jsonify({"error": "Seleccione compañía y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_replicar_distribucion_voucher_web "
+            "@company=?, @period=?, @xlastuser=?",
+            (cia, period, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        period_origen = str(row.get('period_origen') or '').strip()
+        if len(period_origen) == 8 and period_origen.isdigit():
+            period_origen_fmt = (
+                f"{period_origen[0:4]}-{period_origen[4:6]}-{period_origen[6:8]}"
+            )
+        else:
+            period_origen_fmt = period_origen or ''
+        try:
+            copiados = int(row.get('copiados') or 0)
+        except (TypeError, ValueError):
+            copiados = 0
+        try:
+            nuevos = int(row.get('nuevos') or 0)
+        except (TypeError, ValueError):
+            nuevos = 0
+        # Mensaje armado en Python (UTF-8) para evitar mojibake del SP vía sqlcmd.
+        mensaje = (
+            f"Distribución replicada desde el periodo {period_origen_fmt}. "
+            f"Copiados: {copiados}. Nuevos: {nuevos}."
+        )
+        return jsonify({
+            "ok": True,
+            "period_origen": _jsonable_value(row.get('period_origen')),
+            "period_destino": _jsonable_value(row.get('period_destino')),
+            "copiados": copiados,
+            "nuevos": nuevos,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_distribucion_porcentual_replicar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/distribucion-porcentual/guardar', methods=['POST'])
+@login_required
+def api_distribucion_porcentual_guardar():
+    """sp_pr_guardar_distribucion_voucher_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    fila_raw = body.get('fila')
+    try:
+        fila = int(fila_raw) if fila_raw not in (None, '') else None
+    except (TypeError, ValueError):
+        fila = None
+    modo = str(body.get('modo') or ('U' if fila else 'I')).strip().upper()
+    dni = str(body.get('dni') or '').strip()
+    nombre = str(body.get('nombre') or '').strip()
+    codigo = str(body.get('codigo') or '').strip()
+    try:
+        valor = int(body.get('valor'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "El valor debe ser un entero entre 1 y 100."}), 400
+
+    if not cia or not period or not dni or not nombre or not codigo:
+        return jsonify({"error": "Indique compañía, periodo, DNI, nombres y código."}), 400
+    if valor < 1 or valor > 100:
+        return jsonify({"error": "El valor debe ser un entero entre 1 y 100."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardar_distribucion_voucher_web "
+            "@modo=?, @company=?, @period=?, @fila=?, @dni=?, @nombre=?, "
+            "@codigo=?, @valor=?, @xlastuser=?",
+            (modo, cia, period, fila, dni, nombre, codigo, valor, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "fila": _jsonable_value(row.get('fila')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Distribución guardada.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_distribucion_porcentual_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/distribucion-porcentual/eliminar', methods=['POST'])
+@login_required
+def api_distribucion_porcentual_eliminar():
+    """sp_pr_eliminar_distribucion_voucher_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    try:
+        fila = int(body.get('fila'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Indique el registro a eliminar."}), 400
+    if not cia or not period:
+        return jsonify({"error": "Indique compañía y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminar_distribucion_voucher_web @company=?, @period=?, @fila=?",
+            (cia, period, fila),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "fila": _jsonable_value(row.get('fila')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Distribución eliminada.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_distribucion_porcentual_eliminar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

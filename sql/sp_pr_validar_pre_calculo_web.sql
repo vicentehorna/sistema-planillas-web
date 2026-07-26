@@ -1,12 +1,18 @@
 /*
     Validaciones previas al cálculo de planilla (módulo Procesar planilla).
 
-    Detecta conceptos configurados en más de una vía para FIN_DE_MES:
+    Detecta conceptos configurados en más de una vía para MENSUAL / FIN_DE_MES:
       M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
       S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
       F — Fórmulas del proceso (PR_FormulaHeader)
 
     Solo una vía debe estar activa por concepto.
+
+    Excepción hm_aci + MENSUAL/FIN_DE_MES:
+      No se incluye F (formulador) en la comparación. Se valida solo M vs S.
+      Las fórmulas pueden permanecer configuradas; el cálculo mensual se rige por el SP.
+      En hm_aci con otros procesos (p. ej. provisiones), si aplica validación de vías,
+      el formulador sí se considera. En el resto de bases de datos F siempre se compara.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
     y antes de /ejecutar_calculo_streaming y /ejecutar_calculo_planilla.
@@ -33,15 +39,28 @@ BEGIN
     SET @processtype = LTRIM(RTRIM(ISNULL(@processtype, '')));
 
     DECLARE @proceso_shortname VARCHAR(50);
+    DECLARE @proceso_desc VARCHAR(200);
     DECLARE @procedure_name VARCHAR(128);
     DECLARE @sp_def NVARCHAR(MAX);
+    DECLARE @es_mensual BIT = 0;
+    DECLARE @omitir_formulas BIT = 0;
 
     SELECT
-        @proceso_shortname = LTRIM(RTRIM(ISNULL(PT.ShortName, ''))),
+        @proceso_shortname = UPPER(LTRIM(RTRIM(ISNULL(PT.ShortName, '')))),
+        @proceso_desc = UPPER(LTRIM(RTRIM(ISNULL(PT.Description, '')))),
         @procedure_name = LTRIM(RTRIM(ISNULL(PT.ProcedureName, '')))
     FROM PR_ProcessType PT (NOLOCK)
     WHERE PT.Company = @cia
       AND PT.ProcessType = @processtype;
+
+    IF @proceso_shortname IN ('FIN_DE_MES', 'MENSUAL')
+       OR @proceso_desc = 'MENSUAL'
+       OR CHARINDEX('FIN DE MES', @proceso_desc) > 0
+        SET @es_mensual = 1;
+
+    /* hm_aci mensual: no confrontar fórmulas; el SP es la vía de cálculo vigente. */
+    IF LOWER(DB_NAME()) = 'hm_aci' AND @es_mensual = 1
+        SET @omitir_formulas = 1;
 
     CREATE TABLE #errores (
         person      VARCHAR(20) NULL,
@@ -59,8 +78,8 @@ BEGIN
         formulacode VARCHAR(50) NOT NULL PRIMARY KEY
     );
 
-    /* Solo aplica al proceso mensual (FIN_DE_MES). */
-    IF @proceso_shortname <> 'FIN_DE_MES'
+    /* Solo aplica al proceso mensual (FIN_DE_MES / MENSUAL). */
+    IF @es_mensual = 0
     BEGIN
         SELECT
             CAST('' AS VARCHAR(20)) AS person,
@@ -80,19 +99,22 @@ BEGIN
       AND ISNULL(C.flaginsertar, 'N') = 'M'
       AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
 
-    /* F — Fórmulas del proceso */
-    INSERT INTO #vias (formulacode, via)
-    SELECT DISTINCT
-        UPPER(LTRIM(RTRIM(C.FormulaCode))),
-        'F'
-    FROM PR_FormulaHeader FH (NOLOCK)
-        INNER JOIN PR_Concept C (NOLOCK)
-            ON FH.Concept = C.Concept
-           AND C.Company = @cia
-    WHERE FH.Company = @cia
-      AND FH.Payrolltype = @payrolltype
-      AND FH.Proccestype = @processtype
-      AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    /* F — Fórmulas del proceso (omitido en hm_aci + mensual) */
+    IF @omitir_formulas = 0
+    BEGIN
+        INSERT INTO #vias (formulacode, via)
+        SELECT DISTINCT
+            UPPER(LTRIM(RTRIM(C.FormulaCode))),
+            'F'
+        FROM PR_FormulaHeader FH (NOLOCK)
+            INNER JOIN PR_Concept C (NOLOCK)
+                ON FH.Concept = C.Concept
+               AND C.Company = @cia
+        WHERE FH.Company = @cia
+          AND FH.Payrolltype = @payrolltype
+          AND FH.Proccestype = @processtype
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    END
 
     /* S — Llamadas literales a sp_pr_registrar_concepto en el SP de cálculo */
     IF @procedure_name <> ''

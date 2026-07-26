@@ -5385,6 +5385,7 @@ def _render_trabajadores_editar(
     instruction_levels=None,
     institutions=None,
     careers=None,
+    modo_nuevo=False,
 ):
     return render_template(
         'trabajadores_editar.html',
@@ -5413,6 +5414,7 @@ def _render_trabajadores_editar(
         instruction_levels=instruction_levels or [],
         institutions=institutions or [],
         careers=careers or [],
+        modo_nuevo=bool(modo_nuevo),
     )
 
 
@@ -5790,6 +5792,323 @@ def trabajadores_editar(person_id):
                 pass
         logging.exception('trabajadores_editar')
         flash(f'Error al procesar la solicitud: {e}', 'danger')
+        return redirect(url_for('trabajadores_page', retorno=1))
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _default_tipo_documento_dni(tipos_documento):
+    """Prefiere PDT/descripcion DNI en el catálogo de la compañía."""
+    if not tipos_documento:
+        return ''
+    for opt in tipos_documento:
+        text = str(opt.get('text') or '').strip().upper()
+        if text == 'DNI' or text.startswith('DNI ') or 'DOCUMENTO NACIONAL' in text:
+            return str(opt.get('id') or '').strip()
+    for opt in tipos_documento:
+        text = str(opt.get('text') or '').strip().upper()
+        if 'DNI' in text:
+            return str(opt.get('id') or '').strip()
+    return str(tipos_documento[0].get('id') or '').strip()
+
+
+def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
+    dni_id = _default_tipo_documento_dni(tipos_documento or [])
+    unidad_default = ''
+    if unidades:
+        for opt in unidades:
+            uid = str(opt.get('id') or '').strip().upper()
+            if uid == 'LIMA':
+                unidad_default = uid
+                break
+        if not unidad_default:
+            unidad_default = str(unidades[0].get('id') or '').strip()
+    return {
+        'company_desc': cia,
+        'person': '',
+        'nombre': '',
+        'name': '',
+        'name1': '',
+        'name2': '',
+        'lastname1': '',
+        'lastname2': '',
+        'birthdate': '',
+        'sex': '',
+        'sectelephone': '',
+        'email': '',
+        'address': '',
+        'nacionalidad': 'PERUANA',
+        'employeedocumenttype': dni_id,
+        'documentnumber': '',
+        'replicationunit': unidad_default,
+        'userid': '',
+        'employeetype': '',
+        'employeecategory': '',
+        'entrydate': '',
+        'reentrydate': '',
+        'ceasedate': '',
+        'ceasereason': '',
+        'contractmodality': '',
+        'ocupation': '',
+        'specialstatus': '',
+        'position': '',
+        'costcenter': '',
+        'payrolltype': '',
+        'accountprofile': '',
+        'sueldo': '',
+        'flagasigfamiliar': 'N',
+        'pensiontype': '',
+        'pensioninscriptiondate': '',
+        'regimehealth': '',
+        'flagmixta': 'N',
+        'cuspp': '',
+        'collectionform': '',
+        'salarybank': '',
+        'salaryaccounttype': '',
+        'salaryaccount': '',
+        'cci': '',
+        'ctsbank': '',
+        'ctsaccount': '',
+        'ctscurrency': 'LO',
+    }
+
+
+def _dicts_all_resultsets(cursor):
+    """Lee todos los resultsets de un SP (lista de listas de dicts)."""
+    sets = []
+    while True:
+        if cursor.description:
+            cols = [str(c[0]).strip() for c in cursor.description]
+            rows = []
+            for row in cursor.fetchall():
+                rows.append(_row_dict_from_columns(cols, row))
+            sets.append(rows)
+        if not cursor.nextset():
+            break
+    return sets
+
+
+def _as_flag_bool(value):
+    if value is True or value is False:
+        return bool(value)
+    if value is None:
+        return False
+    if isinstance(value, (bytes, bytearray)):
+        return any(b != 0 for b in value)
+    try:
+        return int(value) != 0
+    except (TypeError, ValueError):
+        return str(value).strip().lower() in ('1', 'y', 'true', 's', 'si', 'sí')
+
+
+@app.route('/api/trabajadores/validar-alta', methods=['POST'])
+@login_required
+def api_trabajadores_validar_alta():
+    """sp_pr_validar_alta_trabajador_web: código, documento y nombres similares."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    person = str(body.get('person') or '').strip().upper()
+    documentnumber = str(body.get('documentnumber') or '').strip()
+    name1 = str(body.get('name1') or '').strip().upper()
+    name2 = str(body.get('name2') or '').strip().upper()
+    lastname1 = str(body.get('lastname1') or '').strip().upper()
+    lastname2 = str(body.get('lastname2') or '').strip().upper()
+    if not cia or not person:
+        return jsonify({'error': 'Indique compañía y código.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_validar_alta_trabajador_web '
+            '@cia=?, @person=?, @documentnumber=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?',
+            (cia, person, documentnumber, name1 or None, name2 or None, lastname1 or None, lastname2 or None),
+        )
+        sets = _dicts_all_resultsets(cursor)
+        cab = (sets[0][0] if sets and sets[0] else {}) or {}
+        similares = sets[1] if len(sets) > 1 else []
+        return jsonify({
+            'codigo_existe': _as_flag_bool(cab.get('codigo_existe')),
+            'documento_existe_cia': _as_flag_bool(cab.get('documento_existe_cia')),
+            'codigo_distinto_documento': _as_flag_bool(cab.get('codigo_distinto_documento')),
+            'hay_similares': _as_flag_bool(cab.get('hay_similares')),
+            'nombre_completo': str(cab.get('nombre_completo') or '').strip(),
+            'similares': [
+                {
+                    'person': str(r.get('person') or '').strip(),
+                    'name': str(r.get('name') or '').strip(),
+                    'documentnumber': str(r.get('documentnumber') or '').strip(),
+                    'company': str(r.get('company') or '').strip(),
+                }
+                for r in similares
+            ],
+        })
+    except Exception as e:
+        logging.exception('api_trabajadores_validar_alta')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/trabajadores/nuevo', methods=['GET', 'POST'])
+@login_required
+def trabajadores_nuevo():
+    """Alta de trabajador: misma ficha de edición en modo nuevo."""
+    cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
+    seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion') or 'generales')
+    if seccion == 'educacion':
+        seccion = 'generales'
+
+    if not cia:
+        flash('Seleccione la compañía antes de registrar un trabajador.', 'warning')
+        return redirect(url_for('trabajadores_page', retorno=1))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+        bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
+        pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
+        tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
+        labor_selectors = _cargar_selectores_laborales(cursor, cia)
+
+        if request.method == 'POST':
+            generales = _empleado_generales_desde_form(request.form)
+            laborales = _empleado_laborales_desde_form(request.form)
+            pensiones = _empleado_pensiones_desde_form(request.form)
+            person = str(request.form.get('person') or '').strip().upper()
+            confirmar_nombre = 'Y' if str(request.form.get('confirmar_nombre') or '').strip().upper() == 'Y' else 'N'
+
+            generales['employeedocumenttype'] = _resolver_employeedocumenttype_cia(
+                cursor, cia, generales['employeedocumenttype'], tipos_documento
+            )
+            if not laborales.get('reentrydate'):
+                laborales['reentrydate'] = laborales.get('entrydate') or ''
+
+            cci = re.sub(r'\D', '', str(request.form.get('cci') or ''))[:20]
+            collectionform = str(request.form.get('collectionform') or '').strip()
+
+            cursor.execute(
+                """
+                DECLARE @person_out VARCHAR(20);
+                DECLARE @mensaje_out VARCHAR(500);
+                EXEC sp_pr_registrar_trabajador_web
+                    @cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?,
+                    @birthdate=?, @sex=?, @sectelephone=?, @email=?, @address=?, @nacionalidad=?,
+                    @employeedocumenttype=?, @documentnumber=?, @replicationunit=?, @userid=?,
+                    @employeetype=?, @employeecategory=?, @entrydate=?,
+                    @contractmodality=?, @ocupation=?, @specialstatus=?, @position=?,
+                    @costcenter=?, @payrolltype=?, @accountprofile=?, @sueldo=?, @flagasigfamiliar=?,
+                    @pensiontype=?, @pensioninscriptiondate=?, @regimehealth=?, @flagmixta=?, @cuspp=?,
+                    @collectionform=?, @salarybank=?, @salaryaccounttype=?, @salaryaccount=?,
+                    @cci=?, @ctsbank=?, @ctsaccount=?, @ctscurrency=?,
+                    @confirmar_nombre=?, @xlastuser=?,
+                    @person_out=@person_out OUTPUT, @mensaje_out=@mensaje_out OUTPUT;
+                SELECT @person_out AS person_out, @mensaje_out AS mensaje_out;
+                """,
+                (
+                    cia,
+                    person,
+                    generales['name1'],
+                    generales['name2'] or None,
+                    generales['lastname1'],
+                    generales['lastname2'] or None,
+                    generales['birthdate'] or None,
+                    generales['sex'],
+                    generales['sectelephone'] or None,
+                    generales['email'] or None,
+                    generales['address'] or None,
+                    generales['nacionalidad'] or None,
+                    generales['employeedocumenttype'],
+                    generales['documentnumber'],
+                    generales['replicationunit'],
+                    generales['userid'] or None,
+                    laborales['employeetype'] or None,
+                    laborales['employeecategory'] or None,
+                    _sql_date_str_param(laborales['entrydate']) or None,
+                    laborales['contractmodality'] or None,
+                    laborales['ocupation'] or None,
+                    laborales['specialstatus'] or None,
+                    laborales['position'] or None,
+                    laborales['costcenter'] or None,
+                    laborales['payrolltype'] or None,
+                    laborales['accountprofile'] or None,
+                    laborales['sueldo'] or None,
+                    laborales['flagasigfamiliar'],
+                    pensiones['pensiontype'] or None,
+                    _sql_date_str_param(pensiones['pensioninscriptiondate']) or None,
+                    pensiones['regimehealth'] or None,
+                    pensiones['flagmixta'],
+                    pensiones['cuspp'] or None,
+                    collectionform or None,
+                    str(request.form.get('salarybank') or '').strip() or None,
+                    str(request.form.get('salaryaccounttype') or '').strip() or None,
+                    str(request.form.get('salaryaccount') or '').strip() or None,
+                    cci or None,
+                    str(request.form.get('ctsbank') or '').strip() or None,
+                    str(request.form.get('ctsaccount') or '').strip() or None,
+                    str(request.form.get('ctscurrency') or 'LO').strip() or 'LO',
+                    confirmar_nombre,
+                    xlastuser,
+                ),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            person_out = str((rows[0] if rows else {}).get('person_out') or person).strip()
+            conn.commit()
+            flash('Trabajador registrado correctamente.', 'success')
+            return redirect(url_for('trabajadores_editar', person_id=person_out, cia=cia, seccion='generales'))
+
+        empleado = _empleado_vacio_nuevo(cia, tipos_documento, unidades)
+        cursor.execute(
+            "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Description, ''))) FROM SY_Company WHERE Company = ?",
+            (cia,),
+        )
+        row_cia = cursor.fetchone()
+        if row_cia and row_cia[0]:
+            empleado['company_desc'] = str(row_cia[0]).strip()
+
+        return _render_trabajadores_editar(
+            cia, '', seccion, empleado,
+            bancos=bancos,
+            formas_pago=formas_pago,
+            tipos_cuenta=tipos_cuenta,
+            pension_types=pension_types,
+            regime_health=regime_health,
+            tipos_documento=tipos_documento,
+            unidades=unidades,
+            usuarios=usuarios,
+            employee_types=labor_selectors[0],
+            employee_categories=labor_selectors[1],
+            contract_modalities=labor_selectors[2],
+            ocupations=labor_selectors[3],
+            special_statuses=labor_selectors[4],
+            positions=labor_selectors[5],
+            cost_centers=labor_selectors[6],
+            payroll_types=labor_selectors[7],
+            account_profiles=labor_selectors[8],
+            cease_reasons=labor_selectors[9],
+            modo_nuevo=True,
+        )
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('trabajadores_nuevo')
+        flash(f'Error al registrar trabajador: {e}', 'danger')
+        if request.method == 'POST':
+            return redirect(url_for('trabajadores_nuevo', cia=cia, seccion=seccion))
         return redirect(url_for('trabajadores_page', retorno=1))
     finally:
         if conn:
@@ -19881,7 +20200,10 @@ def _validacion_planilla_rows_to_mensajes(rows):
 
 
 def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype):
-    """sp_pr_validar_pre_calculo_web → duplicidad de vías de concepto (FIN_DE_MES)."""
+    """sp_pr_validar_pre_calculo_web → duplicidad de vías (mensual/FIN_DE_MES).
+
+    En hm_aci + mensual el SP omite el formulador (solo maestro vs procedimiento).
+    """
     cursor.execute(
         "EXEC sp_pr_validar_pre_calculo_web "
         "@cia=?, @payrolltype=?, @processtype=?",

@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Editar trabajador{% endblock %}
+{% block title %}{% if modo_nuevo|default(false) %}Nuevo trabajador{% else %}Editar trabajador{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -269,85 +269,31 @@
 {% endblock %}
 
 {% block content %}
-{% set form_id = 'frmGenerales' if seccion == 'generales'
+{% set modo_nuevo = modo_nuevo|default(false) %}
+{% set form_id = 'frmNuevoTrabajador' if modo_nuevo else (
+    'frmGenerales' if seccion == 'generales'
     else ('frmLaborales' if seccion == 'laborales'
     else ('frmEducacion' if seccion == 'educacion'
-    else ('frmPensiones' if seccion == 'pensiones' else 'frmBancario'))) %}
+    else ('frmPensiones' if seccion == 'pensiones' else 'frmBancario')))) %}
 {% set seccion_titulo = 'Datos Generales' if seccion == 'generales'
     else ('Datos Laborales' if seccion == 'laborales'
     else ('Datos Educación' if seccion == 'educacion'
     else ('Pensiones' if seccion == 'pensiones' else 'Información Bancaria y CTS'))) %}
 
-<div class="te-page">
-    <div class="te-top">
-        <div class="te-page-header">
-            <div>
-                <h4>Edición de trabajador</h4>
-                <p class="te-subtitle">
-                    {% if seccion == 'generales' %}Datos generales del trabajador
-                    {% elif seccion == 'laborales' %}Datos laborales del trabajador
-                    {% elif seccion == 'educacion' %}Datos de educación del trabajador
-                    {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
-                    {% else %}Información bancaria y depósito de CTS{% endif %}
-                </p>
-            </div>
-            <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm te-link-salida">
-                <i class="bi bi-arrow-left"></i> Volver al listado
-            </a>
-        </div>
-
-        <div class="te-worker-summary">
-            <div class="row g-2 small">
-                <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
-                <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.person or person_id or empleado.employeecode or '—' }}</strong></div>
-                <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
-            </div>
-        </div>
-    </div>
-
-    <div class="te-layout">
-        <nav class="te-nav nav flex-column" role="tablist" aria-orientation="vertical">
-            <a class="nav-link te-nav-link {% if seccion == 'generales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
-            <a class="nav-link te-nav-link {% if seccion == 'laborales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
-            <a class="nav-link te-nav-link {% if seccion == 'educacion' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
-            <a class="nav-link te-nav-link {% if seccion == 'pensiones' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
-            <a class="nav-link te-nav-link {% if seccion == 'bancario' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
-        </nav>
-
-        <section class="te-main">
-            <div class="te-dw-panel">
-                <div class="te-dw-titlebar">
-                    <span class="te-dw-title-text">{{ seccion_titulo }}</span>
-                    <div class="te-titlebar-actions">
-                        <a href="{{ url_for('trabajadores_page', retorno=1) }}"
-                           class="btn btn-sm te-btn-cancelar te-link-salida">Cancelar</a>
-                        <button type="submit" form="{{ form_id }}" id="btnGuardarTrabajador"
-                                class="btn btn-success btn-sm te-btn-guardar" title="Ctrl+S">
-                            <i class="bi bi-save"></i> Guardar
-                        </button>
-                    </div>
-                </div>
-                <div class="te-dw-body">
-        {% if seccion == 'generales' %}
-        <form id="frmGenerales" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=generales"
-              novalidate>
-            <input type="hidden" name="cia" value="{{ cia }}">
-            <input type="hidden" name="seccion" value="generales">
-
-            <div class="section-card">
+{% macro campos_generales(editable_codigo=false) %}
+<div class="section-card">
                 <div class="section-title">Identificación</div>
                 <div class="section-body">
                     <div class="row g-3">
                         <div class="col-md-4">
-                            <label for="txtPerson" class="form-label small fw-bold text-muted">Código</label>
+                            <label for="txtPerson" class="form-label small fw-bold text-muted{% if editable_codigo %} te-req{% endif %}">Código</label>
+                            {% if editable_codigo %}
+                            <input type="text" id="txtPerson" name="person" class="form-control form-control-sm campo-obligatorio text-uppercase"
+                                   maxlength="20" value="{{ empleado.person or '' }}" required autocomplete="off">
+                            {% else %}
                             <input type="text" id="txtPerson" class="form-control form-control-sm campo-bloqueado text-uppercase"
                                    value="{{ empleado.person or person_id }}" readonly disabled>
+                            {% endif %}
                         </div>
                         <div class="col-md-4">
                             <label for="txtName1" class="form-label small fw-bold text-muted te-req">Primer Nombre</label>
@@ -451,15 +397,10 @@
                     </div>
                 </div>
             </div>
-        </form>
-        {% elif seccion == 'laborales' %}
-        <form id="frmLaborales" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=laborales"
-              novalidate>
-            <input type="hidden" name="cia" value="{{ cia }}">
-            <input type="hidden" name="seccion" value="laborales">
+{% endmacro %}
 
-            <div class="section-card">
+{% macro campos_laborales() %}
+<div class="section-card">
                 <div class="section-title">Datos del trabajador</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -515,8 +456,8 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="cboCostCenter" class="form-label small fw-bold text-muted">Centro de costo</label>
-                            <select id="cboCostCenter" name="costcenter" class="form-select form-select-sm">
+                            <label for="cboCostCenter" class="form-label small fw-bold text-muted te-req">Centro de costo</label>
+                            <select id="cboCostCenter" name="costcenter" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in cost_centers %}
                                 <option value="{{ opt.id }}" {% if empleado.costcenter == opt.id %}selected{% endif %}>{{ opt.text }}</option>
@@ -591,15 +532,10 @@
                     </div>
                 </div>
             </div>
-        </form>
-        {% elif seccion == 'educacion' %}
-        <form id="frmEducacion" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=educacion"
-              novalidate>
-            <input type="hidden" name="cia" value="{{ cia }}">
-            <input type="hidden" name="seccion" value="educacion">
+{% endmacro %}
 
-            <div class="section-card">
+{% macro campos_educacion() %}
+<div class="section-card">
                 <div class="section-title">Formación académica</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -671,15 +607,10 @@
                     </div>
                 </div>
             </div>
-        </form>
-        {% elif seccion == 'pensiones' %}
-        <form id="frmPensiones" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=pensiones"
-              novalidate>
-            <input type="hidden" name="cia" value="{{ cia }}">
-            <input type="hidden" name="seccion" value="pensiones">
+{% endmacro %}
 
-            <div class="section-card">
+{% macro campos_pensiones() %}
+<div class="section-card">
                 <div class="section-title">Pensión</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -724,15 +655,10 @@
                     </div>
                 </div>
             </div>
-        </form>
-        {% else %}
-        <form id="frmBancario" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=bancario"
-              novalidate>
-            <input type="hidden" name="cia" value="{{ cia }}">
-            <input type="hidden" name="seccion" value="bancario">
+{% endmacro %}
 
-            <div class="section-card">
+{% macro campos_bancario() %}
+<div class="section-card">
                 <div class="section-title">Cuenta de Haberes</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -808,6 +734,144 @@
                     </div>
                 </div>
             </div>
+{% endmacro %}
+
+<div class="te-page">
+    <div class="te-top">
+        <div class="te-page-header">
+            <div>
+                <h4>{% if modo_nuevo %}Nuevo trabajador{% else %}Edición de trabajador{% endif %}</h4>
+                <p class="te-subtitle">
+                    {% if modo_nuevo %}Alta de trabajador: complete los datos generales, laborales, pensiones e información bancaria
+                    {% elif seccion == 'generales' %}Datos generales del trabajador
+                    {% elif seccion == 'laborales' %}Datos laborales del trabajador
+                    {% elif seccion == 'educacion' %}Datos de educación del trabajador
+                    {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
+                    {% else %}Información bancaria y depósito de CTS{% endif %}
+                </p>
+            </div>
+            <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm te-link-salida">
+                <i class="bi bi-arrow-left"></i> Volver al listado
+            </a>
+        </div>
+
+        <div class="te-worker-summary">
+            <div class="row g-2 small">
+                <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
+                <div class="col-md-4"><span class="text-muted">Código:</span>
+                    {% if modo_nuevo %}
+                    <strong id="lblResumenCodigo">—</strong>
+                    {% else %}
+                    <strong>{{ empleado.person or person_id or empleado.employeecode or '—' }}</strong>
+                    {% endif %}
+                </div>
+                <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="te-layout">
+        <nav class="te-nav nav flex-column" role="tablist" aria-orientation="vertical">
+            {% if modo_nuevo %}
+            <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'generales' %}active{% endif %}"
+               href="#" data-seccion="generales">Datos Generales</a>
+            <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'laborales' %}active{% endif %}"
+               href="#" data-seccion="laborales">Datos Laborales</a>
+            <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'pensiones' %}active{% endif %}"
+               href="#" data-seccion="pensiones">Pensiones</a>
+            <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'bancario' %}active{% endif %}"
+               href="#" data-seccion="bancario">Información Bancaria y CTS</a>
+            {% else %}
+            <a class="nav-link te-nav-link {% if seccion == 'generales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
+            <a class="nav-link te-nav-link {% if seccion == 'laborales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
+            <a class="nav-link te-nav-link {% if seccion == 'educacion' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
+            <a class="nav-link te-nav-link {% if seccion == 'pensiones' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
+            <a class="nav-link te-nav-link {% if seccion == 'bancario' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
+            {% endif %}
+        </nav>
+
+        <section class="te-main">
+            <div class="te-dw-panel">
+                <div class="te-dw-titlebar">
+                    <span class="te-dw-title-text">{{ seccion_titulo }}</span>
+                    <div class="te-titlebar-actions">
+                        <a href="{{ url_for('trabajadores_page', retorno=1) }}"
+                           class="btn btn-sm te-btn-cancelar te-link-salida">Cancelar</a>
+                        <button type="submit" form="{{ form_id }}" id="btnGuardarTrabajador"
+                                class="btn btn-success btn-sm te-btn-guardar" title="Ctrl+S">
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+                <div class="te-dw-body">
+        {% if modo_nuevo %}
+        <form id="frmNuevoTrabajador" method="POST"
+              action="{{ url_for('trabajadores_nuevo') }}?cia={{ cia | urlencode }}"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="confirmar_nombre" id="hdConfirmarNombre" value="N">
+
+            <div class="te-panel-nuevo" data-seccion="generales"
+                 style="{{ '' if seccion == 'generales' else 'display:none' }}">
+                {{ campos_generales(true) }}
+            </div>
+            <div class="te-panel-nuevo" data-seccion="laborales"
+                 style="{{ '' if seccion == 'laborales' else 'display:none' }}">
+                {{ campos_laborales() }}
+            </div>
+            <div class="te-panel-nuevo" data-seccion="pensiones"
+                 style="{{ '' if seccion == 'pensiones' else 'display:none' }}">
+                {{ campos_pensiones() }}
+            </div>
+            <div class="te-panel-nuevo" data-seccion="bancario"
+                 style="{{ '' if seccion == 'bancario' else 'display:none' }}">
+                {{ campos_bancario() }}
+            </div>
+        </form>
+        {% elif seccion == 'generales' %}
+        <form id="frmGenerales" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=generales"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="generales">
+            {{ campos_generales(false) }}
+        </form>
+        {% elif seccion == 'laborales' %}
+        <form id="frmLaborales" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=laborales"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="laborales">
+            {{ campos_laborales() }}
+        </form>
+        {% elif seccion == 'educacion' %}
+        <form id="frmEducacion" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=educacion"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="educacion">
+            {{ campos_educacion() }}
+        </form>
+        {% elif seccion == 'pensiones' %}
+        <form id="frmPensiones" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=pensiones"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="pensiones">
+            {{ campos_pensiones() }}
+        </form>
+        {% else %}
+        <form id="frmBancario" method="POST"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=bancario"
+              novalidate>
+            <input type="hidden" name="cia" value="{{ cia }}">
+            <input type="hidden" name="seccion" value="bancario">
+            {{ campos_bancario() }}
         </form>
         {% endif %}
                 </div>
@@ -820,7 +884,9 @@
 {% block extra_js %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
-    const seccion = {{ (seccion or 'generales') | tojson }};
+    const modoNuevo = {{ modo_nuevo|default(false)|tojson }};
+    const cia = {{ cia | tojson }};
+    let seccion = {{ (seccion or 'generales') | tojson }};
     const formIdMap = {
         generales: 'frmGenerales',
         laborales: 'frmLaborales',
@@ -828,11 +894,21 @@ document.addEventListener('DOMContentLoaded', function () {
         pensiones: 'frmPensiones',
         bancario: 'frmBancario',
     };
-    const formId = formIdMap[seccion] || 'frmGenerales';
+    const formId = modoNuevo ? 'frmNuevoTrabajador' : (formIdMap[seccion] || 'frmGenerales');
     const frmActivo = document.getElementById(formId);
     const btnGuardar = document.getElementById('btnGuardarTrabajador');
+    const tituloBar = document.querySelector('.te-dw-title-text');
+    const titulosSeccion = {
+        generales: 'Datos Generales',
+        laborales: 'Datos Laborales',
+        educacion: 'Datos Educación',
+        pensiones: 'Pensiones',
+        bancario: 'Información Bancaria y CTS',
+    };
     let snapshotInicial = '';
     let dirty = false;
+    let docEditadoManual = false;
+    let enviandoNuevo = false;
 
     function mostrarError(msg) {
         const texto = msg || 'Ocurrió un error.';
@@ -843,6 +919,22 @@ document.addEventListener('DOMContentLoaded', function () {
         alert(texto);
     }
 
+    function mostrarAdvertencia(msg) {
+        const texto = msg || '';
+        if (window.HmUi && typeof HmUi.advertencia === 'function') {
+            HmUi.advertencia(texto);
+            return;
+        }
+        alert(texto);
+    }
+
+    async function confirmarUi(opciones) {
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            return HmUi.confirmar(opciones);
+        }
+        return window.confirm(opciones.mensaje || opciones.message || '¿Continuar?');
+    }
+
     function serializarFormulario(form) {
         if (!form) return '';
         const fd = new FormData(form);
@@ -850,7 +942,6 @@ document.addEventListener('DOMContentLoaded', function () {
         fd.forEach((value, key) => {
             pairs.push(key + '=' + String(value == null ? '' : value));
         });
-        // Incluir checkboxes desmarcados para detectar cambios
         form.querySelectorAll('input[type="checkbox"]').forEach((chk) => {
             if (!chk.name) return;
             if (!chk.checked) pairs.push(chk.name + '=');
@@ -872,16 +963,31 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function confirmarSalidaSiDirty() {
         if (!dirty) return true;
-        if (window.HmUi && typeof HmUi.confirmar === 'function') {
-            return HmUi.confirmar({
-                titulo: 'Cambios sin guardar',
-                mensaje: 'Hay cambios sin guardar en esta sección.\nSi continúa, se perderán.',
-                textoOk: 'Salir sin guardar',
-                textoCancelar: 'Seguir editando',
-                variant: 'danger',
-            });
-        }
-        return window.confirm('Hay cambios sin guardar. ¿Desea salir de todos modos?');
+        return confirmarUi({
+            titulo: 'Cambios sin guardar',
+            mensaje: 'Hay cambios sin guardar en esta sección.\nSi continúa, se perderán.',
+            textoOk: 'Salir sin guardar',
+            textoCancelar: 'Seguir editando',
+            variant: 'danger',
+        });
+    }
+
+    function actualizarResumenCodigo() {
+        const lbl = document.getElementById('lblResumenCodigo');
+        if (!lbl) return;
+        const val = (document.getElementById('txtPerson')?.value || '').trim();
+        lbl.textContent = val || '—';
+    }
+
+    function mostrarPanelNuevo(nuevaSeccion) {
+        seccion = nuevaSeccion;
+        document.querySelectorAll('.te-panel-nuevo').forEach((panel) => {
+            panel.style.display = panel.getAttribute('data-seccion') === nuevaSeccion ? '' : 'none';
+        });
+        document.querySelectorAll('.te-nav-modo-nuevo').forEach((link) => {
+            link.classList.toggle('active', link.getAttribute('data-seccion') === nuevaSeccion);
+        });
+        if (tituloBar) tituloBar.textContent = titulosSeccion[nuevaSeccion] || '';
     }
 
     if (frmActivo) {
@@ -889,7 +995,7 @@ document.addEventListener('DOMContentLoaded', function () {
         frmActivo.addEventListener('input', marcarDirty);
         frmActivo.addEventListener('change', marcarDirty);
         frmActivo.addEventListener('submit', function () {
-            dirty = false;
+            if (!modoNuevo) dirty = false;
         });
     }
 
@@ -902,6 +1008,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
     document.querySelectorAll('.te-nav-link, .te-link-salida').forEach((link) => {
         link.addEventListener('click', async function (e) {
+            if (modoNuevo && link.classList.contains('te-nav-modo-nuevo')) {
+                e.preventDefault();
+                const dest = link.getAttribute('data-seccion') || 'generales';
+                if (dest === seccion) return;
+                mostrarPanelNuevo(dest);
+                return;
+            }
             if (link.classList.contains('active')) return;
             if (!dirty) return;
             e.preventDefault();
@@ -928,13 +1041,34 @@ document.addEventListener('DOMContentLoaded', function () {
         if (destino) destino.value = partes.join(' ');
     }
 
-    if (seccion === 'generales') {
+    function wireGenerales() {
         ['txtName1', 'txtName2', 'txtLastName1', 'txtLastName2'].forEach((id) => {
             normalizarMayusculas(document.getElementById(id));
             const el = document.getElementById(id);
             if (el) el.addEventListener('input', calcularNombreCompleto);
         });
         calcularNombreCompleto();
+
+        if (modoNuevo) {
+            const txtPerson = document.getElementById('txtPerson');
+            const txtDoc = document.getElementById('txtDocumentNumber');
+            if (txtPerson) {
+                normalizarMayusculas(txtPerson);
+                txtPerson.addEventListener('input', function () {
+                    actualizarResumenCodigo();
+                    if (!docEditadoManual && txtDoc) {
+                        txtDoc.value = this.value;
+                    }
+                });
+                actualizarResumenCodigo();
+            }
+            if (txtDoc) {
+                txtDoc.addEventListener('input', function () {
+                    docEditadoManual = true;
+                });
+            }
+            return;
+        }
 
         const frmGenerales = document.getElementById('frmGenerales');
         if (frmGenerales) {
@@ -968,10 +1102,21 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
-        return;
     }
 
-    if (seccion === 'laborales') {
+    function wireLaborales() {
+        const txtEntryDate = document.getElementById('txtEntryDate');
+        const txtReentryDate = document.getElementById('txtReentryDate');
+        if (modoNuevo && txtEntryDate && txtReentryDate) {
+            const syncReentry = function () {
+                txtReentryDate.value = txtEntryDate.value || '';
+            };
+            txtEntryDate.addEventListener('change', syncReentry);
+            txtEntryDate.addEventListener('input', syncReentry);
+        }
+
+        if (modoNuevo) return;
+
         const frmLaborales = document.getElementById('frmLaborales');
         const txtSueldo = document.getElementById('txtSueldo');
         const txtCeaseDate = document.getElementById('txtCeaseDate');
@@ -1025,11 +1170,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
-        return;
     }
 
-    if (seccion === 'educacion') {
-        const cia = {{ cia | tojson }};
+    function wireEducacion() {
         const cboInstitution = document.getElementById('cboInstitution');
         const cboCareer = document.getElementById('cboCareer');
         const txtAnio = document.getElementById('txtAnioEgreso');
@@ -1105,10 +1248,9 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
-        return;
     }
 
-    if (seccion === 'pensiones') {
+    function wirePensiones() {
         const frmPensiones = document.getElementById('frmPensiones');
         const txtCuspp = document.getElementById('txtCuspp');
         if (txtCuspp) {
@@ -1116,7 +1258,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 this.value = this.value.toUpperCase().replace(/[^A-Z0-9Ñ]/g, '').slice(0, 12);
             });
         }
-        if (frmPensiones && txtCuspp) {
+        if (!modoNuevo && frmPensiones && txtCuspp) {
             frmPensiones.addEventListener('submit', function (e) {
                 const cuspp = (txtCuspp.value || '').trim();
                 if (cuspp && (!/^[A-Z0-9Ñ]{12}$/.test(cuspp) || !/[A-ZÑ]/.test(cuspp) || !/\d/.test(cuspp))) {
@@ -1126,83 +1268,252 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
-        return;
     }
 
-    const frm = document.getElementById('frmBancario');
-    const cboFormaPago = document.getElementById('cboFormaPago');
-    const cboBancoHaberes = document.getElementById('cboBancoHaberes');
-    const cboTipoCuenta = document.getElementById('cboTipoCuenta');
-    const txtNumeroCuenta = document.getElementById('txtNumeroCuenta');
-    const txtCci = document.getElementById('txtCci');
-    const cboBancoCts = document.getElementById('cboBancoCts');
-    const txtCuentaCts = document.getElementById('txtCuentaCts');
-    const cboMonedaCts = document.getElementById('cboMonedaCts');
+    function wireBancario() {
+        const frm = document.getElementById(modoNuevo ? 'frmNuevoTrabajador' : 'frmBancario');
+        const cboFormaPago = document.getElementById('cboFormaPago');
+        const cboBancoHaberes = document.getElementById('cboBancoHaberes');
+        const cboTipoCuenta = document.getElementById('cboTipoCuenta');
+        const txtNumeroCuenta = document.getElementById('txtNumeroCuenta');
+        const txtCci = document.getElementById('txtCci');
+        const cboBancoCts = document.getElementById('cboBancoCts');
+        const txtCuentaCts = document.getElementById('txtCuentaCts');
+        const cboMonedaCts = document.getElementById('cboMonedaCts');
+        if (!cboFormaPago || !cboBancoHaberes) return;
 
-    function esDeposito() {
-        const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
-        const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
-        const val = (cboFormaPago.value || '').trim();
-        return text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
-    }
-
-    function toggleCamposHaberes() {
-        const habilitado = !!cboBancoHaberes.value.trim();
-        cboTipoCuenta.disabled = !habilitado;
-        txtNumeroCuenta.disabled = !habilitado;
-        if (!habilitado) {
-            cboTipoCuenta.value = '';
-            txtNumeroCuenta.value = '';
+        function esDeposito() {
+            const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
+            const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
+            const val = (cboFormaPago.value || '').trim();
+            return text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
         }
-    }
 
-    function toggleCamposCts() {
-        const habilitado = !!cboBancoCts.value.trim();
-        txtCuentaCts.disabled = !habilitado;
-        cboMonedaCts.disabled = !habilitado;
-        if (!habilitado) {
-            txtCuentaCts.value = '';
-            cboMonedaCts.value = 'LO';
+        function toggleCamposHaberes() {
+            const habilitado = !!cboBancoHaberes.value.trim();
+            cboTipoCuenta.disabled = !habilitado;
+            txtNumeroCuenta.disabled = !habilitado;
+            if (!habilitado) {
+                cboTipoCuenta.value = '';
+                txtNumeroCuenta.value = '';
+            }
         }
-    }
 
-    function validarCci() {
-        const cci = (txtCci.value || '').replace(/\D/g, '');
-        txtCci.value = cci;
-        if (!esDeposito()) {
-            txtCci.classList.remove('is-invalid');
-            return true;
+        function toggleCamposCts() {
+            const habilitado = !!cboBancoCts.value.trim();
+            txtCuentaCts.disabled = !habilitado;
+            cboMonedaCts.disabled = !habilitado;
+            if (!habilitado) {
+                txtCuentaCts.value = '';
+                cboMonedaCts.value = 'LO';
+            }
         }
-        const ok = cci.length === 20;
-        txtCci.classList.toggle('is-invalid', !ok);
-        return ok;
-    }
 
-    cboBancoHaberes.addEventListener('change', toggleCamposHaberes);
-    cboBancoCts.addEventListener('change', toggleCamposCts);
-    cboFormaPago.addEventListener('change', validarCci);
-    txtCci.addEventListener('input', function () {
-        this.value = this.value.replace(/\D/g, '').slice(0, 20);
+        function validarCci() {
+            const cci = (txtCci.value || '').replace(/\D/g, '');
+            txtCci.value = cci;
+            if (!esDeposito()) {
+                txtCci.classList.remove('is-invalid');
+                return true;
+            }
+            const ok = cci.length === 20;
+            txtCci.classList.toggle('is-invalid', !ok);
+            return ok;
+        }
+
+        cboBancoHaberes.addEventListener('change', toggleCamposHaberes);
+        cboBancoCts.addEventListener('change', toggleCamposCts);
+        cboFormaPago.addEventListener('change', validarCci);
+        txtCci.addEventListener('input', function () {
+            this.value = this.value.replace(/\D/g, '').slice(0, 20);
+            validarCci();
+        });
+
+        if (!modoNuevo && frm) {
+            frm.addEventListener('submit', function (e) {
+                if (!validarCci()) {
+                    e.preventDefault();
+                    txtCci.focus();
+                    return;
+                }
+                if (esDeposito() && !cboBancoHaberes.value.trim()) {
+                    e.preventDefault();
+                    mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
+                    cboBancoHaberes.focus();
+                }
+            });
+        }
+
+        toggleCamposHaberes();
+        toggleCamposCts();
         validarCci();
-    });
+        if (!modoNuevo) capturarSnapshot();
 
-    frm.addEventListener('submit', function (e) {
-        if (!validarCci()) {
-            e.preventDefault();
-            txtCci.focus();
+        return { validarCci, esDeposito, cboBancoHaberes, txtCci };
+    }
+
+    async function validarYEnviarNuevo(e) {
+        e.preventDefault();
+        if (enviandoNuevo) return;
+
+        calcularNombreCompleto();
+
+        const txtEntry = document.getElementById('txtEntryDate');
+        const txtReentry = document.getElementById('txtReentryDate');
+        if (txtEntry && txtReentry) {
+            txtReentry.value = txtEntry.value || '';
+        }
+
+        const person = (document.getElementById('txtPerson')?.value || '').trim().toUpperCase();
+        if (document.getElementById('txtPerson')) {
+            document.getElementById('txtPerson').value = person;
+        }
+        const name1 = (document.getElementById('txtName1')?.value || '').trim();
+        const lastname1 = (document.getElementById('txtLastName1')?.value || '').trim();
+        const name2 = (document.getElementById('txtName2')?.value || '').trim();
+        const lastname2 = (document.getElementById('txtLastName2')?.value || '').trim();
+        const docType = (document.getElementById('cboTipoDocumento')?.value || '').trim();
+        const docNumber = (document.getElementById('txtDocumentNumber')?.value || '').trim();
+        const sex = (document.getElementById('cboSex')?.value || '').trim();
+        const unit = (document.getElementById('cboUnidad')?.value || '').trim();
+        const employeetype = (document.getElementById('cboEmployeeType')?.value || '').trim();
+        const costcenter = (document.getElementById('cboCostCenter')?.value || '').trim();
+        const payrolltype = (document.getElementById('cboPayrollType')?.value || '').trim();
+        const entrydate = (document.getElementById('txtEntryDate')?.value || '').trim();
+        const txtCci = document.getElementById('txtCci');
+        const cboFormaPago = document.getElementById('cboFormaPago');
+        const cboBancoHaberes = document.getElementById('cboBancoHaberes');
+
+        const reqs = [
+            [person, 'Indique el código del trabajador.', 'txtPerson', 'generales'],
+            [name1, 'Indique el primer nombre.', 'txtName1', 'generales'],
+            [lastname1, 'Indique el apellido paterno.', 'txtLastName1', 'generales'],
+            [docType, 'Seleccione el tipo de documento.', 'cboTipoDocumento', 'generales'],
+            [docNumber, 'Indique el número de documento.', 'txtDocumentNumber', 'generales'],
+            [sex, 'Seleccione el sexo.', 'cboSex', 'generales'],
+            [unit, 'Seleccione la unidad.', 'cboUnidad', 'generales'],
+            [employeetype, 'Seleccione el tipo de trabajador.', 'cboEmployeeType', 'laborales'],
+            [costcenter, 'Seleccione el centro de costo.', 'cboCostCenter', 'laborales'],
+            [payrolltype, 'Seleccione el tipo de planilla.', 'cboPayrollType', 'laborales'],
+            [entrydate, 'Indique la fecha de ingreso.', 'txtEntryDate', 'laborales'],
+        ];
+        for (const [val, msg, focusId, sec] of reqs) {
+            if (val) continue;
+            mostrarPanelNuevo(sec);
+            mostrarError(msg);
+            document.getElementById(focusId)?.focus();
             return;
         }
-        if (esDeposito() && !cboBancoHaberes.value.trim()) {
-            e.preventDefault();
-            mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
-            cboBancoHaberes.focus();
-        }
-    });
 
-    toggleCamposHaberes();
-    toggleCamposCts();
-    validarCci();
-    capturarSnapshot();
+        // CCI / depósito checks if bancario filled
+        if (cboFormaPago && txtCci) {
+            const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
+            const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
+            const val = (cboFormaPago.value || '').trim();
+            const esDep = text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
+            const cci = (txtCci.value || '').replace(/\D/g, '');
+            txtCci.value = cci;
+            if (esDep) {
+                if (cci.length !== 20) {
+                    mostrarPanelNuevo('bancario');
+                    txtCci.classList.add('is-invalid');
+                    mostrarError('El CCI debe tener exactamente 20 dígitos numéricos.');
+                    txtCci.focus();
+                    return;
+                }
+                if (cboBancoHaberes && !cboBancoHaberes.value.trim()) {
+                    mostrarPanelNuevo('bancario');
+                    mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
+                    cboBancoHaberes.focus();
+                    return;
+                }
+            }
+        }
+
+        const cusppEl = document.getElementById('txtCuspp');
+        if (cusppEl) {
+            const cuspp = (cusppEl.value || '').trim();
+            if (cuspp && (!/^[A-Z0-9Ñ]{12}$/.test(cuspp) || !/[A-ZÑ]/.test(cuspp) || !/\d/.test(cuspp))) {
+                mostrarPanelNuevo('pensiones');
+                mostrarError('El CUSPP debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).');
+                cusppEl.focus();
+                return;
+            }
+        }
+
+        try {
+            const resp = await fetch('/api/trabajadores/validar-alta', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    person,
+                    documentnumber: docNumber,
+                    name1,
+                    name2,
+                    lastname1,
+                    lastname2,
+                }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || data.error) {
+                mostrarError(data.error || 'No se pudo validar el alta.');
+                return;
+            }
+            if (data.codigo_existe) {
+                mostrarError('El código de trabajador ya existe.');
+                mostrarPanelNuevo('generales');
+                document.getElementById('txtPerson')?.focus();
+                return;
+            }
+            if (data.documento_existe_cia) {
+                mostrarError('El documento ya está registrado en esta compañía.');
+                mostrarPanelNuevo('generales');
+                document.getElementById('txtDocumentNumber')?.focus();
+                return;
+            }
+            if (data.codigo_distinto_documento) {
+                mostrarAdvertencia('El código es distinto al número de documento. Continúe si es intencional.');
+            }
+            if (data.hay_similares) {
+                const similares = Array.isArray(data.similares) ? data.similares.slice(0, 5) : [];
+                const lista = similares.map((s) => {
+                    const p = String(s.person || '').trim();
+                    const n = String(s.name || '').trim();
+                    const d = String(s.documentnumber || '').trim();
+                    const c = String(s.company || '').trim();
+                    return `• ${p}${n ? ' — ' + n : ''}${d ? ' (Doc: ' + d + ')' : ''}${c ? ' [' + c + ']' : ''}`;
+                }).join('\n') || '(sin detalle)';
+                const okSim = await confirmarUi({
+                    titulo: 'Trabajadores similares',
+                    mensaje: 'Se encontraron registros con nombre similar:\n\n' + lista + '\n\n¿Desea continuar con el alta?',
+                    textoOk: 'Continuar',
+                    textoCancelar: 'Cancelar',
+                    variant: 'warning',
+                });
+                if (!okSim) return;
+                const hd = document.getElementById('hdConfirmarNombre');
+                if (hd) hd.value = 'Y';
+            }
+
+            enviandoNuevo = true;
+            dirty = false;
+            if (frmActivo) frmActivo.submit();
+        } catch (err) {
+            console.error(err);
+            mostrarError('Error de red al validar el alta.');
+        }
+    }
+
+    if (modoNuevo || seccion === 'generales') wireGenerales();
+    if (modoNuevo || seccion === 'laborales') wireLaborales();
+    if (!modoNuevo && seccion === 'educacion') wireEducacion();
+    if (modoNuevo || seccion === 'pensiones') wirePensiones();
+    if (modoNuevo || seccion === 'bancario') wireBancario();
+
+    if (modoNuevo && frmActivo) {
+        frmActivo.addEventListener('submit', validarYEnviarNuevo);
+    }
 });
 </script>
 {% endblock %}

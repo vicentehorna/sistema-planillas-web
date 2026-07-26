@@ -4,33 +4,81 @@
 
 {% block extra_css %}
 <style>
+    .conceptos-page {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        height: calc(100vh - 7.5rem);
+        max-height: calc(100vh - 7.5rem);
+        overflow: hidden;
+    }
+
+    .conceptos-filtros {
+        flex-shrink: 0;
+    }
+
+    .conceptos-filtros .card-body {
+        padding: 0.7rem 0.85rem;
+    }
+
     .conceptos-layout {
         display: flex;
-        gap: 1rem;
-        min-height: 72vh;
+        gap: 0.85rem;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .conceptos-panel-izq {
-        flex: 0 0 42%;
-        max-width: 42%;
-        min-width: 280px;
+        flex: 0 0 38%;
+        max-width: 38%;
+        min-width: 260px;
         display: flex;
         flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .conceptos-panel-der {
-        flex: 1 1 58%;
+        flex: 1 1 62%;
         min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
     }
 
     .conceptos-grilla {
-        flex: 1;
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
         min-height: 0;
-        max-height: calc(72vh - 5rem);
-        overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
         background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .conceptos-grilla.altura-sincronizada {
+        flex: 0 0 auto;
+    }
+
+    .conceptos-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .conceptos-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #d7dee8;
+        background: #f1f4f8;
+        font-size: 0.8rem;
+        color: #6c757d;
     }
 
     .table-conceptos-lista {
@@ -43,26 +91,36 @@
     .table-conceptos-lista td {
         padding: 0.25rem 0.45rem;
         vertical-align: middle;
+        border-color: #eef1f5;
     }
 
     .table-conceptos-lista thead th {
         position: sticky;
         top: 0;
-        background: #f8f9fa;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
     }
 
     .table-conceptos-lista tbody tr.concepto-row {
         cursor: pointer;
+        border-color: #eef1f5;
     }
 
     .table-conceptos-lista tbody tr.concepto-row:hover {
-        background: #f8f9fa;
+        background: #eef4fb;
     }
 
     .table-conceptos-lista tbody tr.concepto-row.active {
-        background: #cfe2ff;
+        background: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-conceptos-lista tbody tr.concepto-row.active td {
+        font-weight: 600;
     }
 
     .table-conceptos-lista .col-nombre {
@@ -102,14 +160,80 @@
         cursor: not-allowed;
     }
 
-    .conceptos-form-card .form-label {
+    .conceptos-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .conceptos-dw-titlebar {
+        background: #1a4b84;
+        padding: 0.45rem 0.75rem;
+        min-height: 2.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .conceptos-dw-titlebar .conceptos-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .conceptos-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-left: auto;
+    }
+
+    .conceptos-btn-guardar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
         font-size: 0.78rem;
-        margin-bottom: 0.15rem;
+        padding: 0.2rem 0.75rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .conceptos-msg-guardado {
+        margin: 0;
+        min-width: 0;
+        max-width: 18rem;
+        font-size: 0.75rem;
+    }
+
+    .conceptos-dw-body {
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.85rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .conceptos-form-card .form-label {
+        font-size: 0.72rem;
+        margin-bottom: 0.12rem;
     }
 
     .conceptos-form-card .form-control-sm,
     .conceptos-form-card .form-select-sm {
-        font-size: 0.82rem;
+        font-size: 0.8rem;
     }
 
     .conceptos-check-row {
@@ -118,38 +242,42 @@
         align-items: center;
     }
 
-    /* Campos obligatorios — fondo celeste (referencia legacy PowerBuilder) */
     .campo-obligatorio.form-control,
     .campo-obligatorio.form-select {
-        background-color: #d9edf7;
-        border-color: #b8daff;
+        background-color: #fff;
+        border-color: #ced4da;
+        box-shadow: inset 3px 0 0 #1a4b84;
     }
 
     .campo-obligatorio.form-control:focus,
     .campo-obligatorio.form-select:focus {
-        background-color: #cce5f6;
+        background-color: #fff;
         border-color: #86b7fe;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+        box-shadow: inset 3px 0 0 #1a4b84, 0 0 0 0.2rem rgba(26, 75, 132, 0.12);
     }
 
     .campo-obligatorio.form-control:disabled,
     .campo-obligatorio.form-select:disabled {
         background-color: #e9ecef;
+        box-shadow: none;
     }
 
-    .conceptos-check-obligatorio {
-        display: flex;
-        align-items: center;
-        padding: 0 0.5rem;
-        border-radius: 0.25rem;
-        background-color: #d9edf7;
-        border: 1px solid #b8daff;
+    .form-label.mc-req::after {
+        content: ' *';
+        color: #c0392b;
+        font-weight: 700;
     }
 
     .conceptos-check-campo {
         min-height: 31px;
         height: 31px;
         width: 100%;
+        display: flex;
+        align-items: center;
+        padding: 0 0.5rem;
+        border-radius: 0.25rem;
+        border: 1px solid #d7dee8;
+        background: #f8fafc;
     }
 
     .conceptos-check-campo .form-check {
@@ -160,7 +288,7 @@
     }
 
     .conceptos-check-campo .form-check-label {
-        font-size: 0.82rem;
+        font-size: 0.8rem;
         line-height: 1.2;
     }
 
@@ -174,42 +302,35 @@
         padding-right: 0.5rem;
         padding-left: 0.5rem;
         white-space: nowrap;
-    }
-
-    .conceptos-check-compact.conceptos-check-campo {
         width: auto;
         min-width: 0;
     }
 
-    .conceptos-campo-verde .form-select,
-    .conceptos-campo-verde.conceptos-check-campo {
-        background-color: #e8f5e9;
-        border-color: #a3cfbb;
+    .conceptos-campo-grupo {
+        background-color: #f1f4f8;
+        border-color: #d7dee8;
         min-height: 31px;
         height: 31px;
         padding-top: 0.2rem;
         padding-bottom: 0.2rem;
     }
 
-    .conceptos-campo-verde.conceptos-check-campo,
-    .conceptos-campo-verde.d-flex {
+    .conceptos-campo-grupo.conceptos-check-campo,
+    .conceptos-campo-grupo.d-flex {
         height: auto;
         min-height: 31px;
         padding: 0 0.5rem;
         border-radius: 0.25rem;
+        border: 1px solid #d7dee8;
+        background: #f1f4f8;
     }
 
-    .conceptos-campo-verde.d-flex .form-select {
+    .conceptos-campo-grupo.d-flex .form-select {
         min-height: 27px;
         height: 27px;
         padding-top: 0.15rem;
         padding-bottom: 0.15rem;
-    }
-
-    .conceptos-stack-verde {
-        display: flex;
-        flex-direction: column;
-        gap: 0.5rem;
+        background: #fff;
     }
 
     .conceptos-campo-orden {
@@ -247,40 +368,17 @@
     }
 
     .conceptos-fila-par .conceptos-check-campo,
-    .conceptos-fila-par .conceptos-campo-verde .form-select,
-    .conceptos-fila-par .conceptos-campo-verde.conceptos-check-campo {
+    .conceptos-fila-par .conceptos-campo-grupo .form-select,
+    .conceptos-fila-par .conceptos-campo-grupo.conceptos-check-campo {
         width: 100%;
-    }
-
-    .conceptos-fila-declarar-insertar {
-        align-items: flex-end;
-    }
-
-    .conceptos-fila-declarar-insertar > [class*="col-"] {
-        display: flex;
-        flex-direction: column;
-        justify-content: flex-end;
-    }
-
-    .conceptos-label-alineado {
-        min-height: 1.25rem;
-        margin-bottom: 0.25rem;
-    }
-
-    .conceptos-msg-guardado {
-        margin-top: 0;
-        min-width: 0;
-    }
-
-    .conceptos-form-card .card-header .conceptos-msg-guardado:not(.d-none) {
-        flex: 1 1 12rem;
     }
 
     .conceptos-placeholder {
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 420px;
+        flex: 1 1 auto;
+        min-height: 0;
         color: #6c757d;
         text-align: center;
         border: 1px dashed #ced4da;
@@ -292,12 +390,12 @@
         display: flex;
         flex-wrap: wrap;
         align-items: center;
-        gap: 0.35rem 0.85rem;
-        padding: 0.45rem 0.65rem;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
-        background: #f8f9fa;
-        min-height: 2.1rem;
+        gap: 0.25rem 0.7rem;
+        padding: 0.35rem 0.55rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
+        background: #f1f4f8;
+        min-height: 2rem;
     }
 
     .filtro-tipos-concepto .form-check {
@@ -306,16 +404,39 @@
     }
 
     .filtro-tipos-concepto .form-check-label {
-        font-size: 0.82rem;
+        font-size: 0.78rem;
         cursor: pointer;
     }
 
     .filtro-tipos-concepto .filtro-tipos-sep {
         width: 1px;
         align-self: stretch;
-        min-height: 1.25rem;
+        min-height: 1.1rem;
         background: #ced4da;
-        margin: 0 0.15rem;
+        margin: 0 0.1rem;
+    }
+
+    .conceptos-grilla-scroll:focus {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .conceptos-grilla-scroll:focus:not(:focus-visible) {
+        outline: none;
+    }
+
+    .conceptos-grilla-scroll:focus-visible {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .modal-validacion-conceptos .modal-header {
+        background: #1a4b84;
+        color: #fff;
+    }
+
+    .modal-validacion-conceptos .modal-header .btn-close {
+        filter: invert(1);
     }
 
     .modal-validacion-conceptos .table {
@@ -327,8 +448,15 @@
     }
 
     @media (max-width: 991.98px) {
+        .conceptos-page {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
         .conceptos-layout {
             flex-direction: column;
+            overflow: visible;
         }
 
         .conceptos-panel-izq {
@@ -337,15 +465,20 @@
         }
 
         .conceptos-grilla {
-            max-height: 280px;
+            max-height: 260px;
+        }
+
+        .conceptos-panel-der {
+            min-height: 22rem;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card shadow-sm border-0 mb-3">
-    <div class="card-body py-3">
+<div class="conceptos-page">
+<div class="card shadow-sm border-0 conceptos-filtros">
+    <div class="card-body">
         <form id="frmFiltrosConceptos" class="row g-2 align-items-end">
             <div class="col-12 col-md-4 col-lg-3">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
@@ -357,22 +490,22 @@
                 <label for="txtBuscarConcepto" class="form-label small fw-bold text-muted mb-1">Buscar concepto</label>
                 <input type="search" id="txtBuscarConcepto" class="form-control form-control-sm" placeholder="Descripción o nemónico..." autocomplete="off">
             </div>
+            <div class="col-12 col-md-auto d-flex align-items-end flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnValidarConceptosCias">
+                    <i class="bi bi-shield-check"></i> Validar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevoConcepto">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
             <div class="col-12">
                 <label class="form-label small fw-bold text-muted mb-1">Tipo de concepto</label>
                 <div id="contenedorFiltroTiposConcepto" class="filtro-tipos-concepto">
                     <span class="small text-muted">Seleccione una compañía</span>
                 </div>
-            </div>
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
-                <button type="submit" class="btn btn-primary btn-sm px-4">
-                    <i class="bi bi-search"></i> Consultar
-                </button>
-                <button type="button" class="btn btn-warning btn-sm px-4" id="btnValidarConceptosCias">
-                    <i class="bi bi-shield-check"></i> Validar
-                </button>
-                <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoConcepto">
-                    <i class="bi bi-plus-lg"></i> Nuevo
-                </button>
             </div>
         </form>
     </div>
@@ -380,23 +513,26 @@
 
 <div class="conceptos-layout">
     <aside class="conceptos-panel-izq">
-        <div class="conceptos-grilla">
-            <table class="table table-bordered table-sm table-hover table-conceptos-lista align-middle mb-0">
-                <thead>
-                    <tr>
-                        <th class="col-nombre">Concepto</th>
-                        <th class="col-pdt">PDT</th>
-                        <th class="col-tipo">Tipo</th>
-                        <th class="col-codigo">Código</th>
-                        <th class="col-acciones" title="Acciones"> </th>
-                    </tr>
-                </thead>
-                <tbody id="tbodyConceptos">
-                    <tr><td colspan="5" class="text-center text-muted py-3">Seleccione una compañía</td></tr>
-                </tbody>
-            </table>
+        <div class="conceptos-grilla" id="grillaConceptos">
+            <div class="conceptos-grilla-scroll" id="grillaScrollConceptos" tabindex="0"
+                 role="listbox" aria-label="Lista de conceptos. Use flechas arriba y abajo para navegar.">
+                <table class="table table-sm table-hover table-conceptos-lista align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-nombre">Concepto</th>
+                            <th class="col-pdt">PDT</th>
+                            <th class="col-tipo">Tipo</th>
+                            <th class="col-codigo">Código</th>
+                            <th class="col-acciones" title="Acciones"> </th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyConceptos">
+                        <tr><td colspan="5" class="text-center text-muted py-3">Seleccione una compañía</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoConceptos" class="conceptos-grilla-footer">0 registros</div>
         </div>
-        <div id="lblConteoConceptos" class="small text-muted mt-2">0 registros</div>
     </aside>
 
     <div class="modal fade modal-validacion-conceptos" id="modalValidacionConceptos" tabindex="-1" aria-hidden="true">
@@ -442,37 +578,37 @@
             </div>
         </div>
 
-        <div id="panelEdicionConcepto" class="card border-0 shadow-sm conceptos-form-card d-none">
-            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                <span class="fw-semibold flex-shrink-0" id="tituloEdicionConcepto">Editar concepto</span>
+        <div id="panelEdicionConcepto" class="conceptos-dw-panel conceptos-form-card d-none">
+            <div class="conceptos-dw-titlebar">
+                <span class="conceptos-dw-title-text" id="tituloEdicionConcepto">Editar concepto</span>
                 <div id="msgGuardadoConcepto" class="conceptos-msg-guardado d-none" role="status" aria-live="polite"></div>
-                <div class="d-flex gap-2 flex-shrink-0 ms-auto">
-                    <button type="button" class="btn btn-primary btn-sm" id="btnGuardarConcepto">
+                <div class="conceptos-titlebar-actions">
+                    <button type="button" class="btn btn-success btn-sm conceptos-btn-guardar" id="btnGuardarConcepto" title="Ctrl+S">
                         <i class="bi bi-save"></i> Guardar
                     </button>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="conceptos-dw-body">
                 <form id="frmConcepto" class="row g-2">
                     <input type="hidden" id="hidConcept" value="">
                     <input type="hidden" id="hidModo" value="U">
 
                     <div class="col-12">
-                        <label for="txtDescription" class="form-label fw-semibold text-muted">Concepto</label>
+                        <label for="txtDescription" class="form-label fw-semibold text-muted mc-req">Concepto</label>
                         <input type="text" id="txtDescription" class="form-control form-control-sm campo-obligatorio" maxlength="50" required>
                     </div>
 
                     <div class="col-12">
-                        <label for="txtPrintText" class="form-label fw-semibold text-muted">Impresión</label>
+                        <label for="txtPrintText" class="form-label fw-semibold text-muted mc-req">Impresión</label>
                         <input type="text" id="txtPrintText" class="form-control form-control-sm campo-obligatorio" maxlength="50" required>
                     </div>
 
                     <div class="col-12 col-md-6">
-                        <label for="txtFormulaCode" class="form-label fw-semibold text-muted">Nemónico</label>
+                        <label for="txtFormulaCode" class="form-label fw-semibold text-muted mc-req">Nemónico</label>
                         <input type="text" id="txtFormulaCode" class="form-control form-control-sm campo-obligatorio text-uppercase" maxlength="20" required>
                     </div>
                     <div class="col-12 col-md-6">
-                        <label for="cboConceptType" class="form-label fw-semibold text-muted">Tipo</label>
+                        <label for="cboConceptType" class="form-label fw-semibold text-muted mc-req">Tipo</label>
                         <select id="cboConceptType" class="form-select form-select-sm campo-obligatorio" required>
                             <option value="">Seleccione...</option>
                         </select>
@@ -494,7 +630,7 @@
                                         <input type="number" id="txtConceptOrder" class="form-control form-control-sm conceptos-campo-orden" min="0" step="1">
                                     </div>
                                     <div class="col-auto">
-                                        <label for="txtRepOrden" class="form-label fw-semibold text-muted">Orden planilla</label>
+                                        <label for="txtRepOrden" class="form-label fw-semibold text-muted mc-req">Orden planilla</label>
                                         <input type="number" id="txtRepOrden" class="form-control form-control-sm conceptos-campo-orden campo-obligatorio" min="0" step="1" required>
                                     </div>
                                     <div class="col-auto">
@@ -515,7 +651,7 @@
                     <div class="col-12">
                         <div class="row g-2 conceptos-fila-par">
                             <div class="col-12 col-md-7">
-                                <div class="conceptos-check-obligatorio conceptos-check-campo">
+                                <div class="conceptos-check-campo">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="chkFlagAssign">
                                         <label class="form-check-label" for="chkFlagAssign">Disponible para asignación</label>
@@ -523,7 +659,7 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-5">
-                                <div class="conceptos-campo-verde w-100 d-flex align-items-center gap-2 px-2">
+                                <div class="conceptos-campo-grupo w-100 d-flex align-items-center gap-2 px-2">
                                     <span class="form-label fw-semibold text-muted mb-0 text-nowrap small">Insertar en</span>
                                     <select id="cboFlagInsertar" class="form-select form-select-sm flex-grow-1">
                                         <option value="N">Ninguno</option>
@@ -538,7 +674,7 @@
                         </div>
                         <div class="row g-2 conceptos-fila-par mt-2">
                             <div class="col-12 col-md-7">
-                                <div class="conceptos-check-obligatorio conceptos-check-campo">
+                                <div class="conceptos-check-campo">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="chkFlagPayrollTicket">
                                         <label class="form-check-label" for="chkFlagPayrollTicket">Disponible para visualización en boleta</label>
@@ -546,7 +682,7 @@
                                 </div>
                             </div>
                             <div class="col-12 col-md-5">
-                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                <div class="conceptos-campo-grupo conceptos-check-campo w-100">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="chkFlagAfecto5ta">
                                         <label class="form-check-label" for="chkFlagAfecto5ta">Afecto 5ta</label>
@@ -557,20 +693,20 @@
                         <div class="row g-2 conceptos-fila-par mt-2">
                             <div class="col-12 col-md-7">
                                 <div class="d-flex align-items-center gap-2 flex-wrap flex-md-nowrap w-100">
-                                    <div class="conceptos-check-obligatorio conceptos-check-campo flex-grow-1">
+                                    <div class="conceptos-check-campo flex-grow-1">
                                         <div class="form-check">
                                             <input class="form-check-input" type="checkbox" id="chkFlagConceptDeclare">
                                             <label class="form-check-label" for="chkFlagConceptDeclare">Concepto a declarar</label>
                                         </div>
                                     </div>
                                     <div class="conceptos-pdt-inline flex-shrink-0">
-                                        <label for="txtPdt" class="form-label fw-semibold text-muted mb-0">PDT</label>
+                                        <label for="txtPdt" class="form-label fw-semibold text-muted mb-0 mc-req">PDT</label>
                                         <input type="text" id="txtPdt" class="form-control form-control-sm conceptos-campo-pdt campo-obligatorio" maxlength="20" required>
                                     </div>
                                 </div>
                             </div>
                             <div class="col-12 col-md-5">
-                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                <div class="conceptos-campo-grupo conceptos-check-campo w-100">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="chkFlagAfectoAfp">
                                         <label class="form-check-label" for="chkFlagAfectoAfp">Afecto AFP</label>
@@ -581,7 +717,7 @@
                         <div class="row g-2 conceptos-fila-par mt-2">
                             <div class="col-12 col-md-7"></div>
                             <div class="col-12 col-md-5">
-                                <div class="conceptos-campo-verde conceptos-check-campo w-100">
+                                <div class="conceptos-campo-grupo conceptos-check-campo w-100">
                                     <div class="form-check">
                                         <input class="form-check-input" type="checkbox" id="chkFlagAfectoUtilidad">
                                         <label class="form-check-label" for="chkFlagAfectoUtilidad">Afecto Utilidad</label>
@@ -597,6 +733,7 @@
             </div>
         </div>
     </section>
+</div>
 </div>
 {% endblock %}
 
@@ -614,6 +751,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     let conceptoSeleccionado = null;
     let tiposConceptoCache = [];
     let obtenerAbort = null;
+    let idxConceptoActivo = -1;
+    let snapshotFormulario = '';
+    let formDirty = false;
+    let resizeObsGrilla = null;
+    let ciaAnterior = '';
 
     const cboCia = document.getElementById('cboCompania');
     const contenedorFiltroTipos = document.getElementById('contenedorFiltroTiposConcepto');
@@ -621,6 +763,89 @@ document.addEventListener('DOMContentLoaded', async function () {
     const placeholder = document.getElementById('placeholderConcepto');
     const panelEdicion = document.getElementById('panelEdicionConcepto');
     const msgGuardadoConcepto = document.getElementById('msgGuardadoConcepto');
+    const grillaConceptos = document.getElementById('grillaConceptos');
+    const grillaScrollConceptos = document.getElementById('grillaScrollConceptos');
+    const frmConcepto = document.getElementById('frmConcepto');
+    const btnGuardarConcepto = document.getElementById('btnGuardarConcepto');
+
+    function serializarFormularioConcepto() {
+        if (!frmConcepto) return '';
+        const fd = new FormData(frmConcepto);
+        // FormData omite checkboxes no marcados; serializamos estado completo
+        const pairs = [];
+        frmConcepto.querySelectorAll('input, select, textarea').forEach((el) => {
+            if (!el.id && !el.name) return;
+            const key = el.id || el.name;
+            if (el.type === 'checkbox') {
+                pairs.push(key + '=' + (el.checked ? 'Y' : 'N'));
+            } else if (el.type === 'hidden' || el.tagName === 'SELECT' || el.type === 'text' || el.type === 'number' || el.type === 'search') {
+                pairs.push(key + '=' + String(el.value == null ? '' : el.value));
+            }
+        });
+        pairs.sort();
+        return pairs.join('&');
+    }
+
+    function capturarSnapshotFormulario() {
+        snapshotFormulario = serializarFormularioConcepto();
+        formDirty = false;
+    }
+
+    function marcarFormDirty() {
+        formDirty = serializarFormularioConcepto() !== snapshotFormulario;
+    }
+
+    async function confirmarSalidaSiDirty() {
+        if (!formDirty || panelEdicion.classList.contains('d-none')) return true;
+        return hmConfirmar({
+            titulo: 'Cambios sin guardar',
+            mensaje: 'Hay cambios sin guardar en el concepto.\nSi continúa, se perderán.',
+            textoOk: 'Salir sin guardar',
+            textoCancelar: 'Seguir editando',
+            variant: 'danger',
+        });
+    }
+
+    function ajustarAlturaGrillaConceptos() {
+        if (!grillaConceptos) return;
+        if (window.matchMedia('(max-width: 991.98px)').matches) {
+            grillaConceptos.classList.remove('altura-sincronizada');
+            grillaConceptos.style.height = '';
+            grillaConceptos.style.minHeight = '';
+            return;
+        }
+        const top = grillaConceptos.getBoundingClientRect().top;
+        const viewportBottom = window.innerHeight - 16;
+        let targetBottom = viewportBottom;
+        const detalleVisible = panelEdicion && !panelEdicion.classList.contains('d-none');
+        if (detalleVisible) {
+            const panelBottom = panelEdicion.getBoundingClientRect().bottom;
+            if (panelBottom > top + 120) {
+                targetBottom = Math.min(viewportBottom, panelBottom);
+            }
+        }
+        const altura = Math.round(targetBottom - top);
+        if (altura > 120) {
+            grillaConceptos.classList.add('altura-sincronizada');
+            grillaConceptos.style.height = altura + 'px';
+            grillaConceptos.style.minHeight = altura + 'px';
+        }
+    }
+
+    function programarAjusteAlturaGrilla() {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(ajustarAlturaGrillaConceptos);
+        });
+    }
+
+    function registrarObservadorAlturaGrilla() {
+        if (resizeObsGrilla) return;
+        window.addEventListener('resize', programarAjusteAlturaGrilla);
+        if (typeof ResizeObserver === 'undefined') return;
+        resizeObsGrilla = new ResizeObserver(programarAjusteAlturaGrilla);
+        if (panelEdicion) resizeObsGrilla.observe(panelEdicion);
+        if (placeholder) resizeObsGrilla.observe(placeholder);
+    }
 
     function escHtml(s) {
         return String(s || '')
@@ -916,6 +1141,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     function mostrarPanelEdicion(visible) {
         placeholder.classList.toggle('d-none', visible);
         panelEdicion.classList.toggle('d-none', !visible);
+        programarAjusteAlturaGrilla();
     }
 
     function ocultarMensajeGuardado() {
@@ -973,6 +1199,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         setCheck(document.getElementById('chkFlagAfectoUtilidad'), 'N');
         document.getElementById('tituloEdicionConcepto').textContent = 'Nuevo concepto';
         syncMonedaPorValorMonetario();
+        capturarSnapshotFormulario();
     }
 
     function cargarFormulario(data) {
@@ -998,6 +1225,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         setCheck(document.getElementById('chkFlagAfectoUtilidad'), data.flagafectoutilidad);
         document.getElementById('tituloEdicionConcepto').textContent = data.description || 'Editar concepto';
         syncMonedaPorValorMonetario();
+        capturarSnapshotFormulario();
     }
 
     function payloadFormulario() {
@@ -1027,26 +1255,61 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function updateRowHighlight() {
-        tbodyConceptos.querySelectorAll('.concepto-row').forEach((tr) => {
+        tbodyConceptos.querySelectorAll('.concepto-row').forEach((tr, i) => {
             const concept = tr.getAttribute('data-concept');
-            tr.classList.toggle('active', !!(conceptoSeleccionado && conceptoSeleccionado.concept === concept));
+            const on = !!(conceptoSeleccionado && conceptoSeleccionado.concept === concept);
+            tr.classList.toggle('active', on);
+            tr.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) idxConceptoActivo = i;
         });
+    }
+
+    function filasConceptos() {
+        return Array.from(tbodyConceptos.querySelectorAll('.concepto-row'));
+    }
+
+    function marcarFilaConcepto(idx) {
+        const filas = filasConceptos();
+        if (!filas.length) {
+            idxConceptoActivo = -1;
+            return null;
+        }
+        idx = Math.max(0, Math.min(idx, filas.length - 1));
+        idxConceptoActivo = idx;
+        filas.forEach((tr, i) => {
+            const on = i === idx;
+            tr.classList.toggle('active', on);
+            tr.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        filas[idx].scrollIntoView({ block: 'nearest' });
+        return filas[idx];
+    }
+
+    async function activarConceptoPorIndice(idx) {
+        const fila = marcarFilaConcepto(idx);
+        if (!fila) return;
+        const concept = fila.getAttribute('data-concept');
+        const row = conceptosCache.find((x) => x.concept === concept);
+        if (row) await seleccionarConcepto(row);
     }
 
     function renderListaConceptos(rows) {
         if (!rows.length) {
             tbodyConceptos.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoConceptos').textContent = '0 registros';
+            idxConceptoActivo = -1;
+            programarAjusteAlturaGrilla();
             return;
         }
 
-        tbodyConceptos.innerHTML = rows.map((r) => {
+        tbodyConceptos.innerHTML = rows.map((r, idx) => {
             const activo = conceptoSeleccionado && conceptoSeleccionado.concept === r.concept;
+            if (activo) idxConceptoActivo = idx;
             const puedeEliminar = String(r.puede_eliminar || '').trim().toUpperCase() === 'Y';
             const accionesHtml = puedeEliminar
                 ? '<button type="button" class="btn btn-link btn-sm p-0 btn-eliminar-concepto" title="Eliminar concepto"><i class="bi bi-trash-fill text-danger"></i></button>'
                 : '<span class="concepto-no-eliminar" title="No se puede eliminar: está en uso en empleados, planilla o AFP"><i class="bi bi-trash text-muted"></i></span>';
-            return `<tr class="concepto-row ${activo ? 'active' : ''}" data-concept="${escHtml(r.concept || '')}">
+            return `<tr class="concepto-row ${activo ? 'active' : ''}" data-concept="${escHtml(r.concept || '')}" data-idx="${idx}" role="option" aria-selected="${activo ? 'true' : 'false'}">
                 <td class="col-nombre" title="${escHtml(r.description)}">${escHtml(r.description)}</td>
                 <td class="col-pdt">${escHtml(r.pdt)}</td>
                 <td class="col-tipo">${escHtml(r.tiposhortname)}</td>
@@ -1066,8 +1329,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         tbodyConceptos.querySelectorAll('.concepto-row').forEach((tr) => {
             tr.addEventListener('click', async function () {
                 const concept = this.getAttribute('data-concept');
+                const idx = Number(this.getAttribute('data-idx'));
                 const row = conceptosCache.find((x) => x.concept === concept);
-                if (row) await seleccionarConcepto(row);
+                if (!row) return;
+                idxConceptoActivo = idx;
+                if (grillaScrollConceptos) grillaScrollConceptos.focus({ preventScroll: true });
+                await seleccionarConcepto(row);
             });
             const btnEliminar = tr.querySelector('.btn-eliminar-concepto');
             if (btnEliminar) {
@@ -1079,6 +1346,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
             }
         });
+
+        const filaActiva = tbodyConceptos.querySelector('.concepto-row.active');
+        if (filaActiva) filaActiva.scrollIntoView({ block: 'nearest' });
+        programarAjusteAlturaGrilla();
     }
 
     async function cargarListado() {
@@ -1116,6 +1387,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function seleccionarConcepto(row) {
         if (!row || !row.concept) return;
+
+        if (conceptoSeleccionado && conceptoSeleccionado.concept !== row.concept) {
+            const ok = await confirmarSalidaSiDirty();
+            if (!ok) {
+                updateRowHighlight();
+                return;
+            }
+        }
 
         ocultarMensajeGuardado();
 
@@ -1263,6 +1542,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 await seleccionarConcepto({ concept: conceptId });
             }
             mostrarMensajeGuardado(data.mensaje || 'Registro actualizado correctamente.');
+            capturarSnapshotFormulario();
 
             const modoRespuesta = String(data.modo || payload.modo || '').toUpperCase();
             if (esNuevo || modoRespuesta === 'I') {
@@ -1302,11 +1582,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    function iniciarNuevoConcepto() {
+    async function iniciarNuevoConcepto() {
         if (!cboCia.value.trim()) {
             hmAdvertencia('Seleccione una compañía.');
             return;
         }
+        const ok = await confirmarSalidaSiDirty();
+        if (!ok) return;
         conceptoSeleccionado = null;
         updateRowHighlight();
         limpiarFormulario();
@@ -1339,26 +1621,80 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         await cargarListado();
     }
+    ciaAnterior = cboCia.value;
 
     if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
 
+    registrarObservadorAlturaGrilla();
+    programarAjusteAlturaGrilla();
+
+    if (frmConcepto) {
+        frmConcepto.addEventListener('input', marcarFormDirty);
+        frmConcepto.addEventListener('change', marcarFormDirty);
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        if (!btnGuardarConcepto || btnGuardarConcepto.disabled || panelEdicion.classList.contains('d-none')) return;
+        e.preventDefault();
+        btnGuardarConcepto.click();
+    });
+
+    document.getElementById('txtBuscarConcepto').addEventListener('keydown', async function (e) {
+        if (e.key === 'ArrowDown') {
+            const filas = filasConceptos();
+            if (!filas.length) return;
+            e.preventDefault();
+            if (grillaScrollConceptos) grillaScrollConceptos.focus({ preventScroll: true });
+            await activarConceptoPorIndice(idxConceptoActivo >= 0 ? idxConceptoActivo : 0);
+            return;
+        }
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await cargarListado();
+        }
+    });
+
+    if (grillaScrollConceptos) {
+        grillaScrollConceptos.addEventListener('keydown', async function (e) {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter' && e.key !== 'Home' && e.key !== 'End') {
+                return;
+            }
+            const filas = filasConceptos();
+            if (!filas.length) return;
+            e.preventDefault();
+            if (e.key === 'ArrowDown') {
+                await activarConceptoPorIndice(idxConceptoActivo < 0 ? 0 : idxConceptoActivo + 1);
+            } else if (e.key === 'ArrowUp') {
+                await activarConceptoPorIndice(idxConceptoActivo < 0 ? 0 : idxConceptoActivo - 1);
+            } else if (e.key === 'Home') {
+                await activarConceptoPorIndice(0);
+            } else if (e.key === 'End') {
+                await activarConceptoPorIndice(filas.length - 1);
+            } else if (e.key === 'Enter' && idxConceptoActivo >= 0) {
+                await activarConceptoPorIndice(idxConceptoActivo);
+            }
+        });
+    }
+
     cboCia.addEventListener('change', async function () {
+        const nueva = this.value.trim();
+        const ok = await confirmarSalidaSiDirty();
+        if (!ok) {
+            this.value = ciaAnterior;
+            return;
+        }
+        formDirty = false;
+        ciaAnterior = this.value;
         conceptoSeleccionado = null;
         mostrarPanelEdicion(false);
-        await cargarTiposConcepto(this.value.trim());
+        await cargarTiposConcepto(nueva);
         await cargarListado();
     });
 
     document.getElementById('frmFiltrosConceptos').addEventListener('submit', async function (e) {
         e.preventDefault();
         await cargarListado();
-    });
-
-    document.getElementById('txtBuscarConcepto').addEventListener('keydown', async function (e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            await cargarListado();
-        }
     });
 
     document.getElementById('btnNuevoConcepto').addEventListener('click', iniciarNuevoConcepto);

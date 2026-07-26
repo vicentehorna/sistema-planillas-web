@@ -8,36 +8,48 @@
         display: flex;
         gap: 1rem;
         align-items: stretch;
-        min-height: 72vh;
+        min-height: 0;
+        height: calc(100vh - 12.5rem);
+        max-height: calc(100vh - 12.5rem);
+        overflow: hidden;
     }
 
     .ct-panel-izq {
-        flex: 0 0 42%;
-        max-width: 42%;
-        min-width: 320px;
+        flex: 0 0 38%;
+        max-width: 38%;
+        min-width: 280px;
         display: flex;
         flex-direction: column;
         align-self: stretch;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .ct-panel-der {
-        flex: 1 1 58%;
+        flex: 1 1 62%;
         min-width: 0;
         display: flex;
         flex-direction: column;
         gap: 0.75rem;
         align-self: stretch;
+        min-height: 0;
+        overflow: hidden;
     }
 
     .ct-grilla-trabajadores {
         display: flex;
         flex-direction: column;
         flex: 1 1 auto;
-        min-height: 12rem;
+        min-height: 0;
         overflow: hidden;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
         background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .ct-grilla-trabajadores.altura-sincronizada {
+        flex: 0 0 auto;
     }
 
     .ct-grilla-scroll {
@@ -47,11 +59,11 @@
         overflow-x: auto;
     }
 
-    .ct-grilla-header {
+    .ct-grilla-footer {
         flex-shrink: 0;
         padding: 0.3rem 0.5rem;
-        border-bottom: 1px solid #dee2e6;
-        background: #f8f9fa;
+        border-top: 1px solid #d7dee8;
+        background: #f1f4f8;
         font-size: 0.8rem;
         color: #6c757d;
     }
@@ -71,14 +83,23 @@
     .table-trabajadores-ct thead th {
         position: sticky;
         top: 0;
-        background-color: #f8f9fa;
+        background-color: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
     }
 
     .table-trabajadores-ct .col-dni {
         width: 5.75rem;
         max-width: 5.75rem;
+    }
+
+    .table-trabajadores-ct .col-ingreso {
+        width: 5.5rem;
+        max-width: 5.5rem;
+        text-align: center;
     }
 
     .table-trabajadores-ct .col-contrato {
@@ -98,14 +119,16 @@
 
     .table-trabajadores-ct tbody tr.trabajador-row {
         cursor: pointer;
+        border-color: #eef1f5;
     }
 
     .table-trabajadores-ct tbody tr.trabajador-row:hover {
-        background-color: #f8f9fa;
+        background-color: #eef4fb;
     }
 
     .table-trabajadores-ct tbody tr.trabajador-row.active {
-        background-color: #cfe2ff;
+        background-color: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
     }
 
     .table-trabajadores-ct tbody tr.trabajador-row.active td {
@@ -116,20 +139,34 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        min-height: 320px;
+        flex: 1 1 auto;
+        min-height: 0;
         color: #6c757d;
         text-align: center;
         border: 1px dashed #ced4da;
         border-radius: 0.5rem;
         background: #fafbfc;
-        flex: 1 1 auto;
     }
 
-    .ct-dw {
-        border: 1px solid #95a5b5;
-        border-radius: 0.25rem;
+    .ct-cabecera-trabajador {
+        flex-shrink: 0;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .ct-cabecera-trabajador .card-body {
+        padding: 0.65rem 0.85rem;
+    }
+
+    /* Paneles de sección (mismo lenguaje visual que vacaciones / descansos) */
+    .ct-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
         overflow: hidden;
-        background: #d5dde6;
         flex: 1 1 auto;
         display: flex;
         flex-direction: column;
@@ -137,23 +174,69 @@
     }
 
     .ct-dw-titlebar {
+        background: #1a4b84;
+        border-bottom: none;
+        padding: 0.45rem 0.75rem;
+        min-height: 2rem;
         display: flex;
-        align-items: center;
         justify-content: space-between;
+        align-items: center;
         gap: 0.5rem;
-        padding: 0.35rem 0.55rem;
-        background: linear-gradient(180deg, #eef2f6 0%, #cfd8e3 100%);
-        border-bottom: 1px solid #95a5b5;
-        font-size: 0.78rem;
-        font-weight: 700;
-        color: #3a4a5c;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #fff;
+        flex-shrink: 0;
+    }
+
+    .ct-dw-titlebar .ct-dw-title-text {
+        color: #fff;
         text-transform: uppercase;
-        letter-spacing: 0.02em;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+
+    .ct-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+    }
+
+    .ct-btn-agregar {
+        white-space: nowrap;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.7rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        background: rgba(255, 255, 255, 0.12);
+        color: #fff;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .ct-btn-agregar:hover {
+        background: rgba(255, 255, 255, 0.22);
+        border-color: rgba(255, 255, 255, 0.55);
+        color: #fff;
+    }
+
+    .ct-btn-guardar {
+        white-space: nowrap;
+        min-height: calc(1.5em + 0.5rem + 2px);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.7rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
     .ct-dw-body {
-        background: #e3e9f0;
-        padding: 0.45rem;
+        background: #fff;
+        padding: 0.65rem 0.7rem 0.75rem;
+        border-top: none;
         flex: 1 1 auto;
         min-height: 0;
         display: flex;
@@ -163,9 +246,11 @@
 
     .ct-form-contrato {
         background: #fff;
-        border: 1px solid #95a5b5;
-        padding: 0.55rem 0.7rem;
-        border-radius: 0.15rem;
+        border: 1px solid #d7dee8;
+        padding: 0.65rem 0.75rem;
+        border-radius: 0.25rem;
+        box-shadow: none;
+        flex-shrink: 0;
     }
 
     .ct-form-contrato .form-label {
@@ -177,29 +262,44 @@
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
+        border-color: #e6ebf1;
     }
 
     .table-contratos-ct th,
     .table-contratos-ct td {
-        padding: 0.3rem 0.45rem;
+        padding: 0.35rem 0.5rem;
         vertical-align: middle;
+        border-color: #eef1f5;
     }
 
     .table-contratos-scroll {
         flex: 1 1 auto;
-        min-height: 10rem;
+        min-height: 0;
         overflow: auto;
-        border: 1px solid #95a5b5;
+        border: 1px solid #d7dee8;
         background: #fff;
-        border-radius: 0.15rem;
+        border-radius: 0.25rem;
+        box-shadow: none;
     }
 
     .table-contratos-ct thead th {
         position: sticky;
         top: 0;
-        background: #f8f9fa;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 1;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-contratos-ct tbody tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+
+    .table-contratos-ct tbody tr.table-active {
+        background-color: #e7f1ff !important;
+        box-shadow: inset 3px 0 0 #1a4b84;
     }
 
     .table-contratos-ct .col-num {
@@ -229,18 +329,46 @@
         background-color: #6c757d;
     }
 
+    .ct-grilla-scroll:focus {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .ct-grilla-scroll:focus:not(:focus-visible) {
+        outline: none;
+    }
+
+    .ct-grilla-scroll:focus-visible {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    #contenidoDetalle {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
     @media (max-width: 991.98px) {
         .ct-layout {
             flex-direction: column;
+            height: auto;
+            max-height: none;
+            overflow: visible;
         }
 
         .ct-panel-izq {
             flex: 1 1 auto;
             max-width: 100%;
+            min-height: 0;
         }
 
         .ct-grilla-trabajadores {
             max-height: 260px;
+        }
+
+        .ct-panel-der {
+            min-height: 24rem;
         }
     }
 </style>
@@ -287,8 +415,8 @@
             <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
         </div>
         <div class="ct-grilla-trabajadores" id="grillaTrabajadores">
-            <div id="lblConteoTrabajadores" class="ct-grilla-header">No. de Registros: 0</div>
-            <div class="ct-grilla-scroll">
+            <div class="ct-grilla-scroll" id="grillaScrollTrabajadores" tabindex="0"
+                 role="listbox" aria-label="Lista de trabajadores. Use flechas arriba y abajo para navegar.">
                 <table class="table table-bordered table-sm table-hover table-trabajadores-ct align-middle mb-0">
                     <thead>
                         <tr>
@@ -305,6 +433,7 @@
                     </tbody>
                 </table>
             </div>
+            <div id="lblConteoTrabajadores" class="ct-grilla-footer">0 trabajadores</div>
         </div>
     </aside>
 
@@ -316,9 +445,9 @@
             </div>
         </div>
 
-        <div id="contenidoDetalle" class="d-none flex-column gap-2 h-100" style="display: none;">
-            <div class="card border-0 shadow-sm">
-                <div class="card-body py-2">
+        <div id="contenidoDetalle" class="d-none flex-column gap-2" style="display: none;">
+            <div class="ct-cabecera-trabajador">
+                <div class="card-body">
                     <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
                     <div class="small text-muted">
                         <span>Código: <span id="lblCodigoTrabajador"></span></span>
@@ -330,35 +459,38 @@
                 </div>
             </div>
 
-            <div class="ct-dw">
+            <div class="ct-dw-panel" id="panelDetalleContratos">
                 <div class="ct-dw-titlebar">
-                    <span>Detalle de Contratos</span>
-                    <button type="button" id="btnNuevoContrato" class="btn btn-success btn-sm py-0 px-2">
-                        <i class="bi bi-plus-lg"></i> Agregar
-                    </button>
+                    <span class="ct-dw-title-text">Detalle de contratos</span>
+                    <div class="ct-titlebar-actions">
+                        <button type="submit" form="frmNuevoContrato" id="btnGuardarContrato"
+                                class="btn btn-success btn-sm ct-btn-guardar" disabled title="Ctrl+S">
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                        <button type="button" id="btnNuevoContrato" class="btn btn-sm ct-btn-agregar">
+                            <i class="bi bi-plus-lg"></i> Agregar
+                        </button>
+                    </div>
                 </div>
                 <div class="ct-dw-body">
                     <form id="frmNuevoContrato" class="ct-form-contrato d-none">
                         <div class="row g-2 align-items-end">
                             <div class="col-auto">
-                                <label for="txtFechaInicio" class="form-label">Fecha inicio</label>
+                                <label for="txtFechaInicio" class="form-label fw-bold text-muted">Fecha inicio</label>
                                 <input type="date" id="txtFechaInicio" class="form-control form-control-sm" required>
                             </div>
                             <div class="col-auto">
-                                <label for="txtFechaFin" class="form-label">Fecha fin</label>
+                                <label for="txtFechaFin" class="form-label fw-bold text-muted">Fecha fin</label>
                                 <input type="date" id="txtFechaFin" class="form-control form-control-sm">
                             </div>
                             <div class="col-auto">
-                                <label for="cboEstadoContrato" class="form-label">Estado</label>
+                                <label for="cboEstadoContrato" class="form-label fw-bold text-muted">Estado</label>
                                 <select id="cboEstadoContrato" class="form-select form-select-sm">
                                     <option value="A">Activo</option>
                                     <option value="I">Inactivo</option>
                                 </select>
                             </div>
                             <div class="col-auto">
-                                <button type="submit" class="btn btn-primary btn-sm">
-                                    <i class="bi bi-check2"></i> Guardar
-                                </button>
                                 <button type="button" id="btnCancelarContrato" class="btn btn-outline-secondary btn-sm">
                                     Cancelar
                                 </button>
@@ -372,7 +504,7 @@
                     </form>
 
                     <div class="table-contratos-scroll">
-                        <table class="table table-bordered table-sm table-hover table-contratos-ct align-middle mb-0">
+                        <table class="table table-sm table-hover table-contratos-ct align-middle mb-0">
                             <thead>
                                 <tr>
                                     <th class="col-num">#</th>
@@ -389,7 +521,7 @@
                             </tbody>
                         </table>
                     </div>
-                    <div id="lblConteoContratos" class="small text-muted">0 contrato(s)</div>
+                    <div id="lblConteoContratos" class="small text-muted flex-shrink-0">0 contrato(s)</div>
                 </div>
             </div>
         </div>
@@ -410,10 +542,14 @@
     const lblConteoTrab = document.getElementById('lblConteoTrabajadores');
     const placeholderDetalle = document.getElementById('placeholderDetalle');
     const contenidoDetalle = document.getElementById('contenidoDetalle');
+    const grillaTrabajadores = document.getElementById('grillaTrabajadores');
+    const grillaScrollTrabajadores = document.getElementById('grillaScrollTrabajadores');
+    const panelDetalleContratos = document.getElementById('panelDetalleContratos');
     const tbodyContratos = document.getElementById('tbodyContratos');
     const lblConteoContratos = document.getElementById('lblConteoContratos');
     const frmNuevo = document.getElementById('frmNuevoContrato');
     const btnNuevo = document.getElementById('btnNuevoContrato');
+    const btnGuardar = document.getElementById('btnGuardarContrato');
     const btnCancelar = document.getElementById('btnCancelarContrato');
     const txtInicio = document.getElementById('txtFechaInicio');
     const txtFin = document.getElementById('txtFechaFin');
@@ -424,6 +560,9 @@
     let contratosCache = [];
     let contratoSeleccionado = null;
     let filtroLocalTimer = null;
+    let idxTrabajadorActivo = -1;
+    let cargaTrabajadorSeq = 0;
+    let resizeObsGrilla = null;
 
     function optionExists(select, value) {
         return Array.from(select.options).some((o) => String(o.value) === String(value));
@@ -491,6 +630,12 @@
         return '<span class="badge badge-ct-inactivo">Inactivo</span>';
     }
 
+    function actualizarBotonGuardar() {
+        const formVisible = frmNuevo && !frmNuevo.classList.contains('d-none');
+        const inicioOk = !!(txtInicio.value || '').trim();
+        if (btnGuardar) btnGuardar.disabled = !(formVisible && inicioOk && trabajadorActivo);
+    }
+
     function aplicarEstadoPorVencimiento() {
         const fin = (txtFin.value || '').trim();
         if (fin && fin < hoyISO()) {
@@ -499,12 +644,15 @@
         } else {
             cboEstado.disabled = false;
         }
+        actualizarBotonGuardar();
     }
 
     function ocultarFormNuevo() {
         frmNuevo.classList.add('d-none');
         frmNuevo.reset();
         cboEstado.disabled = false;
+        actualizarBotonGuardar();
+        programarAjusteAlturaGrilla();
     }
 
     function mostrarFormNuevo() {
@@ -513,11 +661,61 @@
         txtFin.value = '';
         cboEstado.value = 'A';
         cboEstado.disabled = false;
+        actualizarBotonGuardar();
+        programarAjusteAlturaGrilla();
         txtInicio.focus();
+    }
+
+    function ajustarAlturaGrillaTrabajadores() {
+        if (!grillaTrabajadores) return;
+        if (window.matchMedia('(max-width: 991.98px)').matches) {
+            grillaTrabajadores.classList.remove('altura-sincronizada');
+            grillaTrabajadores.style.height = '';
+            grillaTrabajadores.style.minHeight = '';
+            return;
+        }
+
+        const grillaTop = grillaTrabajadores.getBoundingClientRect().top;
+        const viewportBottom = window.innerHeight - 16;
+        let targetBottom = viewportBottom;
+
+        const detalleVisible = contenidoDetalle
+            && !contenidoDetalle.classList.contains('d-none')
+            && panelDetalleContratos;
+        if (detalleVisible) {
+            const panelBottom = panelDetalleContratos.getBoundingClientRect().bottom;
+            if (panelBottom > grillaTop + 120) {
+                targetBottom = Math.min(viewportBottom, panelBottom);
+            }
+        }
+
+        const altura = Math.round(targetBottom - grillaTop);
+        if (altura > 120) {
+            grillaTrabajadores.classList.add('altura-sincronizada');
+            grillaTrabajadores.style.height = altura + 'px';
+            grillaTrabajadores.style.minHeight = altura + 'px';
+        }
+    }
+
+    function programarAjusteAlturaGrilla() {
+        requestAnimationFrame(() => {
+            requestAnimationFrame(ajustarAlturaGrillaTrabajadores);
+        });
+    }
+
+    function registrarObservadorAlturaGrilla() {
+        if (resizeObsGrilla) return;
+        window.addEventListener('resize', programarAjusteAlturaGrilla);
+        if (typeof ResizeObserver === 'undefined') return;
+        resizeObsGrilla = new ResizeObserver(programarAjusteAlturaGrilla);
+        if (contenidoDetalle) resizeObsGrilla.observe(contenidoDetalle);
+        if (panelDetalleContratos) resizeObsGrilla.observe(panelDetalleContratos);
+        if (placeholderDetalle) resizeObsGrilla.observe(placeholderDetalle);
     }
 
     function mostrarPlaceholder() {
         trabajadorActivo = null;
+        idxTrabajadorActivo = -1;
         contratosCache = [];
         contratoSeleccionado = null;
         ocultarFormNuevo();
@@ -525,6 +723,7 @@
         contenidoDetalle.style.display = 'none';
         placeholderDetalle.classList.remove('d-none');
         placeholderDetalle.style.display = '';
+        programarAjusteAlturaGrilla();
     }
 
     function mostrarDetalleCabecera(t) {
@@ -536,6 +735,7 @@
         document.getElementById('lblCodigoTrabajador').textContent = t.codigo || t.person || '—';
         document.getElementById('lblIngresoTrabajador').textContent = fmtFecha(t.fechaingreso) || '—';
         document.getElementById('lblPlanillaTrabajador').textContent = t.tipoplanilla || t.payrolltype || '—';
+        programarAjusteAlturaGrilla();
     }
 
     function badgeContratoActivo(flag) {
@@ -545,29 +745,82 @@
         return '<span class="badge badge-ct-inactivo">No</span>';
     }
 
+    function filasTrabajadores() {
+        return Array.from(tbodyTrab.querySelectorAll('.trabajador-row'));
+    }
+
+    function marcarFilaTrabajador(idx) {
+        const filas = filasTrabajadores();
+        if (!filas.length) {
+            idxTrabajadorActivo = -1;
+            return null;
+        }
+        idx = Math.max(0, Math.min(idx, filas.length - 1));
+        idxTrabajadorActivo = idx;
+        filas.forEach((tr, i) => {
+            const on = i === idx;
+            tr.classList.toggle('active', on);
+            tr.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        filas[idx].scrollIntoView({ block: 'nearest' });
+        return filas[idx];
+    }
+
+    function listaVisibleActual() {
+        const q = (txtBuscar.value || '').trim().toLowerCase();
+        if (!q) return trabajadoresCache.slice();
+        return trabajadoresCache.filter((t) => {
+            const blob = [t.person, t.codigo, t.documento, t.nombre]
+                .map((x) => String(x || '').toLowerCase()).join(' ');
+            return blob.includes(q);
+        });
+    }
+
+    async function activarTrabajadorPorIndice(idx) {
+        const fila = marcarFilaTrabajador(idx);
+        if (!fila) return;
+        const person = fila.getAttribute('data-person');
+        const row = trabajadoresCache.find((x) => String(x.person) === String(person));
+        if (row) await seleccionarTrabajador(row);
+    }
+
     function renderTrabajadores(lista) {
         tbodyTrab.innerHTML = '';
         if (!lista.length) {
             tbodyTrab.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin trabajadores</td></tr>';
-            lblConteoTrab.textContent = 'No. de Registros: 0';
+            lblConteoTrab.textContent = '0 trabajadores';
+            idxTrabajadorActivo = -1;
+            programarAjusteAlturaGrilla();
             return;
         }
-        lista.forEach((t) => {
+        lista.forEach((t, idx) => {
             const tr = document.createElement('tr');
             tr.className = 'trabajador-row';
-            if (trabajadorActivo && String(trabajadorActivo.person) === String(t.person)) {
-                tr.classList.add('active');
-            }
+            tr.setAttribute('role', 'option');
             tr.dataset.person = String(t.person || '');
+            tr.dataset.idx = String(idx);
+            const activo = trabajadorActivo && String(trabajadorActivo.person) === String(t.person);
+            if (activo) {
+                tr.classList.add('active');
+                idxTrabajadorActivo = idx;
+            }
+            tr.setAttribute('aria-selected', activo ? 'true' : 'false');
             tr.innerHTML =
                 `<td class="col-dni">${escapeHtml(t.codigo || t.documento || t.person || '')}</td>` +
                 `<td class="col-nombre" title="${escapeAttr(t.nombre || '')}">${escapeHtml(t.nombre || '')}</td>` +
                 `<td class="col-ingreso">${escapeHtml(fmtFecha(t.fechaingreso))}</td>` +
                 `<td class="col-contrato">${badgeContratoActivo(t.contrato_activo)}</td>`;
-            tr.addEventListener('click', () => seleccionarTrabajador(t));
+            tr.addEventListener('click', () => {
+                idxTrabajadorActivo = idx;
+                if (grillaScrollTrabajadores) grillaScrollTrabajadores.focus({ preventScroll: true });
+                seleccionarTrabajador(t);
+            });
             tbodyTrab.appendChild(tr);
         });
-        lblConteoTrab.textContent = `No. de Registros: ${lista.length}`;
+        lblConteoTrab.textContent = `${lista.length} trabajador${lista.length === 1 ? '' : 'es'}`;
+        const filaActiva = tbodyTrab.querySelector('.trabajador-row.active');
+        if (filaActiva) filaActiva.scrollIntoView({ block: 'nearest' });
+        programarAjusteAlturaGrilla();
     }
 
     function escapeHtml(s) {
@@ -583,18 +836,7 @@
     }
 
     function filtrarLocal() {
-        const q = (txtBuscar.value || '').trim().toLowerCase();
-        if (!q) {
-            renderTrabajadores(trabajadoresCache);
-            return;
-        }
-        const filtrados = trabajadoresCache.filter((t) => {
-            const blob = [
-                t.person, t.codigo, t.documento, t.nombre
-            ].map((x) => String(x || '').toLowerCase()).join(' ');
-            return blob.includes(q);
-        });
-        renderTrabajadores(filtrados);
+        renderTrabajadores(listaVisibleActual());
     }
 
     async function cargarTrabajadores() {
@@ -622,7 +864,8 @@
         } catch (err) {
             console.error(err);
             tbodyTrab.innerHTML = `<tr><td colspan="4" class="text-center text-danger py-3">${escapeHtml(err.message || err)}</td></tr>`;
-            lblConteoTrab.textContent = 'No. de Registros: 0';
+            lblConteoTrab.textContent = '0 trabajadores';
+            programarAjusteAlturaGrilla();
         }
     }
 
@@ -632,6 +875,7 @@
         if (!lista.length) {
             tbodyContratos.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin contratos</td></tr>';
             lblConteoContratos.textContent = '0 contrato(s)';
+            programarAjusteAlturaGrilla();
             return;
         }
         lista.forEach((c, idx) => {
@@ -658,9 +902,10 @@
             tbodyContratos.appendChild(tr);
         });
         lblConteoContratos.textContent = `${lista.length} contrato(s)`;
+        programarAjusteAlturaGrilla();
     }
 
-    async function cargarContratos(person) {
+    async function cargarContratos(person, seq) {
         const cia = cboCia.value.trim();
         tbodyContratos.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Cargando...</td></tr>';
         try {
@@ -670,31 +915,26 @@
                 body: JSON.stringify({ cia, person }),
             });
             const data = await res.json();
+            if (seq != null && seq !== cargaTrabajadorSeq) return;
             if (!res.ok) throw new Error(data.error || 'Error al listar contratos');
             contratosCache = Array.isArray(data.rows) ? data.rows : [];
             renderContratos(contratosCache);
         } catch (err) {
+            if (seq != null && seq !== cargaTrabajadorSeq) return;
             console.error(err);
             tbodyContratos.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escapeHtml(err.message || err)}</td></tr>`;
             lblConteoContratos.textContent = '0 contrato(s)';
+            programarAjusteAlturaGrilla();
         }
     }
 
     async function seleccionarTrabajador(t) {
+        const seq = ++cargaTrabajadorSeq;
         trabajadorActivo = t;
         ocultarFormNuevo();
-        renderTrabajadores(
-            (txtBuscar.value || '').trim()
-                ? trabajadoresCache.filter((x) => {
-                    const q = txtBuscar.value.trim().toLowerCase();
-                    const blob = [x.person, x.codigo, x.documento, x.nombre]
-                        .map((v) => String(v || '').toLowerCase()).join(' ');
-                    return blob.includes(q);
-                })
-                : trabajadoresCache
-        );
+        renderTrabajadores(listaVisibleActual());
         mostrarDetalleCabecera(t);
-        await cargarContratos(t.person);
+        await cargarContratos(t.person, seq);
     }
 
     function rangosSeCruzan(inicioA, finA, inicioB, finB) {
@@ -761,6 +1001,7 @@
             hmAdvertencia(cruce);
             return;
         }
+        if (btnGuardar) btnGuardar.disabled = true;
         try {
             const res = await fetch('/api/contratos/guardar', {
                 method: 'POST',
@@ -770,11 +1011,12 @@
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo guardar');
             ocultarFormNuevo();
-            await cargarContratos(trabajadorActivo.person);
+            await cargarContratos(trabajadorActivo.person, ++cargaTrabajadorSeq);
             actualizarFlagContratoActivoLocal();
             hmExito('Contrato guardado.');
         } catch (err) {
             hmError(err.message || String(err));
+            actualizarBotonGuardar();
         }
     }
 
@@ -822,7 +1064,7 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo eliminar');
-            await cargarContratos(trabajadorActivo.person);
+            await cargarContratos(trabajadorActivo.person, ++cargaTrabajadorSeq);
             actualizarFlagContratoActivoLocal();
             hmExito('Contrato eliminado.');
         } catch (err) {
@@ -840,6 +1082,44 @@
         filtroLocalTimer = setTimeout(filtrarLocal, 180);
     });
 
+    txtBuscar.addEventListener('keydown', async (e) => {
+        if (e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+        const filas = filasTrabajadores();
+        if (!filas.length) return;
+        e.preventDefault();
+        if (grillaScrollTrabajadores) grillaScrollTrabajadores.focus({ preventScroll: true });
+        await activarTrabajadorPorIndice(idxTrabajadorActivo >= 0 ? idxTrabajadorActivo : 0);
+    });
+
+    if (grillaScrollTrabajadores) {
+        grillaScrollTrabajadores.addEventListener('keydown', async (e) => {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter' && e.key !== 'Home' && e.key !== 'End') {
+                return;
+            }
+            const filas = filasTrabajadores();
+            if (!filas.length) return;
+            e.preventDefault();
+            if (e.key === 'ArrowDown') {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo < 0 ? 0 : idxTrabajadorActivo + 1);
+            } else if (e.key === 'ArrowUp') {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo < 0 ? 0 : idxTrabajadorActivo - 1);
+            } else if (e.key === 'Home') {
+                await activarTrabajadorPorIndice(0);
+            } else if (e.key === 'End') {
+                await activarTrabajadorPorIndice(filas.length - 1);
+            } else if (e.key === 'Enter' && idxTrabajadorActivo >= 0) {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        if (!btnGuardar || btnGuardar.disabled) return;
+        e.preventDefault();
+        btnGuardar.click();
+    });
+
     btnNuevo.addEventListener('click', () => {
         if (!trabajadorActivo) return;
         mostrarFormNuevo();
@@ -848,6 +1128,7 @@
     frmNuevo.addEventListener('submit', guardarContrato);
     txtFin.addEventListener('change', aplicarEstadoPorVencimiento);
     txtInicio.addEventListener('change', aplicarEstadoPorVencimiento);
+    txtInicio.addEventListener('input', actualizarBotonGuardar);
 
     cboCia.addEventListener('change', async () => {
         const cia = cboCia.value.trim();
@@ -880,6 +1161,8 @@
     });
 
     (async function init() {
+        registrarObservadorAlturaGrilla();
+        programarAjusteAlturaGrilla();
         await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
         if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
         if (cboCia.value) {

@@ -4,107 +4,335 @@
 
 {% block extra_css %}
 <style>
-    .edit-tabs .nav-link {
-        text-align: left;
-        border-radius: 0.375rem;
-        color: #495057;
-        padding: 0.75rem 1rem;
+    .te-page {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        height: calc(100vh - 7.5rem);
+        max-height: calc(100vh - 7.5rem);
+        overflow: hidden;
     }
 
-    .edit-tabs .nav-link.active {
-        background-color: #3498db;
+    .te-top {
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+    }
+
+    .te-page-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+
+    .te-page-header h4 {
+        margin: 0;
+        font-weight: 700;
+        color: #1a4b84;
+        font-size: 1.15rem;
+    }
+
+    .te-page-header .te-subtitle {
+        margin: 0.15rem 0 0;
+        color: #6c757d;
+        font-size: 0.8rem;
+    }
+
+    .te-worker-summary {
+        background: #f1f4f8;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        padding: 0.55rem 0.85rem;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .te-worker-summary strong {
+        color: #1a4b84;
+    }
+
+    .te-layout {
+        display: flex;
+        gap: 0.85rem;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .te-nav {
+        flex: 0 0 13.5rem;
+        max-width: 13.5rem;
+        min-width: 11rem;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: auto;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        padding: 0.4rem;
+        gap: 0.2rem;
+    }
+
+    .te-nav .nav-link {
+        text-align: left;
+        border-radius: 0.3rem;
+        color: #495057;
+        padding: 0.55rem 0.7rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        border: 1px solid transparent;
+    }
+
+    .te-nav .nav-link:hover {
+        background: #eef4fb;
+        color: #1a4b84;
+    }
+
+    .te-nav .nav-link.active {
+        background: #e7f1ff;
+        color: #1a4b84;
+        box-shadow: inset 3px 0 0 #1a4b84;
+        border-color: #d7dee8;
+    }
+
+    .te-main {
+        flex: 1 1 auto;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .te-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .te-dw-titlebar {
+        background: #1a4b84;
+        padding: 0.45rem 0.75rem;
+        min-height: 2.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .te-dw-titlebar .te-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .te-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .te-btn-guardar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.75rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .te-btn-cancelar {
+        white-space: nowrap;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.7rem;
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.35);
         color: #fff;
     }
 
-    .edit-tabs .nav-link.disabled {
-        color: #adb5bd;
-        background-color: #f8f9fa;
-        opacity: 1;
-        pointer-events: none;
+    .te-btn-cancelar:hover {
+        background: rgba(255, 255, 255, 0.22);
+        border-color: rgba(255, 255, 255, 0.55);
+        color: #fff;
+    }
+
+    .te-dw-body {
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.85rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
     }
 
     .section-card {
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
         background: #fff;
+        overflow: hidden;
+        margin-bottom: 0.75rem;
+        box-shadow: none;
+    }
+
+    .section-card:last-child {
+        margin-bottom: 0;
     }
 
     .section-card .section-title {
-        background: #f8f9fa;
-        border-bottom: 1px solid #dee2e6;
-        padding: 0.75rem 1rem;
-        font-weight: 600;
-        font-size: 0.95rem;
+        background: #f1f4f8;
+        border-bottom: 1px solid #d7dee8;
+        padding: 0.45rem 0.75rem;
+        font-weight: 700;
+        font-size: 0.72rem;
+        color: #1a4b84;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
     }
 
     .section-card .section-body {
-        padding: 1.25rem;
+        padding: 0.85rem 0.85rem 0.95rem;
     }
 
-    .worker-summary {
-        background: linear-gradient(135deg, #f8f9fa 0%, #eef2f7 100%);
-        border: 1px solid #dee2e6;
-        border-radius: 0.5rem;
+    .section-card .form-label {
+        margin-bottom: 0.15rem;
     }
 
     .campo-obligatorio.form-control,
     .campo-obligatorio.form-select {
-        background-color: #d9edf7;
-        border-color: #b8daff;
+        background-color: #fff;
+        border-color: #ced4da;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .form-label.te-req::after {
+        content: ' *';
+        color: #c0392b;
+        font-weight: 700;
     }
 
     .campo-bloqueado {
-        background-color: #e9ecef;
+        background-color: #e9ecef !important;
         cursor: not-allowed;
         font-weight: 600;
         letter-spacing: 0.03em;
+        box-shadow: none !important;
     }
 
+    @media (max-width: 991.98px) {
+        .te-page {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .te-layout {
+            flex-direction: column;
+            overflow: visible;
+        }
+
+        .te-nav {
+            flex: 0 0 auto;
+            max-width: none;
+            min-width: 0;
+            flex-direction: row;
+            flex-wrap: wrap;
+            overflow: visible;
+        }
+
+        .te-nav .nav-link {
+            flex: 1 1 auto;
+        }
+
+        .te-dw-body {
+            max-height: none;
+            overflow: visible;
+        }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-    <div>
-        <h4 class="mb-1 fw-bold">Edición de trabajador</h4>
-        <p class="text-muted small mb-0">
-            {% if seccion == 'generales' %}Datos generales del trabajador
-            {% elif seccion == 'laborales' %}Datos laborales del trabajador
-            {% elif seccion == 'educacion' %}Datos de educación del trabajador
-            {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
-            {% else %}Información bancaria y depósito de CTS{% endif %}
-        </p>
-    </div>
-    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">
-        <i class="bi bi-arrow-left"></i> Volver al listado
-    </a>
-</div>
+{% set form_id = 'frmGenerales' if seccion == 'generales'
+    else ('frmLaborales' if seccion == 'laborales'
+    else ('frmEducacion' if seccion == 'educacion'
+    else ('frmPensiones' if seccion == 'pensiones' else 'frmBancario'))) %}
+{% set seccion_titulo = 'Datos Generales' if seccion == 'generales'
+    else ('Datos Laborales' if seccion == 'laborales'
+    else ('Datos Educación' if seccion == 'educacion'
+    else ('Pensiones' if seccion == 'pensiones' else 'Información Bancaria y CTS'))) %}
 
-<div class="worker-summary p-3 mb-4">
-    <div class="row g-2 small">
-        <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
-        <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.person or person_id or empleado.employeecode or '—' }}</strong></div>
-        <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
-    </div>
-</div>
+<div class="te-page">
+    <div class="te-top">
+        <div class="te-page-header">
+            <div>
+                <h4>Edición de trabajador</h4>
+                <p class="te-subtitle">
+                    {% if seccion == 'generales' %}Datos generales del trabajador
+                    {% elif seccion == 'laborales' %}Datos laborales del trabajador
+                    {% elif seccion == 'educacion' %}Datos de educación del trabajador
+                    {% elif seccion == 'pensiones' %}Datos de pensiones y aseguramiento
+                    {% else %}Información bancaria y depósito de CTS{% endif %}
+                </p>
+            </div>
+            <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm te-link-salida">
+                <i class="bi bi-arrow-left"></i> Volver al listado
+            </a>
+        </div>
 
-<div class="row g-4">
-    <div class="col-lg-3">
-        <div class="nav flex-column nav-pills edit-tabs" role="tablist" aria-orientation="vertical">
-            <a class="nav-link {% if seccion == 'generales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
-            <a class="nav-link {% if seccion == 'laborales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
-            <a class="nav-link {% if seccion == 'educacion' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
-            <a class="nav-link {% if seccion == 'pensiones' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
-            <a class="nav-link {% if seccion == 'bancario' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
+        <div class="te-worker-summary">
+            <div class="row g-2 small">
+                <div class="col-md-4"><span class="text-muted">Compañía:</span> <strong>{{ empleado.company_desc or cia }}</strong></div>
+                <div class="col-md-4"><span class="text-muted">Código:</span> <strong>{{ empleado.person or person_id or empleado.employeecode or '—' }}</strong></div>
+                <div class="col-md-4"><span class="text-muted">Trabajador:</span> <strong>{{ empleado.nombre or '—' }}</strong></div>
+            </div>
         </div>
     </div>
 
-    <div class="col-lg-9">
+    <div class="te-layout">
+        <nav class="te-nav nav flex-column" role="tablist" aria-orientation="vertical">
+            <a class="nav-link te-nav-link {% if seccion == 'generales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
+            <a class="nav-link te-nav-link {% if seccion == 'laborales' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
+            <a class="nav-link te-nav-link {% if seccion == 'educacion' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
+            <a class="nav-link te-nav-link {% if seccion == 'pensiones' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
+            <a class="nav-link te-nav-link {% if seccion == 'bancario' %}active{% endif %}"
+               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
+        </nav>
+
+        <section class="te-main">
+            <div class="te-dw-panel">
+                <div class="te-dw-titlebar">
+                    <span class="te-dw-title-text">{{ seccion_titulo }}</span>
+                    <div class="te-titlebar-actions">
+                        <a href="{{ url_for('trabajadores_page', retorno=1) }}"
+                           class="btn btn-sm te-btn-cancelar te-link-salida">Cancelar</a>
+                        <button type="submit" form="{{ form_id }}" id="btnGuardarTrabajador"
+                                class="btn btn-success btn-sm te-btn-guardar" title="Ctrl+S">
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+                <div class="te-dw-body">
         {% if seccion == 'generales' %}
         <form id="frmGenerales" method="POST"
               action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=generales"
@@ -112,17 +340,7 @@
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="generales">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <h5 class="mb-0 fw-semibold">Datos Generales</h5>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-save"></i> Guardar cambios
-                    </button>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Identificación</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -132,7 +350,7 @@
                                    value="{{ empleado.person or person_id }}" readonly disabled>
                         </div>
                         <div class="col-md-4">
-                            <label for="txtName1" class="form-label small fw-bold text-muted">Primer Nombre</label>
+                            <label for="txtName1" class="form-label small fw-bold text-muted te-req">Primer Nombre</label>
                             <input type="text" id="txtName1" name="name1" class="form-control form-control-sm campo-obligatorio text-uppercase"
                                    maxlength="40" value="{{ empleado.name1 or '' }}" required autocomplete="off">
                         </div>
@@ -142,7 +360,7 @@
                                    maxlength="40" value="{{ empleado.name2 or '' }}" autocomplete="off">
                         </div>
                         <div class="col-md-4">
-                            <label for="txtLastName1" class="form-label small fw-bold text-muted">Apellido Paterno</label>
+                            <label for="txtLastName1" class="form-label small fw-bold text-muted te-req">Apellido Paterno</label>
                             <input type="text" id="txtLastName1" name="lastname1" class="form-control form-control-sm campo-obligatorio text-uppercase"
                                    maxlength="40" value="{{ empleado.lastname1 or '' }}" required autocomplete="off">
                         </div>
@@ -157,7 +375,7 @@
                                    value="{{ empleado.birthdate or '' }}">
                         </div>
                         <div class="col-md-4">
-                            <label for="cboSex" class="form-label small fw-bold text-muted">Sexo</label>
+                            <label for="cboSex" class="form-label small fw-bold text-muted te-req">Sexo</label>
                             <select id="cboSex" name="sex" class="form-select form-select-sm campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                                 <option value="1" {% if empleado.sex == '1' %}selected{% endif %}>Masculino</option>
@@ -173,7 +391,7 @@
                 </div>
             </div>
 
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Contacto y documento</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -198,7 +416,7 @@
                                    maxlength="100" value="{{ empleado.nacionalidad or '' }}" autocomplete="off">
                         </div>
                         <div class="col-md-5">
-                            <label for="cboTipoDocumento" class="form-label small fw-bold text-muted">Tipo De Documento</label>
+                            <label for="cboTipoDocumento" class="form-label small fw-bold text-muted te-req">Tipo De Documento</label>
                             <select id="cboTipoDocumento" name="employeedocumenttype" class="form-select form-select-sm campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                                 {% for opt in tipos_documento %}
@@ -207,12 +425,12 @@
                             </select>
                         </div>
                         <div class="col-md-3">
-                            <label for="txtDocumentNumber" class="form-label small fw-bold text-muted">Número</label>
+                            <label for="txtDocumentNumber" class="form-label small fw-bold text-muted te-req">Número</label>
                             <input type="text" id="txtDocumentNumber" name="documentnumber" class="form-control form-control-sm campo-obligatorio"
                                    maxlength="15" value="{{ empleado.documentnumber or '' }}" required autocomplete="off">
                         </div>
                         <div class="col-md-4">
-                            <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                            <label for="cboUnidad" class="form-label small fw-bold text-muted te-req">Unidad</label>
                             <select id="cboUnidad" name="replicationunit" class="form-select form-select-sm campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                                 {% for opt in unidades %}
@@ -241,22 +459,12 @@
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="laborales">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <h5 class="mb-0 fw-semibold">Datos Laborales</h5>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-save"></i> Guardar cambios
-                    </button>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Datos del trabajador</div>
                 <div class="section-body">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="cboEmployeeType" class="form-label small fw-bold text-muted">Tipo de trabajador</label>
+                            <label for="cboEmployeeType" class="form-label small fw-bold text-muted te-req">Tipo de trabajador</label>
                             <select id="cboEmployeeType" name="employeetype" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in employee_types %}
@@ -265,7 +473,7 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="cboEmployeeCategory" class="form-label small fw-bold text-muted">Categoría</label>
+                            <label for="cboEmployeeCategory" class="form-label small fw-bold text-muted te-req">Categoría</label>
                             <select id="cboEmployeeCategory" name="employeecategory" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in employee_categories %}
@@ -274,7 +482,7 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="txtEntryDate" class="form-label small fw-bold text-muted">Fecha de ingreso</label>
+                            <label for="txtEntryDate" class="form-label small fw-bold text-muted te-req">Fecha de ingreso</label>
                             <input type="date" id="txtEntryDate" name="entrydate" class="form-control form-control-sm campo-obligatorio"
                                    value="{{ empleado.entrydate or '' }}">
                         </div>
@@ -334,7 +542,7 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="cboPosition" class="form-label small fw-bold text-muted">Cargo</label>
+                            <label for="cboPosition" class="form-label small fw-bold text-muted te-req">Cargo</label>
                             <select id="cboPosition" name="position" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in positions %}
@@ -346,12 +554,12 @@
                 </div>
             </div>
 
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Planilla</div>
                 <div class="section-body">
                     <div class="row g-3">
                         <div class="col-md-6">
-                            <label for="cboPayrollType" class="form-label small fw-bold text-muted">Tipo de planilla</label>
+                            <label for="cboPayrollType" class="form-label small fw-bold text-muted te-req">Tipo de planilla</label>
                             <select id="cboPayrollType" name="payrolltype" class="form-select form-select-sm campo-obligatorio">
                                 <option value="">Seleccione...</option>
                                 {% for opt in payroll_types %}
@@ -369,7 +577,7 @@
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="txtSueldo" class="form-label small fw-bold text-muted">Sueldo básico</label>
+                            <label for="txtSueldo" class="form-label small fw-bold text-muted te-req">Sueldo básico</label>
                             <input type="number" id="txtSueldo" name="sueldo" class="form-control form-control-sm campo-obligatorio text-end"
                                    min="0" step="0.01" value="{{ empleado.sueldo or '' }}" autocomplete="off">
                         </div>
@@ -391,17 +599,7 @@
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="educacion">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <h5 class="mb-0 fw-semibold">Datos Educación</h5>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-save"></i> Guardar cambios
-                    </button>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Formación académica</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -481,17 +679,7 @@
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="pensiones">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <h5 class="mb-0 fw-semibold">Pensiones</h5>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-save"></i> Guardar cambios
-                    </button>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Pensión</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -544,17 +732,7 @@
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="bancario">
 
-            <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
-                <h5 class="mb-0 fw-semibold">Información Bancaria y CTS</h5>
-                <div class="d-flex gap-2">
-                    <a href="{{ url_for('trabajadores_page', retorno=1) }}" class="btn btn-outline-secondary btn-sm">Cancelar</a>
-                    <button type="submit" class="btn btn-primary btn-sm px-4">
-                        <i class="bi bi-save"></i> Guardar cambios
-                    </button>
-                </div>
-            </div>
-
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Cuenta de Haberes</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -602,7 +780,7 @@
                 </div>
             </div>
 
-            <div class="section-card mb-4">
+            <div class="section-card">
                 <div class="section-title">Depósito de CTS</div>
                 <div class="section-body">
                     <div class="row g-3">
@@ -632,6 +810,9 @@
             </div>
         </form>
         {% endif %}
+                </div>
+            </div>
+        </section>
     </div>
 </div>
 {% endblock %}
@@ -640,6 +821,97 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const seccion = {{ (seccion or 'generales') | tojson }};
+    const formIdMap = {
+        generales: 'frmGenerales',
+        laborales: 'frmLaborales',
+        educacion: 'frmEducacion',
+        pensiones: 'frmPensiones',
+        bancario: 'frmBancario',
+    };
+    const formId = formIdMap[seccion] || 'frmGenerales';
+    const frmActivo = document.getElementById(formId);
+    const btnGuardar = document.getElementById('btnGuardarTrabajador');
+    let snapshotInicial = '';
+    let dirty = false;
+
+    function mostrarError(msg) {
+        const texto = msg || 'Ocurrió un error.';
+        if (window.HmUi && typeof HmUi.error === 'function') {
+            HmUi.error(texto);
+            return;
+        }
+        alert(texto);
+    }
+
+    function serializarFormulario(form) {
+        if (!form) return '';
+        const fd = new FormData(form);
+        const pairs = [];
+        fd.forEach((value, key) => {
+            pairs.push(key + '=' + String(value == null ? '' : value));
+        });
+        // Incluir checkboxes desmarcados para detectar cambios
+        form.querySelectorAll('input[type="checkbox"]').forEach((chk) => {
+            if (!chk.name) return;
+            if (!chk.checked) pairs.push(chk.name + '=');
+        });
+        pairs.sort();
+        return pairs.join('&');
+    }
+
+    function marcarDirty() {
+        if (!frmActivo) return;
+        dirty = serializarFormulario(frmActivo) !== snapshotInicial;
+    }
+
+    function capturarSnapshot() {
+        if (!frmActivo) return;
+        snapshotInicial = serializarFormulario(frmActivo);
+        dirty = false;
+    }
+
+    async function confirmarSalidaSiDirty() {
+        if (!dirty) return true;
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            return HmUi.confirmar({
+                titulo: 'Cambios sin guardar',
+                mensaje: 'Hay cambios sin guardar en esta sección.\nSi continúa, se perderán.',
+                textoOk: 'Salir sin guardar',
+                textoCancelar: 'Seguir editando',
+                variant: 'danger',
+            });
+        }
+        return window.confirm('Hay cambios sin guardar. ¿Desea salir de todos modos?');
+    }
+
+    if (frmActivo) {
+        capturarSnapshot();
+        frmActivo.addEventListener('input', marcarDirty);
+        frmActivo.addEventListener('change', marcarDirty);
+        frmActivo.addEventListener('submit', function () {
+            dirty = false;
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        if (!btnGuardar || btnGuardar.disabled) return;
+        e.preventDefault();
+        btnGuardar.click();
+    });
+
+    document.querySelectorAll('.te-nav-link, .te-link-salida').forEach((link) => {
+        link.addEventListener('click', async function (e) {
+            if (link.classList.contains('active')) return;
+            if (!dirty) return;
+            e.preventDefault();
+            const ok = await confirmarSalidaSiDirty();
+            if (ok) {
+                dirty = false;
+                window.location.href = link.href;
+            }
+        });
+    });
 
     function normalizarMayusculas(input) {
         if (!input) return;
@@ -672,27 +944,27 @@ document.addEventListener('DOMContentLoaded', function () {
                 const lastname1 = (document.getElementById('txtLastName1')?.value || '').trim();
                 if (!name1 || !lastname1) {
                     e.preventDefault();
-                    alert('Indique primer nombre y apellido paterno.');
+                    mostrarError('Indique primer nombre y apellido paterno.');
                     return;
                 }
                 if (!(document.getElementById('cboSex')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione el sexo.');
+                    mostrarError('Seleccione el sexo.');
                     return;
                 }
                 if (!(document.getElementById('cboTipoDocumento')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione el tipo de documento.');
+                    mostrarError('Seleccione el tipo de documento.');
                     return;
                 }
                 if (!(document.getElementById('txtDocumentNumber')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Indique el número de documento.');
+                    mostrarError('Indique el número de documento.');
                     return;
                 }
                 if (!(document.getElementById('cboUnidad')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione la unidad.');
+                    mostrarError('Seleccione la unidad.');
                 }
             });
         }
@@ -708,47 +980,47 @@ document.addEventListener('DOMContentLoaded', function () {
             frmLaborales.addEventListener('submit', function (e) {
                 if (!(document.getElementById('cboEmployeeType')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione el tipo de trabajador.');
+                    mostrarError('Seleccione el tipo de trabajador.');
                     return;
                 }
                 if (!(document.getElementById('cboEmployeeCategory')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione la categoría.');
+                    mostrarError('Seleccione la categoría.');
                     return;
                 }
                 if (!(document.getElementById('txtEntryDate')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Indique la fecha de ingreso.');
+                    mostrarError('Indique la fecha de ingreso.');
                     return;
                 }
                 const ceaseDate = (txtCeaseDate?.value || '').trim();
                 const ceaseReason = (cboCeaseReason?.value || '').trim();
                 if (ceaseDate && !ceaseReason) {
                     e.preventDefault();
-                    alert('Seleccione el motivo de cese cuando indica fecha de cese.');
+                    mostrarError('Seleccione el motivo de cese cuando indica fecha de cese.');
                     cboCeaseReason?.focus();
                     return;
                 }
                 if (ceaseReason && !ceaseDate) {
                     e.preventDefault();
-                    alert('Indique la fecha de cese cuando selecciona un motivo.');
+                    mostrarError('Indique la fecha de cese cuando selecciona un motivo.');
                     txtCeaseDate?.focus();
                     return;
                 }
                 if (!(document.getElementById('cboPosition')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione el cargo.');
+                    mostrarError('Seleccione el cargo.');
                     return;
                 }
                 if (!(document.getElementById('cboPayrollType')?.value || '').trim()) {
                     e.preventDefault();
-                    alert('Seleccione el tipo de planilla.');
+                    mostrarError('Seleccione el tipo de planilla.');
                     return;
                 }
                 const sueldo = parseFloat((txtSueldo?.value || '').replace(',', '.'));
                 if (!txtSueldo || Number.isNaN(sueldo) || sueldo < 0) {
                     e.preventDefault();
-                    alert('Indique un sueldo básico válido.');
+                    mostrarError('Indique un sueldo básico válido.');
                     txtSueldo?.focus();
                 }
             });
@@ -804,6 +1076,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 cboCareer.innerHTML = '<option value="">Error al cargar carreras</option>';
             } finally {
                 cboCareer.disabled = false;
+                marcarDirty();
             }
         }
 
@@ -819,7 +1092,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const anio = (txtAnio?.value || '').trim();
                 if (anio && !/^(19|20)\d{2}$/.test(anio)) {
                     e.preventDefault();
-                    alert('Año de egreso no válido. Use formato YYYY (ej. 1997).');
+                    mostrarError('Año de egreso no válido. Use formato YYYY (ej. 1997).');
                     txtAnio?.focus();
                     return;
                 }
@@ -827,7 +1100,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const institucion = (cboInstitution?.value || '').trim();
                 if (carrera && !institucion) {
                     e.preventDefault();
-                    alert('Seleccione la institución antes de la carrera.');
+                    mostrarError('Seleccione la institución antes de la carrera.');
                     cboInstitution?.focus();
                 }
             });
@@ -848,7 +1121,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const cuspp = (txtCuspp.value || '').trim();
                 if (cuspp && (!/^[A-Z0-9Ñ]{12}$/.test(cuspp) || !/[A-ZÑ]/.test(cuspp) || !/\d/.test(cuspp))) {
                     e.preventDefault();
-                    alert('El CUSPP debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).');
+                    mostrarError('El CUSPP debe tener exactamente 12 caracteres alfanuméricos (letras y números; no solo dígitos).');
                     txtCuspp.focus();
                 }
             });
@@ -921,7 +1194,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (esDeposito() && !cboBancoHaberes.value.trim()) {
             e.preventDefault();
-            alert('Seleccione el banco de haberes cuando la forma de pago es depósito.');
+            mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
             cboBancoHaberes.focus();
         }
     });
@@ -929,6 +1202,7 @@ document.addEventListener('DOMContentLoaded', function () {
     toggleCamposHaberes();
     toggleCamposCts();
     validarCci();
+    capturarSnapshot();
 });
 </script>
 {% endblock %}

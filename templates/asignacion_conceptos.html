@@ -5,29 +5,41 @@
 {% block extra_css %}
 <style>
     .table-scroll-container {
-        max-height: 65vh;
+        max-height: calc(100vh - 18rem);
         overflow: auto;
-        border: 1px solid #dee2e6;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
     }
 
     .table-asignacion-conceptos {
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
+        border-color: #e6ebf1;
     }
 
     .table-asignacion-conceptos th,
     .table-asignacion-conceptos td {
         padding: 0.25rem 0.5rem;
         vertical-align: middle;
+        border-color: #eef1f5;
     }
 
     .table-asignacion-conceptos thead th {
         position: sticky;
         top: 0;
-        background-color: #f8f9fa;
+        background-color: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-asignacion-conceptos tbody tr:hover {
+        background-color: #eef4fb;
     }
 
     .table-asignacion-conceptos .col-item {
@@ -41,9 +53,10 @@
     }
 
     .table-asignacion-conceptos tr.total-reporte td {
-        background-color: #e9ecef;
+        background-color: #f1f4f8;
         font-weight: 700;
-        border-top: 2px solid #adb5bd;
+        border-top: 2px solid #d7dee8;
+        color: #1a4b84;
     }
 
     .table-asignacion-conceptos .col-acciones {
@@ -57,23 +70,73 @@
     }
 
     .btn-nueva-asignacion {
-        background-color: #17a2b8;
-        border-color: #17a2b8;
+        background-color: #198754;
+        border-color: #198754;
         color: #fff;
     }
 
     .btn-nueva-asignacion:hover:not(:disabled),
     .btn-nueva-asignacion:focus:not(:disabled) {
-        background-color: #138496;
-        border-color: #117a8b;
+        background-color: #157347;
+        border-color: #146c43;
         color: #fff;
     }
 
     .btn-nueva-asignacion:disabled {
-        background-color: #17a2b8;
-        border-color: #17a2b8;
+        background-color: #198754;
+        border-color: #198754;
         color: #fff;
         opacity: 0.55;
+    }
+
+    /* Modal navy */
+    #modalAsignacionConcepto .modal-content {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        overflow: hidden;
+        box-shadow: 0 8px 28px rgba(26, 75, 132, 0.18);
+    }
+
+    #modalAsignacionConcepto .modal-header {
+        background: #1a4b84;
+        border-bottom: none;
+        padding: 0.55rem 0.85rem;
+        color: #fff;
+    }
+
+    #modalAsignacionConcepto .modal-title {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    #modalAsignacionConcepto .modal-header .btn-close {
+        filter: invert(1) grayscale(100%);
+        opacity: 0.85;
+    }
+
+    #modalAsignacionConcepto .modal-header .btn-close:hover {
+        opacity: 1;
+    }
+
+    #modalAsignacionConcepto .modal-body {
+        padding: 0.85rem 1rem;
+    }
+
+    #modalAsignacionConcepto .modal-footer {
+        border-top: 1px solid #d7dee8;
+        background: #f8fafc;
+        padding: 0.55rem 0.85rem;
+    }
+
+    #modalAsignacionConcepto .btn-guardar-asig {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        box-shadow: none;
     }
 
     .modal-campo-bloqueado {
@@ -81,23 +144,42 @@
         color: #495057;
         cursor: not-allowed;
         border-color: #ced4da;
+        box-shadow: none !important;
     }
 
     .modal-campo-obligatorio {
-        background-color: #faf8f3 !important;
-        border-color: #e8e2d6;
+        background-color: #fff !important;
+        border-color: #ced4da;
+        box-shadow: inset 3px 0 0 #1a4b84;
     }
 
     .modal-campo-obligatorio:focus {
-        background-color: #fcfbfa !important;
-        border-color: #d9d0c3;
-        box-shadow: 0 0 0 0.2rem rgba(180, 170, 150, 0.15);
+        background-color: #fff !important;
+        border-color: #86b7fe;
+        box-shadow: inset 3px 0 0 #1a4b84, 0 0 0 0.2rem rgba(26, 75, 132, 0.12);
     }
 
     .modal-campo-obligatorio:disabled {
-        background-color: #f3f1ed !important;
+        background-color: #e9ecef !important;
         color: #495057;
         opacity: 1;
+        box-shadow: none;
+    }
+
+    .form-label.asig-req::after {
+        content: ' *';
+        color: #c0392b;
+        font-weight: 700;
+    }
+
+    .asig-hint-periodos {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin: 0.15rem 0 0;
+    }
+
+    .asig-hint-periodos.d-none {
+        display: none !important;
     }
 </style>
 {% endblock %}
@@ -203,8 +285,8 @@
 <div class="modal fade" id="modalAsignacionConcepto" tabindex="-1" aria-labelledby="modalAsignacionConceptoLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
-            <div class="modal-header py-2">
-                <h5 class="modal-title fw-bold" id="modalAsignacionConceptoLabel">Nueva asignación de concepto</h5>
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalAsignacionConceptoLabel">Nueva asignación de concepto</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
             </div>
             <form id="frmModalAsignacion" novalidate>
@@ -226,13 +308,13 @@
                             <input type="hidden" id="hdModalPlanilla">
                         </div>
                         <div class="col-12">
-                            <label for="cboModalEmpleado" class="form-label small fw-bold text-muted">Empleado</label>
+                            <label for="cboModalEmpleado" class="form-label small fw-bold text-muted asig-req">Empleado</label>
                             <select id="cboModalEmpleado" class="form-select form-select-sm modal-campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                             </select>
                         </div>
                         <div class="col-12">
-                            <label for="cboModalConcepto" class="form-label small fw-bold text-muted">Concepto</label>
+                            <label for="cboModalConcepto" class="form-label small fw-bold text-muted asig-req">Concepto</label>
                             <select id="cboModalConcepto" class="form-select form-select-sm modal-campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                             </select>
@@ -257,19 +339,24 @@
                             </div>
                         </div>
                         <div class="col-md-6">
-                            <label for="cboModalPeriodoInicio" class="form-label small fw-bold text-muted">Vigente desde</label>
-                            <select id="cboModalPeriodoInicio" class="form-select form-select-sm" required>
+                            <label for="cboModalPeriodoInicio" class="form-label small fw-bold text-muted asig-req">Vigente desde</label>
+                            <select id="cboModalPeriodoInicio" class="form-select form-select-sm modal-campo-obligatorio" required>
                                 <option value="">Seleccione...</option>
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="cboModalPeriodoFin" class="form-label small fw-bold text-muted">Hasta</label>
+                            <label for="cboModalPeriodoFin" id="lblModalPeriodoFin" class="form-label small fw-bold text-muted">Hasta</label>
                             <select id="cboModalPeriodoFin" class="form-select form-select-sm" disabled>
                                 <option value="">—</option>
                             </select>
                         </div>
+                        <div class="col-12">
+                            <p class="asig-hint-periodos" id="hintPeriodosAsignacion">
+                                Los periodos son de planilla (no fechas calendario). En temporal, “Hasta” es obligatorio.
+                            </p>
+                        </div>
                         <div class="col-md-6">
-                            <label for="txtModalValor" class="form-label small fw-bold text-muted">Valor</label>
+                            <label for="txtModalValor" class="form-label small fw-bold text-muted asig-req">Valor</label>
                             <input type="number" id="txtModalValor" class="form-control form-control-sm text-end modal-campo-obligatorio" step="0.0001" min="0" required>
                         </div>
                         <div class="col-md-6">
@@ -281,9 +368,9 @@
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer py-2">
+                <div class="modal-footer">
                     <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-primary btn-sm px-4" id="btnGuardarAsignacion">
+                    <button type="submit" class="btn btn-success btn-sm px-4 btn-guardar-asig" id="btnGuardarAsignacion" title="Ctrl+S">
                         <i class="bi bi-save"></i> Guardar
                     </button>
                 </div>
@@ -313,6 +400,59 @@ document.addEventListener('DOMContentLoaded', async function () {
     let lastExportAsigConceptos = null;
     let modalAsignacion = null;
     let consultaEjecutada = false;
+    let snapshotModalAsig = '';
+    let permitirCerrarModalAsig = false;
+    let guardadoExitosoModal = false;
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmExito(mensaje) {
+        if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        const msg = opciones.mensaje || opciones.message || '¿Continuar?';
+        return confirm(msg);
+    }
+
+    function serializarFormularioModalAsig() {
+        const frm = document.getElementById('frmModalAsignacion');
+        if (!frm) return '';
+        const pairs = [];
+        frm.querySelectorAll('input, select, textarea').forEach((el) => {
+            const key = el.id || el.name;
+            if (!key) return;
+            if (el.type === 'radio') {
+                if (el.checked) pairs.push(key + '=' + String(el.value || ''));
+                return;
+            }
+            if (el.type === 'checkbox') {
+                pairs.push(key + '=' + (el.checked ? 'Y' : 'N'));
+                return;
+            }
+            pairs.push(key + '=' + String(el.value == null ? '' : el.value));
+        });
+        pairs.sort();
+        return pairs.join('&');
+    }
+
+    function capturarSnapshotModalAsig() {
+        snapshotModalAsig = serializarFormularioModalAsig();
+    }
+
+    function modalAsigEstaDirty() {
+        return serializarFormularioModalAsig() !== snapshotModalAsig;
+    }
 
     function actualizarBtnNuevaAsignacion() {
         const cia = document.getElementById('cboCompania').value.trim();
@@ -328,8 +468,17 @@ document.addEventListener('DOMContentLoaded', async function () {
     function actualizarEstadoPeriodoFinModal() {
         const esTemporal = tipoAsignacionSeleccionado() === 'T';
         const cboFin = document.getElementById('cboModalPeriodoFin');
+        const lblFin = document.getElementById('lblModalPeriodoFin');
+        const hint = document.getElementById('hintPeriodosAsignacion');
         cboFin.disabled = !esTemporal;
         cboFin.required = esTemporal;
+        cboFin.classList.toggle('modal-campo-obligatorio', esTemporal);
+        if (lblFin) lblFin.classList.toggle('asig-req', esTemporal);
+        if (hint) {
+            hint.textContent = esTemporal
+                ? 'Los periodos son de planilla (no fechas calendario). En temporal, “Hasta” es obligatorio.'
+                : 'Los periodos son de planilla (no fechas calendario). En permanente no se usa “Hasta”.';
+        }
         if (!esTemporal) {
             cboFin.value = '';
         }
@@ -567,7 +716,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = document.getElementById('cboCompania').value.trim();
         const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
         if (!cia || !payrolltype) {
-            alert('Seleccione compañía y tipo planilla antes de agregar.');
+            hmAdvertencia('Seleccione compañía y tipo planilla antes de agregar.');
             return;
         }
 
@@ -605,6 +754,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
 
         modalAsignacion.show();
+        requestAnimationFrame(() => capturarSnapshotModalAsig());
     }
 
     function keysAsignacionDesdeFila(row) {
@@ -621,7 +771,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function eliminarAsignacion(row) {
         const keys = keysAsignacionDesdeFila(row);
         if (!keys.person || !keys.concept || !keys.payrolltype || !keys.prperiodstart) {
-            alert('No se pudo identificar el registro a eliminar.');
+            hmError('No se pudo identificar el registro a eliminar.');
             return;
         }
 
@@ -634,7 +784,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         const msg = etiqueta
             ? `¿Eliminar la asignación?\n\n${etiqueta}\n\nEsta acción no se puede deshacer.`
             : '¿Eliminar la asignación seleccionada? Esta acción no se puede deshacer.';
-        if (!window.confirm(msg)) {
+        const ok = await hmConfirmar({
+            titulo: 'Eliminar asignación',
+            mensaje: msg,
+            textoOk: 'Eliminar',
+            textoCancelar: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) {
             return;
         }
 
@@ -646,15 +803,16 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {
-                alert(payload.error || 'No se pudo eliminar la asignación.');
+                hmError(payload.error || 'No se pudo eliminar la asignación.');
                 return;
             }
+            hmExito('Asignación eliminada.');
             if (consultaEjecutada) {
                 await ejecutarConsulta();
             }
         } catch (err) {
             console.error(err);
-            alert('Error de red o del servidor al eliminar.');
+            hmError('Error de red o del servidor al eliminar.');
         }
     }
 
@@ -662,7 +820,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const keys = keysAsignacionDesdeFila(row);
 
         if (!keys.person || !keys.concept || !keys.payrolltype || !keys.prperiodstart) {
-            alert('No se pudo identificar el registro a editar.');
+            hmError('No se pudo identificar el registro a editar.');
             return;
         }
 
@@ -709,14 +867,16 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         setModalCamposClaveDisabled(true);
         modalAsignacion.show();
+        requestAnimationFrame(() => capturarSnapshotModalAsig());
 
         if (tipo === 'T') {
             const periodoFin = String(det.prperiodend || '').trim();
             try {
                 await poblarPeriodoFinModal(cia, payrolltype, periodoFin, fmtPeriodoDisplay(periodoFin));
+                capturarSnapshotModalAsig();
             } catch (err) {
                 console.error(err);
-                alert('No se pudo cargar la lista de periodos.');
+                hmError('No se pudo cargar la lista de periodos.');
             }
         }
     }
@@ -747,11 +907,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const flagapplyformula = document.getElementById('chkModalAplicaFormula').checked ? 'Y' : 'N';
 
         if (!company || !payrolltype || !person || !concept || !prperiodstart || conceptvalue === '') {
-            alert('Complete los campos obligatorios.');
+            hmAdvertencia('Complete los campos obligatorios.');
             return;
         }
         if (flagfrecuencytype === 'T' && !prperiodend) {
-            alert('Para asignación temporal indique el periodo fin.');
+            hmAdvertencia('Para asignación temporal indique el periodo fin.');
             return;
         }
         if (flagfrecuencytype === 'P') {
@@ -771,18 +931,19 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {
-                alert(payload.error || 'No se pudo guardar la asignación.');
+                hmError(payload.error || 'No se pudo guardar la asignación.');
                 return;
             }
+            guardadoExitosoModal = true;
+            permitirCerrarModalAsig = true;
             modalAsignacion.hide();
+            hmExito('Asignación guardada correctamente.');
             if (consultaEjecutada) {
                 await ejecutarConsulta();
-            } else {
-                alert('Asignación guardada correctamente.');
             }
         } catch (err) {
             console.error(err);
-            alert('Error de red o del servidor al guardar.');
+            hmError('Error de red o del servidor al guardar.');
         } finally {
             btn.disabled = false;
         }
@@ -985,7 +1146,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function exportAsigConceptosExcel(payload, meta) {
         if (typeof ExcelJS === 'undefined') {
-            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            hmError('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
             return;
         }
         const headers = payload.headers || [];
@@ -1269,7 +1430,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const frecuencytype = document.getElementById('cboTipoConcepto').value.trim() || '0';
 
         if (!cia || !payrolltype) {
-            alert('Complete compañía y tipo planilla.');
+            hmAdvertencia('Complete compañía y tipo planilla.');
             return;
         }
 
@@ -1287,7 +1448,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!res.ok || payload.error) {
                 document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
                 document.getElementById('btnExportExcelAsigConceptos').disabled = true;
-                alert(payload.error || 'Error al consultar el listado.');
+                hmError(payload.error || 'Error al consultar el listado.');
                 return;
             }
             const rows = Array.isArray(payload.rows) ? payload.rows : [];
@@ -1321,7 +1482,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(err);
             document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
             document.getElementById('btnExportExcelAsigConceptos').disabled = true;
-            alert('Error de red o del servidor.');
+            hmError('Error de red o del servidor.');
         }
     }
 
@@ -1339,6 +1500,48 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     modalAsignacion = new bootstrap.Modal(document.getElementById('modalAsignacionConcepto'));
+    const modalAsigEl = document.getElementById('modalAsignacionConcepto');
+
+    if (modalAsigEl) {
+        modalAsigEl.addEventListener('shown.bs.modal', function () {
+            guardadoExitosoModal = false;
+            permitirCerrarModalAsig = false;
+            capturarSnapshotModalAsig();
+        });
+
+        modalAsigEl.addEventListener('hide.bs.modal', function (e) {
+            if (permitirCerrarModalAsig || guardadoExitosoModal) return;
+            if (!modalAsigEstaDirty()) return;
+            e.preventDefault();
+            hmConfirmar({
+                titulo: 'Cambios sin guardar',
+                mensaje: 'Hay cambios sin guardar en la asignación.\nSi continúa, se perderán.',
+                textoOk: 'Salir sin guardar',
+                textoCancelar: 'Seguir editando',
+                variant: 'danger',
+            }).then((ok) => {
+                if (ok) {
+                    permitirCerrarModalAsig = true;
+                    modalAsignacion.hide();
+                }
+            });
+        });
+
+        modalAsigEl.addEventListener('hidden.bs.modal', function () {
+            permitirCerrarModalAsig = false;
+            guardadoExitosoModal = false;
+            snapshotModalAsig = '';
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        if (!modalAsigEl || !modalAsigEl.classList.contains('show')) return;
+        const btn = document.getElementById('btnGuardarAsignacion');
+        if (!btn || btn.disabled) return;
+        e.preventDefault();
+        btn.click();
+    });
 
     await poblarSelect('/api/selectores/unidades', cboUnidad, {
         incluyeTodos: true,
@@ -1475,14 +1678,14 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('btnExportExcelAsigConceptos').addEventListener('click', async function () {
         if (!lastExportAsigConceptos || !lastExportAsigConceptos.headers || !lastExportAsigConceptos.headers.length) {
-            alert('Ejecute primero una consulta con resultados.');
+            hmAdvertencia('Ejecute primero una consulta con resultados.');
             return;
         }
         try {
             await exportAsigConceptosExcel(lastExportAsigConceptos, lastExportAsigConceptos.meta);
         } catch (err) {
             console.error(err);
-            alert('No se pudo generar el archivo Excel.');
+            hmError('No se pudo generar el archivo Excel.');
         }
     });
 });

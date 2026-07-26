@@ -1181,12 +1181,33 @@ document.addEventListener('DOMContentLoaded', async function () {
         try {
             const data = await obtenerPeriodosModal(cia, payrolltype);
             poblarSelectDesdeDatos(selectElement, data, { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' });
+            await seleccionarPeriodoAbiertoMensual(cia, payrolltype, selectElement);
         } catch (e) {
             console.error(e);
             selectElement.innerHTML = '<option value="0">Todos</option>';
             selectElement.value = '0';
         } finally {
             selectElement.disabled = false;
+        }
+    }
+
+    async function seleccionarPeriodoAbiertoMensual(cia, payrolltype, selectElement) {
+        if (!cia || !payrolltype || !selectElement) return;
+        try {
+            const res = await fetch(
+                `/api/aperturar-periodos/periodo-sugerido?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json().catch(() => ({}));
+            const prperiod = String((data && data.prperiod) || '').trim();
+            if (!prperiod) return;
+            const existe = Array.from(selectElement.options).some(
+                (o) => String(o.value).trim() === prperiod
+            );
+            if (existe) {
+                selectElement.value = prperiod;
+            }
+        } catch (err) {
+            console.warn('No se pudo obtener el periodo abierto de Fin de mes.', err);
         }
     }
 
@@ -1344,6 +1365,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             limpiarValorComboSiObsoleto(cboPlanilla);
             limpiarValorComboSiObsoleto(cboPeriodo);
             limpiarValorComboSiObsoleto(cboConcepto);
+            // Si el periodo guardado quedó inválido/vacío, usar el abierto de Fin de mes
+            const ciaRest = cboCia.value.trim();
+            const ptRest = cboPlanilla.value.trim();
+            const perRest = cboPeriodo.value.trim();
+            if (ciaRest && ptRest && (!perRest || perRest === '0')) {
+                await seleccionarPeriodoAbiertoMensual(ciaRest, ptRest, cboPeriodo);
+            }
             const cesados = ciaGuardada.cesados;
             if (cesados && optionExists(document.getElementById('cboCesados'), cesados)) {
                 document.getElementById('cboCesados').value = cesados;

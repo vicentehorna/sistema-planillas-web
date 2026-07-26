@@ -980,11 +980,11 @@
                 );
             }
 
-            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '0';
-            if (periodo && optionExists(cboPer, periodo)) {
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
+            // Solo restaurar periodo guardado si es un periodo concreto (no "Todos"/vacío).
+            // Si no hay guardado útil, dejar el periodo abierto de Fin de mes que ya eligió poblarPeriodosAsignacion.
+            if (periodo && periodo !== '0' && optionExists(cboPer, periodo)) {
                 cboPer.value = periodo;
-            } else if (optionExists(cboPer, '0')) {
-                cboPer.value = '0';
             }
 
             if (cboCesados) {

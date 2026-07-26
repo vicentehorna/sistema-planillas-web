@@ -35,9 +35,10 @@
         flex: 1 1 auto;
         min-height: 12rem;
         overflow: hidden;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
         background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
     }
 
     .vac-grilla-trabajadores.altura-sincronizada {
@@ -74,9 +75,30 @@
     .table-trabajadores-vac thead th {
         position: sticky;
         top: 0;
-        background-color: #f8f9fa;
+        background-color: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row {
+        cursor: pointer;
+        border-color: #eef1f5;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row:hover {
+        background-color: #eef4fb;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row.active {
+        background-color: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-trabajadores-vac tbody tr.trabajador-row.active td {
+        font-weight: 600;
     }
 
     .table-trabajadores-vac .col-dni {
@@ -97,66 +119,79 @@
         text-overflow: ellipsis;
     }
 
-    .table-trabajadores-vac tbody tr.trabajador-row {
-        cursor: pointer;
-    }
-
-    .table-trabajadores-vac tbody tr.trabajador-row:hover {
-        background-color: #f8f9fa;
-    }
-
-    .table-trabajadores-vac tbody tr.trabajador-row.active {
-        background-color: #cfe2ff;
-    }
-
-    .table-trabajadores-vac tbody tr.trabajador-row.active td {
-        font-weight: 600;
-    }
-
     .table-vacaciones {
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
+        border-color: #e6ebf1;
     }
 
     .table-vacaciones th,
     .table-vacaciones td {
-        padding: 0.3rem 0.5rem;
+        padding: 0.4rem 0.55rem;
         vertical-align: middle;
+        border-color: #eef1f5;
     }
 
-    .table-scroll-sm {
+    .table-scroll-sm,
+    .table-scroll-md {
         max-height: 220px;
         overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #fff;
     }
 
     .table-scroll-md {
         max-height: 280px;
-        overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
     }
 
     .table-vacaciones thead th {
         position: sticky;
         top: 0;
-        background: #f8f9fa;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
         z-index: 1;
-        box-shadow: 0 1px 0 #dee2e6;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-vacaciones tbody tr:nth-child(even) {
+        background-color: #f8fafc;
     }
 
     .table-vacaciones tbody tr.periodo-row {
         cursor: pointer;
     }
 
-    .table-vacaciones tbody tr.periodo-row.active {
-        background-color: #cfe2ff;
+    .table-vacaciones tbody tr.periodo-row:hover {
+        background-color: #eef4fb;
     }
 
-    .table-vacaciones tbody tr.detalle-row.selected {
-        background-color: #e7f1ff;
+    .table-vacaciones tbody tr.periodo-row.active {
+        background-color: #e7f1ff !important;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-vacaciones tbody tr.periodo-row.active td {
+        font-weight: 600;
+    }
+
+    .table-vacaciones .col-sel-periodo {
+        width: 2.1rem;
+        text-align: center;
+        color: #8a97a8;
+    }
+
+    .table-vacaciones tbody tr.periodo-row.active .col-sel-periodo {
+        color: #1a4b84;
+    }
+
+    .vac-periodo-hint {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin: 0.45rem 0 0;
     }
 
     .table-vacaciones .col-acciones {
@@ -195,7 +230,7 @@
     .vac-dias-calculados {
         font-size: 1.1rem;
         font-weight: 600;
-        color: #0d6efd;
+        color: #1a4b84;
         line-height: 1.9rem;
         min-height: 1.9rem;
         display: flex;
@@ -210,57 +245,63 @@
         visibility: hidden;
     }
 
+    /* Paneles de sección (estilo liquidación: navy sólido, sin bisel legado) */
     .vac-dw-panel {
-        border: 1px solid #7f90a3;
-        border-radius: 0.4rem 0.4rem 0.2rem 0.2rem;
-        background: #e9eef3;
-        box-shadow:
-            inset 1px 1px 0 rgba(255, 255, 255, 0.9),
-            inset -1px -1px 0 rgba(108, 124, 145, 0.35),
-            0 1px 2px rgba(31, 45, 61, 0.08);
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
         overflow: hidden;
     }
 
     .vac-dw-titlebar {
-        background: linear-gradient(180deg, #f3f6fa 0%, #d7e0ea 48%, #c2cedc 100%);
-        border-bottom: 1px solid #8a9aab;
-        padding: 0.4rem 0.7rem;
-        min-height: 1.9rem;
+        background: #1a4b84;
+        border-bottom: none;
+        padding: 0.45rem 0.75rem;
+        min-height: 2rem;
         display: flex;
         justify-content: space-between;
         align-items: center;
         gap: 0.5rem;
         font-size: 0.8rem;
         font-weight: 600;
-        color: #3a4a5c;
+        color: #fff;
     }
 
     .vac-dw-titlebar .vac-dw-title-text {
-        color: #4a5868;
+        color: #fff;
         text-transform: uppercase;
-        letter-spacing: 0.02em;
-        font-size: 0.72rem;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+
+    .vac-dw-titlebar .badge {
+        background: rgba(255, 255, 255, 0.18) !important;
+        color: #fff !important;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        font-weight: 600;
     }
 
     .vac-dw-body {
-        background: #e3e9f0;
-        padding: 0.4rem;
-        border-top: 1px solid #a8b6c6;
+        background: #fff;
+        padding: 0.65rem 0.7rem 0.75rem;
+        border-top: none;
     }
 
     .vac-dw-body .table-scroll-sm,
     .vac-dw-body .table-scroll-md {
-        border: 1px solid #95a5b5;
+        border: 1px solid #d7dee8;
         background: #fff;
-        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+        box-shadow: none;
     }
 
     .vac-dw-body .vac-form-utilizacion {
         background: #fff;
-        border: 1px solid #95a5b5;
-        padding: 0.55rem 0.65rem;
-        border-radius: 0.15rem;
-        box-shadow: inset 1px 1px 0 rgba(255, 255, 255, 0.75);
+        border: 1px solid #d7dee8;
+        padding: 0.65rem 0.75rem;
+        border-radius: 0.25rem;
+        box-shadow: none;
     }
 
     .vac-form-utilizacion .vac-col-fecha {
@@ -298,25 +339,41 @@
     }
 
     .vac-form-utilizacion .vac-form-fila-principal {
-        flex-wrap: nowrap;
-        overflow-x: hidden;
+        flex-wrap: wrap;
+        overflow-x: visible;
     }
 
     .vac-form-utilizacion .vac-form-fila-principal > [class*="col"] {
         flex-shrink: 0;
     }
 
-    .vac-form-utilizacion .vac-btn-guardar {
+    .vac-btn-guardar {
         white-space: nowrap;
         min-height: calc(1.5em + 0.5rem + 2px);
         display: inline-flex;
         align-items: center;
+        gap: 0.3rem;
     }
 
-    .vac-form-utilizacion .vac-col-guardar .vac-label-invisible {
-        display: block;
-        line-height: 1.2;
-        min-height: calc(0.875rem * 1.2);
+    .vac-dw-titlebar .vac-btn-guardar {
+        font-size: 0.78rem;
+        padding: 0.2rem 0.7rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .vac-grilla-scroll:focus {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .vac-grilla-scroll:focus:not(:focus-visible) {
+        outline: none;
+    }
+
+    .vac-grilla-scroll:focus-visible {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
     }
 
     @media (max-width: 991.98px) {
@@ -369,7 +426,8 @@
             <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
         </div>
         <div class="vac-grilla-trabajadores" id="grillaTrabajadoresVac">
-            <div class="vac-grilla-scroll">
+            <div class="vac-grilla-scroll" id="grillaScrollTrabajadores" tabindex="0"
+                 role="listbox" aria-label="Lista de trabajadores. Use flechas arriba y abajo para navegar.">
                 <table class="table table-bordered table-sm table-hover table-trabajadores-vac align-middle mb-0">
                     <thead>
                         <tr>
@@ -414,13 +472,14 @@
             <div class="vac-dw-panel">
                 <div class="vac-dw-titlebar">
                     <span class="vac-dw-title-text">Periodos vacacionales</span>
-                    <span class="badge bg-secondary" id="badgePeriodoSeleccionado">Sin periodo</span>
+                    <span class="badge text-bg-primary" id="badgePeriodoSeleccionado">Sin periodo</span>
                 </div>
                 <div class="vac-dw-body">
                     <div class="table-scroll-sm">
                         <table class="table table-sm table-hover table-vacaciones mb-0" id="tblPeriodos">
                             <thead>
                                 <tr>
+                                    <th class="col-sel-periodo" title="Seleccionado"></th>
                                     <th>Periodo</th>
                                     <th class="text-end">Días</th>
                                     <th class="text-end">Adquiridos</th>
@@ -434,6 +493,10 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                    <p class="vac-periodo-hint">
+                        <i class="bi bi-hand-index-thumb"></i>
+                        Haga clic en un periodo para seleccionarlo; el registro de abajo se guardará en ese periodo.
+                    </p>
                 </div>
             </div>
 
@@ -464,6 +527,10 @@
             <div class="vac-dw-panel" id="panelRegistrarUtilizacion">
                 <div class="vac-dw-titlebar">
                     <span class="vac-dw-title-text">Registrar utilización</span>
+                    <button type="submit" form="frmNuevaVacacion" id="btnGuardarVacaciones"
+                            class="btn btn-success btn-sm vac-btn-guardar" disabled title="Ctrl+S">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
                 </div>
                 <div class="vac-dw-body">
                     <form id="frmNuevaVacacion" class="vac-form-utilizacion">
@@ -492,12 +559,6 @@
                                     <option value="D" selected>Descanso</option>
                                     <option value="V">Venta</option>
                                 </select>
-                            </div>
-                            <div class="col-auto vac-col-guardar">
-                                <label class="form-label small fw-bold text-muted vac-label-invisible" aria-hidden="true">Guardar</label>
-                                <button type="submit" id="btnGuardarVacaciones" class="btn btn-success btn-sm vac-btn-guardar" disabled>
-                                    Guardar
-                                </button>
                             </div>
                         </div>
                         <div class="alert alert-warning py-2 mb-0 mt-2 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
@@ -646,6 +707,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     let datosVacaciones = null;
     let periodoSeleccionado = null;
     let buscarTimer = null;
+    let idxTrabajadorActivo = -1;
+    let cargaTrabajadorSeq = 0;
+    const grillaScrollTrabajadores = document.getElementById('grillaScrollTrabajadores');
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -656,7 +720,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function mostrarError(msg) {
-        alert(msg || 'Ocurrió un error.');
+        const texto = msg || 'Ocurrió un error.';
+        if (window.HmUi && typeof HmUi.error === 'function') {
+            HmUi.error(texto);
+            return;
+        }
+        alert(texto);
     }
 
     async function leerJson(res) {
@@ -686,6 +755,23 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.getElementById('btnGuardarVacaciones').disabled = true;
         } else {
             validarDiasFormulario();
+        }
+    }
+
+    function actualizarIndicadoresPeriodo(periodo) {
+        const badge = document.getElementById('badgePeriodoSeleccionado');
+        if (!periodo) {
+            if (badge) {
+                badge.textContent = 'Sin periodo';
+                badge.className = 'badge text-bg-secondary';
+            }
+            return;
+        }
+        const nombre = String(periodo.periodo || `Línea ${periodo.line}`).trim();
+        const pend = Number(periodo.pendientes || 0);
+        if (badge) {
+            badge.textContent = `${nombre} · ${pend} pend.`;
+            badge.className = 'badge text-bg-primary';
         }
     }
 
@@ -751,15 +837,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!rows.length) {
             tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores activos</td></tr>';
             lblConteo.textContent = '0 trabajadores';
+            idxTrabajadorActivo = -1;
             return;
         }
 
-        tbodyTrabajadores.innerHTML = rows.map((t) => {
+        tbodyTrabajadores.innerHTML = rows.map((t, idx) => {
             const activo = trabajadorActivo && trabajadorActivo.person === t.person;
+            if (activo) idxTrabajadorActivo = idx;
             const dni = escHtml(t.documento || t.person || '');
             const nombre = escHtml(t.nombre || '');
             const ingreso = escHtml(formatearFechaIngreso(t.fechaingreso));
-            return `<tr class="trabajador-row ${activo ? 'active' : ''}" data-person="${escHtml(t.person)}" title="${nombre}">
+            return `<tr class="trabajador-row ${activo ? 'active' : ''}" data-person="${escHtml(t.person)}" data-idx="${idx}" role="option" aria-selected="${activo ? 'true' : 'false'}" title="${nombre}">
                 <td class="col-dni">${dni}</td>
                 <td class="col-nombre">${nombre}</td>
                 <td class="col-ingreso">${ingreso}</td>
@@ -771,8 +859,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         tbodyTrabajadores.querySelectorAll('.trabajador-row').forEach((tr) => {
             tr.addEventListener('click', async function () {
                 const person = this.getAttribute('data-person');
+                const idx = Number(this.getAttribute('data-idx'));
                 const row = trabajadoresCache.find((x) => x.person === person);
-                if (row) await seleccionarTrabajador(row);
+                if (!row) return;
+                idxTrabajadorActivo = idx;
+                if (grillaScrollTrabajadores) grillaScrollTrabajadores.focus({ preventScroll: true });
+                await seleccionarTrabajador(row);
             });
         });
 
@@ -780,6 +872,35 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (filaActiva) {
             filaActiva.scrollIntoView({ block: 'nearest' });
         }
+    }
+
+    function filasTrabajadores() {
+        return Array.from(tbodyTrabajadores.querySelectorAll('.trabajador-row'));
+    }
+
+    function marcarFilaTrabajador(idx) {
+        const filas = filasTrabajadores();
+        if (!filas.length) {
+            idxTrabajadorActivo = -1;
+            return null;
+        }
+        idx = Math.max(0, Math.min(idx, filas.length - 1));
+        idxTrabajadorActivo = idx;
+        filas.forEach((tr, i) => {
+            const on = i === idx;
+            tr.classList.toggle('active', on);
+            tr.setAttribute('aria-selected', on ? 'true' : 'false');
+        });
+        filas[idx].scrollIntoView({ block: 'nearest' });
+        return filas[idx];
+    }
+
+    async function activarTrabajadorPorIndice(idx) {
+        const fila = marcarFilaTrabajador(idx);
+        if (!fila) return;
+        const person = fila.getAttribute('data-person');
+        const row = trabajadoresCache.find((x) => x.person === person);
+        if (row) await seleccionarTrabajador(row);
     }
 
     async function cargarTrabajadores() {
@@ -827,13 +948,17 @@ document.addEventListener('DOMContentLoaded', async function () {
     function renderPeriodos(periodos) {
         const tbody = document.querySelector('#tblPeriodos tbody');
         if (!periodos.length) {
-            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin periodos vacacionales</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-3">Sin periodos vacacionales</td></tr>';
             return;
         }
 
         tbody.innerHTML = periodos.map((p) => {
             const activo = periodoSeleccionado && periodoSeleccionado.line === p.line;
-            return `<tr class="periodo-row ${activo ? 'active' : ''}" data-line="${p.line}">
+            const icono = activo
+                ? '<i class="bi bi-check-circle-fill" title="Periodo seleccionado"></i>'
+                : '<i class="bi bi-circle" title="Clic para seleccionar"></i>';
+            return `<tr class="periodo-row ${activo ? 'active' : ''}" data-line="${p.line}" title="Clic para seleccionar este periodo">
+                <td class="col-sel-periodo">${icono}</td>
                 <td>${escHtml(p.periodo)}</td>
                 <td class="text-end">${p.dias}</td>
                 <td class="text-end">${p.dias_adquiridos}</td>
@@ -919,11 +1044,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function seleccionarPeriodo(periodo) {
-        periodoSeleccionado = periodo;
-        document.getElementById('badgePeriodoSeleccionado').textContent = periodo.periodo || `Línea ${periodo.line}`;
-        renderPeriodos(datosVacaciones.periodos || []);
-        renderDetalle(datosVacaciones.detalle || []);
-        actualizarFormularioHabilitado(true);
+        periodoSeleccionado = periodo || null;
+        actualizarIndicadoresPeriodo(periodoSeleccionado);
+        renderPeriodos((datosVacaciones && datosVacaciones.periodos) || []);
+        renderDetalle((datosVacaciones && datosVacaciones.detalle) || []);
+        actualizarFormularioHabilitado(!!periodoSeleccionado);
         validarDiasFormulario();
         programarAjusteAlturaGrilla();
     }
@@ -935,13 +1060,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function seleccionarTrabajador(row) {
+        const seq = ++cargaTrabajadorSeq;
         trabajadorActivo = row;
         renderListaTrabajadores(trabajadoresCache);
 
         const cia = cboCia.value.trim();
         mostrarPanelDetalle(true);
         periodoSeleccionado = null;
-        document.getElementById('badgePeriodoSeleccionado').textContent = 'Sin periodo';
+        actualizarIndicadoresPeriodo(null);
         actualizarFormularioHabilitado(false);
         document.getElementById('frmNuevaVacacion').reset();
         limpiarValidacionFechas();
@@ -954,22 +1080,31 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cia, person: row.person }),
             });
+            if (seq !== cargaTrabajadorSeq) return;
             datosVacaciones = await leerJson(res);
+            if (seq !== cargaTrabajadorSeq) return;
             pintarEmpleado(datosVacaciones.empleado || {});
-            renderPeriodos(datosVacaciones.periodos || []);
+            const periodos = datosVacaciones.periodos || [];
+            renderPeriodos(periodos);
             renderDetalle(datosVacaciones.detalle || []);
             await poblarConsumoEfectivo();
+            if (seq !== cargaTrabajadorSeq) return;
 
-            const periodos = datosVacaciones.periodos || [];
             const periodoDefault = periodos.find((p) => p.status === 'A' && p.pendientes > 0) || periodos[0];
             if (periodoDefault) {
                 seleccionarPeriodo(periodoDefault);
+            } else {
+                actualizarIndicadoresPeriodo(null);
+                actualizarFormularioHabilitado(false);
             }
         } catch (err) {
+            if (seq !== cargaTrabajadorSeq) return;
             console.error(err);
             mostrarError(err.message);
         } finally {
-            programarAjusteAlturaGrilla();
+            if (seq === cargaTrabajadorSeq) {
+                programarAjusteAlturaGrilla();
+            }
         }
     }
 
@@ -1014,7 +1149,20 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function eliminarDetalle(line, secuence) {
         if (!trabajadorActivo) return;
-        if (!confirm('¿Eliminar este registro de vacaciones?')) return;
+
+        let ok = false;
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            ok = await HmUi.confirmar({
+                titulo: 'Eliminar utilización',
+                mensaje: '¿Eliminar este registro de vacaciones?\nEsta acción no se puede deshacer.',
+                textoOk: 'Eliminar',
+                textoCancelar: 'Cancelar',
+                variant: 'danger',
+            });
+        } else {
+            ok = window.confirm('¿Eliminar este registro de vacaciones?');
+        }
+        if (!ok) return;
 
         try {
             const res = await fetch('/api/vacaciones/eliminar-detalle', {
@@ -1028,6 +1176,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }),
             });
             await leerJson(res);
+            if (window.HmUi && typeof HmUi.exito === 'function') {
+                HmUi.exito('Registro de vacaciones eliminado.');
+            }
             await seleccionarTrabajador(trabajadorActivo);
         } catch (err) {
             console.error(err);
@@ -1092,6 +1243,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         buscarTimer = setTimeout(cargarTrabajadores, 280);
     });
 
+    txtBuscar.addEventListener('keydown', async function (e) {
+        if (e.key !== 'ArrowDown' && e.key !== 'Enter') return;
+        const filas = filasTrabajadores();
+        if (!filas.length) return;
+        if (e.key === 'ArrowDown' || e.key === 'Enter') {
+            e.preventDefault();
+            if (grillaScrollTrabajadores) grillaScrollTrabajadores.focus({ preventScroll: true });
+            await activarTrabajadorPorIndice(idxTrabajadorActivo >= 0 ? idxTrabajadorActivo : 0);
+        }
+    });
+
     document.getElementById('frmRegistroVacaciones').addEventListener('submit', async function (e) {
         e.preventDefault();
         if (!cboCia.value.trim()) {
@@ -1102,9 +1264,46 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     document.getElementById('frmNuevaVacacion').addEventListener('submit', guardarVacacion);
 
-    ['txtFechaInicio', 'txtFechaFin', 'cboConsumoEfectivo'].forEach((id) => {
-        document.getElementById(id).addEventListener('change', validarDiasFormulario);
-        document.getElementById(id).addEventListener('input', validarDiasFormulario);
+    const txtFechaInicio = document.getElementById('txtFechaInicio');
+    const txtFechaFin = document.getElementById('txtFechaFin');
+    const cboConsumoEfectivo = document.getElementById('cboConsumoEfectivo');
+
+    ['change', 'input', 'blur'].forEach((evt) => {
+        txtFechaInicio.addEventListener(evt, validarDiasFormulario);
+        txtFechaFin.addEventListener(evt, validarDiasFormulario);
+        cboConsumoEfectivo.addEventListener(evt, validarDiasFormulario);
+    });
+
+    if (grillaScrollTrabajadores) {
+        grillaScrollTrabajadores.addEventListener('keydown', async function (e) {
+            if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp' && e.key !== 'Enter' && e.key !== 'Home' && e.key !== 'End') {
+                return;
+            }
+            const filas = filasTrabajadores();
+            if (!filas.length) return;
+            e.preventDefault();
+
+            if (e.key === 'ArrowDown') {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo < 0 ? 0 : idxTrabajadorActivo + 1);
+            } else if (e.key === 'ArrowUp') {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo < 0 ? 0 : idxTrabajadorActivo - 1);
+            } else if (e.key === 'Home') {
+                await activarTrabajadorPorIndice(0);
+            } else if (e.key === 'End') {
+                await activarTrabajadorPorIndice(filas.length - 1);
+            } else if (e.key === 'Enter' && idxTrabajadorActivo >= 0) {
+                await activarTrabajadorPorIndice(idxTrabajadorActivo);
+            }
+        });
+    }
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        const btn = document.getElementById('btnGuardarVacaciones');
+        if (!btn || btn.disabled) return;
+        // Evitar capturar Ctrl+S cuando se escribe en inputs de búsqueda del navegador fuera del flujo
+        e.preventDefault();
+        btn.click();
     });
 
     if (filtrosPersist) {

@@ -15594,6 +15594,12 @@ def enviar_certificados_trabajo_masivo():
     )
 
 
+@app.route('/impuesto_renta/configurar_conceptos_5ta')
+@login_required
+def configurar_conceptos_5ta_page():
+    return render_template('configurar_conceptos_5ta.html')
+
+
 @app.route('/impuesto_renta/certificado_quinta')
 @login_required
 def certificado_quinta_page():
@@ -16893,6 +16899,195 @@ def api_conceptos():
     except Exception:
         logging.exception("api_conceptos")
         return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/procesos-todos')
+@login_required
+def api_procesos_todos():
+    """sp_pr_selectorprocesostodos_web @cia → processtype, proceso."""
+    cia = request.args.get('cia')
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorprocesostodos_web @cia=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            rd = _row_dict_from_columns(col_names, row)
+            data.append({
+                "id": rd.get("processtype"),
+                "text": rd.get("proceso"),
+                "shortname": rd.get("shortname"),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_procesos_todos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _configura5ta_filas_to_xml(filas):
+    """Arma XML <rows><r .../></rows> para sp_pr_guardar_configura5ta_web."""
+    import xml.etree.ElementTree as ET
+
+    root = ET.Element('rows')
+    for f in filas or []:
+        tipo = str(f.get('type') or '').strip().upper()
+        processtype = str(f.get('processtype') or '').strip()
+        concept = str(f.get('concept') or '').strip()
+        if tipo not in ('IN', 'LI', 'UT', 'RE') or not processtype or not concept:
+            continue
+        try:
+            line = int(f.get('line') or 0)
+        except (TypeError, ValueError):
+            line = 0
+        if line <= 0:
+            continue
+        applysum = str(f.get('applysum') or 'P').strip().upper()
+        if applysum != 'P':
+            applysum = 'M'
+        r = ET.SubElement(root, 'r')
+        r.set('type', tipo)
+        r.set('line', str(line))
+        r.set('processtype', processtype)
+        r.set('concept', concept)
+        r.set('applysum', applysum)
+    return ET.tostring(root, encoding='unicode')
+
+
+@app.route('/api/configura5ta/listado', methods=['POST'])
+@login_required
+def api_configura5ta_listado():
+    """sp_pr_listar_configura5ta_web"""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_listar_configura5ta_web @cia=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                "company": _jsonable_value(r.get('company')),
+                "type": _jsonable_value(r.get('type')),
+                "line": _jsonable_value(r.get('line')),
+                "plame": _jsonable_value(r.get('plame')),
+                "processtype": _jsonable_value(r.get('processtype')),
+                "proceso": _jsonable_value(r.get('proceso')),
+                "concept": _jsonable_value(r.get('concept')),
+                "concepto": _jsonable_value(r.get('concepto')),
+                "formulacode": _jsonable_value(r.get('formulacode')),
+                "applysum": _jsonable_value(r.get('applysum')),
+                "op": _jsonable_value(r.get('op')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_configura5ta_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/configura5ta/guardar', methods=['POST'])
+@login_required
+def api_configura5ta_guardar():
+    """sp_pr_guardar_configura5ta_web — reemplaza config de la compañía."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    filas = body.get('filas') or body.get('rows') or []
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not isinstance(filas, list):
+        return jsonify({"error": "Formato de filas inválido."}), 400
+
+    xml_payload = _configura5ta_filas_to_xml(filas)
+    userid = _xlastuser_id()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardar_configura5ta_web @cia=?, @xml=?, @userid=?",
+            (cia, xml_payload, userid),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(row.get('company')) or cia,
+            "total": _jsonable_value(row.get('total')),
+            "mensaje": 'Configuración 5ta guardada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_configura5ta_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/configura5ta/replicar', methods=['POST'])
+@login_required
+def api_configura5ta_replicar():
+    """sp_pr_replicar_configura5ta_web — copia a demás empresas activas."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or body.get('cia_origen') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione la compañía origen."}), 400
+
+    userid = _xlastuser_id()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_replicar_configura5ta_web @cia_origen=?, @userid=?",
+            (cia, userid),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "company_origen": _jsonable_value(row.get('company_origen')) or cia,
+            "cias_ok": _jsonable_value(row.get('cias_ok')),
+            "cias_sin_mapeo": _jsonable_value(row.get('cias_sin_mapeo')),
+            "cias_error": _jsonable_value(row.get('cias_error')),
+            "mensaje": 'Replicación de configuración 5ta finalizada.',
+        })
+    except Exception as e:
+        logging.exception("api_configura5ta_replicar")
+        return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

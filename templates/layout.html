@@ -956,8 +956,8 @@
                 </li>
                 {% endif %}
 
-                {% set impuesto_renta_active = request.endpoint in ('certificado_quinta_page', 'calculo_quinta_trabajador_page') %}
-                {% set show_impuesto_renta = can_menu('certificado_quinta') or can_menu('calculo_quinta_trabajador') %}
+                {% set impuesto_renta_active = request.endpoint in ('configurar_conceptos_5ta_page', 'certificado_quinta_page', 'calculo_quinta_trabajador_page') %}
+                {% set show_impuesto_renta = can_menu('configurar_conceptos_5ta') or can_menu('certificado_quinta') or can_menu('calculo_quinta_trabajador') %}
                 {% if show_impuesto_renta %}
                 <li class="sidebar-menu-parent {{ 'active' if impuesto_renta_active else '' }}">
                     <a href="#submenuImpuestoRenta"
@@ -970,6 +970,13 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if impuesto_renta_active else '' }}" id="submenuImpuestoRenta">
+                        {% if can_menu('configurar_conceptos_5ta') %}
+                        <li class="{{ 'active' if request.endpoint == 'configurar_conceptos_5ta_page' else '' }}">
+                            <a href="{{ url_for('configurar_conceptos_5ta_page') }}" title="Configurar Conceptos 5ta">
+                                <i class="bi bi-sliders"></i><span class="sidebar-link-text">Configurar Conceptos 5ta</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if can_menu('certificado_quinta') %}
                         <li class="{{ 'active' if request.endpoint == 'certificado_quinta_page' else '' }}">
                             <a href="{{ url_for('certificado_quinta_page') }}" title="Certificado de Quinta">

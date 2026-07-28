@@ -73,6 +73,7 @@ BEGIN
             ON PR_EMPLOYEE.PERSON = SY_PERSON_A.PERSON
         LEFT JOIN PR_PAYROLLTYPE
             ON PR_EMPLOYEE.PAYROLLTYPE = PR_PAYROLLTYPE.PAYROLLTYPE
+           AND PR_EMPLOYEE.COMPANY = PR_PAYROLLTYPE.COMPANY
         LEFT JOIN SY_PERSONDOCUMENTTYPE
             ON SY_PERSON_A.EMPLOYEEDOCUMENTTYPE = SY_PERSONDOCUMENTTYPE.PERSONDOCUMENTTYPE
         LEFT JOIN PR_POSITION
@@ -85,7 +86,21 @@ BEGIN
             ON PR_EMPLOYEE.EMPLOYEECATEGORY = PR_EMPLOYEECATEGORY.EMPLOYEECATEGORY
     WHERE PR_EMPLOYEE.COMPANY = @cia
       --AND ISNULL(PR_EMPLOYEE.REGISTER, 'Y') = 'Y'
-      AND (@payrolltype = '0' OR PR_EMPLOYEE.PAYROLLTYPE = @payrolltype)
+      -- Acepta código PayRollType o Description/ShortName de la misma compañía
+      -- (el combo muestra "EMPLEADO" pero el código real es p.ej. SB23000000000004).
+      AND (
+            @payrolltype = '0'
+         OR PR_EMPLOYEE.PAYROLLTYPE = @payrolltype
+         OR PR_EMPLOYEE.PAYROLLTYPE IN (
+                SELECT PT.PayRollType
+                FROM PR_PAYROLLTYPE PT (NOLOCK)
+                WHERE PT.Company = @cia
+                  AND (
+                        PT.Description = @payrolltype
+                     OR PT.ShortName = @payrolltype
+                  )
+            )
+          )
       AND (@person = '0' OR PR_EMPLOYEE.PERSON = @person)
       AND (@docnro = '' OR SY_PERSON_A.DOCUMENTNUMBER LIKE '%' + @docnro + '%')
       AND (

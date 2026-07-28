@@ -344,6 +344,66 @@ document.addEventListener('DOMContentLoaded', async function () {
     const modalResumenCalculoEl = document.getElementById('modalResumenCalculo');
     const modalResumenCalculo = modalResumenCalculoEl ? new bootstrap.Modal(modalResumenCalculoEl) : null;
     let ultimoResumenCalculo = null;
+    /** Evita que respuestas viejas de compañía/planilla pisen el periodo al cambiar rápido. */
+    let filtrosLoadSeq = 0;
+
+    function bumpFiltrosLoadSeq() {
+        filtrosLoadSeq += 1;
+        return filtrosLoadSeq;
+    }
+
+    function textoOpcionSeleccionada(selectEl) {
+        if (!selectEl || selectEl.selectedIndex < 0) return '';
+        const opt = selectEl.options[selectEl.selectedIndex];
+        return opt ? String(opt.textContent || '').trim() : '';
+    }
+
+    function shortNameOpcionSeleccionada(selectEl) {
+        if (!selectEl || selectEl.selectedIndex < 0) return '';
+        const opt = selectEl.options[selectEl.selectedIndex];
+        return opt && opt.dataset ? String(opt.dataset.shortName || '').trim() : '';
+    }
+
+    function seleccionarPorTexto(selectEl, texto) {
+        const want = String(texto || '').trim().toUpperCase();
+        if (!selectEl || !want) return false;
+        for (let i = 0; i < selectEl.options.length; i++) {
+            const t = String(selectEl.options[i].textContent || '').trim().toUpperCase();
+            if (t && t === want) {
+                selectEl.selectedIndex = i;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    function seleccionarProcesoPreferido(selectEl, preferido) {
+        if (!selectEl || !preferido) return false;
+        const wantSn = String(preferido.shortName || '').trim().toUpperCase();
+        const wantTxt = String(preferido.text || '').trim().toUpperCase();
+        if (wantSn) {
+            for (let i = 0; i < selectEl.options.length; i++) {
+                const opt = selectEl.options[i];
+                const sn = opt && opt.dataset ? String(opt.dataset.shortName || '').trim().toUpperCase() : '';
+                if (sn && sn === wantSn) {
+                    selectEl.selectedIndex = i;
+                    return true;
+                }
+            }
+        }
+        return seleccionarPorTexto(selectEl, wantTxt);
+    }
+
+    function limpiarPeriodoUI() {
+        const hid = document.getElementById('hidPeriodoCalculo');
+        const txt = document.getElementById('txtPeriodoDesc');
+        if (hid) hid.value = '';
+        if (txt) {
+            txt.value = '';
+            txt.title = '';
+            txt.placeholder = '—';
+        }
+    }
 
     function invalidarResumenCalculo() {
         ultimoResumenCalculo = null;
@@ -598,8 +658,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         toggleAll(this);
     });
 
-    const poblarSelect = async (url, selectElement) => {
+    const poblarSelect = async (url, selectElement, seq) => {
         if (!selectElement) return;
+        const mySeq = seq == null ? filtrosLoadSeq : seq;
         selectElement.innerHTML = '';
         const loading = document.createElement('option');
         loading.value = '';
@@ -607,7 +668,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         selectElement.appendChild(loading);
         try {
             const res = await fetch(url);
+            if (mySeq !== filtrosLoadSeq) return;
             const data = await res.json();
+            if (mySeq !== filtrosLoadSeq) return;
             selectElement.innerHTML = '';
             const def = document.createElement('option');
             def.value = '';
@@ -621,6 +684,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             selectElement.disabled = false;
         } catch (err) {
+            if (mySeq !== filtrosLoadSeq) return;
             console.error(err);
             selectElement.innerHTML = '<option value="">Error</option>';
         }
@@ -653,14 +717,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function cargarProcesos() {
+    async function cargarProcesos(seq) {
+        const mySeq = seq == null ? filtrosLoadSeq : seq;
         const cia = cboCia.value.trim();
         const pt = cboPt.value.trim();
         cboProc.innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('hidPeriodoCalculo').value = '';
-        const txtPerReset = document.getElementById('txtPeriodoDesc');
-        txtPerReset.value = '';
-        txtPerReset.title = '';
+        limpiarPeriodoUI();
         limpiarTablaTrabajadores();
         if (!cia || !pt) {
             cboProc.disabled = true;
@@ -673,7 +735,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ cia, payrolltype: pt })
             });
+            if (mySeq !== filtrosLoadSeq) return;
             const data = await res.json();
+            if (mySeq !== filtrosLoadSeq) return;
+            cboProc.innerHTML = '<option value="">Seleccione...</option>';
             (Array.isArray(data) ? data : []).forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = item.id != null ? String(item.id) : '';
@@ -683,28 +748,31 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboProc.appendChild(opt);
             });
         } catch (e) {
+            if (mySeq !== filtrosLoadSeq) return;
             console.error(e);
             cboProc.innerHTML = '<option value="">Error</option>';
         }
     }
 
-    async function cargarPeriodo(periodoPreferido) {
+    async function cargarPeriodo(periodoPreferido, seq) {
+        const mySeq = seq == null ? filtrosLoadSeq : seq;
         const cia = cboCia.value.trim();
         const payroll = cboPt.value.trim();
         const proc = cboProc.value.trim();
         const hid = document.getElementById('hidPeriodoCalculo');
         const txt = document.getElementById('txtPeriodoDesc');
-        hid.value = '';
-        txt.value = '';
-        txt.title = '';
+        limpiarPeriodoUI();
         if (!cia || !proc || !payroll) return;
+        if (txt) txt.placeholder = 'Cargando...';
         try {
             const res = await fetch(
                 `${URL_PERIODOS}?cia=${encodeURIComponent(cia)}`
                 + `&processtype=${encodeURIComponent(proc)}`
                 + `&payrolltype=${encodeURIComponent(payroll)}`
             );
+            if (mySeq !== filtrosLoadSeq) return;
             const data = await res.json();
+            if (mySeq !== filtrosLoadSeq) return;
             const arr = Array.isArray(data) ? data : [];
             const esAbierto = (p) => {
                 const st = String((p && p.status) || '').trim().toUpperCase();
@@ -722,10 +790,35 @@ document.addEventListener('DOMContentLoaded', async function () {
                 hid.value = String(pick.id || '');
                 txt.value = String(pick.text || '');
                 txt.title = String(pick.text || pick.id || '').trim();
+                txt.placeholder = '—';
+            } else if (txt) {
+                txt.placeholder = 'Sin periodo abierto';
             }
         } catch (e) {
+            if (mySeq !== filtrosLoadSeq) return;
             console.error(e);
+            if (txt) txt.placeholder = '—';
         }
+    }
+
+    /** Reaplica planilla/proceso por texto al cambiar compañía y carga el periodo abierto. */
+    async function cascadaTrasCambioCia(preferencias, seq) {
+        const mySeq = seq == null ? filtrosLoadSeq : seq;
+        const prefs = preferencias || {};
+        if (prefs.planillaText) {
+            seleccionarPorTexto(cboPt, prefs.planillaText);
+        }
+        if (mySeq !== filtrosLoadSeq) return;
+        if (!cboPt.value.trim()) return;
+        await cargarProcesos(mySeq);
+        if (mySeq !== filtrosLoadSeq) return;
+        if (prefs.proceso) {
+            seleccionarProcesoPreferido(cboProc, prefs.proceso);
+        }
+        if (mySeq !== filtrosLoadSeq) return;
+        if (!cboProc.value.trim()) return;
+        aplicarReglaCesadosPorProceso();
+        await cargarPeriodo(prefs.periodo || undefined, mySeq);
     }
 
     async function listarTrabajadores(opciones) {
@@ -1323,44 +1416,62 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         invalidarResumenCalculo();
-        const cia = this.value.trim();
+        const seq = bumpFiltrosLoadSeq();
+        const prefs = {
+            planillaText: textoOpcionSeleccionada(cboPt),
+            proceso: {
+                text: textoOpcionSeleccionada(cboProc),
+                shortName: shortNameOpcionSeleccionada(cboProc)
+            },
+            periodo: document.getElementById('hidPeriodoCalculo').value.trim()
+        };
         cboProc.innerHTML = '<option value="">Seleccione...</option>';
         cboProc.disabled = true;
-        document.getElementById('hidPeriodoCalculo').value = '';
-        const txtP = document.getElementById('txtPeriodoDesc');
-        txtP.value = '';
-        txtP.title = '';
+        limpiarPeriodoUI();
         limpiarTablaTrabajadores();
+        const cia = this.value.trim();
         if (cia) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt, seq);
+            if (seq !== filtrosLoadSeq) return;
+            await cascadaTrasCambioCia(prefs, seq);
         } else {
             cboPt.innerHTML = '<option value="">Seleccione...</option>';
             cboPt.disabled = true;
         }
+        if (seq !== filtrosLoadSeq) return;
         aplicarReglaCesadosPorProceso();
         if (filtrosPersist) filtrosPersist.guardar();
     });
 
     document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
-        document.getElementById('hidPeriodoCalculo').value = '';
-        const txtTP = document.getElementById('txtPeriodoDesc');
-        txtTP.value = '';
-        txtTP.title = '';
+        const seq = bumpFiltrosLoadSeq();
+        const prefsProceso = {
+            text: textoOpcionSeleccionada(cboProc),
+            shortName: shortNameOpcionSeleccionada(cboProc)
+        };
+        limpiarPeriodoUI();
         limpiarTablaTrabajadores();
-        await cargarProcesos();
+        await cargarProcesos(seq);
+        if (seq !== filtrosLoadSeq) return;
+        if (prefsProceso.text || prefsProceso.shortName) {
+            seleccionarProcesoPreferido(cboProc, prefsProceso);
+        }
         aplicarReglaCesadosPorProceso();
+        if (cboProc.value.trim()) {
+            await cargarPeriodo(undefined, seq);
+        }
+        if (seq !== filtrosLoadSeq) return;
         if (filtrosPersist) filtrosPersist.guardar();
     });
 
     document.getElementById('cboProcesoCalculo').addEventListener('change', async function () {
-        document.getElementById('hidPeriodoCalculo').value = '';
-        const txtPR = document.getElementById('txtPeriodoDesc');
-        txtPR.value = '';
-        txtPR.title = '';
+        const seq = bumpFiltrosLoadSeq();
+        limpiarPeriodoUI();
         limpiarTablaTrabajadores();
         ocultarValidacionesCalculo();
         aplicarReglaCesadosPorProceso();
-        await cargarPeriodo();
+        await cargarPeriodo(undefined, seq);
+        if (seq !== filtrosLoadSeq) return;
         if (filtrosPersist) filtrosPersist.guardar();
     });
 

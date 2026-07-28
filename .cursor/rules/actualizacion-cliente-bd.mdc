@@ -1,0 +1,17 @@
+---
+description: Plan de actualización/onboarding de BD cliente (consolidado, fórmulas, flags, PDT, ConceptType, objetos SP/FN/tablas)
+alwaysApply: true
+---
+
+# Actualización de BD cliente
+
+Cuando el usuario pida actualizar o preparar una BD cliente nueva (como `hm_divisa`):
+
+1. Seguir [`docs/PLAN_ACTUALIZACION_CLIENTE.md`](docs/PLAN_ACTUALIZACION_CLIENTE.md) — **mismos pasos siempre**
+2. Confirmar: `DST`, `CIA` (default BGT), `SRC_FORMULAS=hm_prescription`, `SRC_MAESTRO=hm_aci`
+3. Orden: consolidado → tablas fórmula → réplica fórmulas/conceptos → flags → pdt → ConceptType → **objetos faltantes (SP/FN/tablas desde hm_aci)** → verify
+4. **Nunca** desplegar ni copiar `sp_pr_calcular_*` de proceso (finmes, liquidación, grati, etc.): son **por cliente**. Ver `sql/cliente_especifico/`
+5. Ejecutar: `python scripts/actualizar_cliente_bd.py --dst DST --cia CIA`
+6. Objetos: `python scripts/sync_objetos_bd.py --src hm_aci --dst DST` (también excluye calcular_*)
+7. Cruce conceptos por `FormulaCode`; ConceptType por `PR_ConceptType.ShortName`; no copiar IDs
+8. Reportar conteos/diffs; no commitear `_tmp_*`

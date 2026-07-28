@@ -15,6 +15,19 @@ EXCLUDE_FROM_DEPLOY = {
     "alter_pr_mapping2_hm_atilio.sql",
 }
 
+
+def _is_client_specific_calcular(name: str) -> bool:
+    """sp_pr_calcular_* de proceso (finmes/liq/grati/...) varían por cliente.
+
+    Sí se despliegan los wrappers web: sp_pr_calcularplanillas_*.sql
+    """
+    low = name.lower()
+    if not low.startswith("sp_pr_calcular_"):
+        return False
+    if low.startswith("sp_pr_calcularplanillas"):
+        return False
+    return True
+
 # ALTER / tablas primero (orden explícito + resto alter_/tables_ auto)
 ALTER_FIRST = [
     "alter_pr_mapping_add_banbifbank.sql",
@@ -35,13 +48,19 @@ NOTA_ERP = """\
     sp_pr_selectorpersonas_web, sp_pr_selectortipos_dm_web
 
   IMPORTANTE: no incluir alter_pr_mapping2_hm_atilio.sql (tiene USE hm_atilio).
-  Antes de los SP se ejecutan todos los ALTER de esquema web."""
+  Antes de los SP se ejecutan todos los ALTER de esquema web.
+
+  NO desplegar sp_pr_calcular_* de proceso (finmes, liquidacion, grati, etc.):
+    cada cliente tiene su propio SP (ver sql/cliente_especifico/).
+    Si se despliegan: sp_pr_calcularplanillas_web / _masivo_web."""
 
 
 def main():
     all_files = sorted(
         p.name for p in SQL_DIR.glob("*.sql")
-        if p.name not in EXCLUDE_FROM_DEPLOY and not p.name.startswith("_tmp")
+        if p.name not in EXCLUDE_FROM_DEPLOY
+        and not p.name.startswith("_tmp")
+        and not _is_client_specific_calcular(p.name)
     )
 
     # Cualquier alter_/tables_ restante al inicio (tras ALTER_FIRST)

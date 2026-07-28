@@ -1,21 +1,25 @@
 /*
     Validaciones previas al cálculo de planilla (módulo Procesar planilla).
 
-    Detecta conceptos configurados en más de una vía para MENSUAL / FIN_DE_MES:
+    1) Asignaciones permanentes duplicadas (cualquier proceso):
+       Un trabajador no puede tener el mismo concepto más de una vez
+       con FlagFrecuencyType = 'P' en la planilla.
+
+    2) Conceptos en más de una vía (solo MENSUAL / FIN_DE_MES):
       M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
       S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
       F — Fórmulas del proceso (PR_FormulaHeader)
+      Solo una vía debe estar activa por concepto.
 
-    Solo una vía debe estar activa por concepto.
-
-    Excepción hm_aci + MENSUAL/FIN_DE_MES:
+    Excepción hm_aci / hm_aci2 + MENSUAL/FIN_DE_MES:
       No se incluye F (formulador) en la comparación. Se valida solo M vs S.
       Las fórmulas pueden permanecer configuradas; el cálculo mensual se rige por el SP.
-      En hm_aci con otros procesos (p. ej. provisiones), si aplica validación de vías,
+      En esas BDs con otros procesos (p. ej. provisiones), si aplica validación de vías,
       el formulador sí se considera. En el resto de bases de datos F siempre se compara.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
-    y antes de /ejecutar_calculo_streaming y /ejecutar_calculo_planilla.
+    (también al buscar trabajadores) y antes de /ejecutar_calculo_streaming
+    y /ejecutar_calculo_planilla.
 
     El procedimiento de cálculo (p. ej. sp_pr_calcular_finmes_persona) se obtiene de
     PR_ProcessType.ProcedureName en la BD del cliente; no se versiona en sql/ porque
@@ -58,8 +62,8 @@ BEGIN
        OR CHARINDEX('FIN DE MES', @proceso_desc) > 0
         SET @es_mensual = 1;
 
-    /* hm_aci mensual: no confrontar fórmulas; el SP es la vía de cálculo vigente. */
-    IF LOWER(DB_NAME()) = 'hm_aci' AND @es_mensual = 1
+    /* hm_aci / hm_aci2 mensual: no confrontar fórmulas; el SP es la vía de cálculo vigente. */
+    IF LOWER(DB_NAME()) IN ('hm_aci', 'hm_aci2') AND @es_mensual = 1
         SET @omitir_formulas = 1;
 
     CREATE TABLE #errores (
@@ -78,14 +82,58 @@ BEGIN
         formulacode VARCHAR(50) NOT NULL PRIMARY KEY
     );
 
-    /* Solo aplica al proceso mensual (FIN_DE_MES / MENSUAL). */
+    /* Permanentes duplicados: mismo concepto FlagFrecuencyType='P' más de una vez. */
+    INSERT INTO #errores (person, name, observacion)
+    SELECT
+        D.Person,
+        LTRIM(RTRIM(
+            ISNULL(P.LastName1, '') + ' ' +
+            ISNULL(P.LastName2, '') + ' ' +
+            ISNULL(P.Name1, '') + ' ' +
+            ISNULL(P.Name2, '')
+        )),
+        'tiene ' + CONVERT(VARCHAR(10), D.cnt)
+            + ' asignaciones permanentes del concepto '
+            + CASE
+                WHEN LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+                THEN LTRIM(RTRIM(C.FormulaCode))
+                ELSE LTRIM(RTRIM(ISNULL(C.Description, D.Concept)))
+              END
+            + CASE
+                WHEN LTRIM(RTRIM(ISNULL(C.Description, ''))) <> ''
+                     AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+                THEN ' (' + LTRIM(RTRIM(C.Description)) + ')'
+                ELSE ''
+              END
+            + '. Solo debe tener una.'
+    FROM (
+        SELECT
+            EC.Person,
+            EC.Concept,
+            COUNT(*) AS cnt
+        FROM PR_EmployeeConcept EC (NOLOCK)
+        WHERE EC.Company = @cia
+          AND EC.PayRollType = @payrolltype
+          AND EC.FlagFrecuencyType = 'P'
+        GROUP BY EC.Person, EC.Concept
+        HAVING COUNT(*) > 1
+    ) D
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = D.Concept
+           AND C.Company = @cia
+        LEFT JOIN SY_Person P (NOLOCK)
+            ON P.Person = D.Person
+           AND P.Company = @cia;
+
+    /* Vías M/S/F: solo proceso mensual (FIN_DE_MES / MENSUAL). */
     IF @es_mensual = 0
     BEGIN
         SELECT
-            CAST('' AS VARCHAR(20)) AS person,
-            CAST('' AS VARCHAR(200)) AS name,
-            CAST('' AS VARCHAR(500)) AS observacion
-        WHERE 1 = 0;
+            LTRIM(RTRIM(ISNULL(person, ''))) AS person,
+            LTRIM(RTRIM(ISNULL(name, ''))) AS name,
+            LTRIM(RTRIM(observacion)) AS observacion
+        FROM #errores
+        ORDER BY observacion, person;
         RETURN;
     END
 
@@ -99,7 +147,7 @@ BEGIN
       AND ISNULL(C.flaginsertar, 'N') = 'M'
       AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
 
-    /* F — Fórmulas del proceso (omitido en hm_aci + mensual) */
+    /* F — Fórmulas del proceso (omitido en hm_aci/hm_aci2 + mensual) */
     IF @omitir_formulas = 0
     BEGIN
         INSERT INTO #vias (formulacode, via)

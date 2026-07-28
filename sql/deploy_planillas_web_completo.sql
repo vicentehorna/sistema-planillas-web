@@ -1,6 +1,6 @@
 /*
   DEPLOY COMPLETO - Sistema Planillas Web
-  Generado: 2026-07-20 18:41
+  Generado: 2026-07-28 11:51
   Origen: carpeta sql/ del repositorio sistema-planillas-web
 
   Uso: ejecutar en SQL Server Management Studio (o sqlcmd) sobre la base destino.
@@ -17,16 +17,19 @@
     3. Stored procedures web (_web)
 
   NOTA: algunos SP usados por app.py no estan en sql/ (ya existen en ERP):
-    sp_pr_selectorpersonas_web, sp_pr_selectortipos_dm_web,
-    sp_pr_selectorperiodos_asig_web
+    sp_pr_selectorpersonas_web, sp_pr_selectortipos_dm_web
 
   IMPORTANTE: no incluir alter_pr_mapping2_hm_atilio.sql (tiene USE hm_atilio).
   Antes de los SP se ejecutan todos los ALTER de esquema web.
 
+  NO desplegar sp_pr_calcular_* de proceso (finmes, liquidacion, grati, etc.):
+    cada cliente tiene su propio SP (ver sql/cliente_especifico/).
+    Si se despliegan: sp_pr_calcularplanillas_web / _masivo_web.
+
   Tablas de trabajo requeridas por algunos reportes:
     xx_plamevertical2, xx_reporteplanilla (reporte planilla vertical)
 
-  Archivos incluidos (233):
+  Archivos incluidos (260):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
     - alter_pr_processtype_add_procedurename.sql
@@ -65,8 +68,11 @@
     - replicar_formulas_provisiones_bgt.sql
     - replicar_formulas_provisiones_bgt_limpio.sql
     - sp_ac_alvisoft_parte1.sql
+    - sp_ac_eliminar_centro_costo_web.sql
     - sp_ac_eliminar_cuenta_contable_web.sql
+    - sp_ac_guardar_centro_costo_web.sql
     - sp_ac_guardar_cuenta_contable_web.sql
+    - sp_ac_listar_centros_costo_web.sql
     - sp_ac_listar_cuentas_contables_web.sql
     - sp_pr_5ta_trabajador_web.sql
     - sp_pr_actualizar_bancario_trabajador_web.sql
@@ -78,8 +84,6 @@
     - sp_pr_alertas_liquidacion_cese_pendiente_web.sql
     - sp_pr_alertas_vacaciones_pendientes_web.sql
     - sp_pr_aperturarperiodo_proceso_web.sql
-    - sp_pr_calcular_gratificacion_persona.sql
-    - sp_pr_calcular_provcts_persona.sql
     - sp_pr_calcularplanillas_masivo_web.sql
     - sp_pr_calcularplanillas_web.sql
     - sp_pr_cerrarperiodo_proceso_web.sql
@@ -88,6 +92,7 @@
     - sp_pr_certificadotrabajo_web.sql
     - sp_pr_control_pagos_afp_web.sql
     - sp_pr_datosusuario_web.sql
+    - sp_pr_deletepersoncompany_web.sql
     - sp_pr_depurar_conceptos_auxiliares_web.sql
     - sp_pr_descansos_eliminar_web.sql
     - sp_pr_descansos_guardar_web.sql
@@ -99,6 +104,7 @@
     - sp_pr_detallecalculoutilidades_web.sql
     - sp_pr_eliminar_accountprofiledetail_web.sql
     - sp_pr_eliminar_calculo_planilla_web.sql
+    - sp_pr_eliminar_distribucion_voucher_web.sql
     - sp_pr_eliminarasignacionconcepto_web.sql
     - sp_pr_eliminarbankaccount_web.sql
     - sp_pr_eliminarconcepto_web.sql
@@ -117,7 +123,9 @@
     - sp_pr_generar_periodos_vacacionales_web.sql
     - sp_pr_generar_telecredito_web.sql
     - sp_pr_generarboleta_web.sql
+    - sp_pr_generarcontrato_datos_web.sql
     - sp_pr_guardar_accountprofiledetail_web.sql
+    - sp_pr_guardar_distribucion_voucher_web.sql
     - sp_pr_guardarasignacionconcepto_web.sql
     - sp_pr_guardarbankaccount_web.sql
     - sp_pr_guardarconcepto_web.sql
@@ -146,6 +154,8 @@
     - sp_pr_listaprocesscontrol_apertura_web.sql
     - sp_pr_listar_accountprofiledetail_web.sql
     - sp_pr_listar_asientos_interfaz_web.sql
+    - sp_pr_listar_distribucion_voucher_web.sql
+    - sp_pr_listar_sin_distribucion_voucher_web.sql
     - sp_pr_listarbankaccount_web.sql
     - sp_pr_listarconceptos_web.sql
     - sp_pr_listarformulas_web.sql
@@ -181,9 +191,14 @@
     - sp_pr_plame_validar_r04_web.sql
     - sp_pr_plame_validar_r05_web.sql
     - sp_pr_r019_vacationdetail_web.sql
+    - sp_pr_registrar_formula_calculo.sql
+    - sp_pr_registrar_periodo_inicio.sql
+    - sp_pr_registrar_trabajador_web.sql
+    - sp_pr_replicar_distribucion_voucher_web.sql
     - sp_pr_replicar_formula_cia.sql
     - sp_pr_replicar_nuevo_concepto_nemonico.sql
     - sp_pr_reporte_asiento_contable_web.sql
+    - sp_pr_reportecontratos_web.sql
     - sp_pr_reportelistadopagos_web.sql
     - sp_pr_reportelog_calculo_web.sql
     - sp_pr_reporteplame_total_web.sql
@@ -200,6 +215,7 @@
     - sp_pr_selectorbancos_web.sql
     - sp_pr_selectorcareer_web.sql
     - sp_pr_selectorceasereason_web.sql
+    - sp_pr_selectorcivilstate_web.sql
     - sp_pr_selectorcompanias_web.sql
     - sp_pr_selectorconceptoneto_web.sql
     - sp_pr_selectorconceptos_contables_web.sql
@@ -222,12 +238,14 @@
     - sp_pr_selectorperiodocalculo_web.sql
     - sp_pr_selectorperiodos_apertura_web.sql
     - sp_pr_selectorperiodos_asientos_web.sql
+    - sp_pr_selectorperiodos_asig_web.sql
     - sp_pr_selectorperiodos_cia_web.sql
     - sp_pr_selectorperiodos_consolidada_web.sql
     - sp_pr_selectorperiodos_generar_voucher_web.sql
     - sp_pr_selectorperiodos_plame_web.sql
     - sp_pr_selectorperiodos_web.sql
     - sp_pr_selectorpersonas_consolidada_web.sql
+    - sp_pr_selectorpersonas_web.sql
     - sp_pr_selectorpersondocumenttype_web.sql
     - sp_pr_selectorplanillas_consolidada_web.sql
     - sp_pr_selectorplanillas_web.sql
@@ -244,6 +262,7 @@
     - sp_pr_selectorunidades_web.sql
     - sp_pr_selectorusuarios_web.sql
     - sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
+    - sp_pr_tregistro_actualizar_campos_nuevos_web.sql
     - sp_pr_tregistro_cuentas_web.sql
     - sp_pr_tregistro_datos_personales_web.sql
     - sp_pr_tregistro_establecimiento_web.sql
@@ -256,10 +275,21 @@
     - sp_pr_vacaciones_guardar_detalle_web.sql
     - sp_pr_vacaciones_listar_trabajadores_web.sql
     - sp_pr_vacaciones_obtener_trabajador_web.sql
+    - sp_pr_validar_alta_trabajador_web.sql
     - sp_pr_validar_calculo_web.sql
     - sp_pr_validar_periodo_masivo_web.sql
     - sp_pr_validar_pre_calculo_web.sql
     - sp_pr_validarconceptos_cias_web.sql
+    - sp_web_asignar_user_access_profile_web.sql
+    - sp_web_eliminar_access_profile_web.sql
+    - sp_web_guardar_access_profile_web.sql
+    - sp_web_listar_access_profiles_web.sql
+    - sp_web_listar_menu_options_web.sql
+    - sp_web_listar_usuarios_access_web.sql
+    - sp_web_obtener_access_profile_web.sql
+    - sp_web_obtener_menus_usuario_web.sql
+    - web_access_seed_hm_lumat.sql
+    - web_access_tables.sql
 */
 
 SET NOCOUNT ON;
@@ -267,7 +297,7 @@ GO
 
 
 -- ============================================================================
--- [001/233] alter_pr_mapping_add_banbifbank.sql
+-- [001/260] alter_pr_mapping_add_banbifbank.sql
 -- ============================================================================
 
 /*
@@ -303,7 +333,7 @@ GO
 
 
 -- ============================================================================
--- [002/233] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [002/260] alter_pr_payrolltype_add_diasvacaciones.sql
 -- ============================================================================
 
 /*
@@ -327,7 +357,7 @@ GO
 
 
 -- ============================================================================
--- [003/233] alter_pr_processtype_add_procedurename.sql
+-- [003/260] alter_pr_processtype_add_procedurename.sql
 -- ============================================================================
 
 /*
@@ -368,7 +398,7 @@ GO
 
 
 -- ============================================================================
--- [004/233] alter_pr_importconcept_xlastuser_20.sql
+-- [004/260] alter_pr_importconcept_xlastuser_20.sql
 -- ============================================================================
 
 /*
@@ -413,7 +443,7 @@ GO
 
 
 -- ============================================================================
--- [005/233] alter_sy_company_add_logoname_signaturename.sql
+-- [005/260] alter_sy_company_add_logoname_signaturename.sql
 -- ============================================================================
 
 /*
@@ -437,7 +467,7 @@ GO
 
 
 -- ============================================================================
--- [006/233] alter_sy_person_add_nacionalidad.sql
+-- [006/260] alter_sy_person_add_nacionalidad.sql
 -- ============================================================================
 
 /*
@@ -454,7 +484,7 @@ GO
 
 
 -- ============================================================================
--- [007/233] alter_pr_concept_add_flagafectoutilidad.sql
+-- [007/260] alter_pr_concept_add_flagafectoutilidad.sql
 -- ============================================================================
 
 /*
@@ -471,7 +501,7 @@ GO
 
 
 -- ============================================================================
--- [008/233] alter_pr_formuladetail_conceptlist.sql
+-- [008/260] alter_pr_formuladetail_conceptlist.sql
 -- ============================================================================
 
 /*
@@ -489,7 +519,7 @@ GO
 
 
 -- ============================================================================
--- [009/233] alter_pr_formuladetail_divisor.sql
+-- [009/260] alter_pr_formuladetail_divisor.sql
 -- ============================================================================
 
 /*
@@ -507,7 +537,7 @@ GO
 
 
 -- ============================================================================
--- [010/233] tables_pr_plame_sunat_web.sql
+-- [010/260] tables_pr_plame_sunat_web.sql
 -- ============================================================================
 
 /*
@@ -582,7 +612,7 @@ GO
 
 
 -- ============================================================================
--- [011/233] tables_pr_parametroformula_web.sql
+-- [011/260] tables_pr_parametroformula_web.sql
 -- ============================================================================
 
 /*
@@ -612,7 +642,7 @@ GO
 
 
 -- ============================================================================
--- [012/233] SP_PR_EjecutarFormula.sql
+-- [012/260] SP_PR_EjecutarFormula.sql
 -- ============================================================================
 
 /*
@@ -702,7 +732,7 @@ Begin
 			where
 				((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
 					and (P.FlagFrecuencyType = 'T' or (P.FlagFrecuencyType = 'P' and P.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType)))
+					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
 					
 					),0)
 
@@ -760,7 +790,7 @@ Begin
 				where
 					((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
 					and (P.FlagFrecuencyType = 'T' or (P.FlagFrecuencyType = 'P' and P.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType)))
+					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
 					
 					),0)
 
@@ -1095,7 +1125,7 @@ Begin
 				where
 					((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
 					and (P.FlagFrecuencyType = 'T' or (P.FlagFrecuencyType = 'P' and P.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType)))
+					T.Company = P.Company and T.Person = P.Person AND T.Concept = P.Concept AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
 					
 					),0)
 
@@ -1279,7 +1309,7 @@ GO
 
 
 -- ============================================================================
--- [013/233] SP_PR_ReportePromedioLiquidacion.sql
+-- [013/260] SP_PR_ReportePromedioLiquidacion.sql
 -- ============================================================================
 
 /*
@@ -1790,7 +1820,7 @@ GO
 
 
 -- ============================================================================
--- [014/233] f_count_medical_rest_days_web.sql
+-- [014/260] f_count_medical_rest_days_web.sql
 -- ============================================================================
 
 /*
@@ -1860,7 +1890,7 @@ GO
 
 
 -- ============================================================================
--- [015/233] f_getPromedioGrati.sql
+-- [015/260] f_getPromedioGrati.sql
 -- ============================================================================
 
 /*
@@ -1925,7 +1955,7 @@ GO
 
 
 -- ============================================================================
--- [016/233] f_getPromedioVac.sql
+-- [016/260] f_getPromedioVac.sql
 -- ============================================================================
 
 /*
@@ -2014,7 +2044,7 @@ GO
 
 
 -- ============================================================================
--- [017/233] f_getSuma5ta_web.sql
+-- [017/260] f_getSuma5ta_web.sql
 -- ============================================================================
 
 /*
@@ -2060,7 +2090,7 @@ GO
 
 
 -- ============================================================================
--- [018/233] f_getSumaConceptosCTS.sql
+-- [018/260] f_getSumaConceptosCTS.sql
 -- ============================================================================
 
 /*
@@ -2175,7 +2205,7 @@ GO
 
 
 -- ============================================================================
--- [019/233] f_getSumaConceptosGrati.sql
+-- [019/260] f_getSumaConceptosGrati.sql
 -- ============================================================================
 
 /*
@@ -2253,7 +2283,7 @@ GO
 
 
 -- ============================================================================
--- [020/233] f_getSumaConceptosIngreso.sql
+-- [020/260] f_getSumaConceptosIngreso.sql
 -- ============================================================================
 
 /*
@@ -2319,7 +2349,7 @@ GO
 
 
 -- ============================================================================
--- [021/233] f_getSumaConceptosProceso.sql
+-- [021/260] f_getSumaConceptosProceso.sql
 -- ============================================================================
 
 /*
@@ -2371,7 +2401,7 @@ GO
 
 
 -- ============================================================================
--- [022/233] f_map_conceptlist_cia.sql
+-- [022/260] f_map_conceptlist_cia.sql
 -- ============================================================================
 
 /*
@@ -2443,7 +2473,7 @@ GO
 
 
 -- ============================================================================
--- [023/233] limpiar_formulas_liquidacion_destino.sql
+-- [023/260] limpiar_formulas_liquidacion_destino.sql
 -- ============================================================================
 
 /*
@@ -2519,7 +2549,7 @@ GO
 
 
 -- ============================================================================
--- [024/233] limpiar_formulas_provisiones_destino.sql
+-- [024/260] limpiar_formulas_provisiones_destino.sql
 -- ============================================================================
 
 /*
@@ -2612,7 +2642,7 @@ GO
 
 
 -- ============================================================================
--- [025/233] listar_conceptos_faltantes_cias_liquidacion.sql
+-- [025/260] listar_conceptos_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2675,7 +2705,7 @@ GO
 
 
 -- ============================================================================
--- [026/233] listar_conceptos_faltantes_cias_provisiones.sql
+-- [026/260] listar_conceptos_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -2752,7 +2782,7 @@ GO
 
 
 -- ============================================================================
--- [027/233] listar_conceptos_faltantes_sb03_liquidacion.sql
+-- [027/260] listar_conceptos_faltantes_sb03_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2812,7 +2842,7 @@ GO
 
 
 -- ============================================================================
--- [028/233] listar_formulas_faltantes_cias_liquidacion.sql
+-- [028/260] listar_formulas_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -2853,7 +2883,7 @@ GO
 
 
 -- ============================================================================
--- [029/233] listar_formulas_faltantes_cias_provisiones.sql
+-- [029/260] listar_formulas_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -2903,7 +2933,7 @@ GO
 
 
 -- ============================================================================
--- [030/233] queries_depurar_conceptos_auxiliares.sql
+-- [030/260] queries_depurar_conceptos_auxiliares.sql
 -- ============================================================================
 
 /*
@@ -3087,7 +3117,7 @@ GO
 
 
 -- ============================================================================
--- [031/233] replicar_conceptos_faltantes_cias_liquidacion.sql
+-- [031/260] replicar_conceptos_faltantes_cias_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -3334,7 +3364,7 @@ GO
 
 
 -- ============================================================================
--- [032/233] replicar_conceptos_faltantes_cias_provisiones.sql
+-- [032/260] replicar_conceptos_faltantes_cias_provisiones.sql
 -- ============================================================================
 
 /*
@@ -3528,7 +3558,7 @@ GO
 
 
 -- ============================================================================
--- [033/233] replicar_conceptos_faltantes_sb03_liquidacion.sql
+-- [033/260] replicar_conceptos_faltantes_sb03_liquidacion.sql
 -- ============================================================================
 
 /*
@@ -3734,7 +3764,7 @@ GO
 
 
 -- ============================================================================
--- [034/233] replicar_formulas_liquidacion_bgt.sql
+-- [034/260] replicar_formulas_liquidacion_bgt.sql
 -- ============================================================================
 
 /*
@@ -3846,7 +3876,7 @@ GO
 
 
 -- ============================================================================
--- [035/233] replicar_formulas_liquidacion_bgt_limpio.sql
+-- [035/260] replicar_formulas_liquidacion_bgt_limpio.sql
 -- ============================================================================
 
 /*
@@ -3992,7 +4022,7 @@ GO
 
 
 -- ============================================================================
--- [036/233] replicar_formulas_provisiones_bgt.sql
+-- [036/260] replicar_formulas_provisiones_bgt.sql
 -- ============================================================================
 
 /*
@@ -4121,7 +4151,7 @@ GO
 
 
 -- ============================================================================
--- [037/233] replicar_formulas_provisiones_bgt_limpio.sql
+-- [037/260] replicar_formulas_provisiones_bgt_limpio.sql
 -- ============================================================================
 
 /*
@@ -4278,7 +4308,7 @@ GO
 
 
 -- ============================================================================
--- [038/233] sp_ac_alvisoft_parte1.sql
+-- [038/260] sp_ac_alvisoft_parte1.sql
 -- ============================================================================
 
 /*
@@ -4307,7 +4337,103 @@ GO
 
 
 -- ============================================================================
--- [039/233] sp_ac_eliminar_cuenta_contable_web.sql
+-- [039/260] sp_ac_eliminar_centro_costo_web.sql
+-- ============================================================================
+
+/*
+    Maestro Centros de Costo — eliminación de AC_CostCenter.
+    Usado por: POST /api/centros-costo/eliminar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_eliminar_centro_costo_web]
+    @company    VARCHAR(4),
+    @costcenter VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @costcenter = LTRIM(RTRIM(ISNULL(@costcenter, '')));
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM AC_CostCenter (NOLOCK)
+        WHERE Company = @company
+          AND CostCenter = @costcenter
+    )
+    BEGIN
+        RAISERROR('No se encontró el centro de costo.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_Employee (NOLOCK)
+        WHERE CostCenter = @costcenter
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: el centro de costo está asignado a trabajadores.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_EmployeePayroll (NOLOCK)
+        WHERE CostCenter = @costcenter
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: el centro de costo está referenciado en planillas.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM AC_CostCenterDistribution (NOLOCK)
+        WHERE CostCenter = @costcenter
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: el centro de costo tiene distribución contable.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM AC_CostCenter (NOLOCK)
+        WHERE Company = @company
+          AND CostCenter <> @costcenter
+          AND (ParentLevel1 = @costcenter OR ParentLevel2 = @costcenter)
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: el centro de costo es padre de otros centros.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        DELETE FROM AC_CostCenter
+        WHERE Company = @company
+          AND CostCenter = @costcenter;
+    END TRY
+    BEGIN CATCH
+        IF ERROR_NUMBER() = 547
+            RAISERROR('No se puede eliminar: el centro de costo tiene movimientos o configuraciones relacionadas.', 16, 1);
+        ELSE
+        BEGIN
+            DECLARE @error VARCHAR(4000) = ERROR_MESSAGE();
+            RAISERROR('%s', 16, 1, @error);
+        END;
+        RETURN;
+    END CATCH;
+
+    SELECT
+        @costcenter AS costcenter,
+        'Centro de costo eliminado correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [040/260] sp_ac_eliminar_cuenta_contable_web.sql
 -- ============================================================================
 
 /*
@@ -4384,7 +4510,237 @@ GO
 
 
 -- ============================================================================
--- [040/233] sp_ac_guardar_cuenta_contable_web.sql
+-- [041/260] sp_ac_guardar_centro_costo_web.sql
+-- ============================================================================
+
+/*
+    Maestro Centros de Costo — alta / edición de AC_CostCenter.
+    El ID CostCenter se genera desde SY_ObjectSecuence, objeto ACCOSTCENTER.
+
+    Defaults en alta:
+      Name              = Description (truncado a 50)
+      CCCode            = Abbrev
+      CCLevel           = 1
+      FlagDistribution  = 'N'
+      Status            = 'A'
+      ReplicationUnit   = 'LIMA'
+      XLastUser/XLastDate = auditoría
+
+    Usado por: POST /api/centros-costo/guardar
+
+    En alta (modo I): tras grabar en la compañía origen, replica el centro
+    en las demás empresas activas donde aún no exista el mismo Abbrev.
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_guardar_centro_costo_web]
+    @modo         CHAR(1),
+    @company      VARCHAR(4),
+    @costcenter   VARCHAR(20) = NULL,
+    @abbrev       VARCHAR(20),
+    @description  VARCHAR(255),
+    @xlastuser    VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @costcenter_nuevo VARCHAR(20);
+    DECLARE @name VARCHAR(50);
+    DECLARE @tabla_id TABLE (id_generado VARCHAR(20));
+    DECLARE @cia_dest VARCHAR(4);
+    DECLARE @costcenter_dest VARCHAR(20);
+    DECLARE @max_seq NUMERIC(18, 0);
+    DECLARE @replicadas INT = 0;
+
+    SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @costcenter = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter, ''))), '');
+    SET @abbrev = LTRIM(RTRIM(ISNULL(@abbrev, '')));
+    SET @description = LTRIM(RTRIM(ISNULL(@description, '')));
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+    SET @name = LEFT(@description, 50);
+
+    IF @modo NOT IN ('I', 'U')
+    BEGIN
+        RAISERROR('Modo de operación inválido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @company = ''
+    BEGIN
+        RAISERROR('Indique la compañía.', 16, 1);
+        RETURN;
+    END;
+
+    IF @abbrev = '' OR @description = ''
+    BEGIN
+        RAISERROR('Indique la abreviatura y la descripción del centro de costo.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM AC_CostCenter (NOLOCK)
+        WHERE Company = @company
+          AND LTRIM(RTRIM(ISNULL(Abbrev, ''))) = @abbrev
+          AND (@modo = 'I' OR CostCenter <> @costcenter)
+    )
+    BEGIN
+        RAISERROR('Ya existe un centro de costo con la misma abreviatura.', 16, 1);
+        RETURN;
+    END;
+
+    IF @modo = 'I'
+    BEGIN
+        INSERT INTO @tabla_id (id_generado)
+        EXEC dbo.sp_pr_genera_correlativo_web
+            @cia = @company,
+            @object = 'ACCOSTCENTER',
+            @xlastuser = @xlastuser;
+
+        SELECT @costcenter_nuevo = id_generado FROM @tabla_id;
+
+        IF NULLIF(LTRIM(RTRIM(ISNULL(@costcenter_nuevo, ''))), '') IS NULL
+        BEGIN
+            RAISERROR('No se pudo generar el correlativo del centro de costo.', 16, 1);
+            RETURN;
+        END;
+
+        INSERT INTO AC_CostCenter (
+            CostCenter, Company, Name, Description, Abbrev,
+            Status, CCCode, CCLevel, FlagDistribution,
+            ReplicationUnit, XLastUser, XLastDate
+        )
+        VALUES (
+            @costcenter_nuevo, @company, @name, @description, @abbrev,
+            'A', @abbrev, 1, 'N',
+            'LIMA', @xlastuser, GETDATE()
+        );
+
+        /* Replica a otras empresas activas si no tienen la misma abreviatura. */
+        DECLARE empresas CURSOR LOCAL FAST_FORWARD FOR
+            SELECT LTRIM(RTRIM(Company))
+            FROM SY_Company (NOLOCK)
+            WHERE LTRIM(RTRIM(Company)) <> @company
+              AND ISNULL(status, 'A') = 'A';
+
+        OPEN empresas;
+        FETCH NEXT FROM empresas INTO @cia_dest;
+
+        WHILE @@FETCH_STATUS = 0
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1
+                FROM AC_CostCenter (NOLOCK)
+                WHERE Company = @cia_dest
+                  AND LTRIM(RTRIM(ISNULL(Abbrev, ''))) = @abbrev
+            )
+            AND EXISTS (
+                SELECT 1
+                FROM SY_ObjectSecuence (NOLOCK)
+                WHERE Company = @cia_dest
+                  AND Object = 'ACCOSTCENTER'
+                  AND ReplicationUnit = 'LIMA'
+            )
+            BEGIN
+                SELECT @max_seq = MAX(
+                    CASE
+                        WHEN ISNUMERIC(RIGHT(LTRIM(RTRIM(CostCenter)), 12)) = 1
+                        THEN CAST(RIGHT(LTRIM(RTRIM(CostCenter)), 12) AS BIGINT)
+                        ELSE NULL
+                    END
+                )
+                FROM AC_CostCenter (NOLOCK)
+                WHERE Company = @cia_dest;
+
+                IF @max_seq IS NOT NULL
+                BEGIN
+                    UPDATE SY_ObjectSecuence
+                    SET Secuence = @max_seq
+                    WHERE Company = @cia_dest
+                      AND Object = 'ACCOSTCENTER'
+                      AND ReplicationUnit = 'LIMA'
+                      AND Secuence < @max_seq;
+                END;
+
+                DELETE FROM @tabla_id;
+
+                INSERT INTO @tabla_id (id_generado)
+                EXEC dbo.sp_pr_genera_correlativo_web
+                    @cia = @cia_dest,
+                    @object = 'ACCOSTCENTER',
+                    @xlastuser = @xlastuser;
+
+                SELECT @costcenter_dest = id_generado FROM @tabla_id;
+
+                IF NULLIF(LTRIM(RTRIM(ISNULL(@costcenter_dest, ''))), '') IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1 FROM AC_CostCenter (NOLOCK) WHERE CostCenter = @costcenter_dest
+                   )
+                BEGIN
+                    INSERT INTO AC_CostCenter (
+                        CostCenter, Company, Name, Description, Abbrev,
+                        Status, CCCode, CCLevel, FlagDistribution,
+                        ReplicationUnit, XLastUser, XLastDate
+                    )
+                    VALUES (
+                        @costcenter_dest, @cia_dest, @name, @description, @abbrev,
+                        'A', @abbrev, 1, 'N',
+                        'LIMA', @xlastuser, GETDATE()
+                    );
+                    SET @replicadas = @replicadas + 1;
+                END;
+            END;
+
+            FETCH NEXT FROM empresas INTO @cia_dest;
+        END;
+
+        CLOSE empresas;
+        DEALLOCATE empresas;
+
+        SELECT
+            @costcenter_nuevo AS costcenter,
+            CASE
+                WHEN @replicadas > 0 THEN
+                    'Centro de costo registrado correctamente. Replicado en '
+                    + CAST(@replicadas AS VARCHAR(10))
+                    + CASE WHEN @replicadas = 1 THEN ' empresa.' ELSE ' empresas.' END
+                ELSE
+                    'Centro de costo registrado correctamente.'
+            END AS mensaje;
+        RETURN;
+    END;
+
+    IF @costcenter IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM AC_CostCenter (NOLOCK)
+        WHERE Company = @company
+          AND CostCenter = @costcenter
+    )
+    BEGIN
+        RAISERROR('No se encontró el centro de costo a actualizar.', 16, 1);
+        RETURN;
+    END;
+
+    UPDATE AC_CostCenter
+    SET Abbrev = @abbrev,
+        Description = @description,
+        Name = @name,
+        CCCode = @abbrev,
+        XLastUser = @xlastuser,
+        XLastDate = GETDATE()
+    WHERE Company = @company
+      AND CostCenter = @costcenter;
+
+    SELECT
+        @costcenter AS costcenter,
+        'Centro de costo actualizado correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [042/260] sp_ac_guardar_cuenta_contable_web.sql
 -- ============================================================================
 
 /*
@@ -4598,7 +4954,44 @@ GO
 
 
 -- ============================================================================
--- [041/233] sp_ac_listar_cuentas_contables_web.sql
+-- [043/260] sp_ac_listar_centros_costo_web.sql
+-- ============================================================================
+
+/*
+    Maestro Centros de Costo — listado AC_CostCenter por compañía.
+    Usado por: POST /api/centros-costo/listado
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_ac_listar_centros_costo_web]
+    @company  VARCHAR(4),
+    @busqueda VARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        A.CostCenter AS costcenter,
+        LTRIM(RTRIM(ISNULL(A.Abbrev, ''))) AS abbrev,
+        LTRIM(RTRIM(ISNULL(A.Description, ''))) AS description
+    FROM AC_CostCenter A (NOLOCK)
+    WHERE A.Company = @company
+      AND (
+            @busqueda IS NULL
+         OR A.Abbrev LIKE '%' + @busqueda + '%'
+         OR A.Description LIKE '%' + @busqueda + '%'
+         OR A.Name LIKE '%' + @busqueda + '%'
+         OR A.CCCode LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY A.Abbrev, A.Description;
+END
+GO
+
+
+
+-- ============================================================================
+-- [044/260] sp_ac_listar_cuentas_contables_web.sql
 -- ============================================================================
 
 /*
@@ -4633,7 +5026,7 @@ GO
 
 
 -- ============================================================================
--- [042/233] sp_pr_5ta_trabajador_web.sql
+-- [045/260] sp_pr_5ta_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -4958,7 +5351,7 @@ GO
 
 
 -- ============================================================================
--- [043/233] sp_pr_actualizar_bancario_trabajador_web.sql
+-- [046/260] sp_pr_actualizar_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5014,7 +5407,7 @@ GO
 
 
 -- ============================================================================
--- [044/233] sp_pr_actualizar_datos_afp_web.sql
+-- [047/260] sp_pr_actualizar_datos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -5371,7 +5764,7 @@ GO
 
 
 -- ============================================================================
--- [045/233] sp_pr_actualizar_datoseducacion_trabajador_web.sql
+-- [048/260] sp_pr_actualizar_datoseducacion_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5528,7 +5921,7 @@ GO
 
 
 -- ============================================================================
--- [046/233] sp_pr_actualizar_datosgenerales_trabajador_web.sql
+-- [049/260] sp_pr_actualizar_datosgenerales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5739,7 +6132,7 @@ GO
 
 
 -- ============================================================================
--- [047/233] sp_pr_actualizar_datoslaborales_trabajador_web.sql
+-- [050/260] sp_pr_actualizar_datoslaborales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5882,7 +6275,7 @@ GO
 
 
 -- ============================================================================
--- [048/233] sp_pr_actualizar_pensiones_trabajador_web.sql
+-- [051/260] sp_pr_actualizar_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -5915,17 +6308,52 @@ BEGIN
     IF RTRIM(ISNULL(@flagmixta, '')) NOT IN ('Y', 'N') SET @flagmixta = 'N';
 
     DECLARE @fecha_inscripcion DATETIME = NULL;
+    DECLARE @afp_id VARCHAR(20) = NULL;
+    DECLARE @pension_pdt VARCHAR(20) = NULL;
+    DECLARE @pensiontype_norm VARCHAR(20) = NULLIF(LTRIM(RTRIM(@pensiontype)), '');
+
     IF RTRIM(ISNULL(@pensioninscriptiondate, '')) <> ''
        AND ISDATE(@pensioninscriptiondate) = 1
         SET @fecha_inscripcion = CONVERT(DATETIME, @pensioninscriptiondate, 120);
 
+    /* Resolver AFP automáticamente desde el régimen (sin UI). */
+    IF @pensiontype_norm IS NOT NULL
+    BEGIN
+        SELECT @pension_pdt = LTRIM(RTRIM(ISNULL(pt.PDT, '')))
+        FROM PR_PensionType pt (NOLOCK)
+        WHERE pt.PensionType = @pensiontype_norm;
+
+        IF @pension_pdt IN ('21', '23', '24', '25')
+            OR EXISTS (
+                SELECT 1
+                FROM PR_PensionType pt (NOLOCK)
+                WHERE pt.PensionType = @pensiontype_norm
+                  AND (
+                        UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%SPP%'
+                     OR UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%AFP%'
+                  )
+                  AND UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) NOT LIKE '%ONP%'
+            )
+        BEGIN
+            IF @pension_pdt IN ('21', '23', '24', '25')
+                SELECT TOP 1 @afp_id = a.AFP
+                FROM PR_AFP a (NOLOCK)
+                WHERE a.Company = @cia
+                  AND LTRIM(RTRIM(ISNULL(a.PDT, ''))) = @pension_pdt
+                ORDER BY
+                    CASE WHEN a.AFP LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                    a.AFP;
+        END;
+    END;
+
     UPDATE pr_employee
     SET
-        pensiontype = NULLIF(LTRIM(RTRIM(@pensiontype)), ''),
+        pensiontype = @pensiontype_norm,
         pensioninscriptiondate = @fecha_inscripcion,
         regimehealth = NULLIF(LTRIM(RTRIM(@regimehealth)), ''),
         flagmixta = @flagmixta,
         afpcard = NULLIF(LTRIM(RTRIM(@cuspp)), ''),
+        afp = @afp_id,
         xlastdate = GETDATE(),
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia
@@ -5936,7 +6364,7 @@ GO
 
 
 -- ============================================================================
--- [049/233] sp_pr_alertas_liquidacion_cese_pendiente_web.sql
+-- [052/260] sp_pr_alertas_liquidacion_cese_pendiente_web.sql
 -- ============================================================================
 
 /*
@@ -6111,7 +6539,7 @@ GO
 
 
 -- ============================================================================
--- [050/233] sp_pr_alertas_vacaciones_pendientes_web.sql
+-- [053/260] sp_pr_alertas_vacaciones_pendientes_web.sql
 -- ============================================================================
 
 /*
@@ -6330,7 +6758,7 @@ GO
 
 
 -- ============================================================================
--- [051/233] sp_pr_aperturarperiodo_proceso_web.sql
+-- [054/260] sp_pr_aperturarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -6477,1014 +6905,7 @@ GO
 
 
 -- ============================================================================
--- [052/233] sp_pr_calcular_gratificacion_persona.sql
--- ============================================================================
-
---sp_pr_calcular_provgrati_persona 'BGT', 'LIMABGT 000000000005', 'BGT 000000000008', '20260505', '71302181', 'ADMIN', 3.14
-
---select * FROM PR_PROCESSTYPE
-
---select * FROM PR_PAYROLLTYPE
-
---select PR_Concept.FormulaCode  from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = 'BGT'
---	and PR_FormulaHeader.Proccestype = 'BGT 000000000002' and PR_FormulaHeader.Payrolltype = 'LIMABGT 000000000001')
-
-	--select PR_FormulaHeader.FormulaHeader, PR_Concept.FormulaCode  from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = 'BGT'
-	--and PR_FormulaHeader.Proccestype = 'BGT 000000000002' and PR_FormulaHeader.Payrolltype = 'LIMABGT 000000000001')
-	
---	select * from PR_Concept where FormulaCode = 'HRS_EXTRAS_PORC_35'
---	select * from PR_FormulaDetail where FormulaHeader = 'LIMABGT 000000000031'
-
-CREATE OR ALTER procedure [dbo].[sp_pr_calcular_gratificacion_persona]
-@company varchar(4), @payrolltype varchar(20),  @processtype varchar(20), @period varchar(20), @person varchar(20), @UserID varchar(20), @tc numeric(19,4)
-as
-begin	
-	declare @importe numeric(19,4), @horas25 numeric(19,4), @horas35 numeric(19,4), @horas100 numeric(19,4), @total_5ta numeric(19,4), @total_ingreso numeric(19,4), @total_AFP numeric(19,4)
-	declare @tardanza numeric(19,4), @faltas numeric(19,4), @cesado int
-
-	/*INGRESAR EN ASIGNACION DE CONCEPTOS*/
-
-
-	--execute sp_pr_asignar_conceptos_persona @company, @payrolltype,  @period, @person, @UserID
-	
-	/*INSERTAR CONCEPTOS DESDE ASIGNACION*/
-
-	
-
-	delete from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	delete from PR_EmployeePayRoll where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	delete from PR_LOG_CALCULO_PLANILLAS where Company = @company and PayRollType = @payrolltype and Person = @person
-	and process = @processtype and period = @period
-
-	set @cesado = case when isnull((select convert(varchar(6),CeaseDate,112) from PR_Employee where Person	 = @person and Company = @company),'') = '' then 0 else
-						case when isnull((select convert(varchar(6),CeaseDate,112) from PR_Employee where Person	 = @person and Company = @company),'') < left(@period,6) then 1 else 0 end end
-
-	insert into PR_EmployeePayRoll (PayRollType,Person,Company,ProcessType,PRPeriod,CalculationCurrency,ExchangeRate,ReplicationUnit,XLastUser,XLastDate,entrydate,ceasedate,liquidationdate,ceasereason,
-	pensiontype,AFP,pensionpercentaje,variablepercentage,insuredpercentage,AFPCard,Position,Costcenter,Costcentername,salarybank,salaryaccounttype,salaryaccount,salarycurrency,collectionform,
-	ctsbank,ctscurrency,ctsaccount,pensioninscriptiondate,accountprofile)
-	select 
-		PayRollType,PR_Employee.Person,PR_Employee.Company, @processtype,@period,'LO', @tc,SY_Person.ReplicationUnit,@UserID,GETDATE(),
-		isnull(ReEntryDate,EntryDate), CeaseDate,LiquidationDate,CeaseReason,PensionType,PR_Employee.AFP,PensionPercentage,variablepercentage,insuredpercentage,PR_Employee.AFPCard,
-		PR_Employee.Position,PR_Employee.CostCenter, PR_Employee.Costcentername,salarybank,salaryaccounttype,salaryaccount,salarycurrency,CollectionForm,
-		ctsbank,ctscurrency,ctsaccount,pensioninscriptiondate,accountprofile
-	from PR_Employee INNER JOIN SY_Person ON (PR_Employee.Person = SY_Person.Person) LEFT JOIN PR_AFP on (PR_Employee.AFP = PR_AFP.AFP)
-	where PR_Employee.Person = @person and PR_Employee.Company = @company
-
-
-	insert into PR_EmployeePayRollConcept (Concept, Person, Company, ProcessType, PayRollType,PRPeriod, ConceptValue, FlagIsMonetary, ConceptCurrency, ConceptValueLo,ConceptValueEx,
-	ExchangeRate,ReplicationUnit,XLastUser,XLastDate,flagPayment)
-	select distinct
-		PR_EmployeeConcept.Concept, PR_EmployeeConcept.Person, PR_EmployeeConcept.Company, @processtype,PR_EmployeeConcept.PayRollType,@period,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo) else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,
-		PR_Concept.FlagIsMonetary,PR_EmployeeConcept.ConceptCurrency,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo) else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then ROUND(isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo)/(@tc*1.0000),2) else PR_EmployeeConcept.ConceptValueEx end
-		else NULL end,
-		case when PR_Concept.FlagIsMonetary = 'Y' then @tc else NULL end,
-		SY_Person.ReplicationUnit,@UserID,GETDATE(),'N'
-
-	from PR_EmployeeConcept inner join SY_Person on (PR_EmployeeConcept.Person = SY_Person.Person) inner join PR_Concept on (PR_EmployeeConcept.Company = PR_Concept.Company
-	and PR_EmployeeConcept.Concept = PR_Concept.Concept
-	and @cesado = 0)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and exists (select * from PR_Concept C where C.Company = @company and C.Concept = PR_EmployeeConcept.Concept and isnull(C.flaginsertar, 'N') = 'L')
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-	
-	insert into PR_LOG_CALCULO_PLANILLAS (Company, payrolltype,process,period,person, fecha,concepto,importe,tipo,xlastuser,xlastdate)
-	select 
-		PR_EmployeeConcept.Company, PR_EmployeeConcept.PayRollType,@processtype, @period, PR_EmployeeConcept.Person,getdate(),PR_Concept.FormulaCode,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then PR_EmployeeConcept.ConceptValue else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,'I', 'ADMIN', GETDATE()
-
-	from PR_EmployeeConcept inner join SY_Person on (PR_EmployeeConcept.Person = SY_Person.Person) inner join PR_Concept on (PR_EmployeeConcept.Company = PR_Concept.Company
-	and PR_EmployeeConcept.Concept = PR_Concept.Concept)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and exists (select * from PR_Concept C where C.Company = @company and C.Concept = PR_EmployeeConcept.Concept and isnull(C.flaginsertar, 'N') = 'L')
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-	
-
-	select PR_Concept.formulacode, PR_EmployeeConcept.ConceptValue, FlagApplyFormula into #conceptos 
-	from PR_EmployeeConcept inner join PR_Concept on (PR_EmployeeConcept.Concept = PR_Concept.Concept and PR_Concept.Company = @company)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-
-		
-
-	select PR_Concept.FormulaCode into #formulas from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-
-	--DATOS DEL TRABAJADOR
-	select isnull(reentrydate,entrydate) as fechaingreso, PR_PensionType.PDT as pension, PR_AFP.PensionPercentage as porc_aporte, variablepercentage as porc_comision_flu, 
-	topafp, insuredpercentage as porc_seguro, PR_Employee.CeaseDate as CeaseDate
-	into #empleado 
-	from PR_Employee inner join PR_PensionType on (PR_Employee.PensionType = PR_PensionType.PensionType and PR_PensionType.Company = @company) 
-	left join PR_AFP on (PR_Employee.AFP = PR_AFP.afp and PR_AFP.Company = @company)
-	where Person = @person and PR_Employee.company = @company
-
-
-	--DIAS GRATI TRUNCA
-	declare @fechaactual datetime
-	declare @dia_grati_trunca numeric(19,4)
-	declare @ceasedate datetime, @fechaingreso datetime, @fechaini datetime
-	declare @mes_periodo int
-	declare @fecha_ini_semestre date
-	declare @fecha_fin_semestre date
-
-	set @ceasedate = (select CeaseDate from #empleado)
-	set @fechaingreso = (select fechaingreso from #empleado)
-	set @mes_periodo = convert(int, substring(@period, 5, 2))
-
-	/*
-	    XDIASGRATI - dias del semestre de gratificacion.
-	    Julio: enero a junio. Diciembre: julio a diciembre.
-	    El semestre se determina por el mes del periodo, no por MONTH(@fechaactual).
-	*/
-	set @fecha_ini_semestre = case
-		when @mes_periodo = 7 then convert(date, left(@period, 4) + '0101')
-		when @mes_periodo = 12 then convert(date, left(@period, 4) + '0701')
-		else convert(date, left(@period, 4) + '0101')
-	end
-
-	set @fecha_fin_semestre = case
-		when @mes_periodo = 7 then convert(date, left(@period, 4) + '0630')
-		when @mes_periodo = 12 then convert(date, left(@period, 4) + '1230')
-		else convert(date, left(@period, 6) + '30')
-	end
-
-	set @fechaactual = case
-		when @ceasedate is null then @fecha_fin_semestre
-		else
-			case
-				when @ceasedate < convert(datetime, convert(varchar(6), @ceasedate, 112) + '30')
-					then convert(date, DATEADD(DAY, 30, EOMONTH(@ceasedate, -2)))
-				else convert(date, @ceasedate)
-			end
-	end
-
-	if convert(date, @fechaactual) > @fecha_fin_semestre
-		set @fechaactual = @fecha_fin_semestre
-
-	set @dia_grati_trunca = case when @mes_periodo in (7, 12) then
-								case when convert(date, @fechaingreso) > @fecha_ini_semestre then
-									case when @fechaingreso > convert(datetime, convert(varchar(6), @fechaingreso, 112) + '01')
-										then dbo.f_getDias360(convert(date, convert(varchar(6), dateadd(month, 1, @fechaingreso), 112) + '01'), convert(date, @fechaactual))
-										else dbo.f_getDias360(convert(date, @fechaingreso), convert(date, @fechaactual))
-									end
-								else dbo.f_getDias360(@fecha_ini_semestre, convert(date, @fechaactual))
-								end
-							else 0
-							end
-	set @dia_grati_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASGRATI'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASGRATI'),0) else @dia_grati_trunca end
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XDIASGRATI', @dia_grati_trunca, 'F'
-	if isnull(@dia_grati_trunca,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XDIASGRATI'),0) = 0
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XDIASGRATI', @dia_grati_trunca, 'Y'
-	end
-
-	--XFALTASGRATI - faltas, LSG y suspensiones del semestre de gratificacion
-	declare @dias_faltas_grati numeric(19,4)
-	declare @dias_lsg_grati numeric(19,4)
-	declare @dias_susp_grati numeric(19,4)
-	declare @fecha_fin_faltas date
-
-	set @fecha_fin_faltas = convert(date, @fechaactual)
-
-	if @mes_periodo in (7, 12)
-	begin
-		set @dias_faltas_grati = case when convert(date, @fechaingreso) > @fecha_ini_semestre
-			then dbo.f_getDiasFalta(convert(date, @fechaingreso), @fecha_fin_faltas, @company, @person)
-			else dbo.f_getDiasFalta(@fecha_ini_semestre, @fecha_fin_faltas, @company, @person)
-		end
-
-		set @dias_lsg_grati = case when convert(date, @fechaingreso) > @fecha_ini_semestre
-			then dbo.f_getDiasLSG(convert(date, @fechaingreso), @fecha_fin_faltas, @company, @person)
-			else dbo.f_getDiasLSG(@fecha_ini_semestre, @fecha_fin_faltas, @company, @person)
-		end
-
-		set @dias_susp_grati = case when convert(date, @fechaingreso) > @fecha_ini_semestre
-			then dbo.f_getDiasSUSP(convert(date, @fechaingreso), @fecha_fin_faltas, @company, @person)
-			else dbo.f_getDiasSUSP(@fecha_ini_semestre, @fecha_fin_faltas, @company, @person)
-		end
-
-		if convert(date, @fechaingreso) > @fecha_fin_semestre
-			or convert(date, @fechaingreso) > convert(date, left(@period, 6) + '01')
-		begin
-			set @dias_faltas_grati = 0
-			set @dias_lsg_grati = 0
-			set @dias_susp_grati = 0
-		end
-	end
-	else
-	begin
-		set @dias_faltas_grati = 0
-		set @dias_lsg_grati = 0
-		set @dias_susp_grati = 0
-	end
-
-	set @dias_lsg_grati = isnull(@dias_lsg_grati, 0) + isnull(@dias_faltas_grati, 0) + isnull(@dias_susp_grati, 0)
-	set @dias_lsg_grati = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XFALTASGRATI'), 'N') = 'Y'
-		then isnull((select ConceptValue from #conceptos where FormulaCode = 'XFALTASGRATI'), 0)
-		else @dias_lsg_grati
-	end
-
-	execute sp_pr_registrar_log_calculo @company, @payrolltype, @processtype, @period, @person, @UserID, 'XFALTASGRATI', @dias_lsg_grati, 'F'
-	if isnull(@dias_lsg_grati, 0) > 0 and isnull((select count(*) from #formulas where FormulaCode = 'XFALTASGRATI'), 0) = 0
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype, @processtype, @period, @person, @UserID, @tc, 'XFALTASGRATI', @dias_lsg_grati, 'Y'
-	end
-		
-	
-	----DIAS CTS TRUNCA
-
-
-	--set @ceasedate = (select CeaseDate from #empleado)
-	--set @fechaingreso = (select fechaingreso from #empleado)
-		
-	
-
-	--declare @dia_cts_trunca numeric(19,4)
-		
-	--set @dia_cts_trunca = case when @fechaactual >= convert(datetime,left(@period,4)+'0501') and  @fechaactual <= convert(datetime,left(@period,4)+'1031') then
-	--							case when convert(date,@fechaingreso) >= convert(date,left(@period,4)+'0501') and convert(date,@fechaingreso) <= convert(date,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechaactual) ) else dbo.f_getDias360(convert(date, left(@period,4)+'0501') ,convert(date,@fechaactual) ) end 
-	--						else
-	--							case when @fechaactual > convert(datetime,left(@period,4)+'1031') then
-	--								case when  convert(date,@fechaingreso) > convert(datetime,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechaactual) ) else dbo.f_getDias360(convert(date, left(@period,4) +'1101') ,convert(date,@fechaactual) ) end 
-	--							else
-	--								case when  convert(date,@fechaingreso) > convert(datetime,convert(char(4),convert(int,left(@period,4)) - 1)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechaactual) ) else dbo.f_getDias360(convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1101') ,convert(date,@fechaactual) ) end 
-	--							end
-	--						end
-
-	--set @dia_cts_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASCTS'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASCTS'),0) else @dia_cts_trunca end
-	--execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XDIASCTS', @dia_cts_trunca, 'F'
-	--if isnull(@dia_cts_trunca,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XDIASCTS'),0) = 0
-	--begin
-	--	execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XDIASCTS', @dia_cts_trunca, 'Y'
-	--end
-
-	--DIAS TOTAL DE DIAS CTS 
-
-	declare @dia_total_cts numeric(19,4)
-	declare @fechafinPeriodo datetime
-	
-	set @fechafinPeriodo = convert(datetime,left(@period,6)+'30')
-
-	set @dia_total_cts = case when @fechafinPeriodo >= convert(datetime,left(@period,4)+'0501') and  @fechafinPeriodo <= convert(datetime,left(@period,4)+'1031') then
-								case when convert(date,@fechaingreso) >= convert(date,left(@period,4)+'0501') and convert(date,@fechaingreso) <= convert(date,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechafinPeriodo) ) else dbo.f_getDias360(convert(date, left(@period,4)+'0501') ,convert(date,@fechafinPeriodo) ) end 
-							else
-								case when @fechafinPeriodo > convert(datetime,left(@period,4)+'1031') then
-									case when  convert(date,@fechaingreso) > convert(datetime,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechafinPeriodo) ) else dbo.f_getDias360(convert(date, left(@period,4) +'1101') ,convert(date,@fechafinPeriodo) ) end 
-								else
-									case when  convert(date,@fechaingreso) > convert(datetime,convert(char(4),convert(int,left(@period,4)) - 1)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@fechafinPeriodo) ) else dbo.f_getDias360(convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1101') ,convert(date,@fechafinPeriodo) ) end 
-								end
-							end
-
-	set @dia_total_cts = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XTOTALDIASCTS'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XTOTALDIASCTS'),0) else @dia_total_cts end
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XTOTALDIASCTS', @dia_total_cts, 'F'
-	if isnull(@dia_total_cts,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XTOTALDIASCTS'),0) = 0
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XTOTALDIASCTS', @dia_total_cts, 'Y'
-	end
-
-
-	
-	
-	/*BUCLE FORMULAS AUXILIARES*/
-	declare @importe_formula numeric(19,4)
-	declare @nemonico varchar(20)
-
-	Declare BucleAuxiliares Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '1')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleAuxiliares 
-	FETCH NEXT FROM BucleAuxiliares INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-
-	
-		--print @nemonico
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-	
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleAuxiliares
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleAuxiliares
-	DEALLOCATE BucleAuxiliares
-
-
-	--DIAS GRATI TRUNCA
-
-	declare  @cantvac int, @idvac int
-	declare  @flag28 int
-	declare @dayx char(2)
-	declare @periodo_inicial datetime
-
-	
-	set @ceasedate = (select CeaseDate from #empleado)
-	set @fechaingreso = (select fechaingreso from #empleado)
-
-	
-
-
-
-	--set @flag28 = case when SUBSTRING(@period,5,2) = '02' and right(CONVERT(varchar(8),@ceasedate,112),4) = '0228' then 1 else 0 end
-
-	--set @dayx = case when @flag28 = 1 then '27' else '29' end
-	
-		
-	--set @dia_grati_trunca = case when MONTH (@ceasedate) < 7 then
-	--							case when convert(date,@fechaingreso) > convert(date, left(@period,4) +'0101') then  (case when @fechaingreso > convert(datetime,convert(varchar(6),@fechaingreso,112) + '01') then dbo.f_getDias360(convert(date,convert(varchar(6),dateadd(month,1,@fechaingreso),112) + '01') ,case when @ceasedate < convert(datetime,convert(varchar(6),@ceasedate,112) + '30') then convert(date,DATEADD(DAY, 30, EOMONTH(@ceasedate, -2))) else convert(date,@ceasedate)  end ) else dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) ) end ) else dbo.f_getDias360(convert(date, left(@period,4) +'0101') ,convert(date,@ceasedate) ) end 
-	--						else
-	--							case when convert(date,@fechaingreso) > convert(date, left(@period,4) +'0701') then  (case when @fechaingreso > convert(datetime,convert(varchar(6),@fechaingreso,112) + '01') then dbo.f_getDias360(convert(date,convert(varchar(6),dateadd(month,1,@fechaingreso),112) + '01') ,convert(date,@ceasedate) ) else dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) ) end ) else dbo.f_getDias360(convert(date, left(@period,4) +'0701') ,convert(date,@ceasedate) ) end 
-	--						end
-	--set @dia_grati_trunca = @dia_grati_trunca + 2*@flag28
-	--set @dia_grati_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASGRATI'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASGRATI'),0) else @dia_grati_trunca end
-	--execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XDIASGRATI', @dia_grati_trunca, 'F'
-	--if isnull(@dia_grati_trunca,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XDIASGRATI'),0) = 0
-	--begin
-	--	execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XDIASGRATI', @dia_grati_trunca, 'Y'
-	--end
-
-	
-
-	/*BUCLE FORMULAS INGRESOS*/
-	
-
-	Declare BucleIngresos Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '2')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleIngresos 
-	FETCH NEXT FROM BucleIngresos INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-		--print @nemonico
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleIngresos
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleIngresos
-	DEALLOCATE BucleIngresos
-
-
-	
-
-
-	
-
-	--DIAS TRABAJADOS REAL
-	declare @DIASTRABAJADOS numeric(19,4)
-	set @DIASTRABAJADOS = isnull((select ConceptValue from #conceptos where FormulaCode = 'DIASTRABAJADOS'),0)
-	
-	
-
-	--TOTAL INGRESOS
-	set @total_ingreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'I')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	--set @total_ingreso = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'TOTALINGRESO'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'TOTALINGRESO'),0) else @total_ingreso end
-	--execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALINGRESO', @total_ingreso, 'F'
-	--if isnull(@total_ingreso,0) > 0 
-	--begin
-	--	execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALINGRESO', @total_ingreso, 'Y'
-	--end
-
-
-
-	/*BUCLE FORMULAS EGRESOS*/
-	
-
-	Declare BucleEgresos Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '3')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleEgresos 
-	FETCH NEXT FROM BucleEgresos INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-		--print @nemonico
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleEgresos
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleEgresos
-	DEALLOCATE BucleEgresos
-
-	
-
-
-
-	--TOTAL_EGRESOS
-	declare @total_egreso numeric(19,4)
-	set @total_egreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'D')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	--execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALEGRESOS', @total_egreso, 'F'
-	--if isnull(@total_egreso,0) > 0 
-	--begin
-	--	execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALEGRESOS', @total_egreso, 'Y'
-	--end
-
-	/*BUCLE FORMULAS APORTES*/
-	
-
-	Declare BucleAportes Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '4')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleAportes 
-	FETCH NEXT FROM BucleAportes INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleAportes
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleAportes
-	DEALLOCATE BucleAportes
-
-	
-
-	
-
-	--TOTAL_APORTES
-	declare @total_aportes numeric(19,4)
-	set @total_aportes = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'A')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	--execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'TOTALPATRONAL', @total_aportes, 'F'
-	--if isnull(@total_aportes,0) > 0 
-	--begin
-	--	execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'TOTALPATRONAL', @total_aportes, 'Y'
-	--end
-
-	declare @rem_basica_mes numeric(19,4)
-	set @rem_basica_mes = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period and
-	exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'REM_BASICA_MES')),0)
-
-	--NETO
-	declare @neto numeric(19,4)
-	set @neto = @total_ingreso - @total_egreso
-
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'NETO', @neto, 'F'
-	if isnull(@neto,0) > 0 
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'NETO', @neto, 'Y'
-	end
-
-	declare @liq_total_ing numeric(19,4),@liq_total_egreso numeric(19,4), @liq_total_neto numeric(19,4)
-
-	set @liq_total_ing = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'TOTALINGRESO')),0)
-
-	set @liq_total_egreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'TOTALEGRESOS')),0)
-
-	set @liq_total_neto = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'NETO')),0)
-
-	set @liq_total_ing = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_TOTAL_ING'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_TOTAL_ING'),0) else  @liq_total_ing end
-
-	set @liq_total_egreso = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_TOTAL_EGR'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_TOTAL_EGR'),0) else  @liq_total_egreso end
-
-	set @liq_total_neto = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_NETO'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_NETO'),0) else  @liq_total_neto end
-	
-
-	update PR_EmployeePayRoll set Salary = @rem_basica_mes, SalaryLo = @rem_basica_mes, SalaryEx = round(@rem_basica_mes/@tc,4), WorkingDays = @DIASTRABAJADOS, WorkingHours = @DIASTRABAJADOS * 30,
-	TotalIncome = @total_ingreso, TotalIncomeLo = @total_ingreso, TotalIncomeEx = round(@total_ingreso/@tc, 4),
-	TotalDebits = @total_egreso, TotalDebitsLo = @total_egreso, TotalDebitsEx = round(@total_egreso/@tc, 4),
-	TotalPatronal = @total_aportes, TotalPatronalLo = @total_aportes, TotalPatronalEx = round(@total_aportes/@tc, 4),
-	Net = @neto, NetLo = @neto, NetEx = round(@neto/@tc,4)
-	where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	if isnull((select sum(AmountLo) from PR_EmployeeLoanAmortization where Company = @company and PRperiod = @period and Person = @person),0) > 0 
-	begin
-		update PR_EmployeeLoanAmortization set Status = 'A' where Company = @company and PRperiod = @period and Person = @person
-	end
-	
-end
-
-GO
-
-
--- ============================================================================
--- [053/233] sp_pr_calcular_provcts_persona.sql
--- ============================================================================
-
--- Exportado desde hm_aci2
-
---sp_pr_calcular_liquidacion_persona 'BGT', 'LIMABGT 000000000001', 'BGT 000000000011', '20241111', '45177754', 'ADMIN', 3.14
-
---select * FROM PR_PROCESSTYPE
-
---select * FROM PR_PAYROLLTYPE
-
---select PR_Concept.FormulaCode  from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = 'BGT'
---	and PR_FormulaHeader.Proccestype = 'BGT 000000000002' and PR_FormulaHeader.Payrolltype = 'LIMABGT 000000000001')
-
-	--select PR_FormulaHeader.FormulaHeader, PR_Concept.FormulaCode  from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = 'BGT'
-	--and PR_FormulaHeader.Proccestype = 'BGT 000000000002' and PR_FormulaHeader.Payrolltype = 'LIMABGT 000000000001')
-	
---	select * from PR_Concept where FormulaCode = 'HRS_EXTRAS_PORC_35'
---	select * from PR_FormulaDetail where FormulaHeader = 'LIMABGT 000000000031'
-
-/*
-    Cálculo de provisión CTS por persona.
-    Proceso: PROVISION CTS (sp_pr_calcular_provcts_persona).
-
-    XDIASCTS (activo): días acumulados del semestre CTS hasta el mes del periodo (igual que XTOTALDIASCTS).
-*/
-CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcular_provcts_persona]
-@company varchar(4), @payrolltype varchar(20),  @processtype varchar(20), @period varchar(20), @person varchar(20), @UserID varchar(20), @tc numeric(19,4)
-as
-begin	
-	declare @importe numeric(19,4), @horas25 numeric(19,4), @horas35 numeric(19,4), @horas100 numeric(19,4), @total_5ta numeric(19,4), @total_ingreso numeric(19,4), @total_AFP numeric(19,4)
-	declare @tardanza numeric(19,4), @faltas numeric(19,4), @cesado int
-
-	/*INGRESAR EN ASIGNACION DE CONCEPTOS*/
-
-
-	--execute sp_pr_asignar_conceptos_persona @company, @payrolltype,  @period, @person, @UserID
-	
-	/*INSERTAR CONCEPTOS DESDE ASIGNACION*/
-
-	
-
-	delete from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	delete from PR_EmployeePayRoll where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	delete from PR_LOG_CALCULO_PLANILLAS where Company = @company and PayRollType = @payrolltype and Person = @person
-	and process = @processtype and period = @period
-
-	set @cesado = case when isnull((select convert(varchar(6),CeaseDate,112) from PR_Employee where Person	 = @person and Company = @company),'') = '' then 0 else
-						case when isnull((select convert(varchar(6),CeaseDate,112) from PR_Employee where Person	 = @person and Company = @company),'') < left(@period,6) then 1 else 0 end end
-
-	insert into PR_EmployeePayRoll (PayRollType,Person,Company,ProcessType,PRPeriod,CalculationCurrency,ExchangeRate,ReplicationUnit,XLastUser,XLastDate,entrydate,ceasedate,liquidationdate,ceasereason,
-	pensiontype,AFP,pensionpercentaje,variablepercentage,insuredpercentage,AFPCard,Position,Costcenter,Costcentername,salarybank,salaryaccounttype,salaryaccount,salarycurrency,collectionform,
-	ctsbank,ctscurrency,ctsaccount,pensioninscriptiondate,accountprofile)
-	select 
-		PayRollType,PR_Employee.Person,PR_Employee.Company, @processtype,@period,'LO', @tc,SY_Person.ReplicationUnit,@UserID,GETDATE(),
-		isnull(ReEntryDate,EntryDate), CeaseDate,LiquidationDate,CeaseReason,PensionType,PR_Employee.AFP,PensionPercentage,variablepercentage,insuredpercentage,PR_Employee.AFPCard,
-		PR_Employee.Position,PR_Employee.CostCenter, PR_Employee.Costcentername,salarybank,salaryaccounttype,salaryaccount,salarycurrency,CollectionForm,
-		ctsbank,ctscurrency,ctsaccount,pensioninscriptiondate,accountprofile
-	from PR_Employee INNER JOIN SY_Person ON (PR_Employee.Person = SY_Person.Person) LEFT JOIN PR_AFP on (PR_Employee.AFP = PR_AFP.AFP)
-	where PR_Employee.Person = @person and PR_Employee.Company = @company
-
-
-	insert into PR_EmployeePayRollConcept (Concept, Person, Company, ProcessType, PayRollType,PRPeriod, ConceptValue, FlagIsMonetary, ConceptCurrency, ConceptValueLo,ConceptValueEx,
-	ExchangeRate,ReplicationUnit,XLastUser,XLastDate,flagPayment)
-	select distinct
-		PR_EmployeeConcept.Concept, PR_EmployeeConcept.Person, PR_EmployeeConcept.Company, @processtype,PR_EmployeeConcept.PayRollType,@period,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo) else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,
-		PR_Concept.FlagIsMonetary,PR_EmployeeConcept.ConceptCurrency,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo) else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then ROUND(isnull(PR_EmployeeConcept.ConceptValue,PR_EmployeeConcept.ConceptValueLo)/(@tc*1.0000),2) else PR_EmployeeConcept.ConceptValueEx end
-		else NULL end,
-		case when PR_Concept.FlagIsMonetary = 'Y' then @tc else NULL end,
-		SY_Person.ReplicationUnit,@UserID,GETDATE(),'N'
-
-	from PR_EmployeeConcept inner join SY_Person on (PR_EmployeeConcept.Person = SY_Person.Person) inner join PR_Concept on (PR_EmployeeConcept.Company = PR_Concept.Company
-	and PR_EmployeeConcept.Concept = PR_Concept.Concept
-	and @cesado = 0)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and exists (select * from PR_Concept C where C.Company = @company and C.Concept = PR_EmployeeConcept.Concept and isnull(C.flaginsertar, 'N') = 'L')
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-	
-	insert into PR_LOG_CALCULO_PLANILLAS (Company, payrolltype,process,period,person, fecha,concepto,importe,tipo,xlastuser,xlastdate)
-	select 
-		PR_EmployeeConcept.Company, PR_EmployeeConcept.PayRollType,@processtype, @period, PR_EmployeeConcept.Person,getdate(),PR_Concept.FormulaCode,
-		case when PR_Concept.FlagIsMonetary = 'Y' then
-			case when PR_EmployeeConcept.ConceptCurrency = 'LO' then PR_EmployeeConcept.ConceptValue else PR_EmployeeConcept.ConceptValueEx end
-		else PR_EmployeeConcept.ConceptValue end,'I', 'ADMIN', GETDATE()
-
-	from PR_EmployeeConcept inner join SY_Person on (PR_EmployeeConcept.Person = SY_Person.Person) inner join PR_Concept on (PR_EmployeeConcept.Company = PR_Concept.Company
-	and PR_EmployeeConcept.Concept = PR_Concept.Concept)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and exists (select * from PR_Concept C where C.Company = @company and C.Concept = PR_EmployeeConcept.Concept and isnull(C.flaginsertar, 'N') = 'L')
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-	
-	select PR_Concept.formulacode, PR_EmployeeConcept.ConceptValue, FlagApplyFormula into #conceptos 
-	from PR_EmployeeConcept inner join PR_Concept on (PR_EmployeeConcept.Concept = PR_Concept.Concept and PR_Concept.Company = @company)
-	where PR_EmployeeConcept.Company = @company and PayRollType = @payrolltype and PR_EmployeeConcept.Person = @person
-	and ((FlagFrecuencyType = 'P' and PRPeriodStart <= @period) or (FlagFrecuencyType = 'T' and @period between PRPeriodStart and PRPeriodEnd))
-	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType)))
-
-
-	select PR_Concept.FormulaCode into #formulas from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-
-	--DATOS DEL TRABAJADOR
-	select isnull(reentrydate,entrydate) as fechaingreso, PR_PensionType.PDT as pension, PR_AFP.PensionPercentage as porc_aporte, variablepercentage as porc_comision_flu, 
-	topafp, insuredpercentage as porc_seguro, PR_Employee.CeaseDate as CeaseDate
-	into #empleado 
-	from PR_Employee inner join PR_PensionType on (PR_Employee.PensionType = PR_PensionType.PensionType and PR_PensionType.Company = @company) 
-	left join PR_AFP on (PR_Employee.AFP = PR_AFP.afp and PR_AFP.Company = @company)
-	where Person = @person and PR_Employee.company = @company
-
-
-	
-	
-	----DIAS GRATI TRUNCA
-
-	declare @dia_grati_trunca numeric(19,4)
-	declare @ceasedate datetime, @fechaingreso datetime, @fechaini datetime
-
-	set @ceasedate = (select CeaseDate from #empleado)
-	set @fechaingreso = (select fechaingreso from #empleado)
-		
-
-
-
-	declare @dia_cts_trunca numeric(19,4)
-
-	/*
-	    XDIASCTS - Provisión CTS mensual.
-	    Semestres: Nov-Abr (meses 11,12,1-4) y May-Oct (meses 5-10).
-	    Trabajador activo: días acumulados del semestre hasta fin del mes del periodo
-	    (misma base que XTOTALDIASCTS). Ingreso en el mes del periodo: prorrateo.
-	    Trabajador cesado: mantiene lógica de días truncos por semestre.
-	*/
-	declare @fin_mes date
-	declare @dia_total_cts numeric(19,4)
-
-	set @fin_mes = convert(date, left(@period, 6) + '30')
-
-	set @dia_total_cts = case when @fin_mes >= convert(date, left(@period,4)+'0501') and @fin_mes <= convert(date, left(@period,4)+'1031') then
-								case when convert(date,@fechaingreso) >= convert(date,left(@period,4)+'0501') and convert(date,@fechaingreso) <= convert(date,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,@fin_mes) else dbo.f_getDias360(convert(date, left(@period,4)+'0501') ,@fin_mes) end 
-							else
-								case when @fin_mes > convert(date,left(@period,4)+'1031') then
-									case when convert(date,@fechaingreso) > convert(date,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,@fin_mes) else dbo.f_getDias360(convert(date, left(@period,4) +'1101') ,@fin_mes) end 
-								else
-									case when convert(date,@fechaingreso) > convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,@fin_mes) else dbo.f_getDias360(convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1101') ,@fin_mes) end 
-								end
-							end
-
-	set @dia_cts_trunca =
-					case when @ceasedate is null then
-						@dia_total_cts
-					else
-						case when @ceasedate >= convert(datetime,left(@period,4)+'0501') and  @ceasedate <= convert(datetime,left(@period,4)+'1031') then
-								case when convert(date,@fechaingreso) >= convert(date,left(@period,4)+'0501') and convert(date,@fechaingreso) <= convert(date,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) ) else dbo.f_getDias360(convert(date, left(@period,4)+'0501') ,convert(date,@ceasedate) ) end 
-							else
-								case when @ceasedate > convert(datetime,left(@period,4)+'1031') then
-									case when  convert(date,@fechaingreso) > convert(datetime,left(@period,4)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) ) else dbo.f_getDias360(convert(date, left(@period,4) +'1101') ,convert(date,@ceasedate) ) end 
-								else
-									case when  convert(date,@fechaingreso) > convert(datetime,convert(char(4),convert(int,left(@period,4)) - 1)+'1031') then dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) ) else dbo.f_getDias360(convert(date,convert(char(4),convert(int,left(@period,4)) - 1)+'1101') ,convert(date,@ceasedate) ) end 
-								end
-							end
-					end
-	set @dia_cts_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASCTS'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASCTS'),0) else @dia_cts_trunca end
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XDIASCTS', @dia_cts_trunca, 'F'
-	if isnull(@dia_cts_trunca,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XDIASCTS'),0) = 0
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XDIASCTS', @dia_cts_trunca, 'Y'
-	end
-
-	--DIAS TOTAL DE DIAS CTS 
-
-	set @dia_total_cts = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XTOTALDIASCTS'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'XTOTALDIASCTS'),0) else @dia_total_cts end
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'XTOTALDIASCTS', @dia_total_cts, 'F'
-	if isnull(@dia_total_cts,0) > 0 and  ISNULL((select count(*) from #formulas where FormulaCode = 'XTOTALDIASCTS'),0) = 0
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'XTOTALDIASCTS', @dia_total_cts, 'Y'
-	end
-
-
-
-	
-	/*BUCLE FORMULAS AUXILIARES*/
-	declare @importe_formula numeric(19,4)
-	declare @nemonico varchar(20)
-
-	Declare BucleAuxiliares Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '1')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleAuxiliares 
-	FETCH NEXT FROM BucleAuxiliares INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-		--print @nemonico
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleAuxiliares
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleAuxiliares
-	DEALLOCATE BucleAuxiliares
-
-	
-
-	/*BUCLE FORMULAS INGRESOS*/
-	
-
-	Declare BucleIngresos Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '2')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleIngresos 
-	FETCH NEXT FROM BucleIngresos INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-		--print @nemonico
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleIngresos
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleIngresos
-	DEALLOCATE BucleIngresos
-
-
-	
-
-
-	
-
-	--DIAS TRABAJADOS REAL
-	declare @DIASTRABAJADOS numeric(19,4)
-	set @DIASTRABAJADOS = isnull((select ConceptValue from #conceptos where FormulaCode = 'DIASTRABAJADOS'),0)
-	
-	
-
-	--TOTAL INGRESOS
-	set @total_ingreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'I')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	
-
-
-
-	/*BUCLE FORMULAS EGRESOS*/
-	
-
-	Declare BucleEgresos Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '3')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleEgresos 
-	FETCH NEXT FROM BucleEgresos INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-		--print @nemonico
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleEgresos
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleEgresos
-	DEALLOCATE BucleEgresos
-
-	
-
-	
-
-	--TOTAL_EGRESOS
-	declare @total_egreso numeric(19,4)
-	set @total_egreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'D')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	
-
-	/*BUCLE FORMULAS APORTES*/
-	
-
-	Declare BucleAportes Cursor For
-	select PR_Concept.FormulaCode from PR_FormulaHeader inner join PR_Concept on (PR_FormulaHeader.Concept = PR_Concept.Concept and  PR_FormulaHeader.Company = @company
-	and PR_FormulaHeader.Proccestype = @processtype and PR_FormulaHeader.Payrolltype = @payrolltype)
-	INNER JOIN PR_GrupoFormula ON (PR_FormulaHeader.GrupoFormula = PR_GrupoFormula.GrupoFormula and PR_GrupoFormula.grouporder = '4')
-	order by PR_FormulaHeader.orden
-	
-	OPEN BucleAportes 
-	FETCH NEXT FROM BucleAportes INTO  @nemonico
-	WHILE @@FETCH_STATUS = 0 
-	BEGIN 
-		execute SP_PR_EjecutarFormula @company, @period, @payrolltype,  @processtype, @person, @nemonico
-
-		set @importe_formula = ISNULL((select valor from xx_valor),0)
-		set @importe_formula = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = @nemonico),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = @nemonico),0) else @importe_formula end
-		execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, @nemonico, @importe_formula, 'F'
-		if isnull(@importe_formula,0) > 0 
-		begin
-			execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, @nemonico, @importe_formula, 'Y'
-		end
-			
-	
-	FETCH NEXT FROM BucleAportes
-	
-	INTO  @nemonico
-	END 
-		
-	CLOSE BucleAportes
-	DEALLOCATE BucleAportes
-
-	
-
-	
-
-	--TOTAL_APORTES
-	declare @total_aportes numeric(19,4)
-	set @total_aportes = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept inner join PR_Concept on (PR_EmployeePayRollConcept.Concept = PR_Concept.Concept) 
-	inner join PR_ConceptType on (pr_concept.concepttype = PR_ConceptType.ConceptType and PR_ConceptType.ShortName = 'A')
-	where PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period ),0)
-
-	
-
-	declare @rem_basica_mes numeric(19,4)
-	set @rem_basica_mes = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period and
-	exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'REM_BASICA_MES')),0)
-
-	--NETO
-	declare @neto numeric(19,4)
-	set @neto = @total_ingreso - @total_egreso
-
-	execute sp_pr_registrar_log_calculo @company, @payrolltype,  @processtype, @period, @person, @UserID, 'NETO', @neto, 'F'
-	if isnull(@neto,0) > 0 
-	begin
-		execute sp_pr_registrar_concepto @company, @payrolltype,  @processtype, @period, @person, @UserID, @tc, 'NETO', @neto, 'Y'
-	end
-
-	declare @liq_total_ing numeric(19,4),@liq_total_egreso numeric(19,4), @liq_total_neto numeric(19,4)
-
-	set @liq_total_ing = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'TOTALINGRESO')),0)
-
-	set @liq_total_egreso = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'TOTALEGRESOS')),0)
-
-	set @liq_total_neto = isnull((select sum(ConceptValueLo) from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
-								and PRPeriod = @period and ProcessType = @processtype and
-								exists (select * from PR_Concept where Concept = PR_EmployeePayRollConcept.Concept and Company = @company and FormulaCode = 'NETO')),0)
-
-	set @liq_total_ing = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_TOTAL_ING'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_TOTAL_ING'),0) else  @liq_total_ing end
-
-	set @liq_total_egreso = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_TOTAL_EGR'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_TOTAL_EGR'),0) else  @liq_total_egreso end
-
-	set @liq_total_neto = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'LIQ_NETO'),'N') = 'Y' then isnull((select ConceptValue from #conceptos where FormulaCode = 'LIQ_NETO'),0) else  @liq_total_neto end
-	
-
-	update PR_EmployeePayRoll set Salary = @rem_basica_mes, SalaryLo = @rem_basica_mes, SalaryEx = round(@rem_basica_mes/@tc,4), WorkingDays = @DIASTRABAJADOS, WorkingHours = @DIASTRABAJADOS * 30,
-	TotalIncome = @total_ingreso, TotalIncomeLo = @total_ingreso, TotalIncomeEx = round(@total_ingreso/@tc, 4),
-	TotalDebits = @total_egreso, TotalDebitsLo = @total_egreso, TotalDebitsEx = round(@total_egreso/@tc, 4),
-	TotalPatronal = @total_aportes, TotalPatronalLo = @total_aportes, TotalPatronalEx = round(@total_aportes/@tc, 4),
-	Net = @neto, NetLo = @neto, NetEx = round(@neto/@tc,4)
-	where Company = @company and PayRollType = @payrolltype and Person = @person
-	and ProcessType = @processtype and PRPeriod = @period
-
-	if isnull((select sum(AmountLo) from PR_EmployeeLoanAmortization where Company = @company and PRperiod = @period and Person = @person),0) > 0 
-	begin
-		update PR_EmployeeLoanAmortization set Status = 'A' where Company = @company and PRperiod = @period and Person = @person
-	end
-	
-end
-
-GO
-
-
--- ============================================================================
--- [054/233] sp_pr_calcularplanillas_masivo_web.sql
+-- [055/260] sp_pr_calcularplanillas_masivo_web.sql
 -- ============================================================================
 
 /*
@@ -7650,7 +7071,7 @@ GO
 
 
 -- ============================================================================
--- [055/233] sp_pr_calcularplanillas_web.sql
+-- [056/260] sp_pr_calcularplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -7753,7 +7174,7 @@ GO
 
 
 -- ============================================================================
--- [056/233] sp_pr_cerrarperiodo_proceso_web.sql
+-- [057/260] sp_pr_cerrarperiodo_proceso_web.sql
 -- ============================================================================
 
 /*
@@ -7794,7 +7215,7 @@ GO
 
 
 -- ============================================================================
--- [057/233] sp_pr_certificadoquinta_web.sql
+-- [058/260] sp_pr_certificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -8580,7 +8001,7 @@ GO
 
 
 -- ============================================================================
--- [058/233] sp_pr_certificadoretirocts_web.sql
+-- [059/260] sp_pr_certificadoretirocts_web.sql
 -- ============================================================================
 
 /*
@@ -8691,7 +8112,7 @@ GO
 
 
 -- ============================================================================
--- [059/233] sp_pr_certificadotrabajo_web.sql
+-- [060/260] sp_pr_certificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -8796,7 +8217,7 @@ GO
 
 
 -- ============================================================================
--- [060/233] sp_pr_control_pagos_afp_web.sql
+-- [061/260] sp_pr_control_pagos_afp_web.sql
 -- ============================================================================
 
 /*
@@ -8868,7 +8289,7 @@ GO
 
 
 -- ============================================================================
--- [061/233] sp_pr_datosusuario_web.sql
+-- [062/260] sp_pr_datosusuario_web.sql
 -- ============================================================================
 
 /*
@@ -8957,7 +8378,367 @@ GO
 
 
 -- ============================================================================
--- [062/233] sp_pr_depurar_conceptos_auxiliares_web.sql
+-- [063/260] sp_pr_deletepersoncompany_web.sql
+-- ============================================================================
+
+/*
+
+    Elimina un trabajador solo de la compañía indicada (@cia + @person).
+
+
+
+    - Borra dependencias de planillas / contratos / vacaciones / etc. filtradas por Company.
+
+    - Si el trabajador NO existe en otra compañía (PR_Employee), también elimina
+
+      SY_Person y tablas personales sin Company (p.ej. PR_CapitalHumano).
+
+    - Si existe en otra compañía, conserva SY_Person y datos generales.
+
+
+
+    Basado en sp_pr_deleteperson (hm_aci2), adaptado a filtro por compañía.
+
+    Usado por: POST /api/trabajadores/eliminar
+
+*/
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_deletepersoncompany_web]
+
+    @cia    VARCHAR(10),
+
+    @person VARCHAR(20)
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+    SET XACT_ABORT ON;
+
+
+
+    DECLARE @cia_n VARCHAR(10) = LTRIM(RTRIM(ISNULL(@cia, '')));
+
+    DECLARE @person_n VARCHAR(20) = LTRIM(RTRIM(ISNULL(@person, '')));
+
+    DECLARE @otras_cias INT = 0;
+
+    DECLARE @borro_sy_person CHAR(1) = 'N';
+
+    DECLARE @nombre VARCHAR(200) = '';
+
+
+
+    IF @cia_n = '' OR @person_n = ''
+
+    BEGIN
+
+        RAISERROR('Debe indicar compañía y trabajador.', 16, 1);
+
+        RETURN;
+
+    END;
+
+
+
+    IF NOT EXISTS (
+
+        SELECT 1
+
+        FROM PR_Employee (NOLOCK)
+
+        WHERE Company = @cia_n
+
+          AND Person = @person_n
+
+    )
+
+    BEGIN
+
+        RAISERROR('El trabajador no existe en la compañía indicada.', 16, 1);
+
+        RETURN;
+
+    END;
+
+
+
+    SELECT TOP 1
+
+        @nombre = LTRIM(RTRIM(ISNULL(p.Name, '')))
+
+    FROM SY_Person p (NOLOCK)
+
+    WHERE p.Person = @person_n;
+
+
+
+    SELECT @otras_cias = COUNT(DISTINCT e.Company)
+
+    FROM PR_Employee e (NOLOCK)
+
+    WHERE e.Person = @person_n
+
+      AND e.Company <> @cia_n;
+
+
+
+    BEGIN TRY
+
+        BEGIN TRAN;
+
+
+
+        DELETE FROM PR_EmployeeCTS
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeAFP
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeConcept
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeePayRollConcept
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeePayRoll
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_VacationProvisionedDays
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_VacationProvisionTxn
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_VacationProvision
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_VacationPay
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_VacationDetail
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_Vacation
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_TaxRentEmployee
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_PersonContract
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeMedicalRest
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeLoanAmortization
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeLoan
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeCurrentAccount
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM AR_PersonProfile
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM CA_Photocheck
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeLocal
+
+        WHERE Company = @cia_n
+
+          AND (Employee = @person_n OR Person = @person_n);
+
+
+
+        DELETE FROM SY_Dependant
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM CA_Resumenmarcas
+
+        WHERE person = @person_n AND company = @cia_n;
+
+
+
+        DELETE FROM ca_papeleta
+
+        WHERE person = @person_n AND company = @cia_n;
+
+
+
+        DELETE FROM CA_Check
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM CA_CheckSummary
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM CA_CheckApprove
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PR_EmployeeSchedule
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        DELETE FROM PeriodsIndicators
+
+        WHERE person = @person_n AND company = @cia_n;
+
+
+
+        DELETE FROM PR_Employee
+
+        WHERE Person = @person_n AND Company = @cia_n;
+
+
+
+        IF @otras_cias = 0
+
+        BEGIN
+
+            DELETE FROM PR_CapitalHumano
+
+            WHERE Person = @person_n;
+
+
+
+            DELETE FROM SY_Person
+
+            WHERE Person = @person_n;
+
+
+
+            SET @borro_sy_person = 'Y';
+
+        END;
+
+
+
+        COMMIT TRAN;
+
+
+
+        SELECT
+
+            CAST(1 AS INT) AS ok,
+
+            @cia_n AS cia,
+
+            @person_n AS person,
+
+            @nombre AS nombre,
+
+            @borro_sy_person AS borro_sy_person,
+
+            CASE
+
+                WHEN @borro_sy_person = 'Y'
+
+                    THEN 'Trabajador eliminado completamente del sistema.'
+
+                ELSE 'Trabajador eliminado de la compania. Se conservaron sus datos generales porque existe en otra empresa.'
+
+            END AS mensaje;
+
+    END TRY
+
+    BEGIN CATCH
+
+        IF @@TRANCOUNT > 0
+
+            ROLLBACK TRAN;
+
+
+
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+
+        RAISERROR(@err, 16, 1);
+
+    END CATCH
+
+END
+
+GO
+
+
+
+-- ============================================================================
+-- [064/260] sp_pr_depurar_conceptos_auxiliares_web.sql
 -- ============================================================================
 
 /*
@@ -9249,7 +9030,7 @@ GO
 
 
 -- ============================================================================
--- [063/233] sp_pr_descansos_eliminar_web.sql
+-- [065/260] sp_pr_descansos_eliminar_web.sql
 -- ============================================================================
 
 /*
@@ -9303,7 +9084,7 @@ GO
 
 
 -- ============================================================================
--- [064/233] sp_pr_descansos_guardar_web.sql
+-- [066/260] sp_pr_descansos_guardar_web.sql
 -- ============================================================================
 
 /*
@@ -9497,7 +9278,7 @@ GO
 
 
 -- ============================================================================
--- [065/233] sp_pr_descansos_obtener_trabajador_web.sql
+-- [067/260] sp_pr_descansos_obtener_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -9583,7 +9364,7 @@ GO
 
 
 -- ============================================================================
--- [066/233] sp_pr_detalleboletaaportes_web.sql
+-- [068/260] sp_pr_detalleboletaaportes_web.sql
 -- ============================================================================
 
 /*
@@ -9629,7 +9410,7 @@ GO
 
 
 -- ============================================================================
--- [067/233] sp_pr_detalleboletadescuentos_web.sql
+-- [069/260] sp_pr_detalleboletadescuentos_web.sql
 -- ============================================================================
 
 /*
@@ -9675,7 +9456,7 @@ GO
 
 
 -- ============================================================================
--- [068/233] sp_pr_detalleboletaingresos_web.sql
+-- [070/260] sp_pr_detalleboletaingresos_web.sql
 -- ============================================================================
 
 /*
@@ -9721,7 +9502,7 @@ GO
 
 
 -- ============================================================================
--- [069/233] sp_pr_detallecalculocertificadoquinta_web.sql
+-- [071/260] sp_pr_detallecalculocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -9777,7 +9558,7 @@ GO
 
 
 -- ============================================================================
--- [070/233] sp_pr_detallecalculoutilidades_web.sql
+-- [072/260] sp_pr_detallecalculoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -9836,7 +9617,7 @@ GO
 
 
 -- ============================================================================
--- [071/233] sp_pr_eliminar_accountprofiledetail_web.sql
+-- [073/260] sp_pr_eliminar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -9895,7 +9676,7 @@ GO
 
 
 -- ============================================================================
--- [072/233] sp_pr_eliminar_calculo_planilla_web.sql
+-- [074/260] sp_pr_eliminar_calculo_planilla_web.sql
 -- ============================================================================
 
 /*
@@ -9990,7 +9771,58 @@ GO
 
 
 -- ============================================================================
--- [073/233] sp_pr_eliminarasignacionconcepto_web.sql
+-- [075/260] sp_pr_eliminar_distribucion_voucher_web.sql
+-- ============================================================================
+
+/*
+    Maestro Distribución Porcentual — eliminación de PR_DistribucionVoucher.
+    Usado por: POST /api/asientos/distribucion-porcentual/eliminar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_eliminar_distribucion_voucher_web]
+    @company VARCHAR(4),
+    @period  VARCHAR(20),
+    @fila    INT
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+
+    IF @fila IS NULL OR @company = '' OR @period = ''
+    BEGIN
+        RAISERROR('Indique compañía, periodo y registro a eliminar.', 16, 1);
+        RETURN;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM PR_DistribucionVoucher (NOLOCK)
+        WHERE Fila = @fila
+          AND company = @company
+          AND period = @period
+    )
+    BEGIN
+        RAISERROR('No se encontró el registro de distribución.', 16, 1);
+        RETURN;
+    END;
+
+    DELETE FROM PR_DistribucionVoucher
+    WHERE Fila = @fila
+      AND company = @company
+      AND period = @period;
+
+    SELECT
+        @fila AS fila,
+        'Distribución eliminada correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [076/260] sp_pr_eliminarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -10041,7 +9873,7 @@ GO
 
 
 -- ============================================================================
--- [074/233] sp_pr_eliminarbankaccount_web.sql
+-- [077/260] sp_pr_eliminarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -10104,7 +9936,7 @@ GO
 
 
 -- ============================================================================
--- [075/233] sp_pr_eliminarconcepto_web.sql
+-- [078/260] sp_pr_eliminarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -10202,7 +10034,7 @@ GO
 
 
 -- ============================================================================
--- [076/233] sp_pr_eliminarformula_web.sql
+-- [079/260] sp_pr_eliminarformula_web.sql
 -- ============================================================================
 
 /*
@@ -10270,7 +10102,7 @@ GO
 
 
 -- ============================================================================
--- [077/233] sp_pr_eliminarperiodo_payrolltype_web.sql
+-- [080/260] sp_pr_eliminarperiodo_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -10323,7 +10155,7 @@ GO
 
 
 -- ============================================================================
--- [078/233] sp_pr_eliminarpersondocumenttype_web.sql
+-- [081/260] sp_pr_eliminarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -10397,7 +10229,7 @@ GO
 
 
 -- ============================================================================
--- [079/233] sp_pr_eliminarposition_web.sql
+-- [082/260] sp_pr_eliminarposition_web.sql
 -- ============================================================================
 
 /*
@@ -10470,7 +10302,7 @@ GO
 
 
 -- ============================================================================
--- [080/233] sp_pr_eliminarreplicationunit_web.sql
+-- [083/260] sp_pr_eliminarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -10539,7 +10371,7 @@ GO
 
 
 -- ============================================================================
--- [081/233] sp_pr_extraer_nemonicos_literal_sp_web.sql
+-- [084/260] sp_pr_extraer_nemonicos_literal_sp_web.sql
 -- ============================================================================
 
 /*
@@ -10726,7 +10558,7 @@ GO
 
 
 -- ============================================================================
--- [082/233] sp_pr_formatoliquidacion_web.sql
+-- [085/260] sp_pr_formatoliquidacion_web.sql
 -- ============================================================================
 
 /*
@@ -10925,7 +10757,7 @@ GO
 
 
 -- ============================================================================
--- [083/233] sp_pr_formatoutilidades_web.sql
+-- [086/260] sp_pr_formatoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -11046,7 +10878,7 @@ GO
 
 
 -- ============================================================================
--- [084/233] sp_pr_genera_correlativo_web.sql
+-- [087/260] sp_pr_genera_correlativo_web.sql
 -- ============================================================================
 
 /*
@@ -11145,7 +10977,7 @@ GO
 
 
 -- ============================================================================
--- [085/233] sp_pr_generar_banbif_web.sql
+-- [088/260] sp_pr_generar_banbif_web.sql
 -- ============================================================================
 
 /*
@@ -11366,7 +11198,7 @@ GO
 
 
 -- ============================================================================
--- [086/233] sp_pr_generar_continental_web.sql
+-- [089/260] sp_pr_generar_continental_web.sql
 -- ============================================================================
 
 /*
@@ -11669,7 +11501,7 @@ GO
 
 
 -- ============================================================================
--- [087/233] sp_pr_generar_interbank_web.sql
+-- [090/260] sp_pr_generar_interbank_web.sql
 -- ============================================================================
 
 /*
@@ -11954,7 +11786,7 @@ GO
 
 
 -- ============================================================================
--- [088/233] sp_pr_generar_periodos_vacacionales_web.sql
+-- [091/260] sp_pr_generar_periodos_vacacionales_web.sql
 -- ============================================================================
 
 /*
@@ -12361,7 +12193,7 @@ GO
 
 
 -- ============================================================================
--- [089/233] sp_pr_generar_telecredito_web.sql
+-- [092/260] sp_pr_generar_telecredito_web.sql
 -- ============================================================================
 
 /*
@@ -12645,7 +12477,7 @@ GO
 
 
 -- ============================================================================
--- [090/233] sp_pr_generarboleta_web.sql
+-- [093/260] sp_pr_generarboleta_web.sql
 -- ============================================================================
 
 /*
@@ -13224,7 +13056,301 @@ GO
 
 
 -- ============================================================================
--- [091/233] sp_pr_guardar_accountprofiledetail_web.sql
+-- [094/260] sp_pr_generarcontrato_datos_web.sql
+-- ============================================================================
+
+/*
+
+    Datos para generar contrato Word/PDF (marcadores Jinja / docxtpl).
+
+    Usado por: POST /api/contratos/generar
+
+
+
+    Params: @cia, @person
+
+*/
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generarcontrato_datos_web]
+
+    @cia    VARCHAR(10),
+
+    @person VARCHAR(20)
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+
+    SET @person = LTRIM(RTRIM(ISNULL(@person, '')));
+
+
+
+    ;WITH contrato_activo AS (
+
+        SELECT TOP 1
+
+            pc.Person,
+
+            pc.Company,
+
+            pc.startdate,
+
+            pc.enddate,
+
+            pc.Status,
+
+            pc.Contractno
+
+        FROM PR_PersonContract pc (NOLOCK)
+
+        WHERE pc.Company = @cia
+
+          AND pc.Person = @person
+
+          AND LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
+
+          AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
+
+        ORDER BY pc.startdate DESC, pc.Contractno DESC
+
+    )
+
+    SELECT
+
+        e.Person AS person,
+
+        e.Company AS company,
+
+        ISNULL(NULLIF(LTRIM(RTRIM(e.EmployeeCode)), ''), e.Person) AS codigo,
+
+        LTRIM(RTRIM(ISNULL(sc.Description, ''))) AS empresa,
+
+        LTRIM(RTRIM(ISNULL(sc.Ruc, ''))) AS ruc,
+
+        LTRIM(RTRIM(ISNULL(sc.Address, ''))) AS domicilio_empresa,
+
+        LTRIM(RTRIM(ISNULL(sc.Representative, ''))) AS representante,
+
+        LTRIM(RTRIM(ISNULL(sc.Rep_Position, ''))) AS cargo_representante,
+
+        LTRIM(RTRIM(
+
+            ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(dt_rep.Description, ''))), ''), '') +
+
+            CASE
+
+                WHEN NULLIF(LTRIM(RTRIM(ISNULL(sc.Rep_DocNumber, ''))), '') IS NULL THEN ''
+
+                ELSE ' N° ' + LTRIM(RTRIM(sc.Rep_DocNumber))
+
+            END
+
+        )) AS doc_representante,
+
+        LTRIM(RTRIM(
+
+            ISNULL(p.LastName1, '') + ' ' +
+
+            ISNULL(p.LastName2, '') + ' ' +
+
+            ISNULL(p.Name1, '') + ' ' +
+
+            ISNULL(p.Name2, '')
+
+        )) AS trabajador,
+
+        LTRIM(RTRIM(ISNULL(p.LastName1, ''))) AS apellido_paterno,
+
+        LTRIM(RTRIM(ISNULL(p.LastName2, ''))) AS apellido_materno,
+
+        LTRIM(RTRIM(
+
+            ISNULL(p.Name1, '') +
+
+            CASE WHEN NULLIF(LTRIM(RTRIM(ISNULL(p.Name2, ''))), '') IS NULL THEN '' ELSE ' ' + LTRIM(RTRIM(p.Name2)) END
+
+        )) AS nombres,
+
+        LTRIM(RTRIM(ISNULL(dt.Description, 'DNI'))) AS tipo_documento,
+
+        LTRIM(RTRIM(ISNULL(p.DocumentNumber, e.Person))) AS dni,
+
+        LTRIM(RTRIM(ISNULL(p.Address, ''))) AS direccion,
+
+        CAST('' AS VARCHAR(100)) AS nacionalidad,
+
+        CASE
+
+            WHEN LTRIM(RTRIM(ISNULL(p.Sex, ''))) = '1' THEN 'Masculino'
+
+            WHEN LTRIM(RTRIM(ISNULL(p.Sex, ''))) = '2' THEN 'Femenino'
+
+            ELSE LTRIM(RTRIM(ISNULL(p.Sex, '')))
+
+        END AS sexo,
+
+        LTRIM(RTRIM(ISNULL(pos.Description, ISNULL(pos.Name, '')))) AS cargo,
+
+        LTRIM(RTRIM(ISNULL(e.CostCenterName, ISNULL(e.CostCenter, '')))) AS centro_costo,
+
+        LTRIM(RTRIM(ISNULL(cm.Description, ''))) AS modalidad,
+
+        CONVERT(decimal(18, 2), COALESCE(
+
+            e.rembasica,
+
+            (
+
+                SELECT TOP 1 ec.ConceptValue
+
+                FROM PR_EmployeeConcept ec (NOLOCK)
+
+                INNER JOIN PR_Concept c (NOLOCK)
+
+                    ON c.Concept = ec.Concept
+
+                   AND c.Company = ec.Company
+
+                WHERE ec.Company = e.Company
+
+                  AND ec.Person = e.Person
+
+                  AND c.FormulaCode = 'REM_BASICA'
+
+                  AND ec.FlagFrecuencyType = 'P'
+
+                  AND ec.PRPeriodEnd IS NULL
+
+            ),
+
+            e.salary,
+
+            0
+
+        )) AS sueldo,
+
+        CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS fecha_ingreso,
+
+        CONVERT(varchar(10), ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate)), 23) AS inicio_contrato,
+
+        CONVERT(varchar(10), ca.enddate, 23) AS fin_contrato,
+
+        DAY(ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate))) AS inicio_dia,
+
+        CASE MONTH(ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate)))
+
+            WHEN 1 THEN 'Enero' WHEN 2 THEN 'Febrero' WHEN 3 THEN 'Marzo'
+
+            WHEN 4 THEN 'Abril' WHEN 5 THEN 'Mayo' WHEN 6 THEN 'Junio'
+
+            WHEN 7 THEN 'Julio' WHEN 8 THEN 'Agosto' WHEN 9 THEN 'Septiembre'
+
+            WHEN 10 THEN 'Octubre' WHEN 11 THEN 'Noviembre' WHEN 12 THEN 'Diciembre'
+
+            ELSE ''
+
+        END AS inicio_mes,
+
+        YEAR(ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate))) AS inicio_anio,
+
+        DAY(ca.enddate) AS fin_dia,
+
+        CASE MONTH(ca.enddate)
+
+            WHEN 1 THEN 'Enero' WHEN 2 THEN 'Febrero' WHEN 3 THEN 'Marzo'
+
+            WHEN 4 THEN 'Abril' WHEN 5 THEN 'Mayo' WHEN 6 THEN 'Junio'
+
+            WHEN 7 THEN 'Julio' WHEN 8 THEN 'Agosto' WHEN 9 THEN 'Septiembre'
+
+            WHEN 10 THEN 'Octubre' WHEN 11 THEN 'Noviembre' WHEN 12 THEN 'Diciembre'
+
+            ELSE NULL
+
+        END AS fin_mes,
+
+        YEAR(ca.enddate) AS fin_anio,
+
+        DAY(GETDATE()) AS dia_firma,
+
+        CASE MONTH(GETDATE())
+
+            WHEN 1 THEN 'Enero' WHEN 2 THEN 'Febrero' WHEN 3 THEN 'Marzo'
+
+            WHEN 4 THEN 'Abril' WHEN 5 THEN 'Mayo' WHEN 6 THEN 'Junio'
+
+            WHEN 7 THEN 'Julio' WHEN 8 THEN 'Agosto' WHEN 9 THEN 'Septiembre'
+
+            WHEN 10 THEN 'Octubre' WHEN 11 THEN 'Noviembre' WHEN 12 THEN 'Diciembre'
+
+        END AS mes_firma,
+
+        YEAR(GETDATE()) AS anio_firma,
+
+        CONVERT(varchar(10), GETDATE(), 23) AS fecha_firma,
+
+        LTRIM(RTRIM(ISNULL(ru.Description, ISNULL(ru.Name, ISNULL(p.ReplicationUnit, 'Lima'))))) AS ciudad
+
+    FROM PR_Employee e (NOLOCK)
+
+    INNER JOIN SY_Person p (NOLOCK)
+
+        ON p.Person = e.Person
+
+    LEFT JOIN SY_Company sc (NOLOCK)
+
+        ON sc.Company = e.Company
+
+    LEFT JOIN SY_PersonDocumentType dt (NOLOCK)
+
+        ON dt.PersonDocumentType = p.EmployeeDocumentType
+
+       AND (dt.Company = e.Company OR dt.Company IS NULL)
+
+    LEFT JOIN SY_PersonDocumentType dt_rep (NOLOCK)
+
+        ON dt_rep.PersonDocumentType = sc.Rep_DocType
+
+    LEFT JOIN PR_Position pos (NOLOCK)
+
+        ON pos.Position = e.Position
+
+       AND (pos.Company = e.Company OR pos.Company IS NULL)
+
+    LEFT JOIN HR_ContractModality cm (NOLOCK)
+
+        ON cm.ContractModality = e.ContractModality
+
+       AND cm.Company = e.Company
+
+    LEFT JOIN SY_ReplicationUnit ru (NOLOCK)
+
+        ON ru.ReplicationUnit = p.ReplicationUnit
+
+    LEFT JOIN contrato_activo ca
+
+        ON ca.Person = e.Person
+
+       AND ca.Company = e.Company
+
+    WHERE e.Company = @cia
+
+      AND e.Person = @person;
+
+END
+
+GO
+
+
+
+-- ============================================================================
+-- [095/260] sp_pr_guardar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -13462,7 +13588,145 @@ GO
 
 
 -- ============================================================================
--- [092/233] sp_pr_guardarasignacionconcepto_web.sql
+-- [096/260] sp_pr_guardar_distribucion_voucher_web.sql
+-- ============================================================================
+
+/*
+    Maestro Distribución Porcentual — alta / edición de PR_DistribucionVoucher.
+    ID Fila es IDENTITY (no se genera por SY_ObjectSecuence).
+    tipo = 'OT' por defecto. Sin réplica a otras compañías.
+
+    Usado por: POST /api/asientos/distribucion-porcentual/guardar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardar_distribucion_voucher_web]
+    @modo      CHAR(1),
+    @company   VARCHAR(4),
+    @period    VARCHAR(20),
+    @fila      INT = NULL,
+    @dni       VARCHAR(255),
+    @nombre    VARCHAR(255),
+    @codigo    VARCHAR(50),
+    @valor     INT,
+    @xlastuser VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @fila_nueva INT;
+    DECLARE @tipo VARCHAR(20) = 'OT';
+
+    SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @dni = LTRIM(RTRIM(ISNULL(@dni, '')));
+    SET @nombre = LTRIM(RTRIM(ISNULL(@nombre, '')));
+    SET @codigo = LTRIM(RTRIM(ISNULL(@codigo, '')));
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+    SET @valor = ISNULL(@valor, 0);
+
+    IF @modo NOT IN ('I', 'U')
+    BEGIN
+        RAISERROR('Modo de operación inválido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @company = '' OR @period = ''
+    BEGIN
+        RAISERROR('Indique compañía y periodo.', 16, 1);
+        RETURN;
+    END;
+
+    IF @dni = '' OR @nombre = '' OR @codigo = ''
+    BEGIN
+        RAISERROR('Indique DNI, nombres y código de unidad.', 16, 1);
+        RETURN;
+    END;
+
+    IF @valor < 1 OR @valor > 100
+    BEGIN
+        RAISERROR('El valor debe ser un entero entre 1 y 100.', 16, 1);
+        RETURN;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM SY_ReplicationUnit (NOLOCK)
+        WHERE LTRIM(RTRIM(ReplicationUnit)) = @codigo
+    )
+    BEGIN
+        RAISERROR('El código de unidad no existe en SY_ReplicationUnit.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_DistribucionVoucher (NOLOCK)
+        WHERE company = @company
+          AND period = @period
+          AND ISNULL(NULLIF(LTRIM(RTRIM(tipo)), ''), 'OT') = @tipo
+          AND LTRIM(RTRIM(dni)) = @dni
+          AND LTRIM(RTRIM(codigo)) = @codigo
+          AND (@modo = 'I' OR Fila <> @fila)
+    )
+    BEGIN
+        RAISERROR('Ya existe una distribución para el mismo DNI y código en el periodo.', 16, 1);
+        RETURN;
+    END;
+
+    IF @modo = 'I'
+    BEGIN
+        INSERT INTO PR_DistribucionVoucher (
+            dni, nombre, codigo, valor, period, tipo, company,
+            xlastuser, xlastdate
+        )
+        VALUES (
+            @dni, @nombre, @codigo, @valor, @period, @tipo, @company,
+            @xlastuser, GETDATE()
+        );
+
+        SET @fila_nueva = SCOPE_IDENTITY();
+
+        SELECT
+            @fila_nueva AS fila,
+            'Distribución registrada correctamente.' AS mensaje;
+        RETURN;
+    END;
+
+    IF @fila IS NULL OR NOT EXISTS (
+        SELECT 1
+        FROM PR_DistribucionVoucher (NOLOCK)
+        WHERE Fila = @fila
+          AND company = @company
+          AND period = @period
+    )
+    BEGIN
+        RAISERROR('No se encontró el registro de distribución a actualizar.', 16, 1);
+        RETURN;
+    END;
+
+    UPDATE PR_DistribucionVoucher
+    SET dni = @dni,
+        nombre = @nombre,
+        codigo = @codigo,
+        valor = @valor,
+        tipo = @tipo,
+        xlastuser = @xlastuser,
+        xlastdate = GETDATE()
+    WHERE Fila = @fila
+      AND company = @company
+      AND period = @period;
+
+    SELECT
+        @fila AS fila,
+        'Distribución actualizada correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [097/260] sp_pr_guardarasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -13721,7 +13985,7 @@ GO
 
 
 -- ============================================================================
--- [093/233] sp_pr_guardarbankaccount_web.sql
+-- [098/260] sp_pr_guardarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -13916,7 +14180,7 @@ GO
 
 
 -- ============================================================================
--- [094/233] sp_pr_guardarconcepto_web.sql
+-- [099/260] sp_pr_guardarconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -14252,7 +14516,7 @@ GO
 
 
 -- ============================================================================
--- [095/233] sp_pr_guardarformula_web.sql
+-- [100/260] sp_pr_guardarformula_web.sql
 -- ============================================================================
 
 /*
@@ -14334,6 +14598,21 @@ BEGIN
     IF @flagtruncate NOT IN ('Y', 'N')
         SET @flagtruncate = 'N';
 
+    DECLARE @xml XML = NULL;
+    DECLARE @cant_detalle INT = 0;
+
+    IF @detalle_xml IS NOT NULL AND LTRIM(RTRIM(@detalle_xml)) <> ''
+        SET @xml = TRY_CAST(@detalle_xml AS XML);
+
+    IF @xml IS NOT NULL
+        SET @cant_detalle = ISNULL(@xml.value('count(/root/l)', 'int'), 0);
+
+    IF ISNULL(@cant_detalle, 0) = 0
+    BEGIN
+        RAISERROR('La fórmula debe tener al menos una línea de detalle.', 16, 1);
+        RETURN;
+    END;
+
     BEGIN TRY
         BEGIN TRANSACTION;
 
@@ -14408,39 +14687,32 @@ BEGIN
         DELETE FROM PR_FormulaDetail
         WHERE FormulaHeader = @formulaheader;
 
-        IF @detalle_xml IS NOT NULL AND LTRIM(RTRIM(@detalle_xml)) <> ''
-        BEGIN
-            DECLARE @xml XML = TRY_CAST(@detalle_xml AS XML);
-            IF @xml IS NOT NULL
-            BEGIN
-                INSERT INTO PR_FormulaDetail (
-                    FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
-                    XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-                    NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
-                )
-                SELECT
-                    @formulaheader,
-                    ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), ROW_NUMBER() OVER (ORDER BY (SELECT 1))),
-                    @company,
-                    NULLIF(LTRIM(RTRIM(x.value('(tipo)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(operador)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(concept)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(grupo)[1]', 'char(1)'))), ''),
-                    NULLIF(x.value('(valor)[1]', 'decimal(18,4)'), 0),
-                    @xlastuser,
-                    GETDATE(),
-                    NULLIF(LTRIM(RTRIM(x.value('(parameter)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(process)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(periodoini)[1]', 'varchar(20)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(periodofin)[1]', 'varchar(20)'))), ''),
-                    NULLIF(x.value('(numberini)[1]', 'decimal(18,0)'), 0),
-                    NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
-                    NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
-                    NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
-                    NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
-                FROM @xml.nodes('/root/l') AS T(x);
-            END;
-        END;
+        INSERT INTO PR_FormulaDetail (
+            FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
+            XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
+            NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
+        )
+        SELECT
+            @formulaheader,
+            ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), ROW_NUMBER() OVER (ORDER BY (SELECT 1))),
+            @company,
+            NULLIF(LTRIM(RTRIM(x.value('(tipo)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(operador)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(concept)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(grupo)[1]', 'char(1)'))), ''),
+            NULLIF(x.value('(valor)[1]', 'decimal(18,4)'), 0),
+            @xlastuser,
+            GETDATE(),
+            NULLIF(LTRIM(RTRIM(x.value('(parameter)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(process)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(periodoini)[1]', 'varchar(20)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(periodofin)[1]', 'varchar(20)'))), ''),
+            NULLIF(x.value('(numberini)[1]', 'decimal(18,0)'), 0),
+            NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
+            NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
+            NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
+            NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
+        FROM @xml.nodes('/root/l') AS T(x);
 
         COMMIT TRANSACTION;
 
@@ -14460,7 +14732,7 @@ GO
 
 
 -- ============================================================================
--- [096/233] sp_pr_guardarimportconcept_web.sql
+-- [101/260] sp_pr_guardarimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -14665,7 +14937,7 @@ GO
 
 
 -- ============================================================================
--- [097/233] sp_pr_guardarpayrolltype_web.sql
+-- [102/260] sp_pr_guardarpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -14848,7 +15120,7 @@ GO
 
 
 -- ============================================================================
--- [098/233] sp_pr_guardarperiodo_payrolltype_web.sql
+-- [103/260] sp_pr_guardarperiodo_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -15044,7 +15316,7 @@ GO
 
 
 -- ============================================================================
--- [099/233] sp_pr_guardarpersondocumenttype_web.sql
+-- [104/260] sp_pr_guardarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -15222,7 +15494,7 @@ GO
 
 
 -- ============================================================================
--- [100/233] sp_pr_guardarposition_web.sql
+-- [105/260] sp_pr_guardarposition_web.sql
 -- ============================================================================
 
 /*
@@ -15369,7 +15641,7 @@ GO
 
 
 -- ============================================================================
--- [101/233] sp_pr_guardarreplicationunit_web.sql
+-- [106/260] sp_pr_guardarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -15481,7 +15753,7 @@ GO
 
 
 -- ============================================================================
--- [102/233] sp_pr_guardarusercompany_web.sql
+-- [107/260] sp_pr_guardarusercompany_web.sql
 -- ============================================================================
 
 /*
@@ -15615,7 +15887,7 @@ GO
 
 
 -- ============================================================================
--- [103/233] sp_pr_listaasignacionconceptos_web.sql
+-- [108/260] sp_pr_listaasignacionconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -15811,7 +16083,7 @@ GO
 
 
 -- ============================================================================
--- [104/233] sp_pr_listabanbif_web.sql
+-- [109/260] sp_pr_listabanbif_web.sql
 -- ============================================================================
 
 /*
@@ -15953,7 +16225,7 @@ GO
 
 
 -- ============================================================================
--- [105/233] sp_pr_listacontinental_web.sql
+-- [110/260] sp_pr_listacontinental_web.sql
 -- ============================================================================
 
 /*
@@ -16085,7 +16357,7 @@ GO
 
 
 -- ============================================================================
--- [106/233] sp_pr_listado_declaracion_afp_web.sql
+-- [111/260] sp_pr_listado_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -16530,7 +16802,7 @@ GO
 
 
 -- ============================================================================
--- [107/233] sp_pr_listado_plame14_web.sql
+-- [112/260] sp_pr_listado_plame14_web.sql
 -- ============================================================================
 
 /*
@@ -16641,7 +16913,7 @@ GO
 
 
 -- ============================================================================
--- [108/233] sp_pr_listado_plame15_web.sql
+-- [113/260] sp_pr_listado_plame15_web.sql
 -- ============================================================================
 
 /*
@@ -16760,7 +17032,7 @@ GO
 
 
 -- ============================================================================
--- [109/233] sp_pr_listado_plame18_web.sql
+-- [114/260] sp_pr_listado_plame18_web.sql
 -- ============================================================================
 
 /*
@@ -17060,7 +17332,7 @@ GO
 
 
 -- ============================================================================
--- [110/233] sp_pr_listado_plame26_web.sql
+-- [115/260] sp_pr_listado_plame26_web.sql
 -- ============================================================================
 
 /*
@@ -17153,7 +17425,7 @@ GO
 
 
 -- ============================================================================
--- [111/233] sp_pr_listado_tregistro_web.sql
+-- [116/260] sp_pr_listado_tregistro_web.sql
 -- ============================================================================
 
 /*
@@ -17222,7 +17494,7 @@ GO
 
 
 -- ============================================================================
--- [112/233] sp_pr_listadocertificadoquinta_web.sql
+-- [117/260] sp_pr_listadocertificadoquinta_web.sql
 -- ============================================================================
 
 /*
@@ -17288,7 +17560,7 @@ GO
 
 
 -- ============================================================================
--- [113/233] sp_pr_listadocertificadotrabajo_web.sql
+-- [118/260] sp_pr_listadocertificadotrabajo_web.sql
 -- ============================================================================
 
 /*
@@ -17345,7 +17617,7 @@ GO
 
 
 -- ============================================================================
--- [114/233] sp_pr_listadoformatoutilidades_web.sql
+-- [119/260] sp_pr_listadoformatoutilidades_web.sql
 -- ============================================================================
 
 /*
@@ -17438,7 +17710,7 @@ GO
 
 
 -- ============================================================================
--- [115/233] sp_pr_listadogenerarboletas_web.sql
+-- [120/260] sp_pr_listadogenerarboletas_web.sql
 -- ============================================================================
 
 /*
@@ -17492,7 +17764,7 @@ GO
 
 
 -- ============================================================================
--- [116/233] sp_pr_listainterbank_web.sql
+-- [121/260] sp_pr_listainterbank_web.sql
 -- ============================================================================
 
 /*
@@ -17593,7 +17865,7 @@ GO
 
 
 -- ============================================================================
--- [117/233] sp_pr_listaprocesscontrol_apertura_web.sql
+-- [122/260] sp_pr_listaprocesscontrol_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -17673,7 +17945,7 @@ GO
 
 
 -- ============================================================================
--- [118/233] sp_pr_listar_accountprofiledetail_web.sql
+-- [123/260] sp_pr_listar_accountprofiledetail_web.sql
 -- ============================================================================
 
 /*
@@ -17751,7 +18023,7 @@ GO
 
 
 -- ============================================================================
--- [119/233] sp_pr_listar_asientos_interfaz_web.sql
+-- [124/260] sp_pr_listar_asientos_interfaz_web.sql
 -- ============================================================================
 
 /*
@@ -17832,7 +18104,100 @@ GO
 
 
 -- ============================================================================
--- [120/233] sp_pr_listarbankaccount_web.sql
+-- [125/260] sp_pr_listar_distribucion_voucher_web.sql
+-- ============================================================================
+
+/*
+    Maestro Distribución Porcentual — listado PR_DistribucionVoucher (tipo OT).
+    Usado por: POST /api/asientos/distribucion-porcentual/listado
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listar_distribucion_voucher_web]
+    @company  VARCHAR(4),
+    @period   VARCHAR(20),
+    @busqueda VARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        d.Fila AS fila,
+        LTRIM(RTRIM(ISNULL(d.dni, ''))) AS dni,
+        LTRIM(RTRIM(ISNULL(d.nombre, ''))) AS nombre,
+        LTRIM(RTRIM(ISNULL(d.codigo, ''))) AS codigo,
+        CAST(ROUND(ISNULL(d.valor, 0), 0) AS INT) AS valor,
+        LTRIM(RTRIM(ISNULL(d.period, ''))) AS period,
+        LTRIM(RTRIM(ISNULL(d.tipo, 'OT'))) AS tipo,
+        LTRIM(RTRIM(ISNULL(d.company, ''))) AS company
+    FROM PR_DistribucionVoucher d (NOLOCK)
+    WHERE d.company = @company
+      AND d.period = @period
+      AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = 'OT'
+      AND (
+            @busqueda IS NULL
+         OR d.dni LIKE '%' + @busqueda + '%'
+         OR d.nombre LIKE '%' + @busqueda + '%'
+         OR d.codigo LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY d.nombre, d.dni, d.codigo;
+END
+GO
+
+
+
+-- ============================================================================
+-- [126/260] sp_pr_listar_sin_distribucion_voucher_web.sql
+-- ============================================================================
+
+/*
+    Trabajadores de la compañía sin distribución OT en el periodo.
+    Usado por: POST /api/asientos/distribucion-porcentual/sin-distribucion
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listar_sin_distribucion_voucher_web]
+    @company  VARCHAR(4),
+    @period   VARCHAR(20),
+    @busqueda VARCHAR(255) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        LTRIM(RTRIM(p.Person)) AS dni,
+        LTRIM(RTRIM(ISNULL(p.Name, ''))) AS nombre
+    FROM PR_Employee e (NOLOCK)
+    INNER JOIN SY_Person p (NOLOCK)
+        ON p.Person = e.Person
+    WHERE e.Company = @company
+      AND UPPER(LTRIM(RTRIM(ISNULL(e.Status, 'Y')))) IN ('Y', 'A', '1')
+      AND (e.CeaseDate IS NULL OR e.CeaseDate >= CAST(GETDATE() AS DATE))
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_DistribucionVoucher d (NOLOCK)
+            WHERE d.company = @company
+              AND d.period = @period
+              AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = 'OT'
+              AND LTRIM(RTRIM(d.dni)) = LTRIM(RTRIM(p.Person))
+      )
+      AND (
+            @busqueda IS NULL
+         OR p.Person LIKE '%' + @busqueda + '%'
+         OR p.Name LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY p.Name, p.Person;
+END
+GO
+
+
+
+-- ============================================================================
+-- [127/260] sp_pr_listarbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -17882,7 +18247,7 @@ GO
 
 
 -- ============================================================================
--- [121/233] sp_pr_listarconceptos_web.sql
+-- [128/260] sp_pr_listarconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -17951,7 +18316,7 @@ GO
 
 
 -- ============================================================================
--- [122/233] sp_pr_listarformulas_web.sql
+-- [129/260] sp_pr_listarformulas_web.sql
 -- ============================================================================
 
 /*
@@ -18016,7 +18381,7 @@ GO
 
 
 -- ============================================================================
--- [123/233] sp_pr_listarimportconcept_web.sql
+-- [130/260] sp_pr_listarimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -18065,7 +18430,7 @@ GO
 
 
 -- ============================================================================
--- [124/233] sp_pr_listarpayrolltype_web.sql
+-- [131/260] sp_pr_listarpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -18106,7 +18471,7 @@ GO
 
 
 -- ============================================================================
--- [125/233] sp_pr_listarperiodos_payrolltype_web.sql
+-- [132/260] sp_pr_listarperiodos_payrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -18143,7 +18508,7 @@ GO
 
 
 -- ============================================================================
--- [126/233] sp_pr_listarpersondocumenttype_web.sql
+-- [133/260] sp_pr_listarpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -18182,7 +18547,7 @@ GO
 
 
 -- ============================================================================
--- [127/233] sp_pr_listarposition_web.sql
+-- [134/260] sp_pr_listarposition_web.sql
 -- ============================================================================
 
 /*
@@ -18219,7 +18584,7 @@ GO
 
 
 -- ============================================================================
--- [128/233] sp_pr_listarreplicationunit_web.sql
+-- [135/260] sp_pr_listarreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -18255,7 +18620,7 @@ GO
 
 
 -- ============================================================================
--- [129/233] sp_pr_listarusercompany_empresas_web.sql
+-- [136/260] sp_pr_listarusercompany_empresas_web.sql
 -- ============================================================================
 
 /*
@@ -18299,7 +18664,7 @@ GO
 
 
 -- ============================================================================
--- [130/233] sp_pr_listarusercompany_usuarios_web.sql
+-- [137/260] sp_pr_listarusercompany_usuarios_web.sql
 -- ============================================================================
 
 /*
@@ -18342,7 +18707,7 @@ GO
 
 
 -- ============================================================================
--- [131/233] sp_pr_listatelecredito_web.sql
+-- [138/260] sp_pr_listatelecredito_web.sql
 -- ============================================================================
 
 /*
@@ -18452,7 +18817,7 @@ GO
 
 
 -- ============================================================================
--- [132/233] sp_pr_listatrabajadores_web.sql
+-- [139/260] sp_pr_listatrabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -18582,7 +18947,7 @@ GO
 
 
 -- ============================================================================
--- [133/233] sp_pr_obtener_bancario_trabajador_web.sql
+-- [140/260] sp_pr_obtener_bancario_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18643,7 +19008,7 @@ GO
 
 
 -- ============================================================================
--- [134/233] sp_pr_obtener_datoseducacion_trabajador_web.sql
+-- [141/260] sp_pr_obtener_datoseducacion_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18710,7 +19075,7 @@ GO
 
 
 -- ============================================================================
--- [135/233] sp_pr_obtener_datosgenerales_trabajador_web.sql
+-- [142/260] sp_pr_obtener_datosgenerales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18742,7 +19107,38 @@ BEGIN
         LTRIM(RTRIM(ISNULL(sp.email, ''))) AS email,
         LTRIM(RTRIM(ISNULL(sp.address, ''))) AS address,
         LTRIM(RTRIM(ISNULL(sp.nacionalidad, ''))) AS nacionalidad,
-        LTRIM(RTRIM(ISNULL(sp.employeedocumenttype, ''))) AS employeedocumenttype,
+        LTRIM(RTRIM(ISNULL(
+            COALESCE(
+                (
+                    SELECT TOP 1 dt0.PersonDocumentType
+                    FROM SY_PersonDocumentType dt0 (NOLOCK)
+                    WHERE dt0.Company = e.Company
+                      AND dt0.PersonDocumentType = sp.EmployeeDocumentType
+                ),
+                (
+                    SELECT TOP 1 dt2.PersonDocumentType
+                    FROM SY_PersonDocumentType dt1 (NOLOCK)
+                    INNER JOIN SY_PersonDocumentType dt2 (NOLOCK)
+                        ON dt2.Company = e.Company
+                       AND LTRIM(RTRIM(ISNULL(dt2.PDT, ''))) = LTRIM(RTRIM(ISNULL(dt1.PDT, '')))
+                       AND LTRIM(RTRIM(ISNULL(dt1.PDT, ''))) <> ''
+                    WHERE dt1.PersonDocumentType = sp.EmployeeDocumentType
+                    ORDER BY dt2.PersonDocumentType
+                ),
+                (
+                    SELECT TOP 1 dt2.PersonDocumentType
+                    FROM SY_PersonDocumentType dt1 (NOLOCK)
+                    INNER JOIN SY_PersonDocumentType dt2 (NOLOCK)
+                        ON dt2.Company = e.Company
+                       AND UPPER(LTRIM(RTRIM(ISNULL(dt2.Description, '')))) =
+                           UPPER(LTRIM(RTRIM(ISNULL(dt1.Description, ''))))
+                    WHERE dt1.PersonDocumentType = sp.EmployeeDocumentType
+                    ORDER BY dt2.PersonDocumentType
+                ),
+                sp.EmployeeDocumentType
+            ),
+            ''
+        ))) AS employeedocumenttype,
         LTRIM(RTRIM(ISNULL(dt.description, ''))) AS employeedocumenttype_desc,
         LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) AS documentnumber,
         LTRIM(RTRIM(ISNULL(sp.replicationunit, ''))) AS replicationunit,
@@ -18761,7 +19157,35 @@ BEGIN
         LEFT JOIN sy_company sc (NOLOCK)
             ON sc.company = e.company
         LEFT JOIN sy_persondocumenttype dt (NOLOCK)
-            ON dt.persondocumenttype = sp.employeedocumenttype
+            ON dt.persondocumenttype = COALESCE(
+                (
+                    SELECT TOP 1 dt0.PersonDocumentType
+                    FROM SY_PersonDocumentType dt0 (NOLOCK)
+                    WHERE dt0.Company = e.Company
+                      AND dt0.PersonDocumentType = sp.EmployeeDocumentType
+                ),
+                (
+                    SELECT TOP 1 dt2.PersonDocumentType
+                    FROM SY_PersonDocumentType dt1 (NOLOCK)
+                    INNER JOIN SY_PersonDocumentType dt2 (NOLOCK)
+                        ON dt2.Company = e.Company
+                       AND LTRIM(RTRIM(ISNULL(dt2.PDT, ''))) = LTRIM(RTRIM(ISNULL(dt1.PDT, '')))
+                       AND LTRIM(RTRIM(ISNULL(dt1.PDT, ''))) <> ''
+                    WHERE dt1.PersonDocumentType = sp.EmployeeDocumentType
+                    ORDER BY dt2.PersonDocumentType
+                ),
+                (
+                    SELECT TOP 1 dt2.PersonDocumentType
+                    FROM SY_PersonDocumentType dt1 (NOLOCK)
+                    INNER JOIN SY_PersonDocumentType dt2 (NOLOCK)
+                        ON dt2.Company = e.Company
+                       AND UPPER(LTRIM(RTRIM(ISNULL(dt2.Description, '')))) =
+                           UPPER(LTRIM(RTRIM(ISNULL(dt1.Description, ''))))
+                    WHERE dt1.PersonDocumentType = sp.EmployeeDocumentType
+                    ORDER BY dt2.PersonDocumentType
+                ),
+                sp.EmployeeDocumentType
+            )
            AND dt.company = e.company
         LEFT JOIN sy_replicationunit ru (NOLOCK)
             ON ru.replicationunit = sp.replicationunit
@@ -18773,7 +19197,7 @@ GO
 
 
 -- ============================================================================
--- [136/233] sp_pr_obtener_datoslaborales_trabajador_web.sql
+-- [143/260] sp_pr_obtener_datoslaborales_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18881,7 +19305,7 @@ GO
 
 
 -- ============================================================================
--- [137/233] sp_pr_obtener_pensiones_trabajador_web.sql
+-- [144/260] sp_pr_obtener_pensiones_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -18937,7 +19361,7 @@ GO
 
 
 -- ============================================================================
--- [138/233] sp_pr_obtenerasignacionconcepto_web.sql
+-- [145/260] sp_pr_obtenerasignacionconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -19000,7 +19424,7 @@ GO
 
 
 -- ============================================================================
--- [139/233] sp_pr_obtenerbankaccount_web.sql
+-- [146/260] sp_pr_obtenerbankaccount_web.sql
 -- ============================================================================
 
 /*
@@ -19042,7 +19466,7 @@ GO
 
 
 -- ============================================================================
--- [140/233] sp_pr_obtenerconcepto_web.sql
+-- [147/260] sp_pr_obtenerconcepto_web.sql
 -- ============================================================================
 
 /*
@@ -19094,7 +19518,7 @@ GO
 
 
 -- ============================================================================
--- [141/233] sp_pr_obtenerformula_web.sql
+-- [148/260] sp_pr_obtenerformula_web.sql
 -- ============================================================================
 
 /*
@@ -19196,7 +19620,7 @@ GO
 
 
 -- ============================================================================
--- [142/233] sp_pr_obtenerimportconcept_web.sql
+-- [149/260] sp_pr_obtenerimportconcept_web.sql
 -- ============================================================================
 
 /*
@@ -19251,7 +19675,7 @@ GO
 
 
 -- ============================================================================
--- [143/233] sp_pr_obtenerpayrolltype_web.sql
+-- [150/260] sp_pr_obtenerpayrolltype_web.sql
 -- ============================================================================
 
 /*
@@ -19286,7 +19710,7 @@ GO
 
 
 -- ============================================================================
--- [144/233] sp_pr_obtenerpersondocumenttype_web.sql
+-- [151/260] sp_pr_obtenerpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -19319,7 +19743,7 @@ GO
 
 
 -- ============================================================================
--- [145/233] sp_pr_obtenerposition_web.sql
+-- [152/260] sp_pr_obtenerposition_web.sql
 -- ============================================================================
 
 /*
@@ -19351,7 +19775,7 @@ GO
 
 
 -- ============================================================================
--- [146/233] sp_pr_obtenerreplicationunit_web.sql
+-- [153/260] sp_pr_obtenerreplicationunit_web.sql
 -- ============================================================================
 
 /*
@@ -19379,7 +19803,7 @@ GO
 
 
 -- ============================================================================
--- [147/233] sp_pr_plame_sunat_eliminar_carga_web.sql
+-- [154/260] sp_pr_plame_sunat_eliminar_carga_web.sql
 -- ============================================================================
 
 /*
@@ -19405,7 +19829,7 @@ GO
 
 
 -- ============================================================================
--- [148/233] sp_pr_plame_sunat_obtener_carga_web.sql
+-- [155/260] sp_pr_plame_sunat_obtener_carga_web.sql
 -- ============================================================================
 
 /*
@@ -19446,7 +19870,7 @@ GO
 
 
 -- ============================================================================
--- [149/233] sp_pr_plame_validar_archivo14_web.sql
+-- [156/260] sp_pr_plame_validar_archivo14_web.sql
 -- ============================================================================
 
 /*
@@ -19593,7 +20017,7 @@ GO
 
 
 -- ============================================================================
--- [150/233] sp_pr_plame_validar_archivo18_web.sql
+-- [157/260] sp_pr_plame_validar_archivo18_web.sql
 -- ============================================================================
 
 /*
@@ -19985,7 +20409,7 @@ GO
 
 
 -- ============================================================================
--- [151/233] sp_pr_plame_validar_neto_r01_web.sql
+-- [158/260] sp_pr_plame_validar_neto_r01_web.sql
 -- ============================================================================
 
 /*
@@ -20425,7 +20849,7 @@ GO
 
 
 -- ============================================================================
--- [152/233] sp_pr_plame_validar_r04_web.sql
+-- [159/260] sp_pr_plame_validar_r04_web.sql
 -- ============================================================================
 
 /*
@@ -20877,7 +21301,7 @@ GO
 
 
 -- ============================================================================
--- [153/233] sp_pr_plame_validar_r05_web.sql
+-- [160/260] sp_pr_plame_validar_r05_web.sql
 -- ============================================================================
 
 /*
@@ -21258,7 +21682,7 @@ GO
 
 
 -- ============================================================================
--- [154/233] sp_pr_r019_vacationdetail_web.sql
+-- [161/260] sp_pr_r019_vacationdetail_web.sql
 -- ============================================================================
 
 /*
@@ -21325,7 +21749,784 @@ GO
 
 
 -- ============================================================================
--- [155/233] sp_pr_replicar_formula_cia.sql
+-- [162/260] sp_pr_registrar_formula_calculo.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_formula_calculo]
+
+@company varchar(4), @payrolltype varchar(20),  @processtype varchar(20), @period varchar(20), @person varchar(20),  @formulacode varchar(255), @formula varchar(255)
+
+as
+
+begin	
+
+	
+
+	insert into PR_LOG_CALCULO_FORMULA (Company, payrolltype,process,period,person, formulacode,formula,xlastuser,xlastdate)
+
+	values (@company,@payrolltype,@processtype,@period,@person,@formulacode, @formula, 'ADMIN',getdate())
+
+	
+
+end
+GO
+
+
+
+-- ============================================================================
+-- [163/260] sp_pr_registrar_periodo_inicio.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_periodo_inicio]
+
+@company varchar(4), @payrolltype varchar(20),  @processtype varchar(20), @period varchar(20), @person varchar(20), @UserID varchar(20), @tc numeric(19,4), @formulacode varchar(255), @fechainicial datetime, @flagmonetario char(1)
+
+as
+
+begin	
+
+	
+
+
+
+	update PR_EmployeePayRollConcept
+
+	set PeriodBegin = @fechainicial
+
+	where PR_EmployeePayRollConcept.Person = @person and PR_EmployeePayRollConcept.Company = @company and PayRollType = @payrolltype
+
+	and ProcessType = @processtype and PRPeriod = @period
+
+	and exists (select * from PR_Concept where Company = @company and FormulaCode = @formulacode and Concept = PR_EmployeePayRollConcept.Concept)
+
+	
+
+
+
+	--IF ISNULL(((select Concept from PR_Concept where Company = @company and FormulaCode = @formulacode)), '') <> ''
+
+	--begin
+
+	
+
+	--	insert into PR_EmployeePayRollConcept (Concept, Person, Company, ProcessType, PayRollType,PRPeriod, ConceptValue, FlagIsMonetary, ConceptCurrency, ConceptValueLo,ConceptValueEx,
+
+	--	ExchangeRate,ReplicationUnit,XLastUser,XLastDate,flagPayment)
+
+	--	select 
+
+	--		(select Concept from PR_Concept where Company = @company and FormulaCode = @formulacode), 
+
+	--		PR_Employee.Person, PR_Employee.Company, @processtype,PR_Employee.PayRollType,@period,
+
+	--		@importe,
+
+	--		@flagmonetario,'LO',@importe,
+
+	--		case when @flagmonetario = 'Y' then ROUND(@importe/(@tc*1.0000),2) else NULL end,
+
+	--		case when @flagmonetario = 'Y' then @tc else NULL end,
+
+	--		SY_Person.ReplicationUnit,@UserID,GETDATE(),'N'
+
+
+
+	--	from PR_Employee inner join SY_Person on (PR_Employee.Person = SY_Person.Person)
+
+	--	where PR_Employee.Person = @person and PR_Employee.Company = @company
+
+	--end
+
+end
+GO
+
+
+
+-- ============================================================================
+-- [164/260] sp_pr_registrar_trabajador_web.sql
+-- ============================================================================
+
+/*
+    Alta manual de trabajador desde la ficha web (Nuevo).
+
+    Inserta SY_Person + PR_Employee.
+    - Name = ApellidoPaterno + ApellidoMaterno + Nombre1 + Nombre2
+    - EntryDate = ReEntryDate
+    - Si régimen AFP: resuelve PR_Employee.AFP desde PR_AFP (sin UI)
+    - Si sueldo > 0: asigna REM_BASICA permanente (salvo Construcción Civil)
+    - Si AFP: asigna AFP_FLUJO = 1
+
+    Validaciones bloqueantes:
+      - Código (person) único en SY_Person
+      - Documento no existente ya en la misma compañía
+
+    @confirmar_nombre = 'Y' permite continuar pese a nombres similares
+    (la UI debe haber pedido confirmación vía sp_pr_validar_alta_trabajador_web).
+
+    Usado por: POST /trabajadores/nuevo
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
+    @cia                    VARCHAR(10),
+    @person                 VARCHAR(20),
+    @name1                  VARCHAR(40),
+    @name2                  VARCHAR(40) = NULL,
+    @lastname1              VARCHAR(40),
+    @lastname2              VARCHAR(40) = NULL,
+    @birthdate              VARCHAR(10) = NULL,
+    @sex                    CHAR(1),
+    @sectelephone           VARCHAR(15) = NULL,
+    @email                  VARCHAR(255) = NULL,
+    @address                VARCHAR(255) = NULL,
+    @nacionalidad           VARCHAR(100) = NULL,
+    @employeedocumenttype   VARCHAR(20),
+    @documentnumber         VARCHAR(15),
+    @replicationunit        VARCHAR(4),
+    @userid                 VARCHAR(20) = NULL,
+    @employeetype           VARCHAR(20),
+    @employeecategory       VARCHAR(20) = NULL,
+    @entrydate              VARCHAR(10),
+    @contractmodality       VARCHAR(20) = NULL,
+    @ocupation              VARCHAR(20) = NULL,
+    @specialstatus          VARCHAR(20) = NULL,
+    @position               VARCHAR(20) = NULL,
+    @costcenter             VARCHAR(20),
+    @payrolltype            VARCHAR(20),
+    @accountprofile         VARCHAR(20) = NULL,
+    @sueldo                 VARCHAR(20) = NULL,
+    @flagasigfamiliar       CHAR(1) = 'N',
+    @pensiontype            VARCHAR(20) = NULL,
+    @pensioninscriptiondate VARCHAR(10) = NULL,
+    @regimehealth           VARCHAR(20) = NULL,
+    @flagmixta              CHAR(1) = 'N',
+    @cuspp                  VARCHAR(20) = NULL,
+    @collectionform         VARCHAR(20) = NULL,
+    @salarybank             VARCHAR(20) = NULL,
+    @salaryaccounttype      VARCHAR(20) = NULL,
+    @salaryaccount          VARCHAR(20) = NULL,
+    @cci                    VARCHAR(20) = NULL,
+    @ctsbank                VARCHAR(20) = NULL,
+    @ctsaccount             VARCHAR(20) = NULL,
+    @ctscurrency            CHAR(2) = 'LO',
+    @confirmar_nombre       CHAR(1) = 'N',
+    @xlastuser              VARCHAR(20) = NULL,
+    @person_out             VARCHAR(20) = NULL OUTPUT,
+    @mensaje_out            VARCHAR(500) = NULL OUTPUT
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @nombre_completo    VARCHAR(100);
+    DECLARE @birthdate_dt       DATETIME;
+    DECLARE @entrydate_dt       DATETIME;
+    DECLARE @pensiondate_dt     DATETIME;
+    DECLARE @rembasica          NUMERIC(18, 4) = NULL;
+    DECLARE @costcentername     VARCHAR(20) = NULL;
+    DECLARE @employee_status_id VARCHAR(20) = NULL;
+    DECLARE @afp_id             VARCHAR(20) = NULL;
+    DECLARE @pension_pdt        VARCHAR(20) = NULL;
+    DECLARE @tiene_afp          CHAR(1) = 'N';
+    DECLARE @userid_norm        VARCHAR(20);
+    DECLARE @doc_norm           VARCHAR(15);
+    DECLARE @es_construccion    CHAR(1) = 'N';
+    DECLARE @concept_rembasica  VARCHAR(20);
+    DECLARE @concept_afp_flujo  VARCHAR(20);
+    DECLARE @period_start       VARCHAR(10);
+    DECLARE @cc_asignacion      VARCHAR(20);
+    DECLARE @cc_code_asignacion VARCHAR(20);
+    DECLARE @hay_similares      INT = 0;
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+    SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
+    SET @name1 = UPPER(LTRIM(RTRIM(ISNULL(@name1, ''))));
+    SET @name2 = UPPER(LTRIM(RTRIM(ISNULL(@name2, ''))));
+    SET @lastname1 = UPPER(LTRIM(RTRIM(ISNULL(@lastname1, ''))));
+    SET @lastname2 = UPPER(LTRIM(RTRIM(ISNULL(@lastname2, ''))));
+    SET @birthdate = NULLIF(LTRIM(RTRIM(ISNULL(@birthdate, ''))), '');
+    SET @sex = NULLIF(LTRIM(RTRIM(ISNULL(@sex, ''))), '');
+    SET @sectelephone = NULLIF(LTRIM(RTRIM(ISNULL(@sectelephone, ''))), '');
+    SET @email = NULLIF(LOWER(LTRIM(RTRIM(ISNULL(@email, '')))), '');
+    SET @address = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@address, '')))), '');
+    SET @nacionalidad = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@nacionalidad, '')))), '');
+    SET @employeedocumenttype = LTRIM(RTRIM(ISNULL(@employeedocumenttype, '')));
+    SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
+    SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
+    SET @userid_norm = NULLIF(LOWER(LTRIM(RTRIM(ISNULL(@userid, '')))), '');
+    SET @employeetype = NULLIF(LTRIM(RTRIM(ISNULL(@employeetype, ''))), '');
+    SET @employeecategory = NULLIF(LTRIM(RTRIM(ISNULL(@employeecategory, ''))), '');
+    SET @entrydate = NULLIF(LTRIM(RTRIM(ISNULL(@entrydate, ''))), '');
+    SET @contractmodality = NULLIF(LTRIM(RTRIM(ISNULL(@contractmodality, ''))), '');
+    SET @ocupation = NULLIF(LTRIM(RTRIM(ISNULL(@ocupation, ''))), '');
+    SET @specialstatus = NULLIF(LTRIM(RTRIM(ISNULL(@specialstatus, ''))), '');
+    SET @position = NULLIF(LTRIM(RTRIM(ISNULL(@position, ''))), '');
+    SET @costcenter = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter, ''))), '');
+    SET @payrolltype = NULLIF(LTRIM(RTRIM(ISNULL(@payrolltype, ''))), '');
+    SET @accountprofile = NULLIF(LTRIM(RTRIM(ISNULL(@accountprofile, ''))), '');
+    SET @sueldo = NULLIF(LTRIM(RTRIM(ISNULL(@sueldo, ''))), '');
+    SET @flagasigfamiliar = CASE WHEN UPPER(ISNULL(@flagasigfamiliar, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @pensiontype = NULLIF(LTRIM(RTRIM(ISNULL(@pensiontype, ''))), '');
+    SET @pensioninscriptiondate = NULLIF(LTRIM(RTRIM(ISNULL(@pensioninscriptiondate, ''))), '');
+    SET @regimehealth = NULLIF(LTRIM(RTRIM(ISNULL(@regimehealth, ''))), '');
+    SET @flagmixta = CASE WHEN UPPER(ISNULL(@flagmixta, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @cuspp = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@cuspp, '')))), '');
+    SET @collectionform = NULLIF(LTRIM(RTRIM(ISNULL(@collectionform, ''))), '');
+    SET @salarybank = NULLIF(LTRIM(RTRIM(ISNULL(@salarybank, ''))), '');
+    SET @salaryaccounttype = NULLIF(LTRIM(RTRIM(ISNULL(@salaryaccounttype, ''))), '');
+    SET @salaryaccount = NULLIF(LTRIM(RTRIM(ISNULL(@salaryaccount, ''))), '');
+    SET @cci = NULLIF(LTRIM(RTRIM(ISNULL(@cci, ''))), '');
+    SET @ctsbank = NULLIF(LTRIM(RTRIM(ISNULL(@ctsbank, ''))), '');
+    SET @ctsaccount = NULLIF(LTRIM(RTRIM(ISNULL(@ctsaccount, ''))), '');
+    SET @ctscurrency = CASE WHEN UPPER(ISNULL(@ctscurrency, 'LO')) = 'EX' THEN 'EX' ELSE 'LO' END;
+    SET @confirmar_nombre = CASE WHEN UPPER(ISNULL(@confirmar_nombre, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+    SET @person_out = NULL;
+    SET @mensaje_out = NULL;
+
+    IF @cia = '' OR @person = '' OR @name1 = '' OR @lastname1 = ''
+    BEGIN
+        RAISERROR('Indique compañía, código, primer nombre y apellido paterno.', 16, 1);
+        RETURN;
+    END;
+
+    IF @employeedocumenttype = '' OR @documentnumber = ''
+    BEGIN
+        RAISERROR('Indique tipo y número de documento.', 16, 1);
+        RETURN;
+    END;
+
+    IF @replicationunit = ''
+    BEGIN
+        RAISERROR('Indique la unidad.', 16, 1);
+        RETURN;
+    END;
+
+    IF @sex IS NULL OR @sex NOT IN ('1', '2')
+    BEGIN
+        RAISERROR('Indique el sexo (1=Masculino, 2=Femenino).', 16, 1);
+        RETURN;
+    END;
+
+    IF @employeetype IS NULL OR @costcenter IS NULL OR @payrolltype IS NULL OR @entrydate IS NULL
+    BEGIN
+        RAISERROR('Indique tipo de trabajador, centro de costo, tipo de planilla y fecha de ingreso.', 16, 1);
+        RETURN;
+    END;
+
+    IF ISDATE(@entrydate) = 0
+    BEGIN
+        RAISERROR('Fecha de ingreso no válida.', 16, 1);
+        RETURN;
+    END;
+    SET @entrydate_dt = CONVERT(DATETIME, @entrydate, 120);
+
+    SET @birthdate_dt = NULL;
+    IF @birthdate IS NOT NULL
+    BEGIN
+        IF ISDATE(@birthdate) = 0
+        BEGIN
+            RAISERROR('Fecha de nacimiento no válida.', 16, 1);
+            RETURN;
+        END;
+        SET @birthdate_dt = CONVERT(DATETIME, @birthdate, 120);
+    END;
+
+    SET @pensiondate_dt = NULL;
+    IF @pensioninscriptiondate IS NOT NULL
+    BEGIN
+        IF ISDATE(@pensioninscriptiondate) = 0
+        BEGIN
+            RAISERROR('Fecha de inscripción de pensión no válida.', 16, 1);
+            RETURN;
+        END;
+        SET @pensiondate_dt = CONVERT(DATETIME, @pensioninscriptiondate, 120);
+    END;
+
+    IF @sueldo IS NOT NULL
+    BEGIN
+        SET @rembasica = TRY_CONVERT(NUMERIC(18, 4), REPLACE(@sueldo, ',', ''));
+        IF @rembasica IS NULL OR @rembasica < 0
+        BEGIN
+            RAISERROR('El sueldo indicado no es un valor numérico válido.', 16, 1);
+            RETURN;
+        END;
+    END;
+
+    SET @doc_norm = @documentnumber;
+    IF @doc_norm NOT LIKE '%[^0-9]%'
+    BEGIN
+        WHILE LEN(@doc_norm) > 1 AND LEFT(@doc_norm, 1) = '0'
+            SET @doc_norm = SUBSTRING(@doc_norm, 2, 15);
+    END;
+
+    IF EXISTS (SELECT 1 FROM SY_Person (NOLOCK) WHERE Person = @person)
+    BEGIN
+        RAISERROR('El código de trabajador %s ya existe. Use un código distinto.', 16, 1, @person);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK) ON p.Person = e.Person
+        WHERE e.Company = @cia
+          AND (
+                LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = @documentnumber
+             OR LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = @doc_norm
+             OR (
+                    ISNUMERIC(p.DocumentNumber) = 1
+                AND ISNUMERIC(@doc_norm) = 1
+                AND CAST(p.DocumentNumber AS BIGINT) = CAST(@doc_norm AS BIGINT)
+             )
+          )
+    )
+    BEGIN
+        RAISERROR('El documento %s ya está registrado en esta compañía.', 16, 1, @documentnumber);
+        RETURN;
+    END;
+
+    SET @nombre_completo = UPPER(LTRIM(RTRIM(
+        ISNULL(@lastname1, '') + ' ' +
+        ISNULL(@lastname2, '') + ' ' +
+        ISNULL(@name1, '') + ' ' +
+        ISNULL(@name2, '')
+    )));
+    WHILE CHARINDEX('  ', @nombre_completo) > 0
+        SET @nombre_completo = REPLACE(@nombre_completo, '  ', ' ');
+    IF LEN(@nombre_completo) > 100
+        SET @nombre_completo = LEFT(@nombre_completo, 100);
+
+    IF @confirmar_nombre <> 'Y'
+    BEGIN
+        SELECT @hay_similares = COUNT(*)
+        FROM SY_Person p (NOLOCK)
+        WHERE (
+                UPPER(LTRIM(RTRIM(ISNULL(p.LastName1, '')))) = @lastname1
+            AND UPPER(LTRIM(RTRIM(ISNULL(p.Name1, '')))) = @name1
+          )
+           OR UPPER(LTRIM(RTRIM(ISNULL(p.Name, '')))) = @nombre_completo;
+
+        IF @hay_similares > 0
+        BEGIN
+            RAISERROR('Existen trabajadores con nombre igual o muy parecido. Confirme para continuar.', 16, 1);
+            RETURN;
+        END;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM SY_PersonDocumentType (NOLOCK)
+        WHERE Company = @cia AND PersonDocumentType = @employeedocumenttype
+    )
+    BEGIN
+        RAISERROR('Tipo de documento no válido para la compañía.', 16, 1);
+        RETURN;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM SY_ReplicationUnit (NOLOCK)
+        WHERE ReplicationUnit = @replicationunit
+    )
+    BEGIN
+        RAISERROR('Unidad de replicación no válida: %s', 16, 1, @replicationunit);
+        RETURN;
+    END;
+
+    IF @userid_norm IS NOT NULL
+       AND EXISTS (SELECT 1 FROM SY_Person (NOLOCK) WHERE UserID = @userid_norm)
+    BEGIN
+        RAISERROR('El usuario indicado ya está asignado a otro trabajador.', 16, 1);
+        RETURN;
+    END;
+
+    SELECT TOP 1 @costcentername = LTRIM(RTRIM(ISNULL(cc.Name, '')))
+    FROM AC_CostCenter cc (NOLOCK)
+    WHERE cc.Company = @cia
+      AND cc.CostCenter = @costcenter;
+
+    SELECT TOP 1 @employee_status_id = es.EmployeeStatus
+    FROM PR_EmployeeStatus es (NOLOCK)
+    WHERE (es.Company = @cia OR es.EmployeeStatus LIKE 'LIMA' + @cia + '%')
+      AND (es.PDT IN ('11', '10') OR UPPER(es.Description) LIKE '%ACTIVO%')
+    ORDER BY CASE WHEN es.PDT = '11' THEN 0 WHEN es.PDT = '10' THEN 1 ELSE 2 END,
+             CASE WHEN es.EmployeeStatus LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END;
+
+    /* AFP automática desde régimen */
+    IF @pensiontype IS NOT NULL
+    BEGIN
+        IF EXISTS (
+            SELECT 1
+            FROM PR_PensionType pt (NOLOCK)
+            WHERE pt.PensionType = @pensiontype
+              AND (
+                    pt.PDT IN ('21', '23', '24', '25')
+                 OR (
+                        (
+                            UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%SPP%'
+                         OR UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%AFP%'
+                        )
+                    AND UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) NOT LIKE '%ONP%'
+                 )
+              )
+        )
+            SET @tiene_afp = 'Y';
+
+        SELECT @pension_pdt = LTRIM(RTRIM(ISNULL(pt.PDT, '')))
+        FROM PR_PensionType pt (NOLOCK)
+        WHERE pt.PensionType = @pensiontype;
+    END;
+
+    IF @tiene_afp = 'Y' AND @pension_pdt IN ('21', '23', '24', '25')
+    BEGIN
+        SELECT TOP 1 @afp_id = a.AFP
+        FROM PR_AFP a (NOLOCK)
+        WHERE a.Company = @cia
+          AND LTRIM(RTRIM(ISNULL(a.PDT, ''))) = @pension_pdt
+        ORDER BY
+            CASE WHEN a.AFP LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+            a.AFP;
+    END;
+
+    IF @salaryaccounttype IS NULL
+        SELECT TOP 1 @salaryaccounttype = e.SalaryAccountType
+        FROM PR_Employee e (NOLOCK)
+        WHERE e.Company = @cia AND e.SalaryAccountType IS NOT NULL
+        ORDER BY e.XLastDate DESC;
+
+    IF @accountprofile IS NULL
+        SELECT TOP 1 @accountprofile = e.AccountProfile
+        FROM PR_Employee e (NOLOCK)
+        WHERE e.Company = @cia
+          AND e.EmployeeType = @employeetype
+          AND e.AccountProfile IS NOT NULL
+        ORDER BY e.XLastDate DESC;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        INSERT INTO SY_Person (
+            Person, FlagUserID, PersonType, Name, Address,
+            DocumentType, DocumentNumber, Email, Status, FlagRucPersonType,
+            IsVendor, IsCustomer, XLastUser, XLastDate, Company,
+            ReplicationUnit, IsEmployee, SecTelephone, Name2, LastName1,
+            Name1, LastName2, BirthDate, Sex,
+            EmployeeDocumentType, FlagKeep, FlagName, FlagOutsourcingIn,
+            FlagOutsourcingOut, IsDomiciled, Nacionalidad, FlagPerceptionAgent,
+            FlagSunat5, IsTrainer, IsRecruiter, IsSupervisor, Indicator,
+            FlagLockCA, LicenseCondition, UserID
+        )
+        VALUES (
+            @person, 'N', 'NN', @nombre_completo, @address,
+            @employeedocumenttype, @documentnumber, @email, 'A', 'XX',
+            'Y', 'N', @xlastuser, GETDATE(), @cia,
+            @replicationunit, 'Y', @sectelephone, NULLIF(@name2, ''), @lastname1,
+            @name1, NULLIF(@lastname2, ''), @birthdate_dt, @sex,
+            @employeedocumenttype, 'N', 'P', 'N',
+            'N', '1', @nacionalidad, 'N',
+            'N', 'N', 'N', 'N', NULL,
+            'N', 'L', @userid_norm
+        );
+
+        INSERT INTO PR_Employee (
+            Person, Company, EmployeeCode, EmployeeType, EmployeeCategory,
+            EntryDate, ReEntryDate, PensionType, PensionInscriptionDate,
+            SalaryBank, SalaryAccountType, SalaryCurrency, SalaryAccount,
+            CostCenter, Position, AccountProfile, PayRollType, EmployeeStatus,
+            FlagEssaludVida, Status, XLastDate, XLastUser, ReplicationUnit,
+            CostCenterName, FlagDistribution, ContractModality, ConsiderInCalc,
+            FlagParticipar, FlagAsigFamiliar,
+            SpecialStatus, CollectionForm, Ocupation, RegimeHealth,
+            RemBasica, Salary, AFPCard, FlagMixta, AFP,
+            CTSBank, CTSAccount, CTSCurrency, SocialAssistanceNumber
+        )
+        VALUES (
+            @person, @cia, @person, @employeetype, @employeecategory,
+            @entrydate_dt, @entrydate_dt, @pensiontype, @pensiondate_dt,
+            @salarybank, @salaryaccounttype, 'LO', @salaryaccount,
+            @costcenter, @position, @accountprofile, @payrolltype, @employee_status_id,
+            'N', 'N', GETDATE(), @xlastuser, @replicationunit,
+            NULLIF(@costcentername, ''), 'H', @contractmodality, 'Y',
+            'Y', @flagasigfamiliar,
+            @specialstatus, @collectionform, @ocupation, @regimehealth,
+            @rembasica, @rembasica, @cuspp, @flagmixta, @afp_id,
+            @ctsbank, @ctsaccount, @ctscurrency, @cci
+        );
+
+        /* Construcción Civil: no asignar REM_BASICA */
+        IF EXISTS (
+            SELECT 1 FROM PR_EmployeeType et (NOLOCK)
+            WHERE et.EmployeeType = @employeetype
+              AND (
+                    et.PDT = '27'
+                 OR UPPER(LTRIM(RTRIM(ISNULL(et.Description, '')))) LIKE '%CONSTRUCCION%'
+              )
+        )
+            SET @es_construccion = 'Y';
+
+        IF @es_construccion = 'N' AND EXISTS (
+            SELECT 1 FROM PR_PayRollType pt (NOLOCK)
+            WHERE pt.PayRollType = @payrolltype
+              AND (
+                    UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%CONSTRUCCION%'
+                 OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) LIKE '%CONSTRUCCION%'
+              )
+        )
+            SET @es_construccion = 'Y';
+
+        SET @period_start = NULL;
+        SELECT TOP 1 @period_start = p.PRPeriod
+        FROM PR_Period p (NOLOCK)
+        WHERE p.Company = @cia
+          AND p.PayRollType = @payrolltype
+          AND @entrydate_dt BETWEEN p.DateBegin AND p.DateEnd
+        ORDER BY p.PRPeriod;
+
+        IF @period_start IS NULL
+        BEGIN
+            SELECT TOP 1 @period_start = p.PRPeriod
+            FROM PR_Period p (NOLOCK)
+            WHERE p.Company = @cia
+              AND p.PayRollType = @payrolltype
+              AND p.DateBegin >= @entrydate_dt
+            ORDER BY p.DateBegin ASC, p.PRPeriod ASC;
+
+            IF @period_start IS NULL
+                SELECT TOP 1 @period_start = p.PRPeriod
+                FROM PR_Period p (NOLOCK)
+                WHERE p.Company = @cia
+                  AND p.PayRollType = @payrolltype
+                  AND p.DateBegin <= @entrydate_dt
+                ORDER BY p.DateBegin DESC, p.PRPeriod DESC;
+        END;
+
+        SET @cc_asignacion = ISNULL(@costcenter, '');
+        SET @cc_code_asignacion = ISNULL(NULLIF(@costcentername, ''), @cc_asignacion);
+
+        IF @es_construccion = 'N'
+           AND @rembasica IS NOT NULL
+           AND @rembasica > 0
+           AND @period_start IS NOT NULL
+        BEGIN
+            SELECT TOP 1 @concept_rembasica = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia
+              AND c.FormulaCode = 'REM_BASICA'
+              AND c.Status = 'A'
+            ORDER BY c.Concept;
+
+            IF @concept_rembasica IS NOT NULL
+            BEGIN
+                INSERT INTO PR_EmployeeConcept (
+                    Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                    PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                    FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                    XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                    CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                )
+                VALUES (
+                    @person, @cia, @concept_rembasica, @payrolltype, @period_start, @cc_asignacion,
+                    NULL, @rembasica, NULL, 'LO', NULL,
+                    'N', 'P', @replicationunit,
+                    @xlastuser, GETDATE(), @rembasica, 0, 0,
+                    @cc_code_asignacion, '', '', 'A', NULL
+                );
+            END;
+        END;
+
+        IF @tiene_afp = 'Y' AND @period_start IS NOT NULL
+        BEGIN
+            SELECT TOP 1 @concept_afp_flujo = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia
+              AND c.FormulaCode = 'AFP_FLUJO'
+              AND c.Status = 'A'
+            ORDER BY c.Concept;
+
+            IF @concept_afp_flujo IS NOT NULL
+            BEGIN
+                INSERT INTO PR_EmployeeConcept (
+                    Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                    PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                    FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                    XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                    CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                )
+                VALUES (
+                    @person, @cia, @concept_afp_flujo, @payrolltype, @period_start, @cc_asignacion,
+                    NULL, 1, NULL, 'LO', NULL,
+                    'N', 'P', @replicationunit,
+                    @xlastuser, GETDATE(), 1, 0, 0,
+                    @cc_code_asignacion, '', '', 'A', NULL
+                );
+            END;
+        END;
+
+        COMMIT TRANSACTION;
+        SET @person_out = @person;
+        SET @mensaje_out = 'Trabajador registrado correctamente.';
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+        DECLARE @err NVARCHAR(4000) = ERROR_MESSAGE();
+        RAISERROR('%s', 16, 1, @err);
+        RETURN;
+    END CATCH
+END
+GO
+
+
+
+-- ============================================================================
+-- [165/260] sp_pr_replicar_distribucion_voucher_web.sql
+-- ============================================================================
+
+/*
+    Replica la distribución OT del periodo anterior hacia @period.
+    1) Copia todos los registros OT del periodo previo (misma compañía).
+    2) Agrega trabajadores activos que no estaban en el periodo previo,
+       con codigo = SY_Person.ReplicationUnit y valor = 100.
+
+    Usado por: POST /api/asientos/distribucion-porcentual/replicar
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_replicar_distribucion_voucher_web]
+    @company   VARCHAR(4),
+    @period    VARCHAR(20),
+    @xlastuser VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @period_ant VARCHAR(20);
+    DECLARE @tipo VARCHAR(20) = 'OT';
+    DECLARE @copiados INT = 0;
+    DECLARE @nuevos INT = 0;
+
+    SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
+    SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+
+    IF @company = '' OR @period = ''
+    BEGIN
+        RAISERROR('Indique compañía y periodo.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM PR_DistribucionVoucher (NOLOCK)
+        WHERE company = @company
+          AND period = @period
+          AND ISNULL(NULLIF(LTRIM(RTRIM(tipo)), ''), 'OT') = @tipo
+    )
+    BEGIN
+        RAISERROR('El periodo ya tiene distribución; no se puede replicar.', 16, 1);
+        RETURN;
+    END;
+
+    SELECT @period_ant = MAX(d.period)
+    FROM PR_DistribucionVoucher d (NOLOCK)
+    WHERE d.company = @company
+      AND d.period < @period
+      AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
+
+    IF @period_ant IS NULL
+    BEGIN
+        RAISERROR('No existe un periodo anterior con distribución para replicar.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        INSERT INTO PR_DistribucionVoucher (
+            dni, nombre, codigo, valor, period, tipo, company,
+            xlastuser, xlastdate
+        )
+        SELECT
+            LTRIM(RTRIM(d.dni)),
+            LTRIM(RTRIM(ISNULL(d.nombre, ''))),
+            LTRIM(RTRIM(ISNULL(d.codigo, ''))),
+            d.valor,
+            @period,
+            @tipo,
+            @company,
+            @xlastuser,
+            GETDATE()
+        FROM PR_DistribucionVoucher d (NOLOCK)
+        WHERE d.company = @company
+          AND d.period = @period_ant
+          AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
+
+        SET @copiados = @@ROWCOUNT;
+
+        INSERT INTO PR_DistribucionVoucher (
+            dni, nombre, codigo, valor, period, tipo, company,
+            xlastuser, xlastdate
+        )
+        SELECT
+            LTRIM(RTRIM(p.Person)),
+            LTRIM(RTRIM(ISNULL(p.Name, ''))),
+            LTRIM(RTRIM(p.ReplicationUnit)),
+            100,
+            @period,
+            @tipo,
+            @company,
+            @xlastuser,
+            GETDATE()
+        FROM PR_Employee e (NOLOCK)
+        INNER JOIN SY_Person p (NOLOCK)
+            ON p.Person = e.Person
+        WHERE e.Company = @company
+          AND UPPER(LTRIM(RTRIM(ISNULL(e.Status, 'Y')))) IN ('Y', 'A', '1')
+          AND (e.CeaseDate IS NULL OR e.CeaseDate >= CAST(GETDATE() AS DATE))
+          AND NULLIF(LTRIM(RTRIM(ISNULL(p.ReplicationUnit, ''))), '') IS NOT NULL
+          AND NOT EXISTS (
+                SELECT 1
+                FROM PR_DistribucionVoucher d (NOLOCK)
+                WHERE d.company = @company
+                  AND d.period = @period_ant
+                  AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo
+                  AND LTRIM(RTRIM(d.dni)) = LTRIM(RTRIM(p.Person))
+          )
+          AND NOT EXISTS (
+                SELECT 1
+                FROM PR_DistribucionVoucher d2 (NOLOCK)
+                WHERE d2.company = @company
+                  AND d2.period = @period
+                  AND ISNULL(NULLIF(LTRIM(RTRIM(d2.tipo)), ''), 'OT') = @tipo
+                  AND LTRIM(RTRIM(d2.dni)) = LTRIM(RTRIM(p.Person))
+                  AND LTRIM(RTRIM(d2.codigo)) = LTRIM(RTRIM(p.ReplicationUnit))
+          );
+
+        SET @nuevos = @@ROWCOUNT;
+
+        COMMIT TRANSACTION;
+
+        SELECT
+            @period_ant AS period_origen,
+            @period AS period_destino,
+            @copiados AS copiados,
+            @nuevos AS nuevos,
+            'Distribución replicada desde el periodo '
+                + CASE
+                    WHEN LEN(@period_ant) = 8 THEN
+                        LEFT(@period_ant, 4) + '-' + SUBSTRING(@period_ant, 5, 2) + '-' + RIGHT(@period_ant, 2)
+                    ELSE @period_ant
+                  END
+                + '. Copiados: ' + CAST(@copiados AS VARCHAR(10))
+                + '. Nuevos: ' + CAST(@nuevos AS VARCHAR(10)) + '.' AS mensaje;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0
+            ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END
+GO
+
+
+
+-- ============================================================================
+-- [166/260] sp_pr_replicar_formula_cia.sql
 -- ============================================================================
 
 /*
@@ -21512,7 +22713,7 @@ GO
 
 
 -- ============================================================================
--- [156/233] sp_pr_replicar_nuevo_concepto_nemonico.sql
+-- [167/260] sp_pr_replicar_nuevo_concepto_nemonico.sql
 -- ============================================================================
 
 /*
@@ -21688,7 +22889,7 @@ GO
 
 
 -- ============================================================================
--- [157/233] sp_pr_reporte_asiento_contable_web.sql
+-- [168/260] sp_pr_reporte_asiento_contable_web.sql
 -- ============================================================================
 
 /*
@@ -21923,7 +23124,335 @@ GO
 
 
 -- ============================================================================
--- [158/233] sp_pr_reportelistadopagos_web.sql
+-- [169/260] sp_pr_reportecontratos_web.sql
+-- ============================================================================
+
+/*
+
+    Listado / reporte de contratos (migración DW PB9 LISTADO DE CONTRATOS).
+
+    Usado por: POST /reporte_contratos (reporte_contratos.html).
+
+
+
+    Parámetros:
+
+      @cia              — compañía
+
+      @payrolltype      — tipo planilla; '0' = todos
+
+      @person           — persona; '0' = todos
+
+      @cesados          — T=todos, Y=con fecha de cese (CeaseDate not null), N=sin fecha de cese
+
+                          (mismo criterio que saldo vacaciones / PB9)
+
+      @contractmodality — modalidad; '0' = todas
+
+      @filtro_contrato  — A=contrato activo, S=sin contrato activo (1 fila/persona), T=todos
+
+
+
+    Columnas (headers web):
+
+      codigo, trabajador, f_ingreso, cargo, cc, estado, inicio, termino, f_cese, modalidad
+
+*/
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reportecontratos_web]
+
+    @cia              VARCHAR(4),
+
+    @payrolltype      VARCHAR(20) = '0',
+
+    @person           VARCHAR(20) = '0',
+
+    @cesados          CHAR(1) = 'T',
+
+    @contractmodality VARCHAR(20) = '0',
+
+    @filtro_contrato  CHAR(1) = 'T'
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+
+    SET @payrolltype = LTRIM(RTRIM(ISNULL(@payrolltype, '0')));
+
+    IF @payrolltype = '' SET @payrolltype = '0';
+
+    SET @person = LTRIM(RTRIM(ISNULL(@person, '0')));
+
+    IF @person = '' SET @person = '0';
+
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
+
+    SET @contractmodality = LTRIM(RTRIM(ISNULL(@contractmodality, '0')));
+
+    IF @contractmodality = '' SET @contractmodality = '0';
+
+    SET @filtro_contrato = UPPER(LTRIM(RTRIM(ISNULL(@filtro_contrato, 'T'))));
+
+    IF @filtro_contrato NOT IN ('A', 'S', 'T') SET @filtro_contrato = 'T';
+
+
+
+    ;WITH base AS (
+
+        SELECT
+
+            ISNULL(NULLIF(LTRIM(RTRIM(e.EmployeeCode)), ''), e.Person) AS codigo,
+
+            LTRIM(RTRIM(
+
+                ISNULL(p.LastName1, '') + ' ' +
+
+                ISNULL(p.LastName2, '') + ' ' +
+
+                ISNULL(p.Name1, '') + ' ' +
+
+                ISNULL(p.Name2, '')
+
+            )) AS trabajador,
+
+            CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS f_ingreso,
+
+            ISNULL(
+
+                (
+
+                    SELECT TOP 1 LTRIM(RTRIM(pos.Description))
+
+                    FROM PR_Position pos (NOLOCK)
+
+                    WHERE pos.Position = ISNULL(pc.position, e.Position)
+
+                      AND (pos.Company = e.Company OR pos.Company IS NULL)
+
+                ),
+
+                ISNULL(e.POSITION_DESC, '')
+
+            ) AS cargo,
+
+            ISNULL(NULLIF(LTRIM(RTRIM(e.Costcentername)), ''), LTRIM(RTRIM(ISNULL(e.CostCenter, '')))) AS cc,
+
+            CASE
+
+                WHEN pc.Person IS NULL THEN NULL
+
+                WHEN LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
+
+                     AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
+
+                    THEN 'ACTIVO'
+
+                WHEN LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A' THEN 'INACTIVO'
+
+                WHEN LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'I' THEN 'INACTIVO'
+
+                ELSE LTRIM(RTRIM(ISNULL(pc.Status, '')))
+
+            END AS estado,
+
+            CONVERT(varchar(10), pc.startdate, 23) AS inicio,
+
+            CONVERT(varchar(10), pc.enddate, 23) AS termino,
+
+            CONVERT(varchar(10), e.CeaseDate, 23) AS f_cese,
+
+            ISNULL(
+
+                (
+
+                    SELECT TOP 1 LTRIM(RTRIM(m.Description))
+
+                    FROM HR_ContractModality m (NOLOCK)
+
+                    WHERE m.Company = e.Company
+
+                      AND m.ContractModality = e.ContractModality
+
+                ),
+
+                CASE WHEN NULLIF(LTRIM(RTRIM(e.ContractModality)), '') IS NULL THEN 'Ninguno' ELSE LTRIM(RTRIM(e.ContractModality)) END
+
+            ) AS modalidad,
+
+            e.Person AS person,
+
+            e.Company AS company,
+
+            pc.Contractno AS contractno,
+
+            pc.Status AS contract_status,
+
+            pc.startdate AS contract_start,
+
+            pc.enddate AS contract_end,
+
+            CASE
+
+                WHEN EXISTS (
+
+                    SELECT 1
+
+                    FROM PR_PersonContract pca (NOLOCK)
+
+                    WHERE pca.Company = e.Company
+
+                      AND pca.Person = e.Person
+
+                      AND LTRIM(RTRIM(ISNULL(pca.Status, ''))) = 'A'
+
+                      AND (pca.enddate IS NULL OR CONVERT(date, pca.enddate) >= CONVERT(date, GETDATE()))
+
+                ) THEN 'Y'
+
+                ELSE 'N'
+
+            END AS tiene_activo
+
+        FROM PR_Employee e (NOLOCK)
+
+        INNER JOIN SY_Person p (NOLOCK)
+
+            ON p.Person = e.Person
+
+        LEFT JOIN PR_PersonContract pc (NOLOCK)
+
+            ON pc.Person = e.Person
+
+           AND pc.Company = e.Company
+
+        WHERE e.Company = @cia
+
+          AND (@payrolltype = '0' OR e.PayRollType = @payrolltype)
+
+          AND (@person = '0' OR e.Person = @person)
+
+          AND (
+
+                @cesados = 'T'
+
+                OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)
+
+                OR (@cesados = 'N' AND e.CeaseDate IS NULL)
+
+          )
+
+          AND (
+
+                @contractmodality = '0'
+
+                OR e.ContractModality = @contractmodality
+
+          )
+
+    ),
+
+    filtrado AS (
+
+        SELECT
+
+            b.*,
+
+            ROW_NUMBER() OVER (
+
+                PARTITION BY b.person
+
+                ORDER BY
+
+                    CASE WHEN b.contractno IS NULL THEN 1 ELSE 0 END,
+
+                    ISNULL(b.contract_end, CONVERT(datetime, '19000101')) DESC,
+
+                    ISNULL(b.contract_start, CONVERT(datetime, '19000101')) DESC,
+
+                    ISNULL(b.contractno, 0) DESC
+
+            ) AS rn_sin
+
+        FROM base b
+
+        WHERE
+
+            (
+
+                @filtro_contrato = 'T'
+
+                OR (@filtro_contrato = 'A' AND b.tiene_activo = 'Y' AND b.estado = 'ACTIVO')
+
+                OR (
+
+                    @filtro_contrato = 'S'
+
+                    AND b.tiene_activo = 'N'
+
+                    AND (
+
+                        b.contractno IS NULL
+
+                        OR NOT (
+
+                            LTRIM(RTRIM(ISNULL(b.contract_status, ''))) = 'A'
+
+                            AND (b.contract_end IS NULL OR CONVERT(date, b.contract_end) >= CONVERT(date, GETDATE()))
+
+                        )
+
+                    )
+
+                )
+
+            )
+
+    )
+
+    SELECT
+
+        codigo,
+
+        trabajador,
+
+        f_ingreso,
+
+        cargo,
+
+        cc,
+
+        estado,
+
+        inicio,
+
+        termino,
+
+        f_cese,
+
+        modalidad
+
+    FROM filtrado
+
+    WHERE @filtro_contrato <> 'S' OR rn_sin = 1
+
+    ORDER BY trabajador, contract_start, contractno;
+
+END
+
+GO
+
+
+
+-- ============================================================================
+-- [170/260] sp_pr_reportelistadopagos_web.sql
 -- ============================================================================
 
 /*
@@ -22059,7 +23588,7 @@ GO
 
 
 -- ============================================================================
--- [159/233] sp_pr_reportelog_calculo_web.sql
+-- [171/260] sp_pr_reportelog_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -22153,7 +23682,7 @@ GO
 
 
 -- ============================================================================
--- [160/233] sp_pr_reporteplame_total_web.sql
+-- [172/260] sp_pr_reporteplame_total_web.sql
 -- ============================================================================
 
 /*
@@ -22639,7 +24168,7 @@ GO
 
 
 -- ============================================================================
--- [161/233] sp_pr_reporteplamevertical_web.sql
+-- [173/260] sp_pr_reporteplamevertical_web.sql
 -- ============================================================================
 
 /*
@@ -22983,7 +24512,7 @@ GO
 
 
 -- ============================================================================
--- [162/233] sp_pr_reporteplanillaporconceptos_web.sql
+-- [174/260] sp_pr_reporteplanillaporconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -23069,7 +24598,7 @@ GO
 
 
 -- ============================================================================
--- [163/233] sp_pr_reportesdescansos_medicos_web.sql
+-- [175/260] sp_pr_reportesdescansos_medicos_web.sql
 -- ============================================================================
 
 /*
@@ -23132,7 +24661,7 @@ GO
 
 
 -- ============================================================================
--- [164/233] sp_pr_resumen_calculo_web.sql
+-- [176/260] sp_pr_resumen_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -23210,7 +24739,7 @@ GO
 
 
 -- ============================================================================
--- [165/233] sp_pr_resumen_declaracion_afp_web.sql
+-- [177/260] sp_pr_resumen_declaracion_afp_web.sql
 -- ============================================================================
 
 /*
@@ -23451,7 +24980,7 @@ GO
 
 
 -- ============================================================================
--- [166/233] sp_pr_saldovacaciones_web.sql
+-- [178/260] sp_pr_saldovacaciones_web.sql
 -- ============================================================================
 
 /*
@@ -23727,7 +25256,7 @@ GO
 
 
 -- ============================================================================
--- [167/233] sp_pr_selectoraccount_web.sql
+-- [179/260] sp_pr_selectoraccount_web.sql
 -- ============================================================================
 
 /*
@@ -23771,7 +25300,7 @@ GO
 
 
 -- ============================================================================
--- [168/233] sp_pr_selectoraccountprofile_web.sql
+-- [180/260] sp_pr_selectoraccountprofile_web.sql
 -- ============================================================================
 
 /*
@@ -23797,7 +25326,7 @@ GO
 
 
 -- ============================================================================
--- [169/233] sp_pr_selectorafp_web.sql
+-- [181/260] sp_pr_selectorafp_web.sql
 -- ============================================================================
 
 /*
@@ -23828,7 +25357,7 @@ GO
 
 
 -- ============================================================================
--- [170/233] sp_pr_selectorbancos_consolidada_web.sql
+-- [182/260] sp_pr_selectorbancos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -23855,7 +25384,7 @@ GO
 
 
 -- ============================================================================
--- [171/233] sp_pr_selectorbancos_web.sql
+-- [183/260] sp_pr_selectorbancos_web.sql
 -- ============================================================================
 
 /*
@@ -23880,7 +25409,7 @@ GO
 
 
 -- ============================================================================
--- [172/233] sp_pr_selectorcareer_web.sql
+-- [184/260] sp_pr_selectorcareer_web.sql
 -- ============================================================================
 
 /*
@@ -23928,7 +25457,7 @@ GO
 
 
 -- ============================================================================
--- [173/233] sp_pr_selectorceasereason_web.sql
+-- [185/260] sp_pr_selectorceasereason_web.sql
 -- ============================================================================
 
 /*
@@ -23954,7 +25483,55 @@ GO
 
 
 -- ============================================================================
--- [174/233] sp_pr_selectorcompanias_web.sql
+-- [186/260] sp_pr_selectorcivilstate_web.sql
+-- ============================================================================
+
+/*
+    Selector de estados civiles (SY_CivilState) por compañía.
+    Si la compañía no tiene catálogo propio, usa el de BGT.
+*/
+CREATE   PROCEDURE [dbo].[sp_pr_selectorcivilstate_web]
+    @cia VARCHAR(4)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+
+    IF @cia = ''
+    BEGIN
+        RAISERROR('Indique la compañía.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1
+        FROM SY_CivilState cs (NOLOCK)
+        WHERE cs.Company = @cia
+    )
+    BEGIN
+        SELECT
+            cs.CivilState AS id,
+            LTRIM(RTRIM(ISNULL(cs.Description, ''))) AS text
+        FROM SY_CivilState cs (NOLOCK)
+        WHERE cs.Company = @cia
+        ORDER BY cs.Description ASC, cs.CivilState ASC;
+        RETURN;
+    END;
+
+    SELECT
+        cs.CivilState AS id,
+        LTRIM(RTRIM(ISNULL(cs.Description, ''))) AS text
+    FROM SY_CivilState cs (NOLOCK)
+    WHERE cs.Company = 'BGT'
+    ORDER BY cs.Description ASC, cs.CivilState ASC;
+END
+GO
+
+
+
+-- ============================================================================
+-- [187/260] sp_pr_selectorcompanias_web.sql
 -- ============================================================================
 
 /*
@@ -23974,14 +25551,14 @@ BEGIN
         description
     FROM SY_Company (NOLOCK)
     WHERE UPPER(LTRIM(RTRIM(ISNULL([status], '')))) = 'A'
-    ORDER BY Company ASC;
+    ORDER BY description ASC;
 END
 GO
 
 
 
 -- ============================================================================
--- [175/233] sp_pr_selectorconceptoneto_web.sql
+-- [188/260] sp_pr_selectorconceptoneto_web.sql
 -- ============================================================================
 
 /*
@@ -24013,7 +25590,7 @@ GO
 
 
 -- ============================================================================
--- [176/233] sp_pr_selectorconceptos_contables_web.sql
+-- [189/260] sp_pr_selectorconceptos_contables_web.sql
 -- ============================================================================
 
 /*
@@ -24056,7 +25633,7 @@ GO
 
 
 -- ============================================================================
--- [177/233] sp_pr_selectorconceptos_web.sql
+-- [190/260] sp_pr_selectorconceptos_web.sql
 -- ============================================================================
 
 /*
@@ -24082,7 +25659,7 @@ GO
 
 
 -- ============================================================================
--- [178/233] sp_pr_selectorconcepttype_web.sql
+-- [191/260] sp_pr_selectorconcepttype_web.sql
 -- ============================================================================
 
 /*
@@ -24121,7 +25698,7 @@ GO
 
 
 -- ============================================================================
--- [179/233] sp_pr_selectorcontractmodality_web.sql
+-- [192/260] sp_pr_selectorcontractmodality_web.sql
 -- ============================================================================
 
 /*
@@ -24147,7 +25724,7 @@ GO
 
 
 -- ============================================================================
--- [180/233] sp_pr_selectorcostcenter_web.sql
+-- [193/260] sp_pr_selectorcostcenter_web.sql
 -- ============================================================================
 
 /*
@@ -24179,7 +25756,7 @@ GO
 
 
 -- ============================================================================
--- [181/233] sp_pr_selectoremployeecategory_web.sql
+-- [194/260] sp_pr_selectoremployeecategory_web.sql
 -- ============================================================================
 
 /*
@@ -24205,7 +25782,7 @@ GO
 
 
 -- ============================================================================
--- [182/233] sp_pr_selectoremployeetype_web.sql
+-- [195/260] sp_pr_selectoremployeetype_web.sql
 -- ============================================================================
 
 /*
@@ -24231,7 +25808,7 @@ GO
 
 
 -- ============================================================================
--- [183/233] sp_pr_selectorformapago_web.sql
+-- [196/260] sp_pr_selectorformapago_web.sql
 -- ============================================================================
 
 /*
@@ -24256,7 +25833,7 @@ GO
 
 
 -- ============================================================================
--- [184/233] sp_pr_selectorgrupoformula_web.sql
+-- [197/260] sp_pr_selectorgrupoformula_web.sql
 -- ============================================================================
 
 /*
@@ -24283,7 +25860,7 @@ GO
 
 
 -- ============================================================================
--- [185/233] sp_pr_selectorinstitution_web.sql
+-- [198/260] sp_pr_selectorinstitution_web.sql
 -- ============================================================================
 
 /*
@@ -24312,7 +25889,7 @@ GO
 
 
 -- ============================================================================
--- [186/233] sp_pr_selectorinstructionlevel_web.sql
+-- [199/260] sp_pr_selectorinstructionlevel_web.sql
 -- ============================================================================
 
 /*
@@ -24343,7 +25920,7 @@ GO
 
 
 -- ============================================================================
--- [187/233] sp_pr_selectorocupation_web.sql
+-- [200/260] sp_pr_selectorocupation_web.sql
 -- ============================================================================
 
 /*
@@ -24369,7 +25946,7 @@ GO
 
 
 -- ============================================================================
--- [188/233] sp_pr_selectorparameter_web.sql
+-- [201/260] sp_pr_selectorparameter_web.sql
 -- ============================================================================
 
 /*
@@ -24396,7 +25973,7 @@ GO
 
 
 -- ============================================================================
--- [189/233] sp_pr_selectorparametroformula_web.sql
+-- [202/260] sp_pr_selectorparametroformula_web.sql
 -- ============================================================================
 
 /*
@@ -24419,7 +25996,7 @@ GO
 
 
 -- ============================================================================
--- [190/233] sp_pr_selectorpensiontype_web.sql
+-- [203/260] sp_pr_selectorpensiontype_web.sql
 -- ============================================================================
 
 /*
@@ -24448,12 +26025,13 @@ GO
 
 
 -- ============================================================================
--- [191/233] sp_pr_selectorperiodoactivo_planilla_web.sql
+-- [204/260] sp_pr_selectorperiodoactivo_planilla_web.sql
 -- ============================================================================
 
 /*
-    Periodo activo más reciente entre todos los procesos de una planilla.
+    Ultimo periodo abierto del proceso Mensual / Fin de mes de una planilla.
     Usado por: GET /api/aperturar-periodos/periodo-sugerido
+               (carga masiva, aperturar periodos, asignacion de conceptos)
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorperiodoactivo_planilla_web]
     @cia         VARCHAR(20),
@@ -24465,9 +26043,17 @@ BEGIN
     SELECT TOP 1
         LTRIM(RTRIM(pc.PRPeriod)) AS prperiod
     FROM PR_ProcessControl pc WITH (NOLOCK)
+    INNER JOIN PR_ProcessType pt WITH (NOLOCK)
+        ON pt.ProcessType = pc.ProcessType
+       AND pt.Company = pc.Company
     WHERE pc.Company = @cia
       AND pc.PayRollType = @payrolltype
       AND pc.Status IN ('A', 'G')
+      AND (
+            UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) IN ('FIN_DE_MES', 'MENSUAL')
+         OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) LIKE '%FIN%MES%'
+         OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) LIKE '%MENSUAL%'
+      )
     ORDER BY pc.PRPeriod DESC;
 END
 GO
@@ -24475,7 +26061,7 @@ GO
 
 
 -- ============================================================================
--- [192/233] sp_pr_selectorperiodoactivo_web.sql
+-- [205/260] sp_pr_selectorperiodoactivo_web.sql
 -- ============================================================================
 
 /*
@@ -24509,7 +26095,7 @@ GO
 
 
 -- ============================================================================
--- [193/233] sp_pr_selectorperiodocalculo_web.sql
+-- [206/260] sp_pr_selectorperiodocalculo_web.sql
 -- ============================================================================
 
 /*
@@ -24559,7 +26145,7 @@ GO
 
 
 -- ============================================================================
--- [194/233] sp_pr_selectorperiodos_apertura_web.sql
+-- [207/260] sp_pr_selectorperiodos_apertura_web.sql
 -- ============================================================================
 
 /*
@@ -24595,7 +26181,7 @@ GO
 
 
 -- ============================================================================
--- [195/233] sp_pr_selectorperiodos_asientos_web.sql
+-- [208/260] sp_pr_selectorperiodos_asientos_web.sql
 -- ============================================================================
 
 /*
@@ -24628,7 +26214,43 @@ GO
 
 
 -- ============================================================================
--- [196/233] sp_pr_selectorperiodos_cia_web.sql
+-- [209/260] sp_pr_selectorperiodos_asig_web.sql
+-- ============================================================================
+
+/*
+    Selector de periodos para asignación / descansos médicos.
+    Usado por: GET /api/selectores/periodos-asig
+               registro_descansos_medicos.html
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorperiodos_asig_web]
+    @cia         VARCHAR(4),
+    @payrolltype VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        PR_PERIOD.PAYROLLTYPE,
+        SUBSTRING(PR_PERIOD.PRPERIOD, 1, 4) + '-'
+            + SUBSTRING(PR_PERIOD.PRPERIOD, 5, 2) + '-'
+            + SUBSTRING(PR_PERIOD.PRPERIOD, 7, 2) AS description,
+        PR_PERIOD.PRPERIOD,
+        PR_PERIOD.GLPERIOD,
+        PR_PERIOD.COMPANY,
+        PR_PERIOD.REPLICATIONUNIT,
+        PR_PERIOD.XLASTUSER,
+        PR_PERIOD.XLASTDATE
+    FROM PR_PERIOD
+    WHERE PayRollType = @payrolltype
+      AND Company = @cia
+    ORDER BY PR_PERIOD.PRPERIOD DESC;
+END
+GO
+
+
+
+-- ============================================================================
+-- [210/260] sp_pr_selectorperiodos_cia_web.sql
 -- ============================================================================
 
 /*
@@ -24662,7 +26284,7 @@ GO
 
 
 -- ============================================================================
--- [197/233] sp_pr_selectorperiodos_consolidada_web.sql
+-- [211/260] sp_pr_selectorperiodos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24703,7 +26325,7 @@ GO
 
 
 -- ============================================================================
--- [198/233] sp_pr_selectorperiodos_generar_voucher_web.sql
+-- [212/260] sp_pr_selectorperiodos_generar_voucher_web.sql
 -- ============================================================================
 
 /*
@@ -24750,7 +26372,7 @@ GO
 
 
 -- ============================================================================
--- [199/233] sp_pr_selectorperiodos_plame_web.sql
+-- [213/260] sp_pr_selectorperiodos_plame_web.sql
 -- ============================================================================
 
 /*
@@ -24780,7 +26402,7 @@ GO
 
 
 -- ============================================================================
--- [200/233] sp_pr_selectorperiodos_web.sql
+-- [214/260] sp_pr_selectorperiodos_web.sql
 -- ============================================================================
 
 /*
@@ -24822,7 +26444,7 @@ GO
 
 
 -- ============================================================================
--- [201/233] sp_pr_selectorpersonas_consolidada_web.sql
+-- [215/260] sp_pr_selectorpersonas_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24850,7 +26472,30 @@ GO
 
 
 -- ============================================================================
--- [202/233] sp_pr_selectorpersondocumenttype_web.sql
+-- [216/260] sp_pr_selectorpersonas_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorpersonas_web]
+
+@cia varchar(4)
+
+as
+
+begin
+
+    select PR_Employee.Person,SY_Person.Name from SY_Person inner join PR_Employee on 
+
+    (SY_Person.Person = PR_Employee.Person AND PR_Employee.Status = 'N' and PR_Employee.Company = @cia)
+
+    order by 2
+
+end
+GO
+
+
+
+-- ============================================================================
+-- [217/260] sp_pr_selectorpersondocumenttype_web.sql
 -- ============================================================================
 
 /*
@@ -24883,7 +26528,7 @@ GO
 
 
 -- ============================================================================
--- [203/233] sp_pr_selectorplanillas_consolidada_web.sql
+-- [218/260] sp_pr_selectorplanillas_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -24909,7 +26554,7 @@ GO
 
 
 -- ============================================================================
--- [204/233] sp_pr_selectorplanillas_web.sql
+-- [219/260] sp_pr_selectorplanillas_web.sql
 -- ============================================================================
 
 /*
@@ -24939,7 +26584,7 @@ GO
 
 
 -- ============================================================================
--- [205/233] sp_pr_selectorposition_web.sql
+-- [220/260] sp_pr_selectorposition_web.sql
 -- ============================================================================
 
 /*
@@ -24965,7 +26610,7 @@ GO
 
 
 -- ============================================================================
--- [206/233] sp_pr_selectorprocesos_consolidada_web.sql
+-- [221/260] sp_pr_selectorprocesos_consolidada_web.sql
 -- ============================================================================
 
 /*
@@ -25000,7 +26645,7 @@ GO
 
 
 -- ============================================================================
--- [207/233] sp_pr_selectorprocesos_contables_web.sql
+-- [222/260] sp_pr_selectorprocesos_contables_web.sql
 -- ============================================================================
 
 /*
@@ -25040,7 +26685,7 @@ GO
 
 
 -- ============================================================================
--- [208/233] sp_pr_selectorprocesos_web.sql
+-- [223/260] sp_pr_selectorprocesos_web.sql
 -- ============================================================================
 
 /*
@@ -25078,7 +26723,7 @@ GO
 
 
 -- ============================================================================
--- [209/233] sp_pr_selectorprocesoscalculo_web.sql
+-- [224/260] sp_pr_selectorprocesoscalculo_web.sql
 -- ============================================================================
 
 /*
@@ -25127,7 +26772,7 @@ GO
 
 
 -- ============================================================================
--- [210/233] sp_pr_selectorregimehealth_web.sql
+-- [225/260] sp_pr_selectorregimehealth_web.sql
 -- ============================================================================
 
 /*
@@ -25156,7 +26801,7 @@ GO
 
 
 -- ============================================================================
--- [211/233] sp_pr_selectorsctrpension_web.sql
+-- [226/260] sp_pr_selectorsctrpension_web.sql
 -- ============================================================================
 
 /*
@@ -25187,7 +26832,7 @@ GO
 
 
 -- ============================================================================
--- [212/233] sp_pr_selectorspecialstatus_web.sql
+-- [227/260] sp_pr_selectorspecialstatus_web.sql
 -- ============================================================================
 
 /*
@@ -25213,7 +26858,7 @@ GO
 
 
 -- ============================================================================
--- [213/233] sp_pr_selectortipocuenta_web.sql
+-- [228/260] sp_pr_selectortipocuenta_web.sql
 -- ============================================================================
 
 /*
@@ -25237,7 +26882,7 @@ GO
 
 
 -- ============================================================================
--- [214/233] sp_pr_selectortipos_dm_web.sql
+-- [229/260] sp_pr_selectortipos_dm_web.sql
 -- ============================================================================
 
 /*
@@ -25264,7 +26909,7 @@ GO
 
 
 -- ============================================================================
--- [215/233] sp_pr_selectorunidades_web.sql
+-- [230/260] sp_pr_selectorunidades_web.sql
 -- ============================================================================
 
 /*
@@ -25289,7 +26934,7 @@ GO
 
 
 -- ============================================================================
--- [216/233] sp_pr_selectorusuarios_web.sql
+-- [231/260] sp_pr_selectorusuarios_web.sql
 -- ============================================================================
 
 /*
@@ -25312,7 +26957,7 @@ GO
 
 
 -- ============================================================================
--- [217/233] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
+-- [232/260] sp_pr_trabajadores_sin_regimen_pension_afp_web.sql
 -- ============================================================================
 
 /*
@@ -25379,7 +27024,163 @@ GO
 
 
 -- ============================================================================
--- [218/233] sp_pr_tregistro_cuentas_web.sql
+-- [233/260] sp_pr_tregistro_actualizar_campos_nuevos_web.sql
+-- ============================================================================
+
+/*
+
+    Actualiza solo campos post T-Registro que no vienen del ZIP:
+
+      Position, CostCenter (+CostCenterName), AccountProfile,
+
+      FlagAsigFamiliar, FlagMixta.
+
+
+
+    Usado por: POST /api/tregistro-importacion/campos-nuevos/guardar
+
+*/
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_tregistro_actualizar_campos_nuevos_web]
+
+    @cia              VARCHAR(10),
+
+    @person           VARCHAR(20),
+
+    @position         VARCHAR(20) = NULL,
+
+    @costcenter       VARCHAR(20) = NULL,
+
+    @accountprofile   VARCHAR(20) = NULL,
+
+    @flagasigfamiliar VARCHAR(1) = 'N',
+
+    @flagmixta        VARCHAR(1) = 'N',
+
+    @xlastuser        VARCHAR(20) = NULL
+
+AS
+
+BEGIN
+
+    SET NOCOUNT ON;
+
+
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+
+    SET @person = LTRIM(RTRIM(ISNULL(@person, '')));
+
+
+
+    IF @cia = '' OR @person = ''
+
+    BEGIN
+
+        RAISERROR('Debe indicar compania y trabajador.', 16, 1);
+
+        RETURN;
+
+    END;
+
+
+
+    IF NOT EXISTS (
+
+        SELECT 1
+
+        FROM PR_Employee (NOLOCK)
+
+        WHERE Company = @cia
+
+          AND Person = @person
+
+    )
+
+    BEGIN
+
+        RAISERROR('Trabajador no encontrado para la compania indicada.', 16, 1);
+
+        RETURN;
+
+    END;
+
+
+
+    IF RTRIM(ISNULL(@flagasigfamiliar, '')) NOT IN ('Y', 'N') SET @flagasigfamiliar = 'N';
+
+    IF RTRIM(ISNULL(@flagmixta, '')) NOT IN ('Y', 'N') SET @flagmixta = 'N';
+
+
+
+    DECLARE @costcentername VARCHAR(100) = NULL;
+
+    IF NULLIF(LTRIM(RTRIM(ISNULL(@costcenter, ''))), '') IS NOT NULL
+
+    BEGIN
+
+        SELECT TOP 1 @costcentername = LTRIM(RTRIM(ISNULL(cc.Name, '')))
+
+        FROM AC_CostCenter cc (NOLOCK)
+
+        WHERE cc.Company = @cia
+
+          AND cc.CostCenter = LTRIM(RTRIM(@costcenter));
+
+    END;
+
+
+
+    UPDATE PR_Employee
+
+    SET
+
+        Position = NULLIF(LTRIM(RTRIM(@position)), ''),
+
+        CostCenter = NULLIF(LTRIM(RTRIM(@costcenter)), ''),
+
+        CostCenterName = CASE
+
+            WHEN NULLIF(LTRIM(RTRIM(@costcenter)), '') IS NULL THEN NULL
+
+            ELSE NULLIF(@costcentername, '')
+
+        END,
+
+        AccountProfile = NULLIF(LTRIM(RTRIM(@accountprofile)), ''),
+
+        FlagAsigFamiliar = @flagasigfamiliar,
+
+        FlagMixta = @flagmixta,
+
+        xlastdate = GETDATE(),
+
+        xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
+
+    WHERE Company = @cia
+
+      AND Person = @person;
+
+
+
+    SELECT
+
+        CAST(1 AS INT) AS ok,
+
+        @cia AS cia,
+
+        @person AS person,
+
+        'Campos actualizados correctamente.' AS mensaje;
+
+END
+
+GO
+
+
+
+-- ============================================================================
+-- [234/260] sp_pr_tregistro_cuentas_web.sql
 -- ============================================================================
 
 /*
@@ -25449,7 +27250,7 @@ GO
 
 
 -- ============================================================================
--- [219/233] sp_pr_tregistro_datos_personales_web.sql
+-- [235/260] sp_pr_tregistro_datos_personales_web.sql
 -- ============================================================================
 
 /*
@@ -25562,7 +27363,7 @@ GO
 
 
 -- ============================================================================
--- [220/233] sp_pr_tregistro_establecimiento_web.sql
+-- [236/260] sp_pr_tregistro_establecimiento_web.sql
 -- ============================================================================
 
 /*
@@ -25664,7 +27465,7 @@ GO
 
 
 -- ============================================================================
--- [221/233] sp_pr_tregistro_estudios_web.sql
+-- [237/260] sp_pr_tregistro_estudios_web.sql
 -- ============================================================================
 
 /*
@@ -25734,7 +27535,7 @@ GO
 
 
 -- ============================================================================
--- [222/233] sp_pr_tregistro_periodos_web.sql
+-- [238/260] sp_pr_tregistro_periodos_web.sql
 -- ============================================================================
 
 /*
@@ -25905,7 +27706,7 @@ GO
 
 
 -- ============================================================================
--- [223/233] sp_pr_tregistro_registrar_nuevos_web.sql
+-- [239/260] sp_pr_tregistro_registrar_nuevos_web.sql
 -- ============================================================================
 
 /*
@@ -26141,7 +27942,7 @@ GO
 
 
 -- ============================================================================
--- [224/233] sp_pr_tregistro_registrar_trabajador_nuevo_web.sql
+-- [240/260] sp_pr_tregistro_registrar_trabajador_nuevo_web.sql
 -- ============================================================================
 
 /*
@@ -27164,7 +28965,7 @@ GO
 
 
 -- ============================================================================
--- [225/233] sp_pr_tregistro_trabajador_web.sql
+-- [241/260] sp_pr_tregistro_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -27305,7 +29106,7 @@ GO
 
 
 -- ============================================================================
--- [226/233] sp_pr_vacaciones_eliminar_detalle_web.sql
+-- [242/260] sp_pr_vacaciones_eliminar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -27369,7 +29170,7 @@ GO
 
 
 -- ============================================================================
--- [227/233] sp_pr_vacaciones_guardar_detalle_web.sql
+-- [243/260] sp_pr_vacaciones_guardar_detalle_web.sql
 -- ============================================================================
 
 /*
@@ -27549,7 +29350,7 @@ GO
 
 
 -- ============================================================================
--- [228/233] sp_pr_vacaciones_listar_trabajadores_web.sql
+-- [244/260] sp_pr_vacaciones_listar_trabajadores_web.sql
 -- ============================================================================
 
 /*
@@ -27612,7 +29413,7 @@ GO
 
 
 -- ============================================================================
--- [229/233] sp_pr_vacaciones_obtener_trabajador_web.sql
+-- [245/260] sp_pr_vacaciones_obtener_trabajador_web.sql
 -- ============================================================================
 
 /*
@@ -27725,7 +29526,139 @@ GO
 
 
 -- ============================================================================
--- [230/233] sp_pr_validar_calculo_web.sql
+-- [246/260] sp_pr_validar_alta_trabajador_web.sql
+-- ============================================================================
+
+/*
+    Validaciones previas al alta manual de trabajador (módulo Trabajadores / Nuevo).
+
+    Result sets:
+      1) cabecera: codigo_existe, documento_existe_cia, codigo_distinto_documento, hay_similares
+      2) similares (solo si hay): person, name, documentnumber, company
+
+    Usado por: POST /api/trabajadores/validar-alta
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_validar_alta_trabajador_web]
+    @cia             VARCHAR(10),
+    @person          VARCHAR(20),
+    @documentnumber  VARCHAR(15),
+    @name1           VARCHAR(40) = NULL,
+    @name2           VARCHAR(40) = NULL,
+    @lastname1       VARCHAR(40) = NULL,
+    @lastname2       VARCHAR(40) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
+    SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
+    SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
+    SET @name1 = UPPER(LTRIM(RTRIM(ISNULL(@name1, ''))));
+    SET @name2 = UPPER(LTRIM(RTRIM(ISNULL(@name2, ''))));
+    SET @lastname1 = UPPER(LTRIM(RTRIM(ISNULL(@lastname1, ''))));
+    SET @lastname2 = UPPER(LTRIM(RTRIM(ISNULL(@lastname2, ''))));
+
+    DECLARE @nombre_completo VARCHAR(100);
+    DECLARE @codigo_existe BIT = 0;
+    DECLARE @documento_existe_cia BIT = 0;
+    DECLARE @codigo_distinto_documento BIT = 0;
+    DECLARE @hay_similares BIT = 0;
+    DECLARE @doc_norm VARCHAR(15) = @documentnumber;
+
+    IF @doc_norm <> '' AND @doc_norm NOT LIKE '%[^0-9]%'
+    BEGIN
+        WHILE LEN(@doc_norm) > 1 AND LEFT(@doc_norm, 1) = '0'
+            SET @doc_norm = SUBSTRING(@doc_norm, 2, 15);
+    END;
+
+    SET @nombre_completo = UPPER(LTRIM(RTRIM(
+        ISNULL(@lastname1, '') + ' ' +
+        ISNULL(@lastname2, '') + ' ' +
+        ISNULL(@name1, '') + ' ' +
+        ISNULL(@name2, '')
+    )));
+    WHILE CHARINDEX('  ', @nombre_completo) > 0
+        SET @nombre_completo = REPLACE(@nombre_completo, '  ', ' ');
+    IF LEN(@nombre_completo) > 100
+        SET @nombre_completo = LEFT(@nombre_completo, 100);
+
+    IF @person <> '' AND EXISTS (SELECT 1 FROM SY_Person (NOLOCK) WHERE Person = @person)
+        SET @codigo_existe = 1;
+
+    IF @cia <> '' AND @documentnumber <> ''
+       AND EXISTS (
+            SELECT 1
+            FROM PR_Employee e (NOLOCK)
+                INNER JOIN SY_Person p (NOLOCK) ON p.Person = e.Person
+            WHERE e.Company = @cia
+              AND (
+                    LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = @documentnumber
+                 OR LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = @doc_norm
+                 OR (
+                        ISNUMERIC(p.DocumentNumber) = 1
+                    AND ISNUMERIC(@doc_norm) = 1
+                    AND CAST(p.DocumentNumber AS BIGINT) = CAST(@doc_norm AS BIGINT)
+                 )
+              )
+       )
+        SET @documento_existe_cia = 1;
+
+    IF @person <> '' AND @documentnumber <> ''
+       AND UPPER(@person) <> UPPER(@documentnumber)
+       AND UPPER(@person) <> UPPER(@doc_norm)
+        SET @codigo_distinto_documento = 1;
+
+    CREATE TABLE #similares (
+        person          VARCHAR(20) NOT NULL,
+        name            VARCHAR(100) NULL,
+        documentnumber  VARCHAR(15) NULL,
+        company         VARCHAR(10) NULL
+    );
+
+    IF @lastname1 <> '' AND @name1 <> ''
+    BEGIN
+        INSERT INTO #similares (person, name, documentnumber, company)
+        SELECT TOP 25
+            LTRIM(RTRIM(p.Person)),
+            LTRIM(RTRIM(ISNULL(p.Name, ''))),
+            LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))),
+            LTRIM(RTRIM(ISNULL(p.Company, '')))
+        FROM SY_Person p (NOLOCK)
+        WHERE (
+                UPPER(LTRIM(RTRIM(ISNULL(p.LastName1, '')))) = @lastname1
+            AND UPPER(LTRIM(RTRIM(ISNULL(p.Name1, '')))) = @name1
+          )
+           OR (
+                @nombre_completo <> ''
+            AND UPPER(LTRIM(RTRIM(ISNULL(p.Name, '')))) = @nombre_completo
+           )
+        ORDER BY p.Name, p.Person;
+
+        IF EXISTS (SELECT 1 FROM #similares)
+            SET @hay_similares = 1;
+    END;
+
+    SELECT
+        @codigo_existe AS codigo_existe,
+        @documento_existe_cia AS documento_existe_cia,
+        @codigo_distinto_documento AS codigo_distinto_documento,
+        @hay_similares AS hay_similares,
+        @nombre_completo AS nombre_completo;
+
+    SELECT
+        person,
+        name,
+        documentnumber,
+        company
+    FROM #similares
+    ORDER BY name, person;
+END
+GO
+
+
+
+-- ============================================================================
+-- [247/260] sp_pr_validar_calculo_web.sql
 -- ============================================================================
 
 /*
@@ -28057,7 +29990,7 @@ GO
 
 
 -- ============================================================================
--- [231/233] sp_pr_validar_periodo_masivo_web.sql
+-- [248/260] sp_pr_validar_periodo_masivo_web.sql
 -- ============================================================================
 
 /*
@@ -28153,21 +30086,31 @@ GO
 
 
 -- ============================================================================
--- [232/233] sp_pr_validar_pre_calculo_web.sql
+-- [249/260] sp_pr_validar_pre_calculo_web.sql
 -- ============================================================================
 
 /*
     Validaciones previas al cálculo de planilla (módulo Procesar planilla).
 
-    Detecta conceptos configurados en más de una vía para FIN_DE_MES:
+    1) Asignaciones permanentes duplicadas (cualquier proceso):
+       Un trabajador no puede tener el mismo concepto más de una vez
+       con FlagFrecuencyType = 'P' en la planilla.
+
+    2) Conceptos en más de una vía (solo MENSUAL / FIN_DE_MES):
       M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
       S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
       F — Fórmulas del proceso (PR_FormulaHeader)
+      Solo una vía debe estar activa por concepto.
 
-    Solo una vía debe estar activa por concepto.
+    Excepción hm_aci / hm_aci2 + MENSUAL/FIN_DE_MES:
+      No se incluye F (formulador) en la comparación. Se valida solo M vs S.
+      Las fórmulas pueden permanecer configuradas; el cálculo mensual se rige por el SP.
+      En esas BDs con otros procesos (p. ej. provisiones), si aplica validación de vías,
+      el formulador sí se considera. En el resto de bases de datos F siempre se compara.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
-    y antes de /ejecutar_calculo_streaming y /ejecutar_calculo_planilla.
+    (también al buscar trabajadores) y antes de /ejecutar_calculo_streaming
+    y /ejecutar_calculo_planilla.
 
     El procedimiento de cálculo (p. ej. sp_pr_calcular_finmes_persona) se obtiene de
     PR_ProcessType.ProcedureName en la BD del cliente; no se versiona en sql/ porque
@@ -28191,15 +30134,28 @@ BEGIN
     SET @processtype = LTRIM(RTRIM(ISNULL(@processtype, '')));
 
     DECLARE @proceso_shortname VARCHAR(50);
+    DECLARE @proceso_desc VARCHAR(200);
     DECLARE @procedure_name VARCHAR(128);
     DECLARE @sp_def NVARCHAR(MAX);
+    DECLARE @es_mensual BIT = 0;
+    DECLARE @omitir_formulas BIT = 0;
 
     SELECT
-        @proceso_shortname = LTRIM(RTRIM(ISNULL(PT.ShortName, ''))),
+        @proceso_shortname = UPPER(LTRIM(RTRIM(ISNULL(PT.ShortName, '')))),
+        @proceso_desc = UPPER(LTRIM(RTRIM(ISNULL(PT.Description, '')))),
         @procedure_name = LTRIM(RTRIM(ISNULL(PT.ProcedureName, '')))
     FROM PR_ProcessType PT (NOLOCK)
     WHERE PT.Company = @cia
       AND PT.ProcessType = @processtype;
+
+    IF @proceso_shortname IN ('FIN_DE_MES', 'MENSUAL')
+       OR @proceso_desc = 'MENSUAL'
+       OR CHARINDEX('FIN DE MES', @proceso_desc) > 0
+        SET @es_mensual = 1;
+
+    /* hm_aci / hm_aci2 mensual: no confrontar fórmulas; el SP es la vía de cálculo vigente. */
+    IF LOWER(DB_NAME()) IN ('hm_aci', 'hm_aci2') AND @es_mensual = 1
+        SET @omitir_formulas = 1;
 
     CREATE TABLE #errores (
         person      VARCHAR(20) NULL,
@@ -28217,14 +30173,58 @@ BEGIN
         formulacode VARCHAR(50) NOT NULL PRIMARY KEY
     );
 
-    /* Solo aplica al proceso mensual (FIN_DE_MES). */
-    IF @proceso_shortname <> 'FIN_DE_MES'
+    /* Permanentes duplicados: mismo concepto FlagFrecuencyType='P' más de una vez. */
+    INSERT INTO #errores (person, name, observacion)
+    SELECT
+        D.Person,
+        LTRIM(RTRIM(
+            ISNULL(P.LastName1, '') + ' ' +
+            ISNULL(P.LastName2, '') + ' ' +
+            ISNULL(P.Name1, '') + ' ' +
+            ISNULL(P.Name2, '')
+        )),
+        'tiene ' + CONVERT(VARCHAR(10), D.cnt)
+            + ' asignaciones permanentes del concepto '
+            + CASE
+                WHEN LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+                THEN LTRIM(RTRIM(C.FormulaCode))
+                ELSE LTRIM(RTRIM(ISNULL(C.Description, D.Concept)))
+              END
+            + CASE
+                WHEN LTRIM(RTRIM(ISNULL(C.Description, ''))) <> ''
+                     AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+                THEN ' (' + LTRIM(RTRIM(C.Description)) + ')'
+                ELSE ''
+              END
+            + '. Solo debe tener una.'
+    FROM (
+        SELECT
+            EC.Person,
+            EC.Concept,
+            COUNT(*) AS cnt
+        FROM PR_EmployeeConcept EC (NOLOCK)
+        WHERE EC.Company = @cia
+          AND EC.PayRollType = @payrolltype
+          AND EC.FlagFrecuencyType = 'P'
+        GROUP BY EC.Person, EC.Concept
+        HAVING COUNT(*) > 1
+    ) D
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = D.Concept
+           AND C.Company = @cia
+        LEFT JOIN SY_Person P (NOLOCK)
+            ON P.Person = D.Person
+           AND P.Company = @cia;
+
+    /* Vías M/S/F: solo proceso mensual (FIN_DE_MES / MENSUAL). */
+    IF @es_mensual = 0
     BEGIN
         SELECT
-            CAST('' AS VARCHAR(20)) AS person,
-            CAST('' AS VARCHAR(200)) AS name,
-            CAST('' AS VARCHAR(500)) AS observacion
-        WHERE 1 = 0;
+            LTRIM(RTRIM(ISNULL(person, ''))) AS person,
+            LTRIM(RTRIM(ISNULL(name, ''))) AS name,
+            LTRIM(RTRIM(observacion)) AS observacion
+        FROM #errores
+        ORDER BY observacion, person;
         RETURN;
     END
 
@@ -28238,19 +30238,22 @@ BEGIN
       AND ISNULL(C.flaginsertar, 'N') = 'M'
       AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
 
-    /* F — Fórmulas del proceso */
-    INSERT INTO #vias (formulacode, via)
-    SELECT DISTINCT
-        UPPER(LTRIM(RTRIM(C.FormulaCode))),
-        'F'
-    FROM PR_FormulaHeader FH (NOLOCK)
-        INNER JOIN PR_Concept C (NOLOCK)
-            ON FH.Concept = C.Concept
-           AND C.Company = @cia
-    WHERE FH.Company = @cia
-      AND FH.Payrolltype = @payrolltype
-      AND FH.Proccestype = @processtype
-      AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    /* F — Fórmulas del proceso (omitido en hm_aci/hm_aci2 + mensual) */
+    IF @omitir_formulas = 0
+    BEGIN
+        INSERT INTO #vias (formulacode, via)
+        SELECT DISTINCT
+            UPPER(LTRIM(RTRIM(C.FormulaCode))),
+            'F'
+        FROM PR_FormulaHeader FH (NOLOCK)
+            INNER JOIN PR_Concept C (NOLOCK)
+                ON FH.Concept = C.Concept
+               AND C.Company = @cia
+        WHERE FH.Company = @cia
+          AND FH.Payrolltype = @payrolltype
+          AND FH.Proccestype = @processtype
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    END
 
     /* S — Llamadas literales a sp_pr_registrar_concepto en el SP de cálculo */
     IF @procedure_name <> ''
@@ -28402,7 +30405,7 @@ GO
 
 
 -- ============================================================================
--- [233/233] sp_pr_validarconceptos_cias_web.sql
+-- [250/260] sp_pr_validarconceptos_cias_web.sql
 -- ============================================================================
 
 /*
@@ -28594,5 +30597,703 @@ BEGIN
     DROP TABLE #pares;
     DROP TABLE #origen;
 END
+GO
+
+
+
+-- ============================================================================
+-- [251/260] sp_web_asignar_user_access_profile_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_asignar_user_access_profile_web]
+    @userid      VARCHAR(20),
+    @profilecode VARCHAR(30) = NULL,
+    @xlastuser   VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @userid = LTRIM(RTRIM(ISNULL(@userid, '')));
+    SET @profilecode = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@profilecode, '')))), '');
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+
+    IF @userid = ''
+    BEGIN
+        RAISERROR('Indique el usuario.', 16, 1);
+        RETURN;
+    END;
+
+    IF NOT EXISTS (SELECT 1 FROM SY_User (NOLOCK) WHERE UserID = @userid)
+    BEGIN
+        RAISERROR('El usuario no existe.', 16, 1);
+        RETURN;
+    END;
+
+    /* profilecode NULL o vacio = quitar asignacion (vuelve a unrestricted) */
+    IF @profilecode IS NULL
+    BEGIN
+        DELETE FROM WEB_UserAccessProfile WHERE UserID = @userid;
+        SELECT
+            @userid AS userid,
+            CAST(NULL AS VARCHAR(30)) AS profilecode,
+            'Asignacion de perfil eliminada. El usuario vera todo el menu.' AS mensaje;
+        RETURN;
+    END;
+
+    IF NOT EXISTS (
+        SELECT 1 FROM WEB_AccessProfile (NOLOCK)
+        WHERE ProfileCode = @profilecode AND Status = 'A'
+    )
+    BEGIN
+        RAISERROR('El perfil indicado no existe.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (SELECT 1 FROM WEB_UserAccessProfile (NOLOCK) WHERE UserID = @userid)
+    BEGIN
+        UPDATE WEB_UserAccessProfile
+        SET ProfileCode = @profilecode,
+            XLastUser = @xlastuser,
+            XLastDate = GETDATE()
+        WHERE UserID = @userid;
+    END
+    ELSE
+    BEGIN
+        INSERT INTO WEB_UserAccessProfile (UserID, ProfileCode, XLastUser, XLastDate)
+        VALUES (@userid, @profilecode, @xlastuser, GETDATE());
+    END;
+
+    SELECT
+        @userid AS userid,
+        @profilecode AS profilecode,
+        'Perfil asignado correctamente.' AS mensaje;
+END
+GO
+
+
+
+-- ============================================================================
+-- [252/260] sp_web_eliminar_access_profile_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_eliminar_access_profile_web]
+    @profilecode VARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    SET @profilecode = UPPER(LTRIM(RTRIM(ISNULL(@profilecode, ''))));
+
+    IF @profilecode = ''
+    BEGIN
+        RAISERROR('Indique el perfil a eliminar.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1 FROM WEB_AccessProfile (NOLOCK)
+        WHERE ProfileCode = @profilecode AND FlagAdmin = 'Y'
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar el perfil administrador.', 16, 1);
+        RETURN;
+    END;
+
+    IF EXISTS (
+        SELECT 1 FROM WEB_UserAccessProfile (NOLOCK)
+        WHERE ProfileCode = @profilecode
+    )
+    BEGIN
+        RAISERROR('No se puede eliminar: el perfil esta asignado a usuarios.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+        DELETE FROM WEB_AccessProfileMenu WHERE ProfileCode = @profilecode;
+        DELETE FROM WEB_AccessProfile WHERE ProfileCode = @profilecode;
+        COMMIT TRANSACTION;
+
+        SELECT @profilecode AS profilecode, 'Perfil eliminado correctamente.' AS mensaje;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END
+GO
+
+
+
+-- ============================================================================
+-- [253/260] sp_web_guardar_access_profile_web.sql
+-- ============================================================================
+
+/*
+    Alta / edicion de perfil web + reemplazo de menus.
+    @menus: lista separada por comas de MenuCode.
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_guardar_access_profile_web]
+    @modo        CHAR(1),
+    @profilecode VARCHAR(30),
+    @name        VARCHAR(120),
+    @menus       VARCHAR(MAX) = NULL,
+    @xlastuser   VARCHAR(20) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SET XACT_ABORT ON;
+
+    DECLARE @flagadmin CHAR(1) = 'N';
+    DECLARE @xmlMenus XML;
+
+    SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
+    SET @profilecode = UPPER(LTRIM(RTRIM(ISNULL(@profilecode, ''))));
+    SET @name = LTRIM(RTRIM(ISNULL(@name, '')));
+    SET @menus = LTRIM(RTRIM(ISNULL(@menus, '')));
+    SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+
+    IF @modo NOT IN ('I', 'U')
+    BEGIN
+        RAISERROR('Modo de operacion invalido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @profilecode = '' OR @name = ''
+    BEGIN
+        RAISERROR('Indique codigo y nombre del perfil.', 16, 1);
+        RETURN;
+    END;
+
+    IF @modo = 'I' AND EXISTS (
+        SELECT 1 FROM WEB_AccessProfile (NOLOCK) WHERE ProfileCode = @profilecode
+    )
+    BEGIN
+        RAISERROR('Ya existe un perfil con ese codigo.', 16, 1);
+        RETURN;
+    END;
+
+    IF @modo = 'U' AND NOT EXISTS (
+        SELECT 1 FROM WEB_AccessProfile (NOLOCK) WHERE ProfileCode = @profilecode
+    )
+    BEGIN
+        RAISERROR('No se encontro el perfil a actualizar.', 16, 1);
+        RETURN;
+    END;
+
+    BEGIN TRY
+        BEGIN TRANSACTION;
+
+        IF @modo = 'I'
+        BEGIN
+            INSERT INTO WEB_AccessProfile (
+                ProfileCode, Name, FlagAdmin, Status, XLastUser, XLastDate
+            )
+            VALUES (
+                @profilecode, @name, 'N', 'A', @xlastuser, GETDATE()
+            );
+        END
+        ELSE
+        BEGIN
+            SELECT @flagadmin = FlagAdmin
+            FROM WEB_AccessProfile (NOLOCK)
+            WHERE ProfileCode = @profilecode;
+
+            UPDATE WEB_AccessProfile
+            SET Name = @name,
+                XLastUser = @xlastuser,
+                XLastDate = GETDATE()
+            WHERE ProfileCode = @profilecode;
+        END;
+
+        DELETE FROM WEB_AccessProfileMenu WHERE ProfileCode = @profilecode;
+
+        IF @menus <> ''
+        BEGIN
+            /* Compatible con SQL Server < 2016 / compatibility < 130 (sin STRING_SPLIT) */
+            SET @xmlMenus = CAST(
+                '<root><l>' + REPLACE(@menus, ',', '</l><l>') + '</l></root>' AS XML
+            );
+
+            INSERT INTO WEB_AccessProfileMenu (ProfileCode, MenuCode)
+            SELECT DISTINCT
+                @profilecode,
+                LTRIM(RTRIM(x.value('.', 'VARCHAR(50)')))
+            FROM @xmlMenus.nodes('/root/l') AS T(x)
+            WHERE NULLIF(LTRIM(RTRIM(x.value('.', 'VARCHAR(50)'))), '') IS NOT NULL
+              AND EXISTS (
+                    SELECT 1
+                    FROM WEB_MenuOption m (NOLOCK)
+                    WHERE m.MenuCode = LTRIM(RTRIM(x.value('.', 'VARCHAR(50)')))
+                      AND m.Status = 'A'
+              );
+        END;
+
+        /* ADMIN siempre conserva FlagAdmin y opciones de administración de perfiles */
+        IF EXISTS (
+            SELECT 1 FROM WEB_AccessProfile (NOLOCK)
+            WHERE ProfileCode = @profilecode AND FlagAdmin = 'Y'
+        )
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM WEB_AccessProfileMenu (NOLOCK)
+                WHERE ProfileCode = @profilecode AND MenuCode = 'perfiles_acceso'
+            )
+            AND EXISTS (SELECT 1 FROM WEB_MenuOption WHERE MenuCode = 'perfiles_acceso')
+            BEGIN
+                INSERT INTO WEB_AccessProfileMenu (ProfileCode, MenuCode)
+                VALUES (@profilecode, 'perfiles_acceso');
+            END;
+
+            IF NOT EXISTS (
+                SELECT 1 FROM WEB_AccessProfileMenu (NOLOCK)
+                WHERE ProfileCode = @profilecode AND MenuCode = 'asignar_perfiles'
+            )
+            AND EXISTS (SELECT 1 FROM WEB_MenuOption WHERE MenuCode = 'asignar_perfiles')
+            BEGIN
+                INSERT INTO WEB_AccessProfileMenu (ProfileCode, MenuCode)
+                VALUES (@profilecode, 'asignar_perfiles');
+            END;
+        END;
+
+        COMMIT TRANSACTION;
+
+        SELECT
+            @profilecode AS profilecode,
+            'Perfil guardado correctamente.' AS mensaje;
+    END TRY
+    BEGIN CATCH
+        IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;
+        THROW;
+    END CATCH
+END
+GO
+
+
+
+-- ============================================================================
+-- [254/260] sp_web_listar_access_profiles_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_listar_access_profiles_web]
+    @busqueda VARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        p.ProfileCode AS profilecode,
+        p.Name AS name,
+        p.FlagAdmin AS flagadmin,
+        p.Status AS status,
+        ISNULL((
+            SELECT COUNT(*)
+            FROM WEB_AccessProfileMenu pm (NOLOCK)
+            WHERE pm.ProfileCode = p.ProfileCode
+        ), 0) AS menus,
+        ISNULL((
+            SELECT COUNT(*)
+            FROM WEB_UserAccessProfile u (NOLOCK)
+            WHERE u.ProfileCode = p.ProfileCode
+        ), 0) AS usuarios
+    FROM WEB_AccessProfile p (NOLOCK)
+    WHERE p.Status = 'A'
+      AND (
+            @busqueda IS NULL
+         OR p.ProfileCode LIKE '%' + @busqueda + '%'
+         OR p.Name LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY CASE WHEN p.FlagAdmin = 'Y' THEN 0 ELSE 1 END, p.ProfileCode;
+END
+GO
+
+
+
+-- ============================================================================
+-- [255/260] sp_web_listar_menu_options_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_listar_menu_options_web]
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SELECT
+        m.MenuCode AS menucode,
+        m.Title AS title,
+        m.ParentCode AS parentcode,
+        m.SortOrder AS sortorder,
+        m.Endpoint AS endpoint,
+        m.RoutePrefix AS routeprefix
+    FROM WEB_MenuOption m (NOLOCK)
+    WHERE m.Status = 'A'
+    ORDER BY m.SortOrder, m.Title;
+END
+GO
+
+
+
+-- ============================================================================
+-- [256/260] sp_web_listar_usuarios_access_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_listar_usuarios_access_web]
+    @busqueda VARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @busqueda = NULLIF(LTRIM(RTRIM(ISNULL(@busqueda, ''))), '');
+
+    SELECT
+        u.UserID AS userid,
+        LTRIM(RTRIM(ISNULL(p.Name, ''))) AS nombre,
+        uap.ProfileCode AS profilecode,
+        ISNULL(ap.Name, '') AS profilename,
+        ISNULL(ap.FlagAdmin, 'N') AS flagadmin
+    FROM SY_User u (NOLOCK)
+    INNER JOIN SY_UserProfile up (NOLOCK)
+        ON up.UserID = u.UserID
+    INNER JOIN SY_Profile pr (NOLOCK)
+        ON pr.Profile = up.Profile
+       AND pr.Profile = 'EMPWEB'
+    LEFT JOIN SY_Person p (NOLOCK)
+        ON p.UserID = u.UserID
+    LEFT JOIN WEB_UserAccessProfile uap (NOLOCK)
+        ON uap.UserID = u.UserID
+    LEFT JOIN WEB_AccessProfile ap (NOLOCK)
+        ON ap.ProfileCode = uap.ProfileCode
+    WHERE (
+            @busqueda IS NULL
+         OR u.UserID LIKE '%' + @busqueda + '%'
+         OR p.Name LIKE '%' + @busqueda + '%'
+         OR uap.ProfileCode LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY u.UserID;
+END
+GO
+
+
+
+-- ============================================================================
+-- [257/260] sp_web_obtener_access_profile_web.sql
+-- ============================================================================
+
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_obtener_access_profile_web]
+    @profilecode VARCHAR(30)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @profilecode = LTRIM(RTRIM(ISNULL(@profilecode, '')));
+
+    SELECT
+        p.ProfileCode AS profilecode,
+        p.Name AS name,
+        p.FlagAdmin AS flagadmin,
+        p.Status AS status
+    FROM WEB_AccessProfile p (NOLOCK)
+    WHERE p.ProfileCode = @profilecode;
+
+    SELECT
+        m.MenuCode AS menucode,
+        m.Title AS title,
+        m.ParentCode AS parentcode,
+        m.SortOrder AS sortorder,
+        CASE WHEN pm.MenuCode IS NULL THEN 0 ELSE 1 END AS selected
+    FROM WEB_MenuOption m (NOLOCK)
+    LEFT JOIN WEB_AccessProfileMenu pm (NOLOCK)
+        ON pm.MenuCode = m.MenuCode
+       AND pm.ProfileCode = @profilecode
+    WHERE m.Status = 'A'
+    ORDER BY m.SortOrder, m.Title;
+END
+GO
+
+
+
+-- ============================================================================
+-- [258/260] sp_web_obtener_menus_usuario_web.sql
+-- ============================================================================
+
+/*
+    Menus efectivos del usuario.
+    Resultset 1: flags unrestricted / web_admin / profilecode
+    Resultset 2: MenuCode permitidos (vacio si unrestricted)
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_web_obtener_menus_usuario_web]
+    @userid VARCHAR(20)
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    DECLARE @profilecode VARCHAR(30) = NULL;
+    DECLARE @flagadmin CHAR(1) = 'N';
+    DECLARE @unrestricted INT = 0;
+
+    SET @userid = LTRIM(RTRIM(ISNULL(@userid, '')));
+
+    /* Si no existen las tablas, el caller Python trata como unrestricted. */
+    IF OBJECT_ID('dbo.WEB_UserAccessProfile', 'U') IS NULL
+    BEGIN
+        SELECT
+            1 AS unrestricted,
+            0 AS web_admin,
+            CAST(NULL AS VARCHAR(30)) AS profilecode;
+        SELECT CAST(NULL AS VARCHAR(60)) AS menucode WHERE 1 = 0;
+        RETURN;
+    END;
+
+    SELECT
+        @profilecode = uap.ProfileCode,
+        @flagadmin = ISNULL(ap.FlagAdmin, 'N')
+    FROM WEB_UserAccessProfile uap (NOLOCK)
+    INNER JOIN WEB_AccessProfile ap (NOLOCK)
+        ON ap.ProfileCode = uap.ProfileCode
+       AND ap.Status = 'A'
+    WHERE uap.UserID = @userid;
+
+    IF @profilecode IS NULL
+    BEGIN
+        SET @unrestricted = 1;
+        SELECT
+            1 AS unrestricted,
+            0 AS web_admin,
+            CAST(NULL AS VARCHAR(30)) AS profilecode;
+        SELECT CAST(NULL AS VARCHAR(60)) AS menucode WHERE 1 = 0;
+        RETURN;
+    END;
+
+    IF @flagadmin = 'Y'
+    BEGIN
+        SELECT
+            0 AS unrestricted,
+            1 AS web_admin,
+            @profilecode AS profilecode;
+
+        SELECT m.MenuCode AS menucode
+        FROM WEB_MenuOption m (NOLOCK)
+        WHERE m.Status = 'A'
+        ORDER BY m.SortOrder;
+        RETURN;
+    END;
+
+    SELECT
+        0 AS unrestricted,
+        0 AS web_admin,
+        @profilecode AS profilecode;
+
+    SELECT pm.MenuCode AS menucode
+    FROM WEB_AccessProfileMenu pm (NOLOCK)
+    INNER JOIN WEB_MenuOption m (NOLOCK)
+        ON m.MenuCode = pm.MenuCode
+       AND m.Status = 'A'
+    WHERE pm.ProfileCode = @profilecode
+    ORDER BY m.SortOrder;
+END
+GO
+
+
+
+-- ============================================================================
+-- [259/260] web_access_seed_hm_lumat.sql
+-- ============================================================================
+
+/*
+    Seed catálogo de menús + perfiles ADMIN / RRHH_BASICO en hm_lumat.
+    Asigna adminlumat -> ADMIN y mbenites -> RRHH_BASICO si existen en SY_User.
+*/
+SET NOCOUNT ON;
+
+DELETE FROM dbo.WEB_UserAccessProfile;
+DELETE FROM dbo.WEB_AccessProfileMenu;
+DELETE FROM dbo.WEB_AccessProfile;
+DELETE FROM dbo.WEB_MenuOption;
+
+/* ===== Catálogo de opciones (hojas del sidebar) ===== */
+INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint, RoutePrefix, Status) VALUES
+('alertas', 'Alertas', NULL, 10, 'dashboard', '/dashboard', 'A'),
+
+('conceptos', 'Conceptos', 'generales', 110, 'conceptos_page', '/conceptos', 'A'),
+('tipos_planilla', 'Tipo de Planillas', 'generales', 120, 'tipos_planilla_page', '/tipos-planilla', 'A'),
+('formulas', 'Formulas', 'generales', 130, 'formulas_page', '/formulas', 'A'),
+('usuarios_empresa', 'Usuarios por Empresa', 'generales', 140, 'usuarios_empresa_page', '/usuarios-empresa', 'A'),
+('comparar_planillas', 'Comparar Planillas', 'generales', 150, 'comparar_planillas_page', '/comparar_planillas', 'A'),
+('perfiles_acceso', 'Perfiles de acceso', 'generales', 160, 'perfiles_acceso_page', '/perfiles-acceso', 'A'),
+('asignar_perfiles', 'Asignar perfiles', 'generales', 165, 'asignar_perfiles_page', '/asignar-perfiles', 'A'),
+('receta', 'Receta', 'generales', 170, 'receta_page', '/receta', 'A'),
+
+('cuentas_bancarias', 'Cuentas Bancarias', 'tablas', 210, 'cuentas_bancarias_page', '/cuentas-bancarias', 'A'),
+('cargos', 'Cargos', 'tablas', 220, 'cargos_page', '/cargos', 'A'),
+('centros_costo', 'Centros de Costo', 'tablas', 230, 'centros_costo_page', '/centros-costo', 'A'),
+('tipos_documento', 'Tipos de Documentos', 'tablas', 240, 'tipos_documento_page', '/tipos-documento', 'A'),
+('unidades', 'Unidades', 'tablas', 250, 'unidades_page', '/unidades', 'A'),
+
+('trabajadores', 'Trabajadores', 'administracion', 310, 'trabajadores_page', '/trabajadores', 'A'),
+('asignacion_conceptos', 'Asignacion de Conceptos', 'administracion', 320, 'asignacion_conceptos_page', '/asignacion-conceptos', 'A'),
+('registro_vacaciones', 'Registro de Vacaciones', 'administracion', 330, 'registro_vacaciones_page', '/registro-vacaciones', 'A'),
+('registro_descansos_medicos', 'Registro de Descansos Medicos', 'administracion', 340, 'registro_descansos_medicos_page', '/registro-descansos-medicos', 'A'),
+('plantillas_importacion', 'Plantillas de Importacion', 'carga_masiva', 350, 'plantillas_importacion_page', '/carga-masiva/plantillas-importacion', 'A'),
+('importacion_conceptos', 'Importacion de Conceptos', 'carga_masiva', 360, 'importacion_conceptos_page', '/carga-masiva/importacion-conceptos', 'A'),
+
+('aperturar_periodos', 'Aperturar Periodos', 'calculos', 410, 'aperturar_periodos_page', '/aperturar-periodos', 'A'),
+('procesar_planilla', 'Procesar Planilla', 'calculos', 420, 'procesar_planilla_page', '/procesar_planilla', 'A'),
+('procesar_planilla_masivo', 'Procesar Planilla Masivo', 'calculos', 430, 'procesar_planilla_masivo_page', '/procesar_planilla_masivo', 'A'),
+('log_calculo', 'Log de Calculo de Planillas', 'calculos', 440, 'reporte_log_calculo_page', '/reporte-log-calculo', 'A'),
+
+('plame_archivo_14', 'Archivo 14 (.jor)', 'plame', 510, 'plame_archivo14_page', '/plame/archivo-14', 'A'),
+('plame_archivo_15', 'Archivo 15 (.snl)', 'plame', 520, 'plame_archivo15_page', '/plame/archivo-15', 'A'),
+('plame_archivo_18', 'Archivo 18 (.rem)', 'plame', 530, 'plame_archivo18_page', '/plame/archivo-18', 'A'),
+('plame_archivo_26', 'Archivo 26 (.toc)', 'plame', 540, 'plame_archivo26_page', '/plame/archivo-26', 'A'),
+('plame_archivos_4ta', 'Archivos 4ta Categoria', 'plame', 550, 'plame_archivos_7_20_page', '/plame/archivos-7-20', 'A'),
+('plame_tregistro', 'Archivo T-Registro', 'plame', 560, 'plame_tregistro_page', '/plame/t-registro', 'A'),
+('plame_validar', 'Validar PLAME', 'plame', 570, 'plame_validar_page', '/plame/validar', 'A'),
+('tregistro_importar', 'Importar T-Registro', 'plame', 580, 'tregistro_importar_page', '/plame/t-registro/importar', 'A'),
+
+('afpnet', 'AFPnet', 'afp', 610, 'declaracion_afp_page', '/afp/declaracion', 'A'),
+('control_pagos_afp', 'Control de Pagos AFP', 'afp', 620, 'control_pagos_afp_page', '/afp/control-pagos', 'A'),
+
+('pago_telecredito', 'Archivo Telecredito', 'pago_haberes', 710, 'pago_haberes_telecredito_page', '/pago-haberes/telecredito', 'A'),
+('pago_interbank', 'Archivo Interbank', 'pago_haberes', 720, 'pago_haberes_interbank_page', '/pago-haberes/interbank', 'A'),
+('pago_continental', 'Archivo Continental', 'pago_haberes', 730, 'pago_haberes_bbva_page', '/pago-haberes/bbva', 'A'),
+('pago_banbif', 'Archivo BANBIF', 'pago_haberes', 740, 'pago_haberes_banbif_page', '/pago-haberes/banbif', 'A'),
+
+('certificado_quinta', 'Certificado de Quinta', 'impuesto_renta', 810, 'certificado_quinta_page', '/impuesto_renta/certificado_quinta', 'A'),
+('calculo_quinta_trabajador', 'Calculo de 5ta por Trabajador', 'impuesto_renta', 820, 'calculo_quinta_trabajador_page', '/impuesto_renta/calculo_quinta_trabajador', 'A'),
+
+('certificado_trabajo', 'Certificado de Trabajo', 'liquidaciones', 910, 'certificado_trabajo_page', '/liquidaciones/certificado_trabajo', 'A'),
+('certificado_retiro_cts', 'Certificado Retiro CTS', 'liquidaciones', 920, 'certificado_retiro_cts_page', '/liquidaciones/certificado_retiro_cts', 'A'),
+('formato_liquidacion', 'Formato de Liquidacion', 'liquidaciones', 930, 'formato_liquidacion_page', '/liquidaciones/formato_liquidacion', 'A'),
+
+('asientos_cuentas_contables', 'Cuentas Contables', 'asientos', 1010, 'asientos_cuentas_contables_page', '/asientos/cuentas-contables', 'A'),
+('asientos_distribucion_porcentual', 'Distribucion Porcentual', 'asientos', 1020, 'asientos_distribucion_porcentual_page', '/asientos/distribucion-porcentual', 'A'),
+('asientos_configurar_conceptos', 'Configurar Conceptos', 'asientos', 1030, 'asientos_configurar_conceptos_page', '/asientos/configurar-conceptos', 'A'),
+('asientos_reporte_contable', 'Reporte Asiento Contable', 'asientos', 1040, 'asientos_reporte_contable_page', '/asientos/reporte-contable', 'A'),
+('asientos_generar_voucher', 'Generar Voucher', 'asientos', 1050, 'asientos_generar_voucher_page', '/asientos/generar-voucher', 'A'),
+('asientos_interfaz', 'Interfaz Asientos', 'asientos', 1060, 'asientos_interfaz_page', '/asientos/interfaz', 'A'),
+
+('registro_contratos', 'Registro de Contratos', 'contratos', 1110, 'registro_contratos_page', '/registro-contratos', 'A'),
+('reporte_contratos', 'Reporte de Contratos', 'contratos', 1120, 'reporte_contratos_page', '/reporte-contratos', 'A'),
+('generar_contratos', 'Generar Contratos', 'contratos', 1130, 'generar_contratos_page', '/generar-contratos', 'A'),
+
+('reporte_vacaciones_detalle', 'Detalle de Vacaciones', 'vacaciones_descansos', 1210, 'reporte_vacaciones_detalle_page', '/reporte-vacaciones-detalle', 'A'),
+('reporte_saldo_vacaciones', 'Saldo de Vacaciones', 'vacaciones_descansos', 1220, 'reporte_saldo_vacaciones_page', '/reporte-saldo-vacaciones', 'A'),
+('reporte_descansos_detalle', 'Detalle de Descansos', 'vacaciones_descansos', 1230, 'reporte_descansos_medicos_detalle_page', '/reporte-descansos-medicos-detalle', 'A'),
+
+('reporte_resumen_total', 'Resumen de Planilla Total', 'reportes_planillas', 1310, 'reporte_resumen_total', '/reporte-resumen-total', 'A'),
+('reporte_planilla_vertical', 'Planilla Vertical', 'reportes_planillas', 1320, 'reporte_planilla_vertical_page', '/reporte-planilla-vertical', 'A'),
+('reporte_planilla_consolidada', 'Planilla Consolidada', 'reportes_planillas', 1330, 'reporte_planilla_consolidada_page', '/reporte-planilla-consolidada', 'A'),
+('reporte_listado_pagos', 'Listado de Pagos', 'reportes_planillas', 1340, 'reporte_listado_pagos_page', '/reporte-listado-pagos', 'A'),
+('reporte_promedio_liquidaciones', 'Promedio de Liquidaciones', 'reportes_planillas', 1350, 'reporte_liquidaciones', '/reporte-liquidaciones', 'A'),
+('reporte_planilla_por_conceptos', 'Planilla por Conceptos', 'reportes_planillas', 1360, 'reporte_planilla_por_conceptos_page', '/reporte-planilla-por-conceptos', 'A'),
+
+('generar_boletas', 'Generar Boletas', 'documentos', 1410, 'generar_boletas_page', '/generar_boletas', 'A'),
+('formato_utilidades', 'Constancia de Utilidades', 'documentos', 1420, 'formato_utilidades_page', '/documentos/formato_utilidades', 'A');
+
+/* ===== Perfiles ===== */
+INSERT INTO dbo.WEB_AccessProfile (ProfileCode, Name, FlagAdmin, Status, XLastUser, XLastDate)
+VALUES
+('ADMIN', 'Administrador', 'Y', 'A', 'SYSTEM', GETDATE()),
+('RRHH_BASICO', 'RRHH Basico', 'N', 'A', 'SYSTEM', GETDATE());
+
+/* ADMIN: todas las opciones */
+INSERT INTO dbo.WEB_AccessProfileMenu (ProfileCode, MenuCode)
+SELECT 'ADMIN', MenuCode FROM dbo.WEB_MenuOption WHERE Status = 'A';
+
+/* RRHH_BASICO: trabajadores + registro vacaciones */
+INSERT INTO dbo.WEB_AccessProfileMenu (ProfileCode, MenuCode) VALUES
+('RRHH_BASICO', 'trabajadores'),
+('RRHH_BASICO', 'registro_vacaciones');
+
+/* Asignaciones (si el usuario existe) */
+IF EXISTS (SELECT 1 FROM dbo.SY_User WHERE UserID = 'adminlumat')
+BEGIN
+    INSERT INTO dbo.WEB_UserAccessProfile (UserID, ProfileCode, XLastUser, XLastDate)
+    VALUES ('adminlumat', 'ADMIN', 'SYSTEM', GETDATE());
+END;
+
+IF EXISTS (SELECT 1 FROM dbo.SY_User WHERE UserID = 'mbenites')
+BEGIN
+    INSERT INTO dbo.WEB_UserAccessProfile (UserID, ProfileCode, XLastUser, XLastDate)
+    VALUES ('mbenites', 'RRHH_BASICO', 'SYSTEM', GETDATE());
+END;
+
+SELECT
+    (SELECT COUNT(*) FROM WEB_MenuOption) AS menus,
+    (SELECT COUNT(*) FROM WEB_AccessProfile) AS perfiles,
+    (SELECT COUNT(*) FROM WEB_AccessProfileMenu) AS perfil_menus,
+    (SELECT COUNT(*) FROM WEB_UserAccessProfile) AS usuarios_asignados;
+GO
+
+
+
+-- ============================================================================
+-- [260/260] web_access_tables.sql
+-- ============================================================================
+
+/*
+    Tablas de perfiles de acceso web (menú / opciones).
+    Desplegar inicialmente en hm_lumat.
+*/
+IF OBJECT_ID('dbo.WEB_UserAccessProfile', 'U') IS NOT NULL
+    DROP TABLE dbo.WEB_UserAccessProfile;
+GO
+IF OBJECT_ID('dbo.WEB_AccessProfileMenu', 'U') IS NOT NULL
+    DROP TABLE dbo.WEB_AccessProfileMenu;
+GO
+IF OBJECT_ID('dbo.WEB_AccessProfile', 'U') IS NOT NULL
+    DROP TABLE dbo.WEB_AccessProfile;
+GO
+IF OBJECT_ID('dbo.WEB_MenuOption', 'U') IS NOT NULL
+    DROP TABLE dbo.WEB_MenuOption;
+GO
+
+CREATE TABLE dbo.WEB_MenuOption (
+    MenuCode     VARCHAR(60)  NOT NULL,
+    Title        VARCHAR(120) NOT NULL,
+    ParentCode   VARCHAR(60)  NULL,
+    SortOrder    INT          NOT NULL CONSTRAINT DF_WEB_MenuOption_Sort DEFAULT (0),
+    Endpoint     VARCHAR(120) NULL,
+    RoutePrefix  VARCHAR(120) NULL,
+    Status       CHAR(1)      NOT NULL CONSTRAINT DF_WEB_MenuOption_Status DEFAULT ('A'),
+    CONSTRAINT PK_WEB_MenuOption PRIMARY KEY (MenuCode)
+);
+GO
+
+CREATE TABLE dbo.WEB_AccessProfile (
+    ProfileCode  VARCHAR(30)  NOT NULL,
+    Name         VARCHAR(120) NOT NULL,
+    FlagAdmin    CHAR(1)      NOT NULL CONSTRAINT DF_WEB_AccessProfile_FlagAdmin DEFAULT ('N'),
+    Status       CHAR(1)      NOT NULL CONSTRAINT DF_WEB_AccessProfile_Status DEFAULT ('A'),
+    XLastUser    VARCHAR(20)  NULL,
+    XLastDate    DATETIME     NULL,
+    CONSTRAINT PK_WEB_AccessProfile PRIMARY KEY (ProfileCode)
+);
+GO
+
+CREATE TABLE dbo.WEB_AccessProfileMenu (
+    ProfileCode  VARCHAR(30) NOT NULL,
+    MenuCode     VARCHAR(60) NOT NULL,
+    CONSTRAINT PK_WEB_AccessProfileMenu PRIMARY KEY (ProfileCode, MenuCode),
+    CONSTRAINT FK_WEB_APM_Profile FOREIGN KEY (ProfileCode)
+        REFERENCES dbo.WEB_AccessProfile (ProfileCode),
+    CONSTRAINT FK_WEB_APM_Menu FOREIGN KEY (MenuCode)
+        REFERENCES dbo.WEB_MenuOption (MenuCode)
+);
+GO
+
+CREATE TABLE dbo.WEB_UserAccessProfile (
+    UserID       VARCHAR(20) NOT NULL,
+    ProfileCode  VARCHAR(30) NOT NULL,
+    XLastUser    VARCHAR(20) NULL,
+    XLastDate    DATETIME    NULL,
+    CONSTRAINT PK_WEB_UserAccessProfile PRIMARY KEY (UserID),
+    CONSTRAINT FK_WEB_UAP_Profile FOREIGN KEY (ProfileCode)
+        REFERENCES dbo.WEB_AccessProfile (ProfileCode)
+);
 GO
 

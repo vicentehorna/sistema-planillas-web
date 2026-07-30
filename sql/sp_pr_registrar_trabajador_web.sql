@@ -6,6 +6,8 @@
     - EntryDate = ReEntryDate
     - Si régimen AFP: resuelve PR_Employee.AFP desde PR_AFP (sin UI)
     - Si sueldo > 0: asigna REM_BASICA permanente (salvo Construcción Civil)
+    - Si flag asignación familiar = Y: asigna FLAG_ASIG_FAM permanente con valor 1
+    - Si régimen AFP: asigna AFP_FLUJO permanente con valor 1
     - Si AFP: asigna AFP_FLUJO = 1
 
     Validaciones bloqueantes:
@@ -82,6 +84,7 @@ BEGIN
     DECLARE @es_construccion    CHAR(1) = 'N';
     DECLARE @concept_rembasica  VARCHAR(20);
     DECLARE @concept_afp_flujo  VARCHAR(20);
+    DECLARE @concept_flag_asig  VARCHAR(20);
     DECLARE @period_start       VARCHAR(10);
     DECLARE @cc_asignacion      VARCHAR(20);
     DECLARE @cc_code_asignacion VARCHAR(20);
@@ -194,7 +197,12 @@ BEGIN
 
     IF @sueldo IS NOT NULL
     BEGIN
-        SET @rembasica = TRY_CONVERT(NUMERIC(18, 4), REPLACE(@sueldo, ',', ''));
+        BEGIN TRY
+            SET @rembasica = CONVERT(NUMERIC(18, 4), REPLACE(@sueldo, ',', ''));
+        END TRY
+        BEGIN CATCH
+            SET @rembasica = NULL;
+        END CATCH
         IF @rembasica IS NULL OR @rembasica < 0
         BEGIN
             RAISERROR('El sueldo indicado no es un valor numérico válido.', 16, 1);
@@ -477,6 +485,45 @@ BEGIN
                     NULL, @rembasica, NULL, 'LO', NULL,
                     'N', 'P', @replicationunit,
                     @xlastuser, GETDATE(), @rembasica, 0, 0,
+                    @cc_code_asignacion, '', '', 'A', NULL
+                );
+            END;
+        END;
+
+        /* Asignación familiar: FLAG_ASIG_FAM permanente = 1 (misma lógica de periodo/CC que REM_BASICA). */
+        IF @flagasigfamiliar = 'Y' AND @period_start IS NOT NULL
+        BEGIN
+            SELECT TOP 1 @concept_flag_asig = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia
+              AND c.FormulaCode = 'FLAG_ASIG_FAM'
+              AND c.Status = 'A'
+            ORDER BY c.Concept;
+
+            IF @concept_flag_asig IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeConcept ec (NOLOCK)
+                    WHERE ec.Company = @cia
+                      AND ec.Person = @person
+                      AND ec.Concept = @concept_flag_asig
+                      AND ec.PayRollType = @payrolltype
+                      AND ec.FlagFrecuencyType = 'P'
+                      AND ec.PRPeriodEnd IS NULL
+               )
+            BEGIN
+                INSERT INTO PR_EmployeeConcept (
+                    Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                    PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                    FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                    XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                    CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                )
+                VALUES (
+                    @person, @cia, @concept_flag_asig, @payrolltype, @period_start, @cc_asignacion,
+                    NULL, 1, NULL, 'LO', NULL,
+                    'N', 'P', @replicationunit,
+                    @xlastuser, GETDATE(), 1, 0, 0,
                     @cc_code_asignacion, '', '', 'A', NULL
                 );
             END;

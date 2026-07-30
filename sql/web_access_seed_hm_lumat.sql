@@ -23,6 +23,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('receta', 'Receta', 'generales', 170, 'receta_page', '/receta', 'A'),
 
 ('cuentas_bancarias', 'Cuentas Bancarias', 'tablas', 210, 'cuentas_bancarias_page', '/cuentas-bancarias', 'A'),
+('afps', 'AFPs', 'tablas', 215, 'afps_page', '/afps', 'A'),
 ('cargos', 'Cargos', 'tablas', 220, 'cargos_page', '/cargos', 'A'),
 ('centros_costo', 'Centros de Costo', 'tablas', 230, 'centros_costo_page', '/centros-costo', 'A'),
 ('tipos_documento', 'Tipos de Documentos', 'tablas', 240, 'tipos_documento_page', '/tipos-documento', 'A'),

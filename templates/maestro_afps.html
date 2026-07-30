@@ -1,0 +1,811 @@
+{% extends "layout.html" %}
+
+{% block title %}AFPs{% endblock %}
+
+{% block extra_css %}
+<style>
+    .afps-page {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        height: calc(100vh - 7.5rem);
+        max-height: calc(100vh - 7.5rem);
+        overflow: hidden;
+    }
+
+    .afps-filtros {
+        flex-shrink: 0;
+    }
+
+    .afps-filtros .card-body {
+        padding: 0.7rem 0.85rem;
+    }
+
+    .afps-layout {
+        display: flex;
+        gap: 0.85rem;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .afps-panel-izq {
+        flex: 0 0 34%;
+        max-width: 34%;
+        min-width: 240px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .afps-panel-der {
+        flex: 1 1 66%;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .afps-grilla {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .afps-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .afps-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #d7dee8;
+        background: #f1f4f8;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .table-afps-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-afps-lista th,
+    .table-afps-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+
+    .table-afps-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-afps-lista tbody tr.afp-row {
+        cursor: pointer;
+        border-color: #eef1f5;
+    }
+
+    .table-afps-lista tbody tr.afp-row:hover {
+        background: #eef4fb;
+    }
+
+    .table-afps-lista tbody tr.afp-row.active {
+        background: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-afps-lista tbody tr.afp-row.active td {
+        font-weight: 600;
+    }
+
+    .table-afps-lista .col-afp {
+        min-width: 10rem;
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .afps-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .afps-dw-titlebar {
+        background: #1a4b84;
+        padding: 0.45rem 0.75rem;
+        min-height: 2.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .afps-dw-titlebar .afps-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .afps-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-left: auto;
+    }
+
+    .afps-btn-guardar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.75rem;
+        box-shadow: none;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .afps-btn-eliminar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.65rem;
+        color: #fff;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        background: transparent;
+    }
+
+    .afps-btn-eliminar:hover {
+        color: #fff;
+        background: rgba(220, 53, 69, 0.85);
+        border-color: rgba(255, 255, 255, 0.5);
+    }
+
+    .afps-msg-guardado {
+        margin: 0;
+        min-width: 0;
+        max-width: 18rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #d1e7dd;
+    }
+
+    .afps-dw-body {
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.85rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .afps-form-card .form-label {
+        font-size: 0.72rem;
+        margin-bottom: 0.12rem;
+    }
+
+    .afps-form-card .form-control-sm,
+    .afps-form-card .form-select-sm {
+        font-size: 0.8rem;
+    }
+
+    .campo-obligatorio.form-control,
+    .campo-obligatorio.form-select {
+        background-color: #fff;
+        border-color: #ced4da;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .campo-obligatorio.form-control:focus,
+    .campo-obligatorio.form-select:focus {
+        background-color: #fff;
+        border-color: #86b7fe;
+        box-shadow: inset 3px 0 0 #1a4b84, 0 0 0 0.2rem rgba(26, 75, 132, 0.12);
+    }
+
+    .form-label.afp-req::after {
+        content: ' *';
+        color: #c0392b;
+        font-weight: 700;
+    }
+
+    .afps-campo-auditoria {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+
+    .afps-form-sep {
+        border-top: 1px solid #d7dee8;
+        margin: 0.35rem 0 0.15rem;
+    }
+
+    .afps-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1 1 auto;
+        min-height: 0;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+        padding: 1.5rem;
+    }
+
+    @media (max-width: 991.98px) {
+        .afps-page {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .afps-layout {
+            flex-direction: column;
+            overflow: visible;
+        }
+
+        .afps-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .afps-grilla {
+            max-height: 260px;
+        }
+
+        .afps-panel-der {
+            min-height: 22rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="afps-page">
+<div class="card shadow-sm border-0 afps-filtros">
+    <div class="card-body">
+        <form id="frmFiltrosAfps" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtBuscarAfp" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                <input type="search" id="txtBuscarAfp" class="form-control form-control-sm" placeholder="Nombre o abreviatura..." autocomplete="off">
+            </div>
+            <div class="col-12 col-md-auto d-flex align-items-end flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevaAfp">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="afps-layout">
+    <aside class="afps-panel-izq">
+        <div class="afps-grilla">
+            <div class="afps-grilla-scroll">
+                <table class="table table-sm table-hover table-afps-lista align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-afp">AFP</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyAfps">
+                        <tr>
+                            <td class="text-center text-muted py-3">Seleccione una compañía</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoAfps" class="afps-grilla-footer">No. de Registros: 0</div>
+        </div>
+    </aside>
+
+    <section class="afps-panel-der">
+        <div id="placeholderAfp" class="afps-placeholder">
+            <div>
+                <i class="bi bi-piggy-bank fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione una AFP de la lista o cree una nueva.
+            </div>
+        </div>
+
+        <div id="panelEdicionAfp" class="afps-dw-panel afps-form-card d-none">
+            <div class="afps-dw-titlebar">
+                <span class="afps-dw-title-text" id="tituloEdicionAfp">Nueva AFP</span>
+                <div id="msgGuardadoAfp" class="afps-msg-guardado d-none" role="status" aria-live="polite"></div>
+                <div class="afps-titlebar-actions">
+                    <button type="button" class="btn btn-success btn-sm afps-btn-guardar" id="btnGuardarAfp" title="Ctrl+S">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                    <button type="button" class="btn btn-sm afps-btn-eliminar d-none" id="btnEliminarAfp">
+                        <i class="bi bi-trash"></i> Eliminar
+                    </button>
+                </div>
+            </div>
+            <div class="afps-dw-body">
+                <form id="frmAfp" class="row g-2">
+                    <input type="hidden" id="hidAfp" value="">
+                    <input type="hidden" id="hidModo" value="I">
+
+                    <div class="col-12 col-md-6">
+                        <label for="txtCiaDetalle" class="form-label fw-semibold text-muted">Compañía</label>
+                        <input type="text" id="txtCiaDetalle" class="form-control form-control-sm afps-campo-auditoria" readonly disabled>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtDescription" class="form-label fw-semibold text-muted afp-req">AFP</label>
+                        <input type="text" id="txtDescription" class="form-control form-control-sm campo-obligatorio text-uppercase"
+                               maxlength="20" required autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtAfpCode" class="form-label fw-semibold text-muted">Abreviatura</label>
+                        <input type="text" id="txtAfpCode" class="form-control form-control-sm" maxlength="20" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtAfpCodeNet" class="form-label fw-semibold text-muted">Abreviatura AFP.Net</label>
+                        <input type="text" id="txtAfpCodeNet" class="form-control form-control-sm" maxlength="20" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtPensionPercentage" class="form-label fw-semibold text-muted">Porcentaje de Aporte al Fondo de Pensión</label>
+                        <input type="text" id="txtPensionPercentage" class="form-control form-control-sm text-end" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtTopAfp" class="form-label fw-semibold text-muted">Tope de Aplicación de Prima</label>
+                        <input type="text" id="txtTopAfp" class="form-control form-control-sm text-end" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtFixedAmount" class="form-label fw-semibold text-muted">Porcentaje de Comisión Variable (Mixta)</label>
+                        <input type="text" id="txtFixedAmount" class="form-control form-control-sm text-end" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtVariablePercentage" class="form-label fw-semibold text-muted">Porcentaje de Comisión Variable (Flujo)</label>
+                        <input type="text" id="txtVariablePercentage" class="form-control form-control-sm text-end" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtInsuredPercentage" class="form-label fw-semibold text-muted">Porcentaje de Seguro</label>
+                        <input type="text" id="txtInsuredPercentage" class="form-control form-control-sm text-end" inputmode="decimal" autocomplete="off">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtPdt" class="form-label fw-semibold text-muted">PDT</label>
+                        <input type="text" id="txtPdt" class="form-control form-control-sm" maxlength="20" autocomplete="off">
+                    </div>
+
+                    <div class="col-12"><div class="afps-form-sep"></div></div>
+
+                    <div class="col-12 col-md-6" id="wrapAuditoriaUser">
+                        <label for="txtXLastUser" class="form-label fw-semibold text-muted">Usuario</label>
+                        <input type="text" id="txtXLastUser" class="form-control form-control-sm afps-campo-auditoria" readonly disabled>
+                    </div>
+                    <div class="col-12 col-md-6" id="wrapAuditoriaDate">
+                        <label for="txtXLastDate" class="form-label fw-semibold text-muted">Fecha</label>
+                        <input type="text" id="txtXLastDate" class="form-control form-control-sm afps-campo-auditoria" readonly disabled>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectElement) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                throw new Error('Respuesta no válida del servidor.');
+            }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function formatearFecha(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (m) return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}${m[6] ? ':' + m[6] : ''}`;
+        return s;
+    }
+
+    function formatoNumero(valor, decimales) {
+        if (valor == null || valor === '') return '';
+        const n = Number(valor);
+        if (Number.isNaN(n)) return String(valor);
+        return n.toFixed(decimales);
+    }
+
+    function normalizarNumeroInput(raw) {
+        return String(raw || '').trim().replace(/,/g, '');
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const tbodyAfps = document.getElementById('tbodyAfps');
+    const placeholder = document.getElementById('placeholderAfp');
+    const panelEdicion = document.getElementById('panelEdicionAfp');
+    const msgGuardado = document.getElementById('msgGuardadoAfp');
+
+    let afpsCache = [];
+    let afpSeleccionada = null;
+    let obtenerAbort = null;
+    let msgGuardadoTimer = null;
+
+    function etiquetaCompania() {
+        if (!cboCia || !cboCia.value) return '';
+        const opt = cboCia.options[cboCia.selectedIndex];
+        return opt ? String(opt.textContent || '').trim() : cboCia.value;
+    }
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function ocultarMensajeGuardado() {
+        if (msgGuardadoTimer) {
+            clearTimeout(msgGuardadoTimer);
+            msgGuardadoTimer = null;
+        }
+        if (msgGuardado) {
+            msgGuardado.textContent = '';
+            msgGuardado.classList.add('d-none');
+        }
+    }
+
+    function mostrarMensajeGuardado(texto) {
+        if (!msgGuardado) return;
+        ocultarMensajeGuardado();
+        msgGuardado.textContent = texto || 'Registro guardado correctamente.';
+        msgGuardado.classList.remove('d-none');
+        msgGuardadoTimer = setTimeout(ocultarMensajeGuardado, 6000);
+    }
+
+    function syncVisibilidadModo() {
+        const esNuevo = document.getElementById('hidModo').value === 'I';
+        document.getElementById('wrapAuditoriaUser').classList.toggle('d-none', esNuevo);
+        document.getElementById('wrapAuditoriaDate').classList.toggle('d-none', esNuevo);
+        document.getElementById('btnEliminarAfp').classList.toggle('d-none', esNuevo);
+    }
+
+    function limpiarFormulario() {
+        ocultarMensajeGuardado();
+        document.getElementById('hidAfp').value = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('frmAfp').reset();
+        document.getElementById('txtCiaDetalle').value = etiquetaCompania();
+        document.getElementById('txtXLastUser').value = '';
+        document.getElementById('txtXLastDate').value = '';
+        document.getElementById('tituloEdicionAfp').textContent = 'Nueva AFP';
+        syncVisibilidadModo();
+    }
+
+    function cargarFormulario(data) {
+        document.getElementById('hidAfp').value = data.afp || '';
+        document.getElementById('hidModo').value = 'U';
+        document.getElementById('txtCiaDetalle').value = etiquetaCompania();
+        document.getElementById('txtDescription').value = data.description || '';
+        document.getElementById('txtAfpCode').value = data.afpcode || '';
+        document.getElementById('txtAfpCodeNet').value = data.afpcodenet || '';
+        document.getElementById('txtPensionPercentage').value = formatoNumero(data.pensionpercentage, 2);
+        document.getElementById('txtTopAfp').value = formatoNumero(data.topafp, 2);
+        document.getElementById('txtFixedAmount').value = formatoNumero(data.fixedamount, 2);
+        document.getElementById('txtVariablePercentage').value = formatoNumero(data.variablepercentage, 2);
+        document.getElementById('txtInsuredPercentage').value = formatoNumero(data.insuredpercentage, 2);
+        document.getElementById('txtPdt').value = data.pdt || '';
+        document.getElementById('txtXLastUser').value = data.xlastuser || '';
+        document.getElementById('txtXLastDate').value = formatearFecha(data.xlastdate);
+        document.getElementById('tituloEdicionAfp').textContent = data.description || 'Editar AFP';
+        syncVisibilidadModo();
+    }
+
+    function payloadFormulario() {
+        return {
+            cia: cboCia.value.trim(),
+            afp: document.getElementById('hidAfp').value.trim(),
+            modo: document.getElementById('hidModo').value.trim() || 'I',
+            description: document.getElementById('txtDescription').value.trim().toUpperCase(),
+            afpcode: document.getElementById('txtAfpCode').value.trim(),
+            afpcodenet: document.getElementById('txtAfpCodeNet').value.trim(),
+            pensionpercentage: normalizarNumeroInput(document.getElementById('txtPensionPercentage').value),
+            topafp: normalizarNumeroInput(document.getElementById('txtTopAfp').value),
+            fixedamount: normalizarNumeroInput(document.getElementById('txtFixedAmount').value),
+            variablepercentage: normalizarNumeroInput(document.getElementById('txtVariablePercentage').value),
+            insuredpercentage: normalizarNumeroInput(document.getElementById('txtInsuredPercentage').value),
+            pdt: document.getElementById('txtPdt').value.trim(),
+        };
+    }
+
+    function updateRowHighlight() {
+        tbodyAfps.querySelectorAll('.afp-row').forEach((tr) => {
+            const id = tr.getAttribute('data-afp');
+            tr.classList.toggle('active', !!(afpSeleccionada && afpSeleccionada.afp === id));
+        });
+    }
+
+    function renderListaAfps(rows) {
+        if (!rows.length) {
+            tbodyAfps.innerHTML = '<tr><td class="text-center text-muted py-3">Sin registros</td></tr>';
+            document.getElementById('lblConteoAfps').textContent = 'No. de Registros: 0';
+            return;
+        }
+
+        tbodyAfps.innerHTML = rows.map((r) => {
+            const activo = afpSeleccionada && afpSeleccionada.afp === r.afp;
+            return `<tr class="afp-row ${activo ? 'active' : ''}" data-afp="${escHtml(r.afp || '')}">
+                <td class="col-afp" title="${escHtml(r.description || '')}">${escHtml(r.description || '')}</td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('lblConteoAfps').textContent =
+            `No. de Registros: ${rows.length}`;
+
+        tbodyAfps.querySelectorAll('.afp-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const afp = this.getAttribute('data-afp');
+                const row = afpsCache.find((x) => x.afp === afp);
+                if (row) await seleccionarAfp(row);
+            });
+        });
+    }
+
+    async function eliminarAfp(row) {
+        const nombre = row.description || 'AFP';
+        if (!confirm(`¿Eliminar la AFP "${nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+
+        try {
+            const res = await fetch('/api/afps/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    afp: row.afp,
+                }),
+            });
+            const data = await leerJson(res);
+            if (afpSeleccionada && afpSeleccionada.afp === row.afp) {
+                afpSeleccionada = null;
+                limpiarFormulario();
+                mostrarPanelEdicion(false);
+            }
+            await cargarListado();
+            mostrarMensajeGuardado(data.mensaje || 'AFP eliminada correctamente.');
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    async function cargarListado() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            afpsCache = [];
+            renderListaAfps([]);
+            return;
+        }
+
+        tbodyAfps.innerHTML = '<tr><td class="text-center text-muted py-3">Cargando...</td></tr>';
+
+        try {
+            const res = await fetch('/api/afps/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    busqueda: document.getElementById('txtBuscarAfp').value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            afpsCache = data.rows || [];
+            renderListaAfps(afpsCache);
+        } catch (err) {
+            console.error(err);
+            tbodyAfps.innerHTML = `<tr><td class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function seleccionarAfp(row) {
+        if (!row || !row.afp) return;
+
+        ocultarMensajeGuardado();
+        if (obtenerAbort) obtenerAbort.abort();
+        obtenerAbort = new AbortController();
+        const signal = obtenerAbort.signal;
+
+        afpSeleccionada = row;
+        updateRowHighlight();
+        mostrarPanelEdicion(true);
+
+        try {
+            const res = await fetch('/api/afps/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia: cboCia.value.trim(), afp: row.afp }),
+                signal,
+            });
+            const data = await leerJson(res);
+            if (signal.aborted) return;
+            cargarFormulario(data);
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            alert(err.message);
+        }
+    }
+
+    async function guardarAfp() {
+        const payload = payloadFormulario();
+        if (!payload.cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        if (!payload.description) {
+            alert('Indique el nombre de la AFP.');
+            document.getElementById('txtDescription').focus();
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/afps/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            await cargarListado();
+            const afp = data.afp;
+            const row = afpsCache.find((x) => x.afp === afp);
+            if (row) {
+                await seleccionarAfp(row);
+            } else if (afp) {
+                await seleccionarAfp({ afp });
+            }
+            mostrarMensajeGuardado(data.mensaje || 'Registro guardado correctamente.');
+        } catch (err) {
+            alert(err.message);
+        }
+    }
+
+    function iniciarNuevaAfp() {
+        if (!cboCia.value.trim()) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        afpSeleccionada = null;
+        updateRowHighlight();
+        limpiarFormulario();
+        mostrarPanelEdicion(true);
+        document.getElementById('txtDescription').focus();
+    }
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    if (!seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA) && cboCia.options.length > 1) {
+        /* sin default */
+    }
+
+    if (cboCia.value.trim()) {
+        await cargarListado();
+    }
+
+    cboCia.addEventListener('change', async function () {
+        afpSeleccionada = null;
+        mostrarPanelEdicion(false);
+        await cargarListado();
+    });
+
+    document.getElementById('frmFiltrosAfps').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await cargarListado();
+    });
+
+    document.getElementById('txtBuscarAfp').addEventListener('keydown', async function (e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            await cargarListado();
+        }
+    });
+
+    const txtDesc = document.getElementById('txtDescription');
+    if (txtDesc) {
+        txtDesc.addEventListener('input', function () {
+            this.value = this.value.toUpperCase();
+        });
+    }
+
+    document.getElementById('btnNuevaAfp').addEventListener('click', iniciarNuevaAfp);
+    document.getElementById('btnGuardarAfp').addEventListener('click', guardarAfp);
+    document.getElementById('btnEliminarAfp').addEventListener('click', async function () {
+        if (!afpSeleccionada || !afpSeleccionada.afp) return;
+        await eliminarAfp(afpSeleccionada);
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 's') {
+            if (panelEdicion.classList.contains('d-none')) return;
+            e.preventDefault();
+            guardarAfp();
+        }
+    });
+});
+</script>
+{% endblock %}

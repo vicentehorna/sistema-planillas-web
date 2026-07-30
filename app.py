@@ -6780,6 +6780,12 @@ def cargos_page():
     return render_template('maestro_cargos.html')
 
 
+@app.route('/afps')
+@login_required
+def afps_page():
+    return render_template('maestro_afps.html')
+
+
 @app.route('/centros-costo')
 @login_required
 def centros_costo_page():
@@ -9676,6 +9682,227 @@ def api_cargos_eliminar():
             if len(parts) > 1:
                 err = parts[-1].strip(" ()'\"")
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _afp_lista_dict(r):
+    return {
+        'afp': _jsonable_value(r.get('afp')),
+        'description': _jsonable_value(r.get('description')),
+        'afpcode': _jsonable_value(r.get('afpcode')),
+        'afpcodenet': _jsonable_value(r.get('afpcodenet')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _afp_detalle_dict(r):
+    if not r:
+        return None
+    return {
+        'afp': _jsonable_value(r.get('afp')),
+        'company': _jsonable_value(r.get('company')),
+        'description': _jsonable_value(r.get('description')),
+        'vendor': _jsonable_value(r.get('vendor')),
+        'pensionpercentage': _jsonable_value(r.get('pensionpercentage')),
+        'topafp': _jsonable_value(r.get('topafp')),
+        'topafpcurrency': _jsonable_value(r.get('topafpcurrency')),
+        'fixedamount': _jsonable_value(r.get('fixedamount')),
+        'variablepercentage': _jsonable_value(r.get('variablepercentage')),
+        'insuredpercentage': _jsonable_value(r.get('insuredpercentage')),
+        'replicationunit': _jsonable_value(r.get('replicationunit')),
+        'afpcode': _jsonable_value(r.get('afpcode')),
+        'pdt': _jsonable_value(r.get('pdt')),
+        'afpcodenet': _jsonable_value(r.get('afpcodenet')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _sql_error_message(exc):
+    err = str(exc)
+    if 'RAISERROR' in err or '50000' in err:
+        parts = err.split(']')
+        if len(parts) > 1:
+            return parts[-1].strip(" ()'\"")
+    return err
+
+
+@app.route('/api/afps/listado', methods=['POST'])
+@login_required
+def api_afps_listado():
+    """sp_pr_listarafp_web: listado maestro de AFPs."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or body.get('localizar') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarafp_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_afp_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_afps_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/afps/obtener', methods=['POST'])
+@login_required
+def api_afps_obtener():
+    """sp_pr_obtenerafp_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    afp = str(body.get('afp') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not afp:
+        return jsonify({"error": "Seleccione una AFP."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerafp_web @company=?, @afp=?",
+            (cia, afp),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _afp_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "AFP no encontrada."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_afps_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/afps/guardar', methods=['POST'])
+@login_required
+def api_afps_guardar():
+    """sp_pr_guardaraf_web: alta / edición de AFP."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    afp = str(body.get('afp') or '').strip()
+    modo = str(body.get('modo') or ('U' if afp else 'I')).strip().upper()
+    description = str(body.get('description') or body.get('nombre') or '').strip()
+    afpcode = str(body.get('afpcode') or '').strip()
+    afpcodenet = str(body.get('afpcodenet') or '').strip()
+    pensionpercentage = str(body.get('pensionpercentage') or '').strip()
+    topafp = str(body.get('topafp') or '').strip()
+    fixedamount = str(body.get('fixedamount') or '').strip()
+    variablepercentage = str(body.get('variablepercentage') or '').strip()
+    insuredpercentage = str(body.get('insuredpercentage') or '').strip()
+    pdt = str(body.get('pdt') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not description:
+        return jsonify({"error": "Indique el nombre de la AFP."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardaraf_web "
+            "@modo=?, @company=?, @afp=?, @description=?, @afpcode=?, @afpcodenet=?, "
+            "@pensionpercentage=?, @topafp=?, @fixedamount=?, @variablepercentage=?, "
+            "@insuredpercentage=?, @pdt=?, @xlastuser=?",
+            (
+                modo,
+                cia,
+                afp or None,
+                description,
+                afpcode or None,
+                afpcodenet or None,
+                pensionpercentage or None,
+                topafp or None,
+                fixedamount or None,
+                variablepercentage or None,
+                insuredpercentage or None,
+                pdt or None,
+                xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "afp": _jsonable_value(row.get('afp')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_afps_guardar")
+        return jsonify({"error": _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/afps/eliminar', methods=['POST'])
+@login_required
+def api_afps_eliminar():
+    """sp_pr_eliminaraf_web: elimina AFP."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    afp = str(body.get('afp') or '').strip()
+
+    if not cia or not afp:
+        return jsonify({"error": "Seleccione la AFP a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminaraf_web @company=?, @afp=?",
+            (cia, afp),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "afp": _jsonable_value(row.get('afp')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'AFP eliminada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_afps_eliminar")
+        return jsonify({"error": _sql_error_message(e)}), 500
     finally:
         if conn:
             try:

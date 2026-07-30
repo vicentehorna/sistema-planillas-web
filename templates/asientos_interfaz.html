@@ -385,6 +385,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             let filename = 'asiento.txt';
             const m = cd.match(/filename="([^"]+)"/i);
             if (m) filename = m[1];
+            const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
+            if (!m && ctype.includes('excel')) filename = 'asiento.xls';
 
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');

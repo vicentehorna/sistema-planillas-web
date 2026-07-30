@@ -9125,8 +9125,10 @@ def api_asientos_interfaz_periodos():
 @app.route('/api/asientos/interfaz/generar-archivo', methods=['POST'])
 @login_required
 def api_asientos_interfaz_generar_archivo():
-    """Genera TXT Alvisoft del asiento seleccionado (descarga)."""
+    """Genera archivo del asiento: Alvisoft TXT (ACI) o Excel SAP Divisa (hm_divisa)."""
+    from database import get_active_database
     from alvisoft_export import generar_txt_alvisoft
+    from sap_divisa_export import generar_xls_sap_divisa
 
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
@@ -9137,10 +9139,26 @@ def api_asientos_interfaz_generar_archivo():
     if not voucher:
         return jsonify({"error": "Seleccione un asiento."}), 400
 
+    active_db = str(get_active_database() or '').strip().lower()
+    es_divisa = active_db == 'hm_divisa'
+
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        if es_divisa:
+            filename, contenido = generar_xls_sap_divisa(cursor, cia, voucher)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            resp = Response(
+                contenido,
+                mimetype='application/vnd.ms-excel',
+            )
+            resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return resp
+
         filename, contenido = generar_txt_alvisoft(cursor, cia, voucher)
         try:
             conn.commit()

@@ -5386,6 +5386,7 @@ def _render_trabajadores_editar(
     institutions=None,
     careers=None,
     modo_nuevo=False,
+    modo_reingreso=False,
 ):
     return render_template(
         'trabajadores_editar.html',
@@ -5415,6 +5416,7 @@ def _render_trabajadores_editar(
         institutions=institutions or [],
         careers=careers or [],
         modo_nuevo=bool(modo_nuevo),
+        modo_reingreso=bool(modo_reingreso),
     )
 
 
@@ -5505,6 +5507,16 @@ def _empleado_educacion_para_form(empleado):
     return out
 
 
+def _es_modo_reingreso_request():
+    raw = str(
+        request.args.get('modo')
+        or request.form.get('modo')
+        or request.form.get('modo_reingreso')
+        or ''
+    ).strip().lower()
+    return raw in ('reingreso', 'y', '1', 'true')
+
+
 @app.route('/trabajadores/editar/<person_id>', methods=['GET', 'POST'])
 @login_required
 def trabajadores_editar(person_id):
@@ -5512,6 +5524,9 @@ def trabajadores_editar(person_id):
     person_id = str(person_id or '').strip()
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
     seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion'))
+    modo_reingreso = _es_modo_reingreso_request()
+    if modo_reingreso and request.method == 'GET' and not request.args.get('seccion'):
+        seccion = 'laborales'
 
     if not person_id:
         flash('Trabajador no indicado.', 'warning')
@@ -5586,13 +5601,18 @@ def trabajadores_editar(person_id):
 
         if request.method == 'POST' and seccion == 'laborales':
             datos = _empleado_laborales_desde_form(request.form)
+            modo_reingreso_post = _es_modo_reingreso_request()
+            if modo_reingreso_post:
+                datos['ceasedate'] = ''
+                datos['ceasereason'] = ''
             cursor.execute(
                 'EXEC sp_pr_actualizar_datoslaborales_trabajador_web '
                 '@cia=?, @person=?, @employeetype=?, @employeecategory=?, '
                 '@entrydate=?, @reentrydate=?, @ceasedate=?, @ceasereason=?, '
                 '@contractmodality=?, @ocupation=?, '
                 '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
-                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @xlastuser=?',
+                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @xlastuser=?, '
+                '@modo_reingreso=?',
                 (
                     cia,
                     person_id,
@@ -5612,9 +5632,13 @@ def trabajadores_editar(person_id):
                     datos['sueldo'] or None,
                     datos['flagasigfamiliar'],
                     xlastuser,
+                    'Y' if modo_reingreso_post else 'N',
                 ),
             )
             conn.commit()
+            if modo_reingreso_post:
+                flash('Reingreso registrado correctamente. El trabajador quedó activo.', 'success')
+                return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales'))
             flash('Datos laborales actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales'))
 
@@ -5742,6 +5766,21 @@ def trabajadores_editar(person_id):
             empleado = _empleado_pensiones_para_form(empleado)
         elif seccion == 'laborales':
             empleado = _empleado_laborales_para_form(empleado)
+            if modo_reingreso:
+                if not str(empleado.get('ceasedate') or '').strip():
+                    flash('Solo se puede registrar reingreso de un trabajador cesado.', 'warning')
+                    return redirect(url_for(
+                        'trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales'
+                    ))
+                # Conservar referencia de fechas previas para validación en UI
+                empleado['reentrydate_anterior'] = (
+                    str(empleado.get('reentrydate') or '').strip()
+                    or str(empleado.get('entrydate') or '').strip()
+                )
+                empleado['ceasedate_anterior'] = str(empleado.get('ceasedate') or '').strip()
+                empleado['reentrydate'] = ''
+                empleado['ceasedate'] = ''
+                empleado['ceasereason'] = ''
         elif seccion == 'educacion':
             empleado = _empleado_educacion_para_form(empleado)
 
@@ -5783,6 +5822,7 @@ def trabajadores_editar(person_id):
             instruction_levels=instruction_levels,
             institutions=institutions,
             careers=careers,
+            modo_reingreso=modo_reingreso,
         )
     except Exception as e:
         if conn:
@@ -17693,6 +17733,8 @@ def api_trabajadores_listado():
                 'person': str(r.get('person') or '').strip(),
                 'codigo': str(r.get('codigo') or '').strip(),
                 'nombre': str(r.get('nombre') or '').strip(),
+                'fechacese': _jsonable_value(r.get('fechacese')),
+                'cesado': bool(r.get('fechacese')),
             })
         return jsonify({"headers": headers_es, "data": resultado, "rows": rows_meta})
     except Exception as e:

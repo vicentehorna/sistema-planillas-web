@@ -270,6 +270,7 @@
 
 {% block content %}
 {% set modo_nuevo = modo_nuevo|default(false) %}
+{% set modo_reingreso = modo_reingreso|default(false) %}
 {% set form_id = 'frmNuevoTrabajador' if modo_nuevo else (
     'frmGenerales' if seccion == 'generales'
     else ('frmLaborales' if seccion == 'laborales'
@@ -279,6 +280,7 @@
     else ('Datos Laborales' if seccion == 'laborales'
     else ('Datos Educación' if seccion == 'educacion'
     else ('Pensiones' if seccion == 'pensiones' else 'Información Bancaria y CTS'))) %}
+{% set url_editar_qs = {'cia': cia, 'modo': 'reingreso'} if modo_reingreso else {'cia': cia} %}
 
 {% macro campos_generales(editable_codigo=false) %}
 <div class="section-card">
@@ -424,27 +426,60 @@
                         </div>
                         <div class="col-md-6">
                             <label for="txtEntryDate" class="form-label small fw-bold text-muted te-req">Fecha de ingreso</label>
+                            {% if modo_reingreso %}
+                            <input type="date" id="txtEntryDate" class="form-control form-control-sm campo-bloqueado"
+                                   value="{{ empleado.entrydate or '' }}" readonly disabled>
+                            <input type="hidden" name="entrydate" value="{{ empleado.entrydate or '' }}">
+                            {% else %}
                             <input type="date" id="txtEntryDate" name="entrydate" class="form-control form-control-sm campo-obligatorio"
                                    value="{{ empleado.entrydate or '' }}">
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
-                            <label for="txtReentryDate" class="form-label small fw-bold text-muted">Fecha de reingreso</label>
-                            <input type="date" id="txtReentryDate" name="reentrydate" class="form-control form-control-sm"
-                                   value="{{ empleado.reentrydate or '' }}">
+                            <label for="txtReentryDate" class="form-label small fw-bold text-muted{% if modo_reingreso %} te-req{% endif %}">Fecha de reingreso</label>
+                            <input type="date" id="txtReentryDate" name="reentrydate"
+                                   class="form-control form-control-sm{% if modo_reingreso %} campo-obligatorio border-primary{% endif %}"
+                                   value="{{ empleado.reentrydate or '' }}"
+                                   {% if modo_reingreso %}
+                                   data-reentry-anterior="{{ empleado.reentrydate_anterior or '' }}"
+                                   data-cese-anterior="{{ empleado.ceasedate_anterior or '' }}"
+                                   required
+                                   {% endif %}>
+                            {% if modo_reingreso %}
+                            <div class="form-text text-primary fw-semibold">
+                                Ingrese la fecha de reingreso (debe ser posterior a la fecha de ingreso/reingreso anterior
+                                {% if empleado.reentrydate_anterior %}{{ empleado.reentrydate_anterior }}{% endif %}
+                                {% if empleado.ceasedate_anterior %} y al cese {{ empleado.ceasedate_anterior }}{% endif %}).
+                            </div>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label for="txtCeaseDate" class="form-label small fw-bold text-muted">Fecha de cese</label>
+                            {% if modo_reingreso %}
+                            <input type="date" id="txtCeaseDate" class="form-control form-control-sm campo-bloqueado"
+                                   value="" readonly disabled>
+                            <input type="hidden" name="ceasedate" value="">
+                            <div class="form-text text-muted">Se limpiará al registrar el reingreso.</div>
+                            {% else %}
                             <input type="date" id="txtCeaseDate" name="ceasedate" class="form-control form-control-sm"
                                    value="{{ empleado.ceasedate or '' }}">
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label for="cboCeaseReason" class="form-label small fw-bold text-muted">Motivo de cese</label>
+                            {% if modo_reingreso %}
+                            <select id="cboCeaseReason" class="form-select form-select-sm campo-bloqueado" disabled>
+                                <option value="">(sin motivo — se limpia al reingresar)</option>
+                            </select>
+                            <input type="hidden" name="ceasereason" value="">
+                            {% else %}
                             <select id="cboCeaseReason" name="ceasereason" class="form-select form-select-sm">
                                 <option value="">Seleccione...</option>
                                 {% for opt in cease_reasons %}
                                 <option value="{{ opt.id }}" {% if empleado.ceasereason == opt.id %}selected{% endif %}>{{ opt.text }}</option>
                                 {% endfor %}
                             </select>
+                            {% endif %}
                         </div>
                         <div class="col-md-6">
                             <label for="cboContractModality" class="form-label small fw-bold text-muted">Tipo de contrato</label>
@@ -740,9 +775,10 @@
     <div class="te-top">
         <div class="te-page-header">
             <div>
-                <h4>{% if modo_nuevo %}Nuevo trabajador{% else %}Edición de trabajador{% endif %}</h4>
+                <h4>{% if modo_nuevo %}Nuevo trabajador{% elif modo_reingreso %}Reingreso de trabajador{% else %}Edición de trabajador{% endif %}</h4>
                 <p class="te-subtitle">
                     {% if modo_nuevo %}Alta de trabajador: complete los datos generales, laborales, pensiones e información bancaria
+                    {% elif modo_reingreso %}Registre la nueva fecha de reingreso. Se limpiarán cese y motivo; el trabajador quedará activo.
                     {% elif seccion == 'generales' %}Datos generales del trabajador
                     {% elif seccion == 'laborales' %}Datos laborales del trabajador
                     {% elif seccion == 'educacion' %}Datos de educación del trabajador
@@ -783,15 +819,15 @@
                href="#" data-seccion="bancario">Información Bancaria y CTS</a>
             {% else %}
             <a class="nav-link te-nav-link {% if seccion == 'generales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales') }}">Datos Generales</a>
+               href="{{ url_for('trabajadores_editar', person_id=person_id, seccion='generales', **url_editar_qs) }}">Datos Generales</a>
             <a class="nav-link te-nav-link {% if seccion == 'laborales' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='laborales') }}">Datos Laborales</a>
+               href="{{ url_for('trabajadores_editar', person_id=person_id, seccion='laborales', **url_editar_qs) }}">Datos Laborales</a>
             <a class="nav-link te-nav-link {% if seccion == 'educacion' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='educacion') }}">Datos Educación</a>
+               href="{{ url_for('trabajadores_editar', person_id=person_id, seccion='educacion', **url_editar_qs) }}">Datos Educación</a>
             <a class="nav-link te-nav-link {% if seccion == 'pensiones' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='pensiones') }}">Pensiones</a>
+               href="{{ url_for('trabajadores_editar', person_id=person_id, seccion='pensiones', **url_editar_qs) }}">Pensiones</a>
             <a class="nav-link te-nav-link {% if seccion == 'bancario' %}active{% endif %}"
-               href="{{ url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='bancario') }}">Información Bancaria y CTS</a>
+               href="{{ url_for('trabajadores_editar', person_id=person_id, seccion='bancario', **url_editar_qs) }}">Información Bancaria y CTS</a>
             {% endif %}
         </nav>
 
@@ -843,10 +879,14 @@
         </form>
         {% elif seccion == 'laborales' %}
         <form id="frmLaborales" method="POST"
-              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=laborales"
+              action="{{ url_for('trabajadores_editar', person_id=person_id) }}?cia={{ cia | urlencode }}&seccion=laborales{% if modo_reingreso %}&modo=reingreso{% endif %}"
               novalidate>
             <input type="hidden" name="cia" value="{{ cia }}">
             <input type="hidden" name="seccion" value="laborales">
+            {% if modo_reingreso %}
+            <input type="hidden" name="modo_reingreso" value="Y">
+            <input type="hidden" name="modo" value="reingreso">
+            {% endif %}
             {{ campos_laborales() }}
         </form>
         {% elif seccion == 'educacion' %}
@@ -885,6 +925,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const modoNuevo = {{ modo_nuevo|default(false)|tojson }};
+    const modoReingreso = {{ modo_reingreso|default(false)|tojson }};
     const cia = {{ cia | tojson }};
     let seccion = {{ (seccion or 'generales') | tojson }};
     const formIdMap = {
@@ -900,7 +941,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const tituloBar = document.querySelector('.te-dw-title-text');
     const titulosSeccion = {
         generales: 'Datos Generales',
-        laborales: 'Datos Laborales',
+        laborales: modoReingreso ? 'Reingreso — Datos Laborales' : 'Datos Laborales',
         educacion: 'Datos Educación',
         pensiones: 'Pensiones',
         bancario: 'Información Bancaria y CTS',
@@ -1115,6 +1156,12 @@ document.addEventListener('DOMContentLoaded', function () {
             txtEntryDate.addEventListener('input', syncReentry);
         }
 
+        if (modoReingreso && txtReentryDate) {
+            setTimeout(function () {
+                txtReentryDate.focus();
+            }, 80);
+        }
+
         if (modoNuevo) return;
 
         const frmLaborales = document.getElementById('frmLaborales');
@@ -1133,24 +1180,52 @@ document.addEventListener('DOMContentLoaded', function () {
                     mostrarError('Seleccione la categoría.');
                     return;
                 }
-                if (!(document.getElementById('txtEntryDate')?.value || '').trim()) {
+                const entryDateVal = (document.querySelector('input[name="entrydate"]')?.value
+                    || txtEntryDate?.value || '').trim();
+                if (!entryDateVal) {
                     e.preventDefault();
                     mostrarError('Indique la fecha de ingreso.');
                     return;
                 }
-                const ceaseDate = (txtCeaseDate?.value || '').trim();
-                const ceaseReason = (cboCeaseReason?.value || '').trim();
-                if (ceaseDate && !ceaseReason) {
-                    e.preventDefault();
-                    mostrarError('Seleccione el motivo de cese cuando indica fecha de cese.');
-                    cboCeaseReason?.focus();
-                    return;
+                if (modoReingreso) {
+                    const reentry = (txtReentryDate?.value || '').trim();
+                    const ant = String(txtReentryDate?.getAttribute('data-reentry-anterior') || '').trim();
+                    const ceseAnt = String(txtReentryDate?.getAttribute('data-cese-anterior') || '').trim();
+                    if (!reentry) {
+                        e.preventDefault();
+                        mostrarError('Indique la fecha de reingreso.');
+                        txtReentryDate?.focus();
+                        return;
+                    }
+                    if (ant && reentry <= ant) {
+                        e.preventDefault();
+                        mostrarError('La fecha de reingreso debe ser posterior a la fecha anterior (' + ant + ').');
+                        txtReentryDate?.focus();
+                        return;
+                    }
+                    if (ceseAnt && reentry <= ceseAnt) {
+                        e.preventDefault();
+                        mostrarError('La fecha de reingreso debe ser posterior a la fecha de cese (' + ceseAnt + ').');
+                        txtReentryDate?.focus();
+                        return;
+                    }
                 }
-                if (ceaseReason && !ceaseDate) {
-                    e.preventDefault();
-                    mostrarError('Indique la fecha de cese cuando selecciona un motivo.');
-                    txtCeaseDate?.focus();
-                    return;
+                const ceaseDate = (txtCeaseDate?.value || document.querySelector('input[name="ceasedate"]')?.value || '').trim();
+                const ceaseReason = (cboCeaseReason?.value
+                    || document.querySelector('input[name="ceasereason"]')?.value || '').trim();
+                if (!modoReingreso) {
+                    if (ceaseDate && !ceaseReason) {
+                        e.preventDefault();
+                        mostrarError('Seleccione el motivo de cese cuando indica fecha de cese.');
+                        cboCeaseReason?.focus();
+                        return;
+                    }
+                    if (ceaseReason && !ceaseDate) {
+                        e.preventDefault();
+                        mostrarError('Indique la fecha de cese cuando selecciona un motivo.');
+                        txtCeaseDate?.focus();
+                        return;
+                    }
                 }
                 if (!(document.getElementById('cboPosition')?.value || '').trim()) {
                     e.preventDefault();

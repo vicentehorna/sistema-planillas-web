@@ -78,6 +78,19 @@
         padding: 0;
         cursor: pointer;
     }
+
+    .table-trabajadores tbody tr.fila-seleccionada > td {
+        background-color: #cfe2ff !important;
+    }
+
+    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-1,
+    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-2 {
+        background-color: #cfe2ff !important;
+    }
+
+    .table-trabajadores tbody tr {
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -152,6 +165,9 @@
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoTrabajador" disabled>
                     <i class="bi bi-person-plus"></i> Nuevo
                 </button>
+                <button type="button" class="btn btn-warning btn-sm px-4" id="btnReingresoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
+                    <i class="bi bi-arrow-repeat"></i> Reingreso
+                </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelTrab" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
                 <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCountTrab">0</span></span>
             </div>
@@ -180,11 +196,41 @@ document.addEventListener('DOMContentLoaded', async function () {
     const frmTrabajadores = document.getElementById('frmTrabajadores');
     const btnConsultarTrab = document.getElementById('btnConsultarTrabajadores');
     const btnNuevoTrab = document.getElementById('btnNuevoTrabajador');
+    const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
     let consultaHabilitada = false;
+    let trabajadorSeleccionado = null;
 
     function setBotonesConsultaEnabled(enabled) {
         if (btnConsultarTrab) btnConsultarTrab.disabled = !enabled;
         if (btnNuevoTrab) btnNuevoTrab.disabled = !enabled;
+        actualizarBotonReingreso();
+    }
+
+    function actualizarBotonReingreso() {
+        if (!btnReingresoTrab) return;
+        const ok = consultaHabilitada
+            && trabajadorSeleccionado
+            && trabajadorSeleccionado.person
+            && trabajadorSeleccionado.cesado;
+        btnReingresoTrab.disabled = !ok;
+        btnReingresoTrab.title = ok
+            ? ('Registrar reingreso de ' + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person))
+            : 'Seleccione un trabajador cesado en el listado';
+    }
+
+    function seleccionarFilaTrabajador(tr) {
+        const tbody = document.getElementById('tbody-trabajadores');
+        if (!tbody || !tr) return;
+        tbody.querySelectorAll('tr.fila-seleccionada').forEach((row) => {
+            row.classList.remove('fila-seleccionada');
+        });
+        tr.classList.add('fila-seleccionada');
+        trabajadorSeleccionado = {
+            person: String(tr.getAttribute('data-person') || '').trim(),
+            nombre: String(tr.getAttribute('data-nombre') || '').trim(),
+            cesado: String(tr.getAttribute('data-cesado') || '') === '1',
+        };
+        actualizarBotonReingreso();
     }
 
     if (frmTrabajadores) {
@@ -224,6 +270,11 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function hmExito(mensaje) {
         if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi && typeof HmUi.advertencia === 'function') HmUi.advertencia(mensaje);
         else alert(mensaje);
     }
 
@@ -336,16 +387,18 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         const filas = response.data || [];
         let htmlBody = '';
+        trabajadorSeleccionado = null;
         filas.forEach((rowVals, rowIndex) => {
             const meta = rowsMeta[rowIndex] || {};
             const person = String(meta.person || '').trim();
-            htmlBody += '<tr>';
+            const nombre = String(meta.nombre || '').trim();
+            const cesado = !!meta.cesado || !!String(meta.fechacese || '').trim();
+            htmlBody += `<tr data-person="${escapeHtml(person)}" data-nombre="${escapeHtml(nombre)}" data-cesado="${cesado ? '1' : '0'}">`;
             (rowVals || []).forEach((valor, index) => {
                 if (index === idxAcciones) {
                     const editUrl = person
                         ? `/trabajadores/editar/${encodeURIComponent(person)}?cia=${encodeURIComponent(ciaActual)}`
                         : '#';
-                    const nombre = String(meta.nombre || '').trim();
                     const btnEdit = person
                         ? `<a href="${editUrl}" class="text-decoration-none btn-editar-trabajador" title="Editar trabajador"><i class="bi bi-pencil-fill text-success"></i></a>`
                         : '';
@@ -369,6 +422,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         tbody.innerHTML = htmlBody;
         document.getElementById('lblRowCountTrab').textContent = String(filas.length);
+        actualizarBotonReingreso();
     }
 
     async function exportTrabajadoresExcel(payload, meta) {
@@ -711,45 +765,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
 
         const btnDel = ev.target.closest('.btn-eliminar-trabajador');
-        if (!btnDel) return;
+        if (btnDel) {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const person = String(btnDel.getAttribute('data-person') || '').trim();
+            const nombre = String(btnDel.getAttribute('data-nombre') || '').trim();
+            const cia = document.getElementById('cboCompania').value.trim();
+            const ciaTxt = etiquetaCompaniaSeleccionada() || cia;
+            if (!person || !cia) {
+                hmError('Seleccione compañía y trabajador.');
+                return;
+            }
 
-        ev.preventDefault();
-        const person = String(btnDel.getAttribute('data-person') || '').trim();
-        const nombre = String(btnDel.getAttribute('data-nombre') || '').trim();
-        const cia = document.getElementById('cboCompania').value.trim();
-        const ciaTxt = etiquetaCompaniaSeleccionada() || cia;
-        if (!person || !cia) {
-            hmError('Seleccione compañía y trabajador.');
+            const ok = await hmConfirmar({
+                titulo: 'Eliminar trabajador',
+                mensaje:
+                    `Se eliminará completamente el registro del trabajador${nombre ? ` "${nombre}"` : ''} ` +
+                    `de la empresa "${ciaTxt}".\n\nEsta acción no se podrá revertir.`,
+                textoOk: 'Eliminar',
+                textoCancelar: 'Cancelar',
+                variant: 'danger',
+            });
+            if (!ok) return;
+
+            btnDel.disabled = true;
+            try {
+                const res = await fetch(URL_ELIMINAR, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cia, person }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el trabajador.');
+                hmExito(data.mensaje || 'Trabajador eliminado.');
+                await ejecutarConsultaTrabajadores();
+            } catch (err) {
+                console.error(err);
+                hmError(err.message || String(err));
+            } finally {
+                btnDel.disabled = false;
+            }
             return;
         }
 
-        const ok = await hmConfirmar({
-            titulo: 'Eliminar trabajador',
-            mensaje:
-                `Se eliminará completamente el registro del trabajador${nombre ? ` "${nombre}"` : ''} ` +
-                `de la empresa "${ciaTxt}".\n\nEsta acción no se podrá revertir.`,
-            textoOk: 'Eliminar',
-            textoCancelar: 'Cancelar',
-            variant: 'danger',
-        });
-        if (!ok) return;
-
-        btnDel.disabled = true;
-        try {
-            const res = await fetch(URL_ELIMINAR, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, person }),
-            });
-            const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el trabajador.');
-            hmExito(data.mensaje || 'Trabajador eliminado.');
-            await ejecutarConsultaTrabajadores();
-        } catch (err) {
-            console.error(err);
-            hmError(err.message || String(err));
-        } finally {
-            btnDel.disabled = false;
+        if (ev.target.closest('a, button')) return;
+        const tr = ev.target.closest('tr');
+        if (tr && tr.parentElement && tr.parentElement.id === 'tbody-trabajadores') {
+            seleccionarFilaTrabajador(tr);
         }
     });
 
@@ -770,6 +832,31 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             if (filtrosPersist) filtrosPersist.guardar();
             window.location.href = '/trabajadores/nuevo?cia=' + encodeURIComponent(cia);
+        });
+    }
+
+    if (btnReingresoTrab) {
+        btnReingresoTrab.addEventListener('click', function () {
+            if (!consultaHabilitada) return;
+            const cia = document.getElementById('cboCompania').value.trim();
+            if (!cia) {
+                alert('Seleccione una compañía.');
+                return;
+            }
+            if (!trabajadorSeleccionado || !trabajadorSeleccionado.person) {
+                hmAdvertencia('Seleccione en el listado el trabajador cesado a reingresar.');
+                return;
+            }
+            if (!trabajadorSeleccionado.cesado) {
+                hmAdvertencia('Solo se puede reingresar un trabajador con fecha de cese.');
+                return;
+            }
+            if (filtrosPersist) filtrosPersist.guardar();
+            const person = trabajadorSeleccionado.person;
+            window.location.href =
+                '/trabajadores/editar/' + encodeURIComponent(person) +
+                '?cia=' + encodeURIComponent(cia) +
+                '&seccion=laborales&modo=reingreso';
         });
     }
 

@@ -119,7 +119,12 @@ BEGIN
 
     IF RTRIM(ISNULL(@sueldo, '')) <> ''
     BEGIN
-        SET @rembasica = TRY_CONVERT(NUMERIC(18, 4), REPLACE(@sueldo, ',', ''));
+        BEGIN TRY
+            SET @rembasica = CONVERT(NUMERIC(18, 4), REPLACE(@sueldo, ',', ''));
+        END TRY
+        BEGIN CATCH
+            SET @rembasica = NULL;
+        END CATCH
         IF @rembasica IS NULL
         BEGIN
             RAISERROR('El sueldo indicado no es un valor numérico válido.', 16, 1);

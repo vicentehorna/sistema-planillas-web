@@ -9284,10 +9284,53 @@ def api_asientos_generar_voucher_periodos():
                 pass
 
 
+@app.route('/api/asientos/generar-voucher/validar-dni', methods=['POST'])
+@login_required
+def api_asientos_generar_voucher_validar_dni():
+    """Valida que el DNI exista en compañía/planilla y tenga cálculo en el periodo."""
+    from voucher_generate import resolve_trabajador_voucher
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    dni = str(body.get('dni') or body.get('documento') or '').strip()
+
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"ok": False, "error": "Complete compañía, planilla, proceso y periodo."}), 400
+    if not dni:
+        return jsonify({"ok": False, "error": "Ingrese el DNI."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        result = resolve_trabajador_voucher(
+            cursor,
+            company=cia,
+            payrolltype=payrolltype,
+            processtype=processtype,
+            period_pr=period,
+            dni=dni,
+        )
+        status = 200 if result.get('ok') else 400
+        return jsonify(result), status
+    except Exception as e:
+        logging.exception("api_asientos_generar_voucher_validar_dni")
+        return jsonify({"ok": False, "error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/asientos/generar-voucher', methods=['POST'])
 @login_required
 def api_asientos_generar_voucher():
-    """Genera voucher contable de planilla (modo General)."""
+    """Genera voucher contable de planilla (modo General; opcional por DNI)."""
     from datetime import datetime as _dt
 
     from voucher_generate import generar_voucher_general
@@ -9297,6 +9340,7 @@ def api_asientos_generar_voucher():
     payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
     processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
+    dni = str(body.get('dni') or body.get('documento') or '').strip()
     currency = str(body.get('currency') or 'LO').strip() or 'LO'
     try:
         exchangerate = float(body.get('exchangerate') or body.get('tc') or 1)
@@ -9339,6 +9383,7 @@ def api_asientos_generar_voucher():
             user_id=user_id,
             confirm_reverse=confirm_reverse,
             save=save,
+            dni=dni or None,
         )
         if result.ok and save and not result.needs_confirm_reverse:
             conn.commit()

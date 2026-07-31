@@ -1393,6 +1393,33 @@
         };
     }
 
+    function lineaEmiteImporte(ln) {
+        const t = String(ln && ln.tipo || '').toUpperCase();
+        if (t === 'G') return false;
+        return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z'].includes(t);
+    }
+
+    function validarConstruccionFormula(payload) {
+        const tipoH = String(payload.tipo || 'N').toUpperCase().slice(0, 1) || 'N';
+        const cond = String(payload.conceptcond || '').trim();
+        if ((tipoH === 'A' || tipoH === 'C') && !cond) {
+            return 'Si el tipo de cabecera es Concepto o Asignación, indique el concepto condicional. Si no usa condición, elija tipo Ninguno.';
+        }
+        const dets = Array.isArray(payload.detalle) ? payload.detalle : [];
+        for (let i = 0; i < dets.length - 1; i++) {
+            const a = dets[i] || {};
+            const b = dets[i + 1] || {};
+            const op = String(a.operador || '').toUpperCase();
+            if (op === 'T') continue;
+            if (!lineaEmiteImporte(a) || !lineaEmiteImporte(b)) continue;
+            if (!['M', 'P', 'X', 'D'].includes(op)) {
+                const n = (a.line != null ? a.line : (i + 1));
+                return `Línea ${n}: falta operador (+, -, *, /) antes de la siguiente línea de valor. Sin operador el motor concatena los importes y falla al calcular (p.ej. Incorrect syntax near '.0000'). Use () solo en la última línea.`;
+            }
+        }
+        return null;
+    }
+
     async function guardarFormula() {
         const payload = payloadGuardar();
         if (!payload.cia || !payload.payrolltype || !payload.proccestype) {
@@ -1405,6 +1432,11 @@
         }
         if (!Array.isArray(payload.detalle) || payload.detalle.length === 0) {
             alert('La fórmula debe tener al menos una línea de detalle. Use Agregar antes de guardar.');
+            return;
+        }
+        const errConstruccion = validarConstruccionFormula(payload);
+        if (errConstruccion) {
+            alert(errConstruccion);
             return;
         }
         const btn = document.getElementById('btnGuardarFormula');

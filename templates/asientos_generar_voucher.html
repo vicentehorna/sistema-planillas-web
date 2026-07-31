@@ -136,6 +136,14 @@
                         <option value="">Seleccione...</option>
                     </select>
                 </div>
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label for="txtDni" class="form-label small fw-bold text-muted mb-1">DNI <span class="fw-normal">(opcional)</span></label>
+                    <input id="txtDni" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Vacío = toda la planilla" autocomplete="off">
+                </div>
+                <div class="col-12 col-md-6 col-lg-3">
+                    <label class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                    <input id="txtTrabajadorNombre" type="text" class="form-control form-control-sm bg-white" value="" readonly placeholder="Se completa al validar el DNI">
+                </div>
                 <div class="col-6 col-md-2 col-lg-1">
                     <label class="form-label small fw-bold text-muted mb-1">Moneda</label>
                     <input type="text" class="form-control form-control-sm bg-white" value="Local" readonly>
@@ -153,6 +161,9 @@
                         <i class="bi bi-play-circle"></i> Generar
                     </button>
                 </div>
+            </div>
+            <div class="small text-muted mt-2">
+                Si indica un DNI válido, se genera un asiento solo de ese trabajador (no modifica el voucher general de la planilla).
             </div>
         </form>
     </div>
@@ -232,11 +243,15 @@
     const cboPlanilla = document.getElementById('cboPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
+    const txtDni = document.getElementById('txtDni');
+    const txtTrabajadorNombre = document.getElementById('txtTrabajadorNombre');
     const txtTC = document.getElementById('txtTC');
     const txtFecha = document.getElementById('txtFecha');
     const frm = document.getElementById('frmGenerarVoucher');
     const boxErrores = document.getElementById('boxErrores');
     const icoErrores = document.getElementById('icoErrores');
+    let dniValidado = '';
+
 
     function hoyISO() {
         const d = new Date();
@@ -354,9 +369,59 @@
         setErroresBox(options.errorMode || 'is-empty', options.errorText || 'Sin errores.');
     }
 
+    function limpiarTrabajador() {
+        dniValidado = '';
+        if (txtTrabajadorNombre) txtTrabajadorNombre.value = '';
+    }
+
+    async function validarDniTrabajador() {
+        const dni = (txtDni.value || '').trim();
+        if (!dni) {
+            limpiarTrabajador();
+            return true;
+        }
+        if (!cboCia.value || !cboPlanilla.value || !cboProceso.value || !cboPeriodo.value) {
+            limpiarTrabajador();
+            if (window.HmUi) HmUi.advertencia('Seleccione compañía, planilla, proceso y periodo antes de validar el DNI.');
+            else alert('Seleccione compañía, planilla, proceso y periodo antes de validar el DNI.');
+            return false;
+        }
+        try {
+            const res = await fetch('/api/asientos/generar-voucher/validar-dni', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value,
+                    payrolltype: cboPlanilla.value,
+                    processtype: cboProceso.value,
+                    period: cboPeriodo.value,
+                    dni,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
+                limpiarTrabajador();
+                const msg = data.error || 'DNI no válido para esta planilla/periodo.';
+                if (window.HmUi) HmUi.advertencia(msg);
+                else alert(msg);
+                return false;
+            }
+            dniValidado = String(data.dni || dni).trim();
+            txtDni.value = dniValidado;
+            txtTrabajadorNombre.value = data.nombre || data.person || '';
+            return true;
+        } catch (e) {
+            limpiarTrabajador();
+            const msg = e.message || String(e);
+            if (window.HmUi) HmUi.error(msg);
+            else alert(msg);
+            return false;
+        }
+    }
+
     function setBusy(busy, texto) {
         const btnGen = document.getElementById('btnGenerar');
-        [btnGen, cboCia, cboPlanilla, cboProceso, cboPeriodo, txtTC, txtFecha].forEach((el) => {
+        [btnGen, cboCia, cboPlanilla, cboProceso, cboPeriodo, txtTC, txtFecha, txtDni].forEach((el) => {
             if (el) el.disabled = !!busy;
         });
         const cc = document.getElementById('txtCCosto');
@@ -446,6 +511,7 @@
             payrolltype: cboPlanilla.value,
             processtype: cboProceso.value,
             period: cboPeriodo.value,
+            dni: (txtDni.value || '').trim(),
             currency: 'LO',
             exchangerate: Number(txtTC.value || 1),
             voucher_date: txtFecha.value,
@@ -463,14 +529,19 @@
             else alert('Complete compañía, planilla, proceso y periodo.');
             return;
         }
+        if (body.dni) {
+            const okDni = await validarDniTrabajador();
+            if (!okDni) return;
+            body.dni = (txtDni.value || '').trim();
+        }
 
         // Limpiar resultado anterior de inmediato para que el usuario vea el nuevo proceso
         limpiarResultado({
-            mensaje: 'Generando voucher…',
+            mensaje: body.dni ? `Generando voucher DNI ${body.dni}…` : 'Generando voucher…',
             errorMode: 'is-empty',
             errorText: 'Preparando generación…',
         });
-        setBusy(true, 'Generando voucher…');
+        setBusy(true, body.dni ? `Generando voucher DNI ${body.dni}…` : 'Generando voucher…');
 
         try {
             const res = await fetch('/api/asientos/generar-voucher', {
@@ -536,11 +607,29 @@
     }
 
     function onFiltroChangeClear() {
+        limpiarTrabajador();
         limpiarResultado();
     }
 
-    cboCia.addEventListener('change', () => { onFiltroChangeClear(); cargarPlanillas(); });
-    cboPlanilla.addEventListener('change', () => { onFiltroChangeClear(); cargarProcesos(); });
+    txtDni.addEventListener('blur', () => {
+        const dni = (txtDni.value || '').trim();
+        if (!dni) {
+            limpiarTrabajador();
+            return;
+        }
+        if (dni === dniValidado && txtTrabajadorNombre.value) return;
+        validarDniTrabajador();
+    });
+    txtDni.addEventListener('input', () => {
+        if ((txtDni.value || '').trim() !== dniValidado) {
+            if (txtTrabajadorNombre) txtTrabajadorNombre.value = '';
+            dniValidado = '';
+        }
+        limpiarResultado();
+    });
+
+    cboCia.addEventListener('change', () => { onFiltroChangeClear(); if (txtDni) txtDni.value = ''; cargarPlanillas(); });
+    cboPlanilla.addEventListener('change', () => { onFiltroChangeClear(); if (txtDni) txtDni.value = ''; cargarProcesos(); });
     cboProceso.addEventListener('change', () => { onFiltroChangeClear(); cargarPeriodos(); });
     cboPeriodo.addEventListener('change', onFiltroChangeClear);
     frm.addEventListener('submit', (ev) => {

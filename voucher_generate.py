@@ -211,6 +211,127 @@ FROM (
 ) x
 """
 
+# Marcador reemplazado por filtro de persona cuando se genera voucher por DNI.
+_PERSON_FILTER_MARK = "/*PERSON_FILTER*/"
+SQL_VOUCHER_DATA = SQL_VOUCHER_DATA.replace(
+    "AND LTRIM(RTRIM(ct.shortname)) IN ('I', 'D', 'A', 'T', 'G', 'X')",
+    _PERSON_FILTER_MARK + "\n      AND LTRIM(RTRIM(ct.shortname)) IN ('I', 'D', 'A', 'T', 'G', 'X')",
+)
+
+
+def _person_title_tag(dni: str) -> str:
+    return f"DNI:{_s(dni)}"
+
+
+def resolve_trabajador_voucher(
+    cursor,
+    *,
+    company: str,
+    payrolltype: str,
+    processtype: str,
+    period_pr: str,
+    dni: str,
+) -> Dict[str, Any]:
+    """Resuelve DNI → Person y valida que tenga cálculo en el periodo/proceso."""
+    company = _s(company)
+    payrolltype = _s(payrolltype)
+    processtype = _s(processtype)
+    period_pr = _s(period_pr)
+    dni = _s(dni)
+    if not dni:
+        return {"ok": False, "error": "Ingrese el DNI del trabajador."}
+
+    cursor.execute(
+        """
+        SELECT TOP 1
+            e.Person AS person,
+            LTRIM(RTRIM(ISNULL(p.DocumentNumber, e.Person))) AS dni,
+            LTRIM(RTRIM(ISNULL(p.Name, ''))) AS nombre
+        FROM PR_Employee e (NOLOCK)
+        INNER JOIN SY_Person p (NOLOCK)
+            ON p.Person = e.Person AND p.Company = e.Company
+        WHERE e.Company = ?
+          AND e.PayRollType = ?
+          AND (
+                LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = ?
+             OR LTRIM(RTRIM(e.Person)) = ?
+          )
+        ORDER BY CASE WHEN LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = ? THEN 0 ELSE 1 END
+        """,
+        (company, payrolltype, dni, dni, dni),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return {
+            "ok": False,
+            "error": "No se encontró un trabajador con ese DNI en la compañía y planilla seleccionadas.",
+        }
+    person, doc, nombre = _s(row[0]), _s(row[1]), _s(row[2])
+
+    digits = "".join(c for c in period_pr if c.isdigit())
+    if len(digits) >= 8:
+        period_filter = digits[:8]
+        period_sql = "epc.PRPeriod = ?"
+    else:
+        period_filter = _period_ac(period_pr) + "%"
+        period_sql = "epc.PRPeriod LIKE ?"
+
+    cursor.execute(
+        f"""
+        SELECT TOP 1 1
+        FROM PR_EmployeePayRollConcept epc (NOLOCK)
+        WHERE epc.Company = ?
+          AND epc.PayRollType = ?
+          AND epc.ProcessType = ?
+          AND {period_sql}
+          AND epc.Person = ?
+        """,
+        (company, payrolltype, processtype, period_filter, person),
+    )
+    if not cursor.fetchone():
+        return {
+            "ok": False,
+            "error": (
+                f"El trabajador {doc}"
+                + (f" ({nombre})" if nombre else "")
+                + " no tiene cálculo en el proceso/periodo seleccionados."
+            ),
+            "person": person,
+            "dni": doc,
+            "nombre": nombre,
+        }
+
+    return {"ok": True, "person": person, "dni": doc, "nombre": nombre}
+
+
+def _find_person_voucher(
+    cursor,
+    company: str,
+    period_ac: str,
+    dni: str,
+) -> Optional[Dict[str, Any]]:
+    """Busca voucher individual activo por DNI (no usa PR_ProcessVoucher)."""
+    tag = _person_title_tag(dni)
+    cursor.execute(
+        """
+        SELECT TOP 1 Voucher, VoucherNo, Status, Title, Period
+        FROM AC_Voucher (NOLOCK)
+        WHERE Company = ?
+          AND Application = 'PR'
+          AND VoucherType = 'PR'
+          AND Period = ?
+          AND Status IN ('A', 'T')
+          AND Title LIKE ?
+        ORDER BY XLastDate DESC
+        """,
+        (company, period_ac, f"%{tag}%"),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    cols = [c[0] for c in cursor.description]
+    return dict(zip(cols, row))
+
 
 def _printtext_map(cursor, concepts: List[str]) -> Dict[str, str]:
     uniq = sorted({_s(c) for c in concepts if _s(c)})
@@ -235,8 +356,16 @@ def _printtext_map(cursor, concepts: List[str]) -> Dict[str, str]:
     return out
 
 
-def _load_epc_rows(cursor, company: str, payrolltype: str, processtype: str, period_pr: str) -> List[Dict[str, Any]]:
+def _load_epc_rows(
+    cursor,
+    company: str,
+    payrolltype: str,
+    processtype: str,
+    period_pr: str,
+    person: Optional[str] = None,
+) -> List[Dict[str, Any]]:
     period_pr = _s(period_pr)
+    person = _s(person) or None
     digits = "".join(c for c in period_pr if c.isdigit())
     if len(digits) >= 8:
         period_filter = digits[:8]
@@ -245,12 +374,17 @@ def _load_epc_rows(cursor, company: str, payrolltype: str, processtype: str, per
         period_filter = _period_ac(period_pr) + "%"
         period_sql = "epc.prperiod LIKE ?"
 
-    sql = SQL_VOUCHER_DATA.replace("epc.prperiod LIKE ?", period_sql)
-    params = (
-        company, payrolltype, processtype, period_filter,
-        company, payrolltype, processtype, period_filter,
-        company, payrolltype, processtype, period_filter,
+    person_sql = "AND epc.person = ?" if person else ""
+    sql = (
+        SQL_VOUCHER_DATA.replace("epc.prperiod LIKE ?", period_sql).replace(
+            _PERSON_FILTER_MARK, person_sql
+        )
     )
+    base = (company, payrolltype, processtype, period_filter)
+    if person:
+        params = base + (person,) + base + (person,) + base + (person,)
+    else:
+        params = base + base + base
     cursor.execute(sql, params)
     cols = [c[0].lower() for c in cursor.description]
     rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -693,6 +827,8 @@ def generar_voucher_general(
     user_id: str = "web",
     confirm_reverse: bool = False,
     save: bool = True,
+    dni: Optional[str] = None,
+    person: Optional[str] = None,
 ) -> VoucherResult:
     company = _s(company)
     payrolltype = _s(payrolltype)
@@ -705,7 +841,38 @@ def generar_voucher_general(
     if len(period_ac) != 6:
         return VoucherResult(ok=False, status="E", message="Periodo inválido.", errors=["Periodo inválido."])
 
-    existing = _find_process_voucher(cursor, company, payrolltype, processtype, period_pr)
+    dni = _s(dni)
+    person = _s(person)
+    worker_nombre = ""
+    if dni or person:
+        resolved = resolve_trabajador_voucher(
+            cursor,
+            company=company,
+            payrolltype=payrolltype,
+            processtype=processtype,
+            period_pr=period_pr,
+            dni=dni or person,
+        )
+        if not resolved.get("ok"):
+            return VoucherResult(
+                ok=False,
+                status="E",
+                message=_s(resolved.get("error")) or "Trabajador no válido.",
+                errors=[_s(resolved.get("error")) or "Trabajador no válido."],
+            )
+        person = _s(resolved.get("person"))
+        dni = _s(resolved.get("dni")) or dni
+        worker_nombre = _s(resolved.get("nombre"))
+    else:
+        person = None
+        dni = ""
+
+    if person:
+        # Voucher individual: no toca PR_ProcessVoucher ni el asiento general.
+        existing = _find_person_voucher(cursor, company, period_ac, dni)
+    else:
+        existing = _find_process_voucher(cursor, company, payrolltype, processtype, period_pr)
+
     if existing and _s(existing.get("Status")) in ("A", "T"):
         if save and not confirm_reverse:
             return VoucherResult(
@@ -728,17 +895,32 @@ def generar_voucher_general(
         if save and confirm_reverse:
             _annul_voucher(cursor, _s(existing.get("Voucher")), user_id)
 
-    epc_rows = _load_epc_rows(cursor, company, payrolltype, processtype, period_pr)
+    epc_rows = _load_epc_rows(
+        cursor, company, payrolltype, processtype, period_pr, person=person
+    )
     if not epc_rows:
+        msg = (
+            "No hay datos contables para ese trabajador en el proceso/periodo."
+            if person
+            else "No hay datos para la generación de voucher."
+        )
         return VoucherResult(
             ok=False,
             status="E",
-            message="No hay datos para la generación de voucher.",
-            errors=["No hay datos para la generación de voucher."],
+            message=msg,
+            errors=[msg],
         )
 
     payroll_desc, process_desc = _descriptions(cursor, payrolltype, processtype)
-    title = f"{payroll_desc}-{process_desc}-{period_pr}"
+    if person:
+        base_title = f"{payroll_desc}-{process_desc}-{period_pr}-{_person_title_tag(dni)}"
+        if worker_nombre:
+            room = 255 - len(base_title) - 1
+            title = f"{base_title}-{worker_nombre[:room]}" if room > 0 else base_title[:255]
+        else:
+            title = base_title[:255]
+    else:
+        title = f"{payroll_desc}-{process_desc}-{period_pr}"
 
     lines = _build_detail_lines(epc_rows, currency, er, voucher_date)
     lines = _apply_distributions(cursor, company, lines)
@@ -754,10 +936,13 @@ def generar_voucher_general(
         "currency": currency,
         "exchangerate": float(er),
         "voucherdate": voucher_date.strftime("%Y-%m-%d"),
-        "comments": process_desc,
+        "comments": process_desc if not person else f"{process_desc} / {_person_title_tag(dni)}",
         "application": "PR",
         "vouchertype": "PR",
         "status": "E" if errors else "A",
+        "dni": dni or None,
+        "person": person,
+        "trabajador": worker_nombre or None,
     }
     detail_dicts = [_line_to_dict(ln) for ln in lines]
     totals_out = {k: float(v) if isinstance(v, Decimal) else v for k, v in totals.items()}
@@ -792,6 +977,7 @@ def generar_voucher_general(
     voucher_id = _next_voucher_id(cursor, company, replicationunit, user_id)
     voucherno = _next_voucherno(cursor, company, "PR", "PR", period_ac)
     amount = abs(totals["totalcreditlo"])
+    comments_hdr = process_desc if not person else f"{process_desc} / {_person_title_tag(dni)}"
 
     cursor.execute(
         """
@@ -820,7 +1006,7 @@ def generar_voucher_general(
             _trunc(currency, 2),
             float(er),
             voucher_date,
-            _trunc(process_desc, 255),
+            _trunc(comments_hdr, 255),
             float(totals["totaldebitlo"]),
             float(totals["totaldebitex"]),
             float(totals["totalcreditlo"]),
@@ -845,26 +1031,33 @@ def generar_voucher_general(
         lines=lines,
     )
 
-    if existing:
-        cursor.execute(
-            """
-            UPDATE PR_ProcessVoucher
-            SET Voucher = ?, VoucherNo = ?, VoucherDate = ?
-            WHERE Company = ? AND PayRollType = ? AND ProcessType = ? AND Period = ?
-            """,
-            (voucher_id, voucherno, voucher_date, company, payrolltype, processtype, period_pr),
-        )
-    else:
-        cursor.execute(
-            """
-            INSERT INTO PR_ProcessVoucher (
-                Company, PayRollType, ProcessType, Period, VoucherDate, Voucher, VoucherNo
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            (company, payrolltype, processtype, period_pr, voucher_date, voucher_id, voucherno),
-        )
+    # Solo el voucher general actualiza PR_ProcessVoucher.
+    if not person:
+        if existing:
+            cursor.execute(
+                """
+                UPDATE PR_ProcessVoucher
+                SET Voucher = ?, VoucherNo = ?, VoucherDate = ?
+                WHERE Company = ? AND PayRollType = ? AND ProcessType = ? AND Period = ?
+                """,
+                (voucher_id, voucherno, voucher_date, company, payrolltype, processtype, period_pr),
+            )
+        else:
+            cursor.execute(
+                """
+                INSERT INTO PR_ProcessVoucher (
+                    Company, PayRollType, ProcessType, Period, VoucherDate, Voucher, VoucherNo
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (company, payrolltype, processtype, period_pr, voucher_date, voucher_id, voucherno),
+            )
 
     header.update({"voucher": voucher_id, "voucherno": voucherno, "status": "A"})
+    msg_ok = f"Voucher {voucherno} generado correctamente."
+    if person:
+        msg_ok = f"Voucher {voucherno} generado para DNI {dni}" + (
+            f" ({worker_nombre})." if worker_nombre else "."
+        )
     return VoucherResult(
         ok=True,
         status="A",
@@ -876,5 +1069,5 @@ def generar_voucher_general(
         header=header,
         details=detail_dicts,
         totals=totals_out,
-        message=f"Voucher {voucherno} generado correctamente.",
+        message=msg_ok,
     )

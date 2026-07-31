@@ -92,6 +92,84 @@ BEGIN
         RETURN;
     END;
 
+    /* Validación de construcción (evita SQL dinámico inválido en SP_PR_EjecutarFormula). */
+    IF ISNULL(@tipo, 'N') IN ('A', 'C') AND @conceptcond IS NULL
+    BEGIN
+        RAISERROR(
+            'Si el tipo de cabecera es Concepto o Asignación, indique el concepto condicional. Si no usa condición, elija tipo Ninguno.',
+            16, 1);
+        RETURN;
+    END;
+
+    DECLARE @det TABLE (
+        idx       INT IDENTITY(1, 1) PRIMARY KEY,
+        line_no   INT NOT NULL,
+        tipo      CHAR(1) NULL,
+        operador  CHAR(1) NULL,
+        grupo     CHAR(1) NULL
+    );
+
+    INSERT INTO @det (line_no, tipo, operador, grupo)
+    SELECT
+        ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), ROW_NUMBER() OVER (ORDER BY (SELECT 1))),
+        NULLIF(UPPER(LTRIM(RTRIM(x.value('(tipo)[1]', 'varchar(5)')))), ''),
+        NULLIF(UPPER(LTRIM(RTRIM(x.value('(operador)[1]', 'varchar(5)')))), ''),
+        NULLIF(UPPER(LTRIM(RTRIM(x.value('(grupo)[1]', 'varchar(5)')))), '')
+    FROM @xml.nodes('/root/l') AS T(x)
+    ORDER BY ISNULL(NULLIF(x.value('(line)[1]', 'int'), 0), 2147483647);
+
+    DECLARE
+        @i INT = 1,
+        @n INT = (SELECT COUNT(*) FROM @det),
+        @t1 CHAR(1),
+        @t2 CHAR(1),
+        @o1 CHAR(1),
+        @g1 CHAR(1),
+        @g2 CHAR(1),
+        @ln1 INT;
+
+    WHILE @i < @n
+    BEGIN
+        SELECT @t1 = tipo, @o1 = operador, @g1 = grupo, @ln1 = line_no
+        FROM @det WHERE idx = @i;
+
+        SELECT @t2 = tipo, @g2 = grupo
+        FROM @det WHERE idx = @i + 1;
+
+        /* Operador ES (T) separa rama THEN/ELSE: no exige aritmética hacia la siguiente. */
+            IF ISNULL(@o1, '') = 'T'
+        BEGIN
+            SET @i = @i + 1;
+            CONTINUE;
+        END;
+
+        /* '(' no es un importe; no validar concatenación contra la siguiente. */
+        IF @t1 = 'G' AND ISNULL(@g1, '') = 'O'
+        BEGIN
+            SET @i = @i + 1;
+            CONTINUE;
+        END;
+
+        /* Cierre/apertura de grupo: patrón legacy "valor () + Grupo"; no es el bug .0000. */
+        IF @t2 = 'G'
+        BEGIN
+            SET @i = @i + 1;
+            CONTINUE;
+        END;
+
+        IF ISNULL(@t1, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z')
+           AND ISNULL(@t2, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z')
+           AND ISNULL(@o1, '') NOT IN ('M', 'P', 'X', 'D')
+        BEGIN
+            RAISERROR(
+                'Línea %d: falta operador (+, -, *, /) antes de la siguiente línea de valor. Sin operador el motor concatena los importes y falla al calcular (p.ej. Incorrect syntax near ''.0000''). Use () solo en la última línea.',
+                16, 1, @ln1);
+            RETURN;
+        END;
+
+        SET @i = @i + 1;
+    END;
+
     BEGIN TRY
         BEGIN TRANSACTION;
 

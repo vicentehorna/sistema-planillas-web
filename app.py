@@ -64,7 +64,7 @@ except Exception as _weasy_err:
     WEASYPRINT_AVAILABLE = False
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
-from database import User, get_datos_usuario_web, cambiar_password, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
+from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
 from tregistro_import import (
     construir_payload_registro_nuevos,
     construir_resumen_importacion,
@@ -5093,11 +5093,17 @@ def change_password_route():
     if new_password != confirm:
         flash('Las contraseñas nuevas no coinciden.', 'error')
         return redirect(url_for('login'))
+    ok_pwd, msg_pwd = validar_password_fuerte(new_password)
+    if not ok_pwd:
+        flash(msg_pwd, 'error')
+        return redirect(url_for('login'))
     user = User.validate_user(username, old_password)
     if not user:
         flash('Usuario o contraseña anterior incorrectos.', 'error')
         return redirect(url_for('login'))
-    ok, msg = cambiar_password(user.id, old_password, new_password)
+    from database import resolve_client_database
+    target_db = resolve_client_database(username) or session.get('client_database')
+    ok, msg = cambiar_password(user.id, old_password, new_password, database=target_db)
     flash(msg, 'success' if ok else 'error')
     return redirect(url_for('login'))
 

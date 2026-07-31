@@ -1,4 +1,5 @@
 import os
+import re
 import pyodbc
 import platform
 from flask_login import UserMixin
@@ -638,14 +639,47 @@ def get_datos_usuario_web(userid):
         return None
 
 
-def cambiar_password(userid, clave_ant, clave_nueva):
+def validar_password_fuerte(password):
+    """
+    Criterios de contraseña fuerte (login / cambio de clave).
+    Retorna (True, '') o (False, mensaje).
+    PasswordWeb en SY_User es VARCHAR(20).
+    """
+    pwd = password if password is not None else ''
+    if len(pwd) < 8:
+        return False, 'La contraseña debe tener mínimo 8 caracteres.'
+    if len(pwd) > 20:
+        return False, 'La contraseña no puede superar 20 caracteres.'
+    if not re.search(r'[A-Z]', pwd):
+        return False, 'La contraseña debe incluir al menos una letra mayúscula (A-Z).'
+    if not re.search(r'[a-z]', pwd):
+        return False, 'La contraseña debe incluir al menos una letra minúscula (a-z).'
+    if not re.search(r'[0-9]', pwd):
+        return False, 'La contraseña debe incluir al menos un número (0-9).'
+    if not re.search(r'[@#$%!&*]', pwd):
+        return False, 'La contraseña debe incluir al menos un carácter especial (@, #, $, %, !, &, *).'
+    return True, ''
+
+
+def cambiar_password(userid, clave_ant, clave_nueva, database=None):
     """
     Llama al SP sp_pr_CambiarPassword_web
     Retorna: (True, "mensaje") si es OK, o (False, "Mensaje de error") si es KO.
     """
+    ok_pwd, msg_pwd = validar_password_fuerte(clave_nueva)
+    if not ok_pwd:
+        return False, msg_pwd
+
+    target_db = (database or '').strip() or get_client_database_from_session() or ''
+    if not target_db and userid:
+        target_db = (resolve_client_database(str(userid).strip()) or '').strip()
+
     conn = None
     try:
-        conn = DatabaseConfig.get_connection()
+        if target_db:
+            conn = DatabaseConfig.get_connection(database=target_db)
+        else:
+            conn = DatabaseConfig.get_connection()
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_CambiarPassword_web @userid=?, @clave_ant=?, @clave_nueva=?",

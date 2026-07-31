@@ -1,5 +1,5 @@
 /*
-    Agrega opción de menú AFPs (Tablas) y la asigna a perfiles admin.
+    Menú maestro AFPs dentro de Procesos / AFP (primera opción del grupo).
 */
 SET NOCOUNT ON;
 
@@ -10,14 +10,14 @@ BEGIN
         INSERT INTO dbo.WEB_MenuOption
             (MenuCode, Title, ParentCode, SortOrder, Endpoint, RoutePrefix, Status)
         VALUES
-            ('afps', 'AFPs', 'tablas', 215, 'afps_page', '/afps', 'A');
+            ('afps', 'AFPs', 'afp', 600, 'afps_page', '/afps', 'A');
     END
     ELSE
     BEGIN
         UPDATE dbo.WEB_MenuOption
         SET Title = 'AFPs',
-            ParentCode = 'tablas',
-            SortOrder = 215,
+            ParentCode = 'afp',
+            SortOrder = 600,
             Endpoint = 'afps_page',
             RoutePrefix = '/afps',
             Status = 'A'

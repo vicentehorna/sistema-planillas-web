@@ -23,7 +23,6 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('receta', 'Receta', 'generales', 170, 'receta_page', '/receta', 'A'),
 
 ('cuentas_bancarias', 'Cuentas Bancarias', 'tablas', 210, 'cuentas_bancarias_page', '/cuentas-bancarias', 'A'),
-('afps', 'AFPs', 'tablas', 215, 'afps_page', '/afps', 'A'),
 ('cargos', 'Cargos', 'tablas', 220, 'cargos_page', '/cargos', 'A'),
 ('centros_costo', 'Centros de Costo', 'tablas', 230, 'centros_costo_page', '/centros-costo', 'A'),
 ('tipos_documento', 'Tipos de Documentos', 'tablas', 240, 'tipos_documento_page', '/tipos-documento', 'A'),
@@ -50,6 +49,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('plame_validar', 'Validar PLAME', 'plame', 570, 'plame_validar_page', '/plame/validar', 'A'),
 ('tregistro_importar', 'Importar T-Registro', 'plame', 580, 'tregistro_importar_page', '/plame/t-registro/importar', 'A'),
 
+('afps', 'AFPs', 'afp', 600, 'afps_page', '/afps', 'A'),
 ('afpnet', 'AFPnet', 'afp', 610, 'declaracion_afp_page', '/afp/declaracion', 'A'),
 ('control_pagos_afp', 'Control de Pagos AFP', 'afp', 620, 'control_pagos_afp_page', '/afp/control-pagos', 'A'),
 

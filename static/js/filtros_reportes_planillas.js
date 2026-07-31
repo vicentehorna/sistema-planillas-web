@@ -964,6 +964,11 @@
             }
             cboPt.value = payroll;
 
+            if (cboTrabajador && typeof opts.poblarTrabajadoresFiltro === 'function') {
+                await opts.poblarTrabajadoresFiltro(cia, cboTrabajador, payroll);
+                cboTrabajador.disabled = false;
+            }
+
             const concept = filtros.concept != null ? String(filtros.concept).trim() : '0';
             if (concept && optionExists(cboConcepto, concept)) {
                 cboConcepto.value = concept;

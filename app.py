@@ -18039,15 +18039,19 @@ def api_trabajadores_eliminar():
 @app.route('/api/selectores/trabajadores')
 @login_required
 def api_trabajadores():
-    """sp_pr_selectorpersonas_web @cia → Person, Name"""
+    """sp_pr_selectorpersonas_web @cia, @payrolltype(opcional) → Person, Name"""
     cia = request.args.get('cia')
+    payrolltype = str(request.args.get('payrolltype') or request.args.get('payroll_type') or '0').strip() or '0'
     if not cia:
         return jsonify([])
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorpersonas_web @cia=?", (cia,))
+        cursor.execute(
+            "EXEC sp_pr_selectorpersonas_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
         rows = cursor.fetchall()
         data = [{"id": r.Person, "text": r.Name} for r in rows]
         return jsonify(data)

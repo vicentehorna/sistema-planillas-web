@@ -562,15 +562,31 @@ document.addEventListener('DOMContentLoaded', async function () {
         selectElement.value = v;
     }
 
-    async function obtenerTrabajadoresModal(cia) {
-        if (cacheCombosModal.cia === cia && cacheCombosModal.trabajadores) {
+    async function obtenerTrabajadoresModal(cia, payrolltype) {
+        cia = String(cia || '').trim();
+        payrolltype = String(payrolltype || '').trim() || '0';
+        if (
+            cacheCombosModal.cia === cia
+            && cacheCombosModal.payrolltype === payrolltype
+            && cacheCombosModal.trabajadores
+        ) {
             return cacheCombosModal.trabajadores;
         }
-        if (cacheCombosModal.cia !== cia) {
-            invalidarCacheCombosModal();
+        if (cacheCombosModal.cia !== cia || cacheCombosModal.payrolltype !== payrolltype) {
+            // Solo invalidar trabajadores/periodos al cambiar planilla; conceptos siguen por cia.
+            if (cacheCombosModal.cia !== cia) {
+                invalidarCacheCombosModal();
+            } else {
+                cacheCombosModal.trabajadores = null;
+            }
         }
-        const data = await fetchSelectorJson(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`);
+        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+        if (payrolltype && payrolltype !== '0') {
+            url += `&payrolltype=${encodeURIComponent(payrolltype)}`;
+        }
+        const data = await fetchSelectorJson(url);
         cacheCombosModal.cia = cia;
+        cacheCombosModal.payrolltype = payrolltype;
         cacheCombosModal.trabajadores = data;
         return data;
     }
@@ -624,7 +640,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         precacheCombosModalKey = key;
         precacheCombosModalPromise = Promise.all([
-            obtenerTrabajadoresModal(cia),
+            obtenerTrabajadoresModal(cia, payrolltype),
             obtenerConceptosModal(cia),
             obtenerPeriodosModal(cia, payrolltype),
         ]).catch((err) => {
@@ -678,7 +694,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
 
         const [trabajadores, conceptos, periodos] = await Promise.all([
-            obtenerTrabajadoresModal(cia),
+            obtenerTrabajadoresModal(cia, payrolltype),
             obtenerConceptosModal(cia),
             obtenerPeriodosModal(cia, payrolltype),
         ]);
@@ -1388,12 +1404,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function poblarTrabajadoresFiltro(cia, selectElement) {
+    async function poblarTrabajadoresFiltro(cia, selectElement, payrolltype) {
         if (!selectElement) return;
         selectElement.innerHTML = '<option value="">Cargando...</option>';
         selectElement.disabled = true;
         try {
-            const data = await obtenerTrabajadoresModal(cia);
+            const data = await obtenerTrabajadoresModal(cia, payrolltype);
             selectElement.innerHTML = '';
             const optTodos = document.createElement('option');
             optTodos.value = '';
@@ -1637,6 +1653,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     cboPlanilla.addEventListener('change', async function () {
         cacheCombosModal.periodos = null;
+        cacheCombosModal.trabajadores = null;
         cacheCombosModal.payrolltype = '';
         const cia = cboCia.value;
         const payroll = this.value;
@@ -1645,12 +1662,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             const conceptoPendiente = cboConcepto.disabled
                 || cboConcepto.options.length <= 1
                 || (cboConcepto.options.length === 1 && cboConcepto.options[0].value === '');
-            const empleadoPendiente = cboTrabajador.disabled
-                || (cboTrabajador.options.length <= 1 && cboTrabajador.options[0].value === '');
 
-            const tareas = [poblarPeriodosAsignacion(cia, payroll, cboPeriodo)];
+            const tareas = [
+                poblarPeriodosAsignacion(cia, payroll, cboPeriodo),
+                poblarTrabajadoresFiltro(cia, cboTrabajador, payroll),
+            ];
             if (conceptoPendiente) tareas.push(poblarConceptos(cia, cboConcepto));
-            if (empleadoPendiente) tareas.push(poblarTrabajadoresFiltro(cia, cboTrabajador));
             await Promise.all(tareas);
 
             cboConcepto.disabled = false;

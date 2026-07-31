@@ -31,6 +31,7 @@ DEFAULT_CLIENT_DBS = [
     "hm_divisa",
     "hm_globaltec",
     "hm_prescription",
+    "hm_lumat",
     "hm_lumat2",
     "hm_alamo",
     "hm_ultra",

@@ -4575,8 +4575,17 @@ def _build_formato_liquidacion_remuneracion(formula_values):
     formula_values = formula_values or {}
     filas = []
     totales = {'cts': 0.0, 'grati': 0.0, 'vaca': 0.0}
+    es_divisa = False
+    try:
+        from database import get_active_database
+        es_divisa = str(get_active_database() or '').strip().lower() == 'hm_divisa'
+    except Exception:
+        es_divisa = False
     for defn in _FORMATO_LIQ_REMUNERACION_DEF:
-        fila = {'label': defn['label']}
+        label = defn['label']
+        if es_divisa and defn.get('cts') == 'BONO_PROD_CTS':
+            label = 'Promedio Descanso'
+        fila = {'label': label}
         for col in ('cts', 'grati', 'vaca'):
             fc = defn.get(col)
             valor = float(formula_values.get(fc, 0) or 0) if fc else 0.0

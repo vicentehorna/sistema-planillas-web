@@ -279,6 +279,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         return filas.length;
     }
 
+    async function sincronizarDistribucion(cia, period) {
+        return postJson('/api/asientos/distribucion-porcentual/replicar', { cia, period });
+    }
+
     async function consultar() {
         const cia = cboCia.value.trim();
         const period = cboPeriodo.value.trim();
@@ -288,24 +292,35 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         msg.textContent = 'Consultando...';
         try {
-            const total = await cargarListado(cia, period);
-            msg.textContent = '';
-            if (total > 0) return;
+            let total = await cargarListado(cia, period);
 
-            const ok = await confirmar('Se va a replicar la distribución del periodo pasado');
-            if (!ok) {
-                toastOk('Consulta cancelada. No se replicó la distribución.');
+            if (total === 0) {
+                const ok = await confirmar('Se va a replicar la distribución del periodo pasado');
+                if (!ok) {
+                    msg.textContent = '';
+                    toastOk('Consulta cancelada. No se replicó la distribución.');
+                    return;
+                }
+                msg.textContent = 'Replicando distribución del periodo anterior...';
+                const data = await sincronizarDistribucion(cia, period);
+                total = await cargarListado(cia, period);
+                msg.textContent = '';
+                toastOk(data.mensaje || 'Distribución replicada correctamente.');
                 return;
             }
 
-            msg.textContent = 'Replicando distribución del periodo anterior...';
-            const data = await postJson('/api/asientos/distribucion-porcentual/replicar', {
-                cia,
-                period
-            });
-            await cargarListado(cia, period);
+            /* Ya hay registros: agregar activos de la empresa que falten (unidad ficha, 100%). */
+            msg.textContent = 'Verificando trabajadores activos...';
+            const sync = await sincronizarDistribucion(cia, period);
+            const nuevos = Number(sync.nuevos || 0);
+            if (nuevos > 0) {
+                total = await cargarListado(cia, period);
+                msg.textContent = '';
+                toastOk(sync.mensaje || `Se agregaron ${nuevos} trabajador(es) activo(s).`);
+                return;
+            }
+
             msg.textContent = '';
-            toastOk(data.mensaje || 'Distribución replicada correctamente.');
         } catch (error) {
             msg.textContent = '';
             toastErr(error.message);

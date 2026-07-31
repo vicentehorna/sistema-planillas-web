@@ -8626,7 +8626,7 @@ def api_distribucion_porcentual_listado():
 @app.route('/api/asientos/distribucion-porcentual/replicar', methods=['POST'])
 @login_required
 def api_distribucion_porcentual_replicar():
-    """sp_pr_replicar_distribucion_voucher_web: copia periodo anterior + nuevos activos."""
+    """sp_pr_replicar_distribucion_voucher_web: si vacío copia periodo anterior; siempre agrega activos faltantes."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
@@ -8661,10 +8661,23 @@ def api_distribucion_porcentual_replicar():
         except (TypeError, ValueError):
             nuevos = 0
         # Mensaje armado en Python (UTF-8) para evitar mojibake del SP vía sqlcmd.
-        mensaje = (
-            f"Distribución replicada desde el periodo {period_origen_fmt}. "
-            f"Copiados: {copiados}. Nuevos: {nuevos}."
-        )
+        if copiados > 0 and nuevos > 0:
+            mensaje = (
+                f"Distribución replicada desde el periodo {period_origen_fmt}. "
+                f"Copiados: {copiados}. Nuevos activos: {nuevos}."
+            )
+        elif copiados > 0:
+            mensaje = (
+                f"Distribución replicada desde el periodo {period_origen_fmt}. "
+                f"Copiados: {copiados}."
+            )
+        elif nuevos > 0:
+            mensaje = (
+                f"Se agregaron {nuevos} trabajador(es) activo(s) sin distribución "
+                f"(unidad de ficha, 100%)."
+            )
+        else:
+            mensaje = "Sin cambios. La distribución del periodo ya está actualizada."
         return jsonify({
             "ok": True,
             "period_origen": _jsonable_value(row.get('period_origen')),

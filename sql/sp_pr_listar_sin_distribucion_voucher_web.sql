@@ -21,7 +21,8 @@ BEGIN
     INNER JOIN SY_Person p (NOLOCK)
         ON p.Person = e.Person
     WHERE e.Company = @company
-      AND UPPER(LTRIM(RTRIM(ISNULL(e.Status, 'Y')))) IN ('Y', 'A', '1')
+      /* Activo en este sistema: Status = 'N' (ver sp_pr_listatrabajadores_web) */
+      AND LTRIM(RTRIM(ISNULL(e.Status, ''))) = 'N'
       AND (e.CeaseDate IS NULL OR e.CeaseDate >= CAST(GETDATE() AS DATE))
       AND NOT EXISTS (
             SELECT 1

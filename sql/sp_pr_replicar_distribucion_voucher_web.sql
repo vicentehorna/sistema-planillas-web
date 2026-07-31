@@ -1,8 +1,12 @@
 /*
-    Replica la distribución OT del periodo anterior hacia @period.
-    1) Copia todos los registros OT del periodo previo (misma compañía).
-    2) Agrega trabajadores activos que no estaban en el periodo previo,
-       con codigo = SY_Person.ReplicationUnit y valor = 100.
+    Asegura la distribución OT del periodo:
+    1) Si el periodo está vacío: copia todos los registros OT del periodo previo
+       (misma compañía).
+    2) Siempre: agrega trabajadores activos de la compañía que aún no estén
+       en el periodo, con codigo = SY_Person.ReplicationUnit y valor = 100.
+
+    Activo en este sistema: PR_Employee.Status = 'N' y sin cese vigente
+    (CeaseDate IS NULL o CeaseDate >= hoy).
 
     Usado por: POST /api/asientos/distribucion-porcentual/replicar
 */
@@ -19,6 +23,7 @@ BEGIN
     DECLARE @tipo VARCHAR(20) = 'OT';
     DECLARE @copiados INT = 0;
     DECLARE @nuevos INT = 0;
+    DECLARE @tiene_periodo BIT = 0;
 
     SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
@@ -37,47 +42,59 @@ BEGIN
           AND period = @period
           AND ISNULL(NULLIF(LTRIM(RTRIM(tipo)), ''), 'OT') = @tipo
     )
-    BEGIN
-        RAISERROR('El periodo ya tiene distribución; no se puede replicar.', 16, 1);
-        RETURN;
-    END;
+        SET @tiene_periodo = 1;
 
-    SELECT @period_ant = MAX(d.period)
-    FROM PR_DistribucionVoucher d (NOLOCK)
-    WHERE d.company = @company
-      AND d.period < @period
-      AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
-
-    IF @period_ant IS NULL
+    IF @tiene_periodo = 0
     BEGIN
-        RAISERROR('No existe un periodo anterior con distribución para replicar.', 16, 1);
-        RETURN;
+        SELECT @period_ant = MAX(d.period)
+        FROM PR_DistribucionVoucher d (NOLOCK)
+        WHERE d.company = @company
+          AND d.period < @period
+          AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
+
+        IF @period_ant IS NULL
+        BEGIN
+            RAISERROR('No existe un periodo anterior con distribución para replicar.', 16, 1);
+            RETURN;
+        END;
+    END
+    ELSE
+    BEGIN
+        SELECT @period_ant = MAX(d.period)
+        FROM PR_DistribucionVoucher d (NOLOCK)
+        WHERE d.company = @company
+          AND d.period < @period
+          AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
     END;
 
     BEGIN TRY
         BEGIN TRANSACTION;
 
-        INSERT INTO PR_DistribucionVoucher (
-            dni, nombre, codigo, valor, period, tipo, company,
-            xlastuser, xlastdate
-        )
-        SELECT
-            LTRIM(RTRIM(d.dni)),
-            LTRIM(RTRIM(ISNULL(d.nombre, ''))),
-            LTRIM(RTRIM(ISNULL(d.codigo, ''))),
-            d.valor,
-            @period,
-            @tipo,
-            @company,
-            @xlastuser,
-            GETDATE()
-        FROM PR_DistribucionVoucher d (NOLOCK)
-        WHERE d.company = @company
-          AND d.period = @period_ant
-          AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
+        IF @tiene_periodo = 0
+        BEGIN
+            INSERT INTO PR_DistribucionVoucher (
+                dni, nombre, codigo, valor, period, tipo, company,
+                xlastuser, xlastdate
+            )
+            SELECT
+                LTRIM(RTRIM(d.dni)),
+                LTRIM(RTRIM(ISNULL(d.nombre, ''))),
+                LTRIM(RTRIM(ISNULL(d.codigo, ''))),
+                d.valor,
+                @period,
+                @tipo,
+                @company,
+                @xlastuser,
+                GETDATE()
+            FROM PR_DistribucionVoucher d (NOLOCK)
+            WHERE d.company = @company
+              AND d.period = @period_ant
+              AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo;
 
-        SET @copiados = @@ROWCOUNT;
+            SET @copiados = @@ROWCOUNT;
+        END;
 
+        /* Trabajadores activos sin distribución en el periodo actual */
         INSERT INTO PR_DistribucionVoucher (
             dni, nombre, codigo, valor, period, tipo, company,
             xlastuser, xlastdate
@@ -96,25 +113,16 @@ BEGIN
         INNER JOIN SY_Person p (NOLOCK)
             ON p.Person = e.Person
         WHERE e.Company = @company
-          AND UPPER(LTRIM(RTRIM(ISNULL(e.Status, 'Y')))) IN ('Y', 'A', '1')
+          AND LTRIM(RTRIM(ISNULL(e.Status, ''))) = 'N'
           AND (e.CeaseDate IS NULL OR e.CeaseDate >= CAST(GETDATE() AS DATE))
           AND NULLIF(LTRIM(RTRIM(ISNULL(p.ReplicationUnit, ''))), '') IS NOT NULL
           AND NOT EXISTS (
                 SELECT 1
                 FROM PR_DistribucionVoucher d (NOLOCK)
                 WHERE d.company = @company
-                  AND d.period = @period_ant
+                  AND d.period = @period
                   AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = @tipo
                   AND LTRIM(RTRIM(d.dni)) = LTRIM(RTRIM(p.Person))
-          )
-          AND NOT EXISTS (
-                SELECT 1
-                FROM PR_DistribucionVoucher d2 (NOLOCK)
-                WHERE d2.company = @company
-                  AND d2.period = @period
-                  AND ISNULL(NULLIF(LTRIM(RTRIM(d2.tipo)), ''), 'OT') = @tipo
-                  AND LTRIM(RTRIM(d2.dni)) = LTRIM(RTRIM(p.Person))
-                  AND LTRIM(RTRIM(d2.codigo)) = LTRIM(RTRIM(p.ReplicationUnit))
           );
 
         SET @nuevos = @@ROWCOUNT;
@@ -126,14 +134,20 @@ BEGIN
             @period AS period_destino,
             @copiados AS copiados,
             @nuevos AS nuevos,
-            'Distribución replicada desde el periodo '
-                + CASE
-                    WHEN LEN(@period_ant) = 8 THEN
-                        LEFT(@period_ant, 4) + '-' + SUBSTRING(@period_ant, 5, 2) + '-' + RIGHT(@period_ant, 2)
-                    ELSE @period_ant
-                  END
-                + '. Copiados: ' + CAST(@copiados AS VARCHAR(10))
-                + '. Nuevos: ' + CAST(@nuevos AS VARCHAR(10)) + '.' AS mensaje;
+            CASE
+                WHEN @copiados > 0 AND @nuevos > 0 THEN
+                    'Distribución replicada desde el periodo anterior. Copiados: '
+                    + CAST(@copiados AS VARCHAR(10))
+                    + '. Nuevos activos: ' + CAST(@nuevos AS VARCHAR(10)) + '.'
+                WHEN @copiados > 0 THEN
+                    'Distribución replicada desde el periodo anterior. Copiados: '
+                    + CAST(@copiados AS VARCHAR(10)) + '.'
+                WHEN @nuevos > 0 THEN
+                    'Se agregaron ' + CAST(@nuevos AS VARCHAR(10))
+                    + ' trabajador(es) activo(s) sin distribución (unidad de ficha, 100%).'
+                ELSE
+                    'Sin cambios. La distribución del periodo ya está actualizada.'
+            END AS mensaje;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0

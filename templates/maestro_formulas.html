@@ -192,10 +192,40 @@
         justify-content: space-between;
         align-items: center;
         margin-bottom: 0.35rem;
+        gap: 0.5rem;
+        flex-wrap: wrap;
     }
 
     .formulas-detalle-toolbar .formulas-seccion-titulo {
         margin: 0;
+    }
+
+    .formulas-tipo-ayuda {
+        flex: 0 0 auto;
+        display: none;
+        width: 100%;
+        margin: 0 0 0.4rem;
+        padding: 0.45rem 0.65rem;
+        border: 1px solid #cfe2ff;
+        border-left: 3px solid #0d6efd;
+        border-radius: 0.25rem;
+        background: #f0f7ff;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: #334155;
+    }
+
+    .formulas-tipo-ayuda.is-visible {
+        display: block;
+    }
+
+    .formulas-tipo-ayuda strong {
+        color: #0d6efd;
+    }
+
+    .formulas-tipo-ayuda .ayuda-params {
+        margin-top: 0.2rem;
+        color: #64748b;
     }
 
     .formulas-seccion-titulo {
@@ -528,11 +558,12 @@
                             <button type="button" class="btn btn-outline-danger" id="btnBorrarLinea">Borrar</button>
                         </div>
                     </div>
+                    <div id="ayudaTipoDetalle" class="formulas-tipo-ayuda" role="status" aria-live="polite"></div>
                     <div class="formulas-detalle-wrap">
                         <table class="table table-bordered table-sm table-formula-detalle mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Tipo</th>
+                                    <th title="Pase el mouse o enfoque el combo Tipo para ver la ayuda de cada función">Tipo</th>
                                     <th>Elemento</th>
                                     <th>Oper.</th>
                                     <th>Proceso</th>
@@ -665,22 +696,84 @@
     }
 
     const TIPOS_DETALLE = [
-        { v: 'C', t: 'Concepto' },
-        { v: 'A', t: 'Asignación' },
-        { v: 'V', t: 'Valor' },
-        { v: 'G', t: 'Grupo' },
-        { v: 'P', t: 'Parámetro' },
-        { v: 'S', t: 'SumaConc' },
-        { v: 'I', t: 'SCIngreso' },
-        { v: 'B', t: 'SC_CTS' },
-        { v: 'R', t: 'SC_GRATI' },
-        { v: 'M', t: 'Promedio Vac' },
-        { v: 'H', t: 'Promedio Grati' },
-        { v: 'X', t: 'CuentaLiq' },
-        { v: 'Y', t: 'CuentaConcepto' },
-        { v: 'Z', t: 'SumaProv' },
-        { v: 'T', t: 'Tipo' },
+        {
+            v: 'C', t: 'Concepto',
+            desc: 'Toma el importe del concepto en el periodo y proceso actuales del cálculo.',
+            params: 'Elemento: concepto. Operador.',
+        },
+        {
+            v: 'A', t: 'Asignación',
+            desc: 'Toma el valor de una asignación manual del trabajador (concepto de tipo asignación).',
+            params: 'Elemento: concepto asignación. Operador.',
+        },
+        {
+            v: 'V', t: 'Valor',
+            desc: 'Inserta un número fijo en la fórmula (constante).',
+            params: 'Elemento: valor numérico. Operador.',
+        },
+        {
+            v: 'G', t: 'Grupo',
+            desc: 'Abre o cierra paréntesis para agrupar operaciones de la fórmula.',
+            params: 'Elemento: Abre ( o Cierra ). Operador opcional.',
+        },
+        {
+            v: 'P', t: 'Parámetro',
+            desc: 'Usa un parámetro de planilla configurado en el maestro de parámetros.',
+            params: 'Elemento: parámetro. Operador.',
+        },
+        {
+            v: 'S', t: 'SumaConc',
+            desc: 'Suma uno o varios conceptos en un proceso y un rango de periodos (Per. ini → Per. fin).',
+            params: 'Elemento: lista de conceptos. Proceso, Per. ini + #, Per. fin + #, Operador.',
+        },
+        {
+            v: 'I', t: 'SCIngreso',
+            desc: 'Suma un concepto desde el periodo de ingreso/reingreso del trabajador hasta el periodo fin indicado.',
+            params: 'Elemento: concepto. Proceso, Per. fin + #, Operador.',
+        },
+        {
+            v: 'B', t: 'SC_CTS',
+            desc: 'Suma un concepto desde el inicio del ciclo CTS (may–oct o nov–abr) hasta el periodo fin. Respeta fecha de ingreso.',
+            params: 'Elemento: concepto. Proceso, Per. fin + #, Operador.',
+        },
+        {
+            v: 'R', t: 'SC_GRATI',
+            desc: 'Suma un concepto desde el inicio del ciclo de gratificación (ene–jun o jul–dic) hasta el periodo fin.',
+            params: 'Elemento: concepto. Proceso, Per. fin + #, Operador.',
+        },
+        {
+            v: 'M', t: 'Promedio Vac',
+            desc: 'Promedio de un concepto en un proceso y rango de periodos. Si hay menos meses con importe > 0 que el mínimo, devuelve 0. Divide entre Div. (o meses del rango desde ingreso si Div. vacío).',
+            params: 'Elemento: concepto. Proceso, Per. ini + #, Per. fin + #, Mín. (meses), Div. (opcional), Operador.',
+        },
+        {
+            v: 'H', t: 'Promedio Grati',
+            desc: 'Igual que Promedio Vac, pero el periodo inicial lo fija el ciclo de gratificación: ene–jul → enero; ago–dic → julio del mismo año.',
+            params: 'Elemento: concepto. Proceso, Per. fin + #, Mín. (meses), Div. (opcional), Operador.',
+        },
+        {
+            v: 'X', t: 'CuentaLiq',
+            desc: 'En liquidación: suma el concepto en el tramo del ciclo (CTS / GRATI / VACA según T.Liq) desde ingreso hasta la fecha de cese.',
+            params: 'Elemento: concepto. T.Liq (CTS, GRATI o VACA), Operador.',
+        },
+        {
+            v: 'Y', t: 'CuentaConcepto',
+            desc: 'En liquidación: cuenta cuántas veces aparece el concepto en el tramo del ciclo (CTS / GRATI / VACA) hasta el cese.',
+            params: 'Elemento: concepto. T.Liq (CTS, GRATI o VACA), Operador.',
+        },
+        {
+            v: 'Z', t: 'SumaProv',
+            desc: 'Cuenta cuántos periodos del rango tienen el concepto en el proceso indicado (cantidad de meses con el concepto, no la suma de importes).',
+            params: 'Elemento: concepto. Proceso, Per. ini + #, Per. fin + #, Operador.',
+        },
+        {
+            v: 'T', t: 'Tipo',
+            desc: 'Provisión del ciclo según T.Liq (CTS, GRATI o VACA): calcula la provisión acumulada del concepto según reglas de inicio de ciclo y mes en proceso.',
+            params: 'Elemento: concepto. T.Liq (CTS, GRATI o VACA), Operador.',
+        },
     ];
+
+    const TIPOS_DETALLE_MAP = Object.fromEntries(TIPOS_DETALLE.map((it) => [it.v, it]));
 
     const OPERADORES = [
         { v: 'P', t: '(+)' },
@@ -785,11 +878,46 @@
         if (tipo !== 'V') document.getElementById('cboParametroFormula').value = '';
     }
 
+    function textoAyudaTipo(tipo) {
+        const it = TIPOS_DETALLE_MAP[tipo];
+        if (!it) return '';
+        const parts = [it.t + ': ' + (it.desc || '')];
+        if (it.params) parts.push('Parámetros: ' + it.params);
+        return parts.join(' ');
+    }
+
+    function htmlAyudaTipo(tipo) {
+        const it = TIPOS_DETALLE_MAP[tipo];
+        if (!it) return '';
+        return (
+            `<strong>${escHtml(it.t)}</strong> — ${escHtml(it.desc || '')}`
+            + (it.params
+                ? `<div class="ayuda-params"><strong>Parámetros:</strong> ${escHtml(it.params)}</div>`
+                : '')
+        );
+    }
+
+    function mostrarAyudaTipo(tipo) {
+        const box = document.getElementById('ayudaTipoDetalle');
+        if (!box) return;
+        const html = htmlAyudaTipo(tipo);
+        if (!html) {
+            box.classList.remove('is-visible');
+            box.innerHTML = '';
+            return;
+        }
+        box.innerHTML = html;
+        box.classList.add('is-visible');
+    }
+
     function opcionesHtml(items, valSel, blank) {
         let html = blank ? '<option value="">—</option>' : '';
         items.forEach((it) => {
             const sel = String(valSel || '') === String(it.v) ? ' selected' : '';
-            html += `<option value="${escHtml(it.v)}"${sel}>${escHtml(it.t)}</option>`;
+            const tip = it.desc
+                ? ` title="${escHtml(textoAyudaTipo(it.v))}"`
+                : '';
+            html += `<option value="${escHtml(it.v)}"${sel}${tip}>${escHtml(it.t)}</option>`;
         });
         return html;
     }
@@ -953,7 +1081,7 @@
             const showDiv = tipoDetalleMuestraDivisor(ln.tipo);
             const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
             return `<tr class="linea-detalle${activo}" data-idx="${idx}">
-                <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
+                <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}" title="${escHtml(textoAyudaTipo(ln.tipo))}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
                 <td>${renderElementoCelda(ln, idx)}</td>
                 <td><select class="form-select form-select-sm celda-operador" data-idx="${idx}">${opcionesHtml(OPERADORES, ln.operador, true)}</select></td>
                 <td>${showProc ? `<select class="form-select form-select-sm celda-process" data-idx="${idx}">${opcionesSelectApi(cacheProcesos, ln.process)}</select>` : '—'}</td>
@@ -1023,6 +1151,24 @@
         bind('.celda-valormin', 'valor', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-divisor', 'divisor', (v) => (v === '' ? null : parseInt(v, 10)));
         bind('.celda-tipoliq', 'tipoliq');
+
+        tbodyDetalle.querySelectorAll('.celda-tipo').forEach((el) => {
+            const refrescarAyuda = () => {
+                const opt = el.options[el.selectedIndex];
+                const tipo = opt ? opt.value : el.value;
+                mostrarAyudaTipo(tipo);
+                el.title = textoAyudaTipo(tipo);
+            };
+            el.addEventListener('focus', refrescarAyuda);
+            el.addEventListener('mouseenter', refrescarAyuda);
+            el.addEventListener('mousemove', refrescarAyuda);
+            el.addEventListener('keyup', refrescarAyuda);
+            el.addEventListener('change', refrescarAyuda);
+        });
+
+        if (lineaSeleccionada != null && lineasDetalle[lineaSeleccionada]) {
+            mostrarAyudaTipo(lineasDetalle[lineaSeleccionada].tipo);
+        }
 
         tbodyDetalle.querySelectorAll('.celda-conceptlist-btn').forEach((btn) => {
             btn.addEventListener('mousedown', (e) => e.stopPropagation());

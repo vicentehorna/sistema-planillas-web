@@ -484,6 +484,31 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function periodoFinTieneOpciones() {
+        const cboFin = document.getElementById('cboModalPeriodoFin');
+        if (!cboFin) return false;
+        return Array.from(cboFin.options).some((o) => String(o.value || '').trim() !== '');
+    }
+
+    async function onCambioTipoAsignacion() {
+        actualizarEstadoPeriodoFinModal();
+        if (tipoAsignacionSeleccionado() !== 'T') return;
+
+        const cia = document.getElementById('hdModalCompania').value.trim();
+        const payrolltype = document.getElementById('hdModalPlanilla').value.trim();
+        if (!cia || !payrolltype) return;
+
+        /* Al pasar de Permanente → Temporal en edición, Hasta nunca se pobló. */
+        if (!periodoFinTieneOpciones()) {
+            try {
+                await poblarPeriodoFinModal(cia, payrolltype, '', '');
+            } catch (err) {
+                console.error(err);
+                hmError('No se pudo cargar la lista de periodos.');
+            }
+        }
+    }
+
     function setModalCamposClaveDisabled(esEdicion) {
         const bloqueados = ['cboModalEmpleado', 'cboModalConcepto', 'cboModalPeriodoInicio'];
         bloqueados.forEach((id) => {
@@ -885,15 +910,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         modalAsignacion.show();
         requestAnimationFrame(() => capturarSnapshotModalAsig());
 
-        if (tipo === 'T') {
-            const periodoFin = String(det.prperiodend || '').trim();
-            try {
-                await poblarPeriodoFinModal(cia, payrolltype, periodoFin, fmtPeriodoDisplay(periodoFin));
-                capturarSnapshotModalAsig();
-            } catch (err) {
-                console.error(err);
-                hmError('No se pudo cargar la lista de periodos.');
-            }
+        /* Siempre cargar periodos de Hasta: si es permanente y luego cambia a temporal, ya están listos. */
+        const periodoFin = String(det.prperiodend || '').trim();
+        try {
+            await poblarPeriodoFinModal(cia, payrolltype, periodoFin, fmtPeriodoDisplay(periodoFin));
+            capturarSnapshotModalAsig();
+        } catch (err) {
+            console.error(err);
+            hmError('No se pudo cargar la lista de periodos.');
         }
     }
 
@@ -1682,7 +1706,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     document.querySelectorAll('input[name="radModalTipo"]').forEach((el) => {
-        el.addEventListener('change', actualizarEstadoPeriodoFinModal);
+        el.addEventListener('change', () => { onCambioTipoAsignacion(); });
     });
 
     document.getElementById('btnNuevaAsignacion').addEventListener('click', abrirModalNuevo);

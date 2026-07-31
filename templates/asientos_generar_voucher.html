@@ -4,102 +4,190 @@
 
 {% block extra_css %}
 <style>
-    .gv-section {
-        border: 1px solid #dee2e6;
-        border-radius: .5rem;
+    /* Paneles de sección (mismo lenguaje visual que vacaciones / contratos) */
+    .gv-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
         background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
         overflow: hidden;
-        box-shadow: 0 .05rem .2rem rgba(0,0,0,.04);
     }
-    .gv-section-head {
+
+    .gv-dw-titlebar {
+        background: #1a4b84;
+        border-bottom: none;
+        padding: 0.45rem 0.75rem;
+        min-height: 2rem;
         display: flex;
+        justify-content: space-between;
         align-items: center;
-        gap: .5rem;
-        padding: .55rem .9rem;
-        border-bottom: 1px solid #e9ecef;
-        font-size: .9rem;
+        gap: 0.5rem;
+        font-size: 0.8rem;
         font-weight: 600;
-        color: #212529;
+        color: #fff;
         flex-wrap: wrap;
     }
-    .gv-section-head i { opacity: .85; }
-    .gv-section-params {
-        background: linear-gradient(180deg, #f4f8ff 0%, #eef4fc 100%);
-        border-color: #cfe2ff;
+
+    .gv-dw-titlebar .gv-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
     }
-    .gv-section-params .gv-section-head {
-        background: #e7f1ff;
-        border-bottom-color: #cfe2ff;
-        color: #0b5ed7;
+
+    .gv-dw-titlebar .gv-dw-title-text i {
+        opacity: 0.95;
     }
-    .gv-section-result .gv-section-head {
-        background: #f8f9fa;
+
+    .gv-dw-titlebar .badge {
+        background: rgba(255, 255, 255, 0.18) !important;
+        color: #fff !important;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+        font-weight: 600;
     }
-    .gv-grilla { max-height: 220px; overflow: auto; }
-    .gv-grilla-detail { max-height: 340px; overflow: auto; }
-    .table-gv { font-size: 12px; margin-bottom: 0; white-space: nowrap; }
-    .table-gv th, .table-gv td { padding: .28rem .4rem; vertical-align: middle; }
+
+    .gv-dw-hint {
+        font-size: 0.72rem;
+        font-weight: 400;
+        color: rgba(255, 255, 255, 0.78);
+        text-transform: none;
+        letter-spacing: 0;
+    }
+
+    .gv-dw-body {
+        background: #fff;
+        padding: 0.65rem 0.7rem 0.75rem;
+        border-top: none;
+    }
+
+    .gv-table-scroll,
+    .gv-table-scroll-md {
+        max-height: 220px;
+        overflow: auto;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+
+    .gv-table-scroll-md {
+        max-height: 340px;
+    }
+
+    .table-gv {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+        border-color: #e6ebf1;
+    }
+
+    .table-gv th,
+    .table-gv td {
+        padding: 0.4rem 0.55rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+
     .table-gv thead th {
-        position: sticky; top: 0; background: #eef2f6; z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6; font-weight: 600; color: #495057;
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
     }
-    .table-gv .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    .table-gv tbody tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+
+    .table-gv .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+
     .gv-status-A { color: #198754; font-weight: 600; }
     .gv-status-E { color: #dc3545; font-weight: 600; }
+
     .gv-totales {
         display: flex;
         flex-wrap: wrap;
-        gap: .75rem 1.25rem;
-        padding: .55rem .9rem;
-        background: #f1f3f5;
-        border-top: 1px solid #dee2e6;
-        font-size: .8rem;
-        color: #495057;
+        gap: 0.75rem 1.25rem;
+        margin-top: 0.55rem;
+        padding: 0.4rem 0.55rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        color: #6c757d;
     }
+
     .gv-totales strong {
-        color: #212529;
+        color: #1a4b84;
         font-variant-numeric: tabular-nums;
     }
+
     .gv-totales .gv-diff-ok { color: #198754; }
     .gv-totales .gv-diff-bad { color: #dc3545; }
+
     .gv-errores {
         min-height: 64px;
-        border-radius: 0 0 .5rem .5rem;
-        padding: .75rem .9rem;
+        padding: 0.65rem 0.75rem;
         white-space: pre-wrap;
-        font-size: 13px;
-        border-top: 1px solid #e9ecef;
+        font-size: 0.82rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #fafbfc;
+        color: #6c757d;
     }
+
     .gv-errores.is-empty {
-        background: #f8f9fa;
+        background: #fafbfc;
         color: #6c757d;
     }
+
     .gv-errores.is-ok {
-        background: #d1e7dd;
+        background: #eef7f1;
         color: #0f5132;
-        border-top-color: #badbcc;
+        border-color: #c5dfd0;
     }
+
     .gv-errores.is-error {
-        background: #f8d7da;
+        background: #fdf2f3;
         color: #842029;
-        border-top-color: #f5c2c7;
+        border-color: #efc2c7;
     }
-    .gv-hint {
-        font-size: .78rem;
-        font-weight: 400;
+
+    .gv-form-hint {
+        font-size: 0.75rem;
         color: #6c757d;
+        margin: 0.55rem 0 0;
+    }
+
+    .gv-btn-generar {
+        white-space: nowrap;
+        min-height: calc(1.5em + 0.5rem + 2px);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+
+    .gv-placeholder-row td {
+        color: #6c757d !important;
+        font-weight: 400 !important;
+        background: #fff !important;
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="gv-section gv-section-params mb-3">
-    <div class="gv-section-head">
-        <i class="bi bi-sliders"></i>
-        <span>Parámetros de generación</span>
-        <span class="gv-hint ms-1">Complete los filtros y pulse Generar</span>
-    </div>
-    <div class="py-3 px-3">
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
         <form id="frmGenerarVoucher">
             <div class="row g-2 align-items-end">
                 <div class="col-12 col-md-4 col-lg-3">
@@ -137,7 +225,7 @@
                     </select>
                 </div>
                 <div class="col-6 col-md-3 col-lg-2">
-                    <label for="txtDni" class="form-label small fw-bold text-muted mb-1">DNI <span class="fw-normal">(opcional)</span></label>
+                    <label for="txtDni" class="form-label small fw-bold text-muted mb-1">DNI <span class="fw-normal opacity-75">(opcional)</span></label>
                     <input id="txtDni" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Vacío = toda la planilla" autocomplete="off">
                 </div>
                 <div class="col-12 col-md-6 col-lg-3">
@@ -156,30 +244,28 @@
                     <label for="txtFecha" class="form-label small fw-bold text-muted mb-1">F. Generación</label>
                     <input id="txtFecha" type="date" class="form-control form-control-sm" required>
                 </div>
-                <div class="col-auto ms-auto d-flex gap-2">
-                    <button type="submit" id="btnGenerar" class="btn btn-primary btn-sm px-4">
+                <div class="col-auto ms-auto">
+                    <button type="submit" id="btnGenerar" class="btn btn-primary btn-sm px-4 gv-btn-generar">
                         <i class="bi bi-play-circle"></i> Generar
                     </button>
                 </div>
             </div>
-            <div class="small text-muted mt-2">
+            <p class="gv-form-hint">
+                <i class="bi bi-info-circle"></i>
                 Si indica un DNI válido, se genera un asiento solo de ese trabajador (no modifica el voucher general de la planilla).
-            </div>
+            </p>
         </form>
     </div>
 </div>
 
-<div class="gv-section gv-section-result mb-3">
-    <div class="gv-section-head">
-        <i class="bi bi-table text-secondary"></i>
-        <span>Resultado del voucher</span>
-        <span class="gv-hint ms-1">Cabecera, líneas contables y cuadre</span>
+<div class="gv-dw-panel mb-3">
+    <div class="gv-dw-titlebar">
+        <span class="gv-dw-title-text"><i class="bi bi-card-heading"></i> Cabecera del voucher</span>
+        <span class="gv-dw-hint">Resumen del asiento generado</span>
     </div>
-
-    <div class="px-3 pt-3 pb-1">
-        <div class="small fw-semibold text-muted mb-1">Cabecera</div>
-        <div class="border rounded gv-grilla bg-white">
-            <table class="table table-bordered table-sm table-gv">
+    <div class="gv-dw-body">
+        <div class="gv-table-scroll">
+            <table class="table table-bordered table-sm table-gv align-middle mb-0">
                 <thead>
                     <tr>
                         <th>No</th>
@@ -190,16 +276,21 @@
                     </tr>
                 </thead>
                 <tbody id="tbHeader">
-                    <tr><td colspan="5" class="text-center text-muted py-3">Sin resultados</td></tr>
+                    <tr class="gv-placeholder-row"><td colspan="5" class="text-center py-3">Sin resultados</td></tr>
                 </tbody>
             </table>
         </div>
     </div>
+</div>
 
-    <div class="px-3 pt-3">
-        <div class="small fw-semibold text-muted mb-1">Detalle del voucher</div>
-        <div class="border rounded gv-grilla-detail bg-white">
-            <table class="table table-bordered table-sm table-gv">
+<div class="gv-dw-panel mb-3">
+    <div class="gv-dw-titlebar">
+        <span class="gv-dw-title-text"><i class="bi bi-table"></i> Detalle del voucher</span>
+        <span class="badge" id="badgeLineas">0 líneas</span>
+    </div>
+    <div class="gv-dw-body">
+        <div class="gv-table-scroll-md">
+            <table class="table table-bordered table-sm table-gv align-middle mb-0">
                 <thead>
                     <tr>
                         <th>Cuenta</th>
@@ -212,26 +303,27 @@
                     </tr>
                 </thead>
                 <tbody id="tbDetail">
-                    <tr><td colspan="7" class="text-center text-muted py-3">Sin resultados</td></tr>
+                    <tr class="gv-placeholder-row"><td colspan="7" class="text-center py-3">Sin resultados</td></tr>
                 </tbody>
             </table>
         </div>
-    </div>
-
-    <div class="gv-totales mt-3">
-        <span>Líneas: <strong id="lblLineas">0</strong></span>
-        <span>Total Créditos: <strong id="lblCreditos">0.00</strong></span>
-        <span>Débitos: <strong id="lblDebitos">0.00</strong></span>
-        <span>Diferencia: <strong id="lblDiff" class="gv-diff-ok">0.00</strong></span>
+        <div class="gv-totales">
+            <span>Líneas: <strong id="lblLineas">0</strong></span>
+            <span>Total Créditos: <strong id="lblCreditos">0.00</strong></span>
+            <span>Débitos: <strong id="lblDebitos">0.00</strong></span>
+            <span>Diferencia: <strong id="lblDiff" class="gv-diff-ok">0.00</strong></span>
+        </div>
     </div>
 </div>
 
-<div class="gv-section mb-3">
-    <div class="gv-section-head">
-        <i class="bi bi-exclamation-octagon text-secondary" id="icoErrores"></i>
-        <span>Detalle errores</span>
+<div class="gv-dw-panel mb-3">
+    <div class="gv-dw-titlebar">
+        <span class="gv-dw-title-text"><i class="bi bi-exclamation-octagon" id="icoErrores"></i> Detalle errores</span>
+        <span class="gv-dw-hint">Cuadre y validaciones del asiento</span>
     </div>
-    <div id="boxErrores" class="gv-errores is-empty">Sin errores.</div>
+    <div class="gv-dw-body">
+        <div id="boxErrores" class="gv-errores is-empty">Sin errores.</div>
+    </div>
 </div>
 {% endblock %}
 
@@ -250,8 +342,8 @@
     const frm = document.getElementById('frmGenerarVoucher');
     const boxErrores = document.getElementById('boxErrores');
     const icoErrores = document.getElementById('icoErrores');
+    const badgeLineas = document.getElementById('badgeLineas');
     let dniValidado = '';
-
 
     function hoyISO() {
         const d = new Date();
@@ -339,16 +431,21 @@
         return st || '';
     }
 
+    function setBadgeLineas(n) {
+        const count = Number(n || 0);
+        if (badgeLineas) badgeLineas.textContent = count === 1 ? '1 línea' : `${count} líneas`;
+    }
+
     function setErroresBox(mode, text) {
         boxErrores.classList.remove('is-empty', 'is-ok', 'is-error');
         boxErrores.classList.add(mode);
         boxErrores.textContent = text;
         if (icoErrores) {
             icoErrores.className = mode === 'is-error'
-                ? 'bi bi-exclamation-octagon-fill text-danger'
+                ? 'bi bi-exclamation-octagon-fill'
                 : mode === 'is-ok'
-                    ? 'bi bi-check-circle-fill text-success'
-                    : 'bi bi-exclamation-octagon text-secondary';
+                    ? 'bi bi-check-circle-fill'
+                    : 'bi bi-exclamation-octagon';
         }
     }
 
@@ -356,12 +453,13 @@
         const options = opts || {};
         const msg = options.mensaje || 'Sin resultados';
         document.getElementById('tbHeader').innerHTML =
-            `<tr><td colspan="5" class="text-center text-muted py-3">${msg}</td></tr>`;
+            `<tr class="gv-placeholder-row"><td colspan="5" class="text-center py-3">${msg}</td></tr>`;
         document.getElementById('tbDetail').innerHTML =
-            `<tr><td colspan="7" class="text-center text-muted py-3">${msg}</td></tr>`;
+            `<tr class="gv-placeholder-row"><td colspan="7" class="text-center py-3">${msg}</td></tr>`;
         document.getElementById('lblLineas').textContent = '0';
         document.getElementById('lblCreditos').textContent = '0.00';
         document.getElementById('lblDebitos').textContent = '0.00';
+        setBadgeLineas(0);
         const lblDiff = document.getElementById('lblDiff');
         lblDiff.textContent = '0.00';
         lblDiff.classList.add('gv-diff-ok');
@@ -430,12 +528,13 @@
             const label = texto || 'Generando voucher…';
             const spinner = `<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>${label}`;
             document.getElementById('tbHeader').innerHTML =
-                `<tr><td colspan="5" class="text-center text-primary py-3">${spinner}</td></tr>`;
+                `<tr class="gv-placeholder-row"><td colspan="5" class="text-center text-primary py-3">${spinner}</td></tr>`;
             document.getElementById('tbDetail').innerHTML =
-                `<tr><td colspan="7" class="text-center text-primary py-3">${spinner}</td></tr>`;
+                `<tr class="gv-placeholder-row"><td colspan="7" class="text-center text-primary py-3">${spinner}</td></tr>`;
             document.getElementById('lblLineas').textContent = '0';
             document.getElementById('lblCreditos').textContent = '0.00';
             document.getElementById('lblDebitos').textContent = '0.00';
+            setBadgeLineas(0);
             const lblDiff = document.getElementById('lblDiff');
             lblDiff.textContent = '0.00';
             lblDiff.classList.add('gv-diff-ok');
@@ -456,6 +555,7 @@
         const totals = data.totals || {};
         const errors = data.errors || [];
         const diff = Number(totals.diff_lo || 0);
+        const lineCount = totals.lines || details.length || 0;
 
         document.getElementById('tbHeader').innerHTML = `
             <tr>
@@ -468,7 +568,7 @@
 
         if (!details.length) {
             document.getElementById('tbDetail').innerHTML =
-                '<tr><td colspan="7" class="text-center text-muted py-3">Sin detalle</td></tr>';
+                '<tr class="gv-placeholder-row"><td colspan="7" class="text-center py-3">Sin detalle</td></tr>';
         } else {
             document.getElementById('tbDetail').innerHTML = details.map(d => `
                 <tr>
@@ -483,7 +583,8 @@
             `).join('');
         }
 
-        document.getElementById('lblLineas').textContent = totals.lines || details.length || 0;
+        document.getElementById('lblLineas').textContent = lineCount;
+        setBadgeLineas(lineCount);
         document.getElementById('lblCreditos').textContent = fmtNum(totals.totalcreditlo);
         document.getElementById('lblDebitos').textContent = fmtNum(totals.totaldebitlo);
         const lblDiff = document.getElementById('lblDiff');
@@ -535,7 +636,6 @@
             body.dni = (txtDni.value || '').trim();
         }
 
-        // Limpiar resultado anterior de inmediato para que el usuario vea el nuevo proceso
         limpiarResultado({
             mensaje: body.dni ? `Generando voucher DNI ${body.dni}…` : 'Generando voucher…',
             errorMode: 'is-empty',

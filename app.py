@@ -4494,6 +4494,13 @@ _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
     'APORTE_EPS',
 )
 
+_FORMATO_LIQ_CABECERA_FORMULACODES = (
+    'LIQ_REM_BASICA',
+    'ANIO',
+    'MES',
+    'DIA',
+)
+
 
 def _formato_liquidacion_fc_valor(formula_values, *codes, default=0.0):
     formula_values = formula_values or {}
@@ -4529,6 +4536,7 @@ def _formato_liquidacion_formulacodes_requeridos():
     codes.update(_FORMATO_LIQ_GRATI_FORMULACODES)
     codes.update(_FORMATO_LIQ_VACA_FORMULACODES)
     codes.update(_FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES)
+    codes.update(_FORMATO_LIQ_CABECERA_FORMULACODES)
     return sorted(codes)
 
 
@@ -4575,6 +4583,7 @@ def _build_formato_liquidacion_remuneracion(formula_values):
     formula_values = formula_values or {}
     filas = []
     totales = {'cts': 0.0, 'grati': 0.0, 'vaca': 0.0}
+    totales_fc = {'cts': [], 'grati': [], 'vaca': []}
     es_divisa = False
     try:
         from database import get_active_database
@@ -4591,12 +4600,19 @@ def _build_formato_liquidacion_remuneracion(formula_values):
             valor = float(formula_values.get(fc, 0) or 0) if fc else 0.0
             totales[col] += valor
             fila[f'{col}_fmt'] = _formato_liquidacion_moneda(valor)
+            fila[f'{col}_fc'] = fc or ''
+            if fc:
+                totales_fc[col].append(fc)
         filas.append(fila)
     totales_fmt = {
         col: _formato_liquidacion_moneda(totales[col])
         for col in ('cts', 'grati', 'vaca')
     }
-    return filas, totales_fmt, totales
+    totales_fc_fmt = {
+        col: ' + '.join(totales_fc[col]) if totales_fc[col] else ''
+        for col in ('cts', 'grati', 'vaca')
+    }
+    return filas, totales_fmt, totales, totales_fc_fmt
 
 
 def _build_formato_liquidacion_trunca(total_base, formula_values, meses_code, dias_code, dias_falta_code=None):
@@ -4634,6 +4650,11 @@ def _build_formato_liquidacion_trunca(total_base, formula_values, meses_code, di
         'x_dia_fmt': _formato_liquidacion_moneda(x_dia),
         'total_fmt': _formato_liquidacion_moneda(total),
         'total': total,
+        'meses_fc': meses_code or '',
+        'dias_fc': dias_code or '',
+        'dias_falta_fc': dias_falta_code or '',
+        'formula_meses_fc': f'(Σ rem.CTS / 12) × {meses_code}' if meses_code else '',
+        'formula_dias_fc': f'(Σ rem.CTS / 360) × {dias_code}' if dias_code else '',
     }
     if dias_falta_code:
         try:
@@ -4679,6 +4700,9 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
                 'base_fmt': '',
                 'importe_fmt': _formato_liquidacion_moneda(importe),
                 'importe': importe,
+                'formula_code': defn.get('formula_code') or '',
+                'base_formula_code': '',
+                'pct_formula_code': '',
             })
             continue
         importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
@@ -4703,12 +4727,16 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
             'base_fmt': base_fmt,
             'importe_fmt': _formato_liquidacion_moneda(importe),
             'importe': importe,
+            'formula_code': defn.get('formula_code') or '',
+            'base_formula_code': base_formula_code if not defn.get('placeholder') else '',
+            'pct_formula_code': pct_formula_code or '',
         })
 
     return {
         'filas': filas,
         'total_fmt': _formato_liquidacion_moneda(total),
         'total': total,
+        'base_formula_code': base_formula_code,
     }
 
 
@@ -4740,6 +4768,11 @@ def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
     total = x_mes + x_dia
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
+    resultado['x_mes_fc'] = 'CTSXMES'
+    resultado['x_dia_fc'] = 'CTSXDIA'
+    resultado['total_fc'] = 'CTSXMES + CTSXDIA'
+    resultado['formula_meses_fc'] = '(Σ rem.CTS / 12) × C_CTSMESES → CTSXMES'
+    resultado['formula_dias_fc'] = '(Σ rem.CTS / 360) × DIAS_CTS_TRUNCO → CTSXDIA'
     return resultado
 
 
@@ -4775,6 +4808,12 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
         bono_9 = 0.0
     resultado['bono_9'] = bono_9
     resultado['bono_9_fmt'] = _formato_liquidacion_moneda(bono_9)
+    resultado['x_mes_fc'] = 'GRATI_TRUNCA'
+    resultado['x_dia_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS'
+    resultado['total_fc'] = 'GRATI_TRUNCA'
+    resultado['bono_9_fc'] = 'BONIF_EXTRA_ESSALUD'
+    resultado['formula_meses_fc'] = '(Σ rem.GRATI / 6) × NUMERO_MESES → GRATI_TRUNCA'
+    resultado['formula_dias_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS'
     return resultado
 
 
@@ -4830,10 +4869,24 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'devolucion_quinta_fmt': _formato_liquidacion_moneda(devolucion_quinta),
         'otros_ingresos_afectos': otros_ingresos_afectos,
         'otros_ingresos_afectos_fmt': _formato_liquidacion_moneda(otros_ingresos_afectos),
+        'anios_fc': 'ANIOSVACTRUNCA',
+        'meses_fc': 'MESES_VAC_TRUN',
+        'dias_fc': 'DIAS_VAC_TRUN',
+        'dias_falta_fc': 'XFALTASVACA / DIASFALTAVACLIQ',
+        'x_anio_fc': 'VACACIONANIO',
+        'x_mes_fc': 'VACXMES',
+        'x_dia_fc': 'VACXDIA',
+        'total_fc': 'VACACIONANIO + VACXMES + VACXDIA',
+        'devolucion_quinta_fc': 'DEVOLUCION_QUINTA',
+        'otros_ingresos_afectos_fc': 'LIQINGRESOAFECTO',
+        'formula_anios_fc': 'Σ rem.VACA × ANIOSVACTRUNCA → VACACIONANIO',
+        'formula_meses_fc': '(Σ rem.VACA / 12) × MESES_VAC_TRUN → VACXMES',
+        'formula_dias_fc': '(Σ rem.VACA / 30) × DIAS_VAC_TRUN → VACXDIA',
     }
 
 
-def generar_pdf_formato_liquidacion(params):
+def _contexto_formato_liquidacion(params, include_images=True):
+    """Datos compartidos del formato de liquidación (PDF y vista analista)."""
     cia_param = str(params.get('cia') or '').strip()
     if not cia_param and has_request_context():
         ensure_user_session()
@@ -4869,12 +4922,21 @@ def generar_pdf_formato_liquidacion(params):
     if not liq:
         raise ValueError('No se encontraron datos para el formato de liquidación.')
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
+    logo_src = ''
+    firma_src = ''
+    if include_images:
+        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+        logo_src = _image_data_uri(ruta_logo)
+        firma_src = _image_data_uri(ruta_firma)
+
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'
-    remuneracion_rows, remuneracion_totales, remuneracion_totales_raw = _build_formato_liquidacion_remuneracion(formula_values)
+    (
+        remuneracion_rows,
+        remuneracion_totales,
+        remuneracion_totales_raw,
+        remuneracion_totales_fc,
+    ) = _build_formato_liquidacion_remuneracion(formula_values)
     cts_calc = _build_formato_liquidacion_cts(remuneracion_totales_raw.get('cts'), formula_values)
     grati_calc = _build_formato_liquidacion_grati(remuneracion_totales_raw.get('grati'), formula_values)
     vaca_calc = _build_formato_liquidacion_vaca(remuneracion_totales_raw.get('vaca'), formula_values)
@@ -4892,27 +4954,41 @@ def generar_pdf_formato_liquidacion(params):
     neto_a_pagar = total_ingresos - float(descuentos_calc.get('total') or 0)
     neto_a_pagar_fmt = _formato_liquidacion_moneda(neto_a_pagar)
 
-    html_renderizado = render_template(
-        'formato_liquidacion_pdf.html',
-        liq=liq,
-        logo_src=logo_src,
-        firma_src=firma_src,
-        regimen_pensionario=_regimen_pensionario_formato_liquidacion(liq),
-        basico_fmt=_formato_liquidacion_moneda(liq.get('basico')),
-        entry_date_fmt=_formato_liquidacion_fecha(liq.get('entry_date')),
-        cease_date_fmt=_formato_liquidacion_fecha(liq.get('cease_date')),
-        cero=cero,
-        cero_pct=cero_pct,
-        remuneracion_rows=remuneracion_rows,
-        remuneracion_totales=remuneracion_totales,
-        cts_calc=cts_calc,
-        grati_calc=grati_calc,
-        vaca_calc=vaca_calc,
-        total_ingresos_fmt=total_ingresos_fmt,
-        descuentos_calc=descuentos_calc,
-        aportaciones_calc=aportaciones_calc,
-        neto_a_pagar_fmt=neto_a_pagar_fmt,
-    )
+    return {
+        'cia': cia,
+        'payroll_type': payroll_type,
+        'period': period,
+        'person': person,
+        'liq': liq,
+        'formula_values': formula_values,
+        'logo_src': logo_src,
+        'firma_src': firma_src,
+        'regimen_pensionario': _regimen_pensionario_formato_liquidacion(liq),
+        'basico_fmt': _formato_liquidacion_moneda(liq.get('basico')),
+        'basico_fc': 'LIQ_REM_BASICA',
+        'anios_servicio_fc': 'ANIO',
+        'meses_servicio_fc': 'MES',
+        'dias_servicio_fc': 'DIA',
+        'entry_date_fmt': _formato_liquidacion_fecha(liq.get('entry_date')),
+        'cease_date_fmt': _formato_liquidacion_fecha(liq.get('cease_date')),
+        'cero': cero,
+        'cero_pct': cero_pct,
+        'remuneracion_rows': remuneracion_rows,
+        'remuneracion_totales': remuneracion_totales,
+        'remuneracion_totales_fc': remuneracion_totales_fc,
+        'cts_calc': cts_calc,
+        'grati_calc': grati_calc,
+        'vaca_calc': vaca_calc,
+        'total_ingresos_fmt': total_ingresos_fmt,
+        'descuentos_calc': descuentos_calc,
+        'aportaciones_calc': aportaciones_calc,
+        'neto_a_pagar_fmt': neto_a_pagar_fmt,
+    }
+
+
+def generar_pdf_formato_liquidacion(params):
+    ctx = _contexto_formato_liquidacion(params, include_images=True)
+    html_renderizado = render_template('formato_liquidacion_pdf.html', **ctx)
 
     if WEASYPRINT_AVAILABLE:
         pdf_io = io.BytesIO()
@@ -15433,6 +15509,28 @@ def enviar_certificados_retiro_cts_masivo():
 @login_required
 def formato_liquidacion_page():
     return render_template('formato_liquidacion.html')
+
+
+@app.route('/liquidaciones/mapa_conceptos_liquidacion')
+@login_required
+def mapa_conceptos_liquidacion_page():
+    """Vista analista: mismo diseño del formato con FormulaCode por importe."""
+    return render_template('mapa_conceptos_liquidacion.html')
+
+
+@app.route('/api/liquidaciones/mapa-conceptos')
+@login_required
+def api_mapa_conceptos_liquidacion():
+    """HTML del mapa de conceptos (solo analista)."""
+    try:
+        ctx = _contexto_formato_liquidacion(request.args, include_images=False)
+        html = render_template('mapa_conceptos_liquidacion_panel.html', **ctx)
+        return jsonify({'ok': True, 'html': html})
+    except ValueError as e:
+        return jsonify({'ok': False, 'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('api_mapa_conceptos_liquidacion')
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/get_lista_formato_liquidacion', methods=['POST'])

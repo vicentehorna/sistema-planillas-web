@@ -1,0 +1,277 @@
+{% macro fc(code) -%}
+{%- if code -%}
+<span class="fc-code">{{ code }}</span>
+{%- endif -%}
+{%- endmacro %}
+
+{% macro celda_monto(fmt, code) -%}
+<div class="celda-analista">
+    <div class="monto-val">{{ fmt }}</div>
+    {{ fc(code) }}
+</div>
+{%- endmacro %}
+
+<div class="alert alert-warning py-2 px-3 mb-3 small mb-0">
+    <i class="bi bi-shield-exclamation"></i>
+    <strong>Solo analista</strong> — no enviar al trabajador. Muestra el <code>FormulaCode</code> usado por cada importe del formato.
+</div>
+
+<div class="mapa-liq card border-0 shadow-sm mt-3">
+    <div class="card-body">
+        <div class="mapa-header mb-3">
+            <div class="fw-bold">{{ liq.company_name or '' }}</div>
+            <div class="text-muted small">{{ liq.person_name or '' }} · {{ liq.person or '' }} · Periodo {{ period }}</div>
+        </div>
+
+        <table class="table table-sm table-bordered mapa-table mb-3">
+            <tbody>
+                <tr>
+                    <td class="lbl">Sueldo</td>
+                    <td>{{ celda_monto(basico_fmt, basico_fc) }}</td>
+                    <td class="lbl">Motivo de cese</td>
+                    <td>{{ liq.cease_reason or '' }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Fecha ingreso</td>
+                    <td>{{ entry_date_fmt }}</td>
+                    <td class="lbl">Fecha cese</td>
+                    <td>{{ cease_date_fmt }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl">Tiempo servicio</td>
+                    <td colspan="3">
+                        Año: {{ liq.anios_servicio | default(0) | int }} {{ fc(anios_servicio_fc) }}
+                        &nbsp; Mes: {{ liq.meses_servicio | default(0) | int }} {{ fc(meses_servicio_fc) }}
+                        &nbsp; Día: {{ liq.dias_servicio | default(0) | int }} {{ fc(dias_servicio_fc) }}
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h6 class="seccion-titulo">Remuneración computable</h6>
+        <table class="table table-sm table-bordered mapa-table mb-3">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th class="text-end">CTS</th>
+                    <th class="text-end">Gratificación</th>
+                    <th class="text-end">Vacaciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in remuneracion_rows %}
+                <tr>
+                    <td>{{ row.label }}</td>
+                    <td class="text-end">{{ celda_monto(row.cts_fmt, row.cts_fc) }}</td>
+                    <td class="text-end">{{ celda_monto(row.grati_fmt, row.grati_fc) }}</td>
+                    <td class="text-end">{{ celda_monto(row.vaca_fmt, row.vaca_fc) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="table-secondary fw-bold">
+                    <td>Total remuneración computable</td>
+                    <td class="text-end">{{ celda_monto(remuneracion_totales.cts, remuneracion_totales_fc.cts) }}</td>
+                    <td class="text-end">{{ celda_monto(remuneracion_totales.grati, remuneracion_totales_fc.grati) }}</td>
+                    <td class="text-end">{{ celda_monto(remuneracion_totales.vaca, remuneracion_totales_fc.vaca) }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h6 class="seccion-titulo">Ingresos</h6>
+
+        <div class="bloque-calc mb-3">
+            <div class="fw-semibold mb-1">
+                Compensación por tiempo de servicios - CTS
+                <span class="ms-2 small text-muted">Días Falta: {{ cts_calc.dias_falta_txt }} {{ fc(cts_calc.dias_falta_fc) }}</span>
+            </div>
+            <table class="table table-sm table-bordered mapa-table mb-0">
+                <tr>
+                    <td class="lbl">Cálculo</td>
+                    <td>
+                        {{ cts_calc.formula_meses }} × {{ cts_calc.meses_label }}
+                        {{ fc(cts_calc.formula_meses_fc) }}
+                        {{ fc(cts_calc.meses_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(cts_calc.x_mes_fmt, cts_calc.x_mes_fc) }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl"></td>
+                    <td>
+                        {{ cts_calc.formula_dias }} × {{ cts_calc.dias_label }}
+                        {{ fc(cts_calc.formula_dias_fc) }}
+                        {{ fc(cts_calc.dias_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(cts_calc.x_dia_fmt, cts_calc.x_dia_fc) }}</td>
+                </tr>
+                <tr class="table-light fw-bold">
+                    <td></td>
+                    <td>TOTAL CTS TRUNCA</td>
+                    <td class="text-end">{{ celda_monto(cts_calc.total_fmt, cts_calc.total_fc) }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque-calc mb-3">
+            <div class="fw-semibold mb-1">
+                Gratificación trunca
+                <span class="ms-2 small text-muted">Días Falta: {{ grati_calc.dias_falta_txt }} {{ fc(grati_calc.dias_falta_fc) }}</span>
+            </div>
+            <table class="table table-sm table-bordered mapa-table mb-0">
+                <tr>
+                    <td class="lbl">Cálculo</td>
+                    <td>
+                        {{ grati_calc.formula_meses }} × {{ grati_calc.meses_label }}
+                        {{ fc(grati_calc.formula_meses_fc) }}
+                        {{ fc(grati_calc.meses_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(grati_calc.x_mes_fmt, grati_calc.x_mes_fc) }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl"></td>
+                    <td>
+                        {{ grati_calc.formula_dias }} × {{ grati_calc.dias_label }}
+                        {{ fc(grati_calc.formula_dias_fc) }}
+                        {{ fc(grati_calc.dias_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(grati_calc.x_dia_fmt, grati_calc.x_dia_fc) }}</td>
+                </tr>
+                <tr class="table-light fw-bold">
+                    <td></td>
+                    <td>TOTAL GRATIFICACION TRUNCA</td>
+                    <td class="text-end">{{ celda_monto(grati_calc.total_fmt, grati_calc.total_fc) }}</td>
+                </tr>
+                <tr class="table-light fw-bold">
+                    <td></td>
+                    <td>BONO 9%</td>
+                    <td class="text-end">{{ celda_monto(grati_calc.bono_9_fmt, grati_calc.bono_9_fc) }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="bloque-calc mb-3">
+            <div class="fw-semibold mb-1">
+                Vacaciones truncas
+                <span class="ms-2 small text-muted">Días Falta: {{ vaca_calc.dias_falta_txt }} {{ fc(vaca_calc.dias_falta_fc) }}</span>
+            </div>
+            <table class="table table-sm table-bordered mapa-table mb-0">
+                <tr>
+                    <td class="lbl">Cálculo</td>
+                    <td>
+                        {{ vaca_calc.formula_anios }} × {{ vaca_calc.anios_label }}
+                        {{ fc(vaca_calc.formula_anios_fc) }}
+                        {{ fc(vaca_calc.anios_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(vaca_calc.x_anio_fmt, vaca_calc.x_anio_fc) }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl"></td>
+                    <td>
+                        {{ vaca_calc.formula_meses }} × {{ vaca_calc.meses_label }}
+                        {{ fc(vaca_calc.formula_meses_fc) }}
+                        {{ fc(vaca_calc.meses_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(vaca_calc.x_mes_fmt, vaca_calc.x_mes_fc) }}</td>
+                </tr>
+                <tr>
+                    <td class="lbl"></td>
+                    <td>
+                        {{ vaca_calc.formula_dias }} × {{ vaca_calc.dias_label }}
+                        {{ fc(vaca_calc.formula_dias_fc) }}
+                        {{ fc(vaca_calc.dias_fc) }}
+                    </td>
+                    <td class="text-end">{{ celda_monto(vaca_calc.x_dia_fmt, vaca_calc.x_dia_fc) }}</td>
+                </tr>
+                <tr class="table-light fw-bold">
+                    <td></td>
+                    <td>TOTAL VACACIONES TRUNCAS</td>
+                    <td class="text-end">{{ celda_monto(vaca_calc.total_fmt, vaca_calc.total_fc) }}</td>
+                </tr>
+            </table>
+        </div>
+
+        <table class="table table-sm table-bordered mapa-table mb-3">
+            <tr>
+                <td>Devolución de Quinta</td>
+                <td class="text-end">{{ celda_monto(vaca_calc.devolucion_quinta_fmt, vaca_calc.devolucion_quinta_fc) }}</td>
+            </tr>
+            <tr>
+                <td>Otros Ingresos Afectos</td>
+                <td class="text-end">{{ celda_monto(vaca_calc.otros_ingresos_afectos_fmt, vaca_calc.otros_ingresos_afectos_fc) }}</td>
+            </tr>
+            <tr class="table-secondary fw-bold">
+                <td>TOTAL INGRESOS</td>
+                <td class="text-end">{{ total_ingresos_fmt }}</td>
+            </tr>
+        </table>
+
+        <h6 class="seccion-titulo">Descuentos</h6>
+        <table class="table table-sm table-bordered mapa-table mb-3">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th class="text-end">%</th>
+                    <th class="text-end">Base afecta</th>
+                    <th class="text-end">Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in descuentos_calc.filas %}
+                <tr>
+                    <td>{{ row.label }} {{ fc(row.formula_code) }}</td>
+                    <td class="text-end">
+                        {{ row.pct_fmt }}
+                        {% if row.pct_formula_code %}{{ fc(row.pct_formula_code) }}{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if row.base_fmt %}
+                        {{ celda_monto(row.base_fmt, row.base_formula_code) }}
+                        {% endif %}
+                    </td>
+                    <td class="text-end">{{ celda_monto(row.importe_fmt, row.formula_code) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="table-secondary fw-bold">
+                    <td colspan="3">TOTAL DESCUENTOS</td>
+                    <td class="text-end">{{ descuentos_calc.total_fmt }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h6 class="seccion-titulo">Aportaciones</h6>
+        <table class="table table-sm table-bordered mapa-table mb-3">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th class="text-end">%</th>
+                    <th class="text-end">Base afecta</th>
+                    <th class="text-end">Importe</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in aportaciones_calc.filas %}
+                <tr>
+                    <td>{{ row.label }} {{ fc(row.formula_code) }}</td>
+                    <td class="text-end">
+                        {{ row.pct_fmt }}
+                        {% if row.pct_formula_code %}{{ fc(row.pct_formula_code) }}{% endif %}
+                    </td>
+                    <td class="text-end">
+                        {% if row.base_fmt %}
+                        {{ celda_monto(row.base_fmt, row.base_formula_code) }}
+                        {% endif %}
+                    </td>
+                    <td class="text-end">{{ celda_monto(row.importe_fmt, row.formula_code) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="table-secondary fw-bold">
+                    <td colspan="3">TOTAL APORTACIONES</td>
+                    <td class="text-end">{{ aportaciones_calc.total_fmt }}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="neto-box d-flex justify-content-between align-items-center px-3 py-2">
+            <span class="fw-bold">NETO A PAGAR</span>
+            <span class="fw-bold fs-5">{{ neto_a_pagar_fmt }}</span>
+        </div>
+    </div>
+</div>

@@ -65,6 +65,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('certificado_trabajo', 'Certificado de Trabajo', 'liquidaciones', 910, 'certificado_trabajo_page', '/liquidaciones/certificado_trabajo', 'A'),
 ('certificado_retiro_cts', 'Certificado Retiro CTS', 'liquidaciones', 920, 'certificado_retiro_cts_page', '/liquidaciones/certificado_retiro_cts', 'A'),
 ('formato_liquidacion', 'Formato de Liquidacion', 'liquidaciones', 930, 'formato_liquidacion_page', '/liquidaciones/formato_liquidacion', 'A'),
+('mapa_conceptos_liquidacion', 'Mapa conceptos liquidacion', 'liquidaciones', 940, 'mapa_conceptos_liquidacion_page', '/liquidaciones/mapa_conceptos_liquidacion', 'A'),
 
 ('asientos_cuentas_contables', 'Cuentas Contables', 'asientos', 1010, 'asientos_cuentas_contables_page', '/asientos/cuentas-contables', 'A'),
 ('asientos_distribucion_porcentual', 'Distribucion Porcentual', 'asientos', 1020, 'asientos_distribucion_porcentual_page', '/asientos/distribucion-porcentual', 'A'),

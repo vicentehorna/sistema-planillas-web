@@ -56,6 +56,8 @@ ENDPOINT_MENU_MAP = {
     'certificado_trabajo_page': 'certificado_trabajo',
     'certificado_retiro_cts_page': 'certificado_retiro_cts',
     'formato_liquidacion_page': 'formato_liquidacion',
+    'mapa_conceptos_liquidacion_page': 'mapa_conceptos_liquidacion',
+    'api_mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
     'asientos_cuentas_contables_page': 'asientos_cuentas_contables',
     'asientos_distribucion_porcentual_page': 'asientos_distribucion_porcentual',
     'asientos_configurar_conceptos_page': 'asientos_configurar_conceptos',
@@ -132,6 +134,8 @@ PATH_PREFIX_MENU_MAP = {
     '/api/carga-masiva': 'importacion_conceptos',
     '/api/reportes/planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
     '/reporte-planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
+    '/api/liquidaciones/mapa-conceptos': 'mapa_conceptos_liquidacion',
+    '/liquidaciones/mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
 }
 
 ALWAYS_ALLOWED_ENDPOINTS = {

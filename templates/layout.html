@@ -1002,8 +1002,8 @@
                 </li>
                 {% endif %}
 
-                {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page', 'formato_liquidacion_page') %}
-                {% set show_liquidaciones = can_menu('certificado_trabajo') or can_menu('certificado_retiro_cts') or can_menu('formato_liquidacion') %}
+                {% set liquidaciones_active = request.endpoint in ('certificado_trabajo_page', 'certificado_retiro_cts_page', 'formato_liquidacion_page', 'mapa_conceptos_liquidacion_page') %}
+                {% set show_liquidaciones = can_menu('certificado_trabajo') or can_menu('certificado_retiro_cts') or can_menu('formato_liquidacion') or can_menu('mapa_conceptos_liquidacion') %}
                 {% if show_liquidaciones %}
                 <li class="sidebar-menu-parent {{ 'active' if liquidaciones_active else '' }}">
                     <a href="#submenuLiquidaciones"
@@ -1034,6 +1034,13 @@
                         <li class="{{ 'active' if request.endpoint == 'formato_liquidacion_page' else '' }}">
                             <a href="{{ url_for('formato_liquidacion_page') }}" title="Formato de Liquidación">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de Liquidación</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('mapa_conceptos_liquidacion') %}
+                        <li class="{{ 'active' if request.endpoint == 'mapa_conceptos_liquidacion_page' else '' }}">
+                            <a href="{{ url_for('mapa_conceptos_liquidacion_page') }}" title="Mapa conceptos liquidación">
+                                <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Mapa conceptos liquidación</span>
                             </a>
                         </li>
                         {% endif %}

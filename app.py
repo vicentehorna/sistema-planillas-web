@@ -6228,6 +6228,12 @@ def reporte_planilla_por_conceptos_page():
     return render_template('reporte_planilla_por_conceptos.html')
 
 
+@app.route('/reporte-planilla-anual-trabajador')
+@login_required
+def reporte_planilla_anual_trabajador_page():
+    return render_template('reporte_planilla_anual_trabajador.html')
+
+
 @app.route('/procesar_planilla')
 @login_required
 def procesar_planilla_page():
@@ -20202,6 +20208,74 @@ def api_reporte_planilla_por_conceptos():
     except Exception as e:
         logging.exception('api_reporte_planilla_por_conceptos')
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/planilla-anual-trabajador', methods=['POST'])
+@login_required
+def api_reporte_planilla_anual_trabajador():
+    """sp_pr_reporteplanillaanualtrabajador_web: pivot mensual por trabajador/concepto."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    anio = str(body.get('anio') or body.get('anho') or body.get('year') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    process = str(body.get('process') or body.get('processtype') or '').strip()
+    person = str(body.get('person') or '0').strip() or '0'
+    concept = str(body.get('concept') or '0').strip() or '0'
+    unidad = str(body.get('unidad') or body.get('repunit') or '0').strip() or '0'
+
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    if not anio or len(anio) != 4 or not anio.isdigit():
+        return jsonify({'error': 'Indique un año válido (YYYY).'}), 400
+    if not process:
+        return jsonify({'error': 'Seleccione el proceso.'}), 400
+    if not payrolltype or payrolltype == '0':
+        return jsonify({'error': 'Seleccione el tipo de planilla.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            'EXEC sp_pr_reporteplanillaanualtrabajador_web '
+            '@company=?, @anho=?, @processtype=?, @payrolltype=?, '
+            '@person=?, @concept=?, @repunit=?',
+            (cia, anio, process, payrolltype, person, concept, unidad),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun',
+                 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
+        resultado = []
+        for r in rows:
+            item = {
+                'person': str(r.get('person') or '').strip(),
+                'personname': str(r.get('personname') or '').strip(),
+                'conceptshort': str(r.get('conceptshort') or '').strip(),
+                'concepttype': str(r.get('concepttype') or '').strip(),
+                'conceptname': str(r.get('conceptname') or '').strip(),
+            }
+            for m in meses:
+                try:
+                    item[m] = float(r.get(m) or 0)
+                except (TypeError, ValueError):
+                    item[m] = 0.0
+            resultado.append(item)
+        return jsonify({
+            'rows': resultado,
+            'count': len(resultado),
+            'anio': anio,
+        })
+    except Exception as e:
+        logging.exception('api_reporte_planilla_anual_trabajador')
+        return jsonify({'error': _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

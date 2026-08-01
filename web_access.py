@@ -74,6 +74,7 @@ ENDPOINT_MENU_MAP = {
     'reporte_listado_pagos_page': 'reporte_listado_pagos',
     'reporte_liquidaciones': 'reporte_promedio_liquidaciones',
     'reporte_planilla_por_conceptos_page': 'reporte_planilla_por_conceptos',
+    'reporte_planilla_anual_trabajador_page': 'reporte_planilla_anual_trabajador',
     'generar_boletas_page': 'generar_boletas',
     'formato_utilidades_page': 'formato_utilidades',
 }
@@ -129,6 +130,8 @@ PATH_PREFIX_MENU_MAP = {
     '/plame/': 'plame_validar',
     '/carga-masiva/': 'importacion_conceptos',
     '/api/carga-masiva': 'importacion_conceptos',
+    '/api/reportes/planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
+    '/reporte-planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
 }
 
 ALWAYS_ALLOWED_ENDPOINTS = {

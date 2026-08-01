@@ -87,6 +87,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('reporte_listado_pagos', 'Listado de Pagos', 'reportes_planillas', 1340, 'reporte_listado_pagos_page', '/reporte-listado-pagos', 'A'),
 ('reporte_promedio_liquidaciones', 'Promedio de Liquidaciones', 'reportes_planillas', 1350, 'reporte_liquidaciones', '/reporte-liquidaciones', 'A'),
 ('reporte_planilla_por_conceptos', 'Planilla por Conceptos', 'reportes_planillas', 1360, 'reporte_planilla_por_conceptos_page', '/reporte-planilla-por-conceptos', 'A'),
+('reporte_planilla_anual_trabajador', 'Planilla Anual por Trabajador', 'reportes_planillas', 1370, 'reporte_planilla_anual_trabajador_page', '/reporte-planilla-anual-trabajador', 'A'),
 
 ('generar_boletas', 'Generar Boletas', 'documentos', 1410, 'generar_boletas_page', '/generar_boletas', 'A'),
 ('formato_utilidades', 'Constancia de Utilidades', 'documentos', 1420, 'formato_utilidades_page', '/documentos/formato_utilidades', 'A');

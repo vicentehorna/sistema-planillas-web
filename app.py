@@ -16623,9 +16623,10 @@ def descargar_zip_boletas():
 def enviar_boletas_masivo():
     data = request.get_json(silent=True) or {}
     ensure_user_session()
-    cia = session.get('company')
+    # Misma resolución que ZIP/listado: priorizar cia del body (combo UI).
+    cia = str(data.get('cia') or session.get('company') or '').strip()
     payroll_type = str(data.get('payroll_type') or '').strip()
-    process = str(data.get('process') or '').strip()
+    process = str(data.get('process') or data.get('processtype') or '').strip()
     period = _normalize_pr_period(data.get('period'))
     seleccionados = data.get('empleados', data.get('trabajadores', []))
 

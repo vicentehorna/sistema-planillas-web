@@ -481,6 +481,22 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.open(`${URL_PREVIEW}?${params}`, '_blank');
     }
 
+    function filtrosAccionActuales() {
+        // Preferir los filtros con los que se consultó el listado (más fiable que el combo).
+        const base = filtrosListaActuales || {};
+        const cia = String(base.cia || cboCia.value || '').trim();
+        const payroll_type = String(base.payroll_type || cboPt.value || '').trim();
+        const process = String(base.process || cboProc.value || '').trim();
+        const period = String(base.period || cboPer.value || '').trim();
+        return {
+            cia,
+            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
+            payroll_type,
+            process,
+            period
+        };
+    }
+
     async function ejecutarAccion() {
         const ids = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
         if (!ids.length) {
@@ -489,13 +505,15 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         const modoEl = document.querySelector('input[name="modoProceso"]:checked');
         const modo = modoEl ? modoEl.value : 'zip';
-        const filtros = {
-            cia: cboCia.value.trim(),
-            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
-            payroll_type: cboPt.value.trim(),
-            process: cboProc.value.trim(),
-            period: cboPer.value.trim()
-        };
+        const filtros = filtrosAccionActuales();
+        if (!filtros.cia || !filtros.payroll_type || !filtros.process || !filtros.period) {
+            Swal.fire(
+                'Atención',
+                'Seleccione compañía, tipo de planilla, proceso y periodo, y pulse Consultar antes de ejecutar la acción.',
+                'warning'
+            );
+            return;
+        }
         const btn = document.getElementById('btnEjecutarBoletas');
         const prev = btn.innerHTML;
         btn.disabled = true;
@@ -585,6 +603,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    cia: filtros.cia,
                     empleados: ids,
                     period: filtros.period,
                     payroll_type: filtros.payroll_type,

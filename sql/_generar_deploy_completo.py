@@ -13,6 +13,20 @@ EXCLUDE_FROM_DEPLOY = {
     "tables_usuarios_router.sql",
     # Contiene USE hm_atilio: cambia el contexto de BD a mitad del script.
     "alter_pr_mapping2_hm_atilio.sql",
+    # One-shot: limpia/replica formulas BGT -> SB01..SB06 (no son deploy web).
+    "limpiar_formulas_liquidacion_destino.sql",
+    "limpiar_formulas_provisiones_destino.sql",
+    "replicar_formulas_liquidacion_bgt.sql",
+    "replicar_formulas_liquidacion_bgt_limpio.sql",
+    "replicar_formulas_provisiones_bgt.sql",
+    "replicar_formulas_provisiones_bgt_limpio.sql",
+    "replicar_conceptos_faltantes_cias_liquidacion.sql",
+    "replicar_conceptos_faltantes_cias_provisiones.sql",
+    "replicar_conceptos_faltantes_sb03_liquidacion.sql",
+    "listar_formulas_faltantes_cias_liquidacion.sql",
+    "listar_formulas_faltantes_cias_provisiones.sql",
+    "listar_conceptos_faltantes_cias_liquidacion.sql",
+    "listar_conceptos_faltantes_cias_provisiones.sql",
 }
 
 

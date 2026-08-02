@@ -1,6 +1,6 @@
 /*
   ALTER SCHEMA WEB - columnas/tablas requeridas por SPs web
-  Generado: 2026-07-28 11:51
+  Generado: 2026-08-02 12:36
 
   Ejecutar PRIMERO sobre la BD destino (hm_alamo, hm_aci, ...)
   antes o como parte de deploy_planillas_web_completo.sql.

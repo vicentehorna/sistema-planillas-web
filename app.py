@@ -11403,23 +11403,68 @@ def api_formulas_eliminar():
 @app.route('/api/formulas/replicar', methods=['POST'])
 @login_required
 def api_formulas_replicar():
-    """sp_pr_replicar_formula_cia: replica fórmulas seleccionadas a otras compañías."""
+    """Replica fórmulas de cia(+planilla+proceso) a las demás empresas activas.
+
+    Body:
+      cia (origen), formulas[{formulaheader, formulacode}], opcional:
+      payrolltype, processtype (si formulas vacío, carga el listado del filtro),
+      crear_conceptos (bool, default True): crea nemónicos faltantes en destino.
+    """
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    processtype = str(
+        body.get('processtype') or body.get('proccestype') or ''
+    ).strip()
     formulas = body.get('formulas') or []
+    crear_conceptos = body.get('crear_conceptos', True)
+    if isinstance(crear_conceptos, str):
+        crear_conceptos = crear_conceptos.strip().lower() in ('1', 'true', 's', 'y', 'yes')
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía origen."}), 400
-    if not formulas:
-        return jsonify({"error": "Seleccione al menos una fórmula."}), 400
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Si no vienen fórmulas, cargar todas del filtro cia+planilla+proceso
+        if not formulas:
+            if not payrolltype or not processtype:
+                return jsonify({
+                    "error": (
+                        "Indique fórmulas a replicar, o compañía + tipo de "
+                        "planilla + proceso para replicar el listado completo."
+                    ),
+                }), 400
+            cursor.execute(
+                """
+                SELECT fh.FormulaHeader,
+                       LTRIM(RTRIM(ISNULL(c.FormulaCode, fh.formulacode)))
+                FROM PR_FormulaHeader fh (NOLOCK)
+                LEFT JOIN PR_Concept c (NOLOCK)
+                    ON fh.Concept = c.Concept AND fh.Company = c.Company
+                WHERE fh.Company = ?
+                  AND fh.Payrolltype = ?
+                  AND fh.Proccestype = ?
+                ORDER BY fh.orden ASC, fh.FormulaHeader ASC
+                """,
+                (cia, payrolltype, processtype),
+            )
+            formulas = [
+                {"formulaheader": str(r[0]).strip(), "formulacode": str(r[1] or '').strip()}
+                for r in cursor.fetchall()
+                if r and r[0]
+            ]
+
+        if not formulas:
+            return jsonify({"error": "No hay fórmulas para replicar con el filtro indicado."}), 400
+
         ok = 0
         errores = []
         advertencias = []
+        conceptos_creados = 0
 
         cursor.execute(
             """
@@ -11468,20 +11513,58 @@ def api_formulas_replicar():
                 concepto_desc = fc or fh
 
             faltantes = []
-            for dest in destinos:
-                cursor.execute(
-                    """
-                    SELECT 1
-                    FROM PR_Concept (NOLOCK)
-                    WHERE Company = ?
-                      AND LTRIM(RTRIM(FormulaCode)) = ?
-                    """,
-                    (dest, fc),
-                )
-                if not cursor.fetchone():
-                    faltantes.append(dest)
+            if fc:
+                for dest in destinos:
+                    cursor.execute(
+                        """
+                        SELECT 1
+                        FROM PR_Concept (NOLOCK)
+                        WHERE Company = ?
+                          AND LTRIM(RTRIM(FormulaCode)) = ?
+                        """,
+                        (dest, fc),
+                    )
+                    if not cursor.fetchone():
+                        faltantes.append(dest)
 
-            if faltantes:
+            if faltantes and crear_conceptos and fc:
+                creados_ok = []
+                creados_err = []
+                for dest in faltantes:
+                    try:
+                        cursor.execute(
+                            "EXEC sp_pr_replicar_nuevo_concepto_nemonico "
+                            "@cia=?, @formulacode=?, @cia_origen=?",
+                            (dest, fc, cia),
+                        )
+                        while cursor.nextset():
+                            pass
+                        creados_ok.append(dest)
+                        conceptos_creados += 1
+                    except Exception as ex_c:
+                        creados_err.append(f"{dest}: {ex_c}")
+                if creados_ok:
+                    advertencias.append({
+                        "formulaheader": fh,
+                        "formulacode": fc,
+                        "concepto": concepto_desc,
+                        "mensaje": (
+                            f"Concepto creado en: {', '.join(creados_ok)}."
+                        ),
+                        "empresas_creadas": creados_ok,
+                    })
+                if creados_err:
+                    advertencias.append({
+                        "formulaheader": fh,
+                        "formulacode": fc,
+                        "concepto": concepto_desc,
+                        "mensaje": (
+                            "No se pudo crear concepto en: "
+                            + '; '.join(creados_err[:8])
+                        ),
+                        "empresas_faltantes": faltantes,
+                    })
+            elif faltantes:
                 advertencias.append({
                     "formulaheader": fh,
                     "formulacode": fc,
@@ -11511,17 +11594,23 @@ def api_formulas_replicar():
 
         conn.commit()
         n = len([i for i in formulas if str((i or {}).get('formulaheader') or '').strip()])
+        partes = [
+            f"Se replicaron {ok} fórmula(s) desde {cia} hacia "
+            f"{len(destinos)} empresa(s)."
+        ]
+        if errores:
+            partes.append(f"{len(errores)} con error.")
+        if conceptos_creados:
+            partes.append(f"{conceptos_creados} concepto(s) creado(s) en destino.")
         return jsonify({
             "ok": True,
             "replicadas": ok,
             "procesadas": n,
+            "empresas_destino": len(destinos),
+            "conceptos_creados": conceptos_creados,
             "advertencias": advertencias,
             "errores": errores,
-            "mensaje": f"Se replicaron {ok} fórmula(s) en las demás empresas." + (
-                f" {len(errores)} con error." if errores else ''
-            ) + (
-                f" {len(advertencias)} con advertencias de concepto." if advertencias else ''
-            ),
+            "mensaje": " ".join(partes),
         })
     except Exception as e:
         logging.exception("api_formulas_replicar")

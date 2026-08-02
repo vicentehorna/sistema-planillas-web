@@ -451,7 +451,8 @@
             <div class="d-flex justify-content-between align-items-center mb-1 flex-wrap gap-1">
                 <span class="formulas-seccion-titulo">Listado de fórmulas</span>
                 <div class="d-flex align-items-center gap-2 formulas-lista-acciones">
-                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnReplicarFormulas" disabled>
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnReplicarFormulas" disabled
+                            title="Replica las fórmulas marcadas (check) a las demás empresas">
                         <i class="bi bi-copy"></i> Replicar
                     </button>
                     <button type="button" class="btn btn-outline-danger btn-sm" id="btnEliminarFormulas" disabled>
@@ -1183,8 +1184,30 @@
         const n = formulasMarcadas.size;
         const btnRep = document.getElementById('btnReplicarFormulas');
         const btnDel = document.getElementById('btnEliminarFormulas');
+        // Replicar y Eliminar: solo con fórmulas marcadas (check)
         if (btnRep) btnRep.disabled = n === 0;
         if (btnDel) btnDel.disabled = n === 0;
+    }
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        const msg = opciones.mensaje || opciones.message || '¿Continuar?';
+        return confirm(msg);
+    }
+
+    function etiquetaSelect(sel) {
+        if (!sel || !sel.selectedOptions || !sel.selectedOptions.length) return '';
+        return String(sel.selectedOptions[0].textContent || '').trim();
     }
 
     function sincronizarChkTodas() {
@@ -1258,28 +1281,49 @@
     }
 
     async function replicarFormulasSeleccionadas() {
-        const seleccionadas = obtenerFormulasSeleccionadas();
-        if (!seleccionadas.length) {
-            alert('Seleccione al menos una fórmula.');
-            return;
-        }
-
         const cia = cboCia.value.trim();
-        if (!cia) {
-            alert('Seleccione una compañía origen.');
+        const payrolltype = cboPlanilla.value.trim();
+        const processtype = cboProceso.value.trim();
+        if (!cia || !payrolltype || !processtype) {
+            hmAdvertencia('Seleccione compañía, tipo de planilla y proceso, luego busque.');
             return;
         }
 
-        const n = seleccionadas.length;
-        const msg = n === 1
-            ? 'Se va a replicar 1 fórmula seleccionada en las demás empresas, ¿desea continuar?'
-            : `Se van a replicar ${n} fórmulas seleccionadas en las demás empresas, ¿desea continuar?`;
-        if (!confirm(msg)) return;
+        const aReplicar = obtenerFormulasSeleccionadas();
+        if (!aReplicar.length) {
+            hmAdvertencia('Marque con check las fórmulas que desea replicar.');
+            return;
+        }
+
+        const n = aReplicar.length;
+        const planillaTxt = etiquetaSelect(cboPlanilla) || payrolltype;
+        const procesoTxt = etiquetaSelect(cboProceso) || processtype;
+
+        const msg = [
+            `Se van a replicar / actualizar ${n} fórmula(s) marcada(s) desde la empresa ${cia}`,
+            `Tipo de planilla: ${planillaTxt}`,
+            `Proceso: ${procesoTxt}`,
+            '',
+            'Destino: todas las demás empresas activas de esta base.',
+            'Si una fórmula ya existe en destino (mismo concepto + planilla + proceso), se reemplazará.',
+            'Los conceptos faltantes en destino se crearán automáticamente cuando sea posible.',
+            '',
+            'Esta acción puede tardar varios minutos si hay muchas empresas. ¿Desea continuar?',
+        ].join('\n');
+
+        const ok = await hmConfirmar({
+            titulo: 'Replicar fórmulas',
+            mensaje: msg,
+            textoOk: 'Sí, replicar',
+            textoCancelar: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
 
         const btn = document.getElementById('btnReplicarFormulas');
         const txt = btn.innerHTML;
         btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Replicando…';
 
         try {
             const res = await fetch('/api/formulas/replicar', {
@@ -1287,7 +1331,10 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia,
-                    formulas: seleccionadas.map((r) => ({
+                    payrolltype,
+                    processtype,
+                    crear_conceptos: true,
+                    formulas: aReplicar.map((r) => ({
                         formulaheader: r.formulaheader,
                         formulacode: r.formulacode || null,
                         concept: r.concept || null,
@@ -1296,6 +1343,9 @@
             });
             const data = await leerJson(res);
             let texto = data.mensaje || `Se replicaron ${data.replicadas || 0} fórmula(s).`;
+            if (data.conceptos_creados) {
+                texto += `\nConceptos creados en destino: ${data.conceptos_creados}.`;
+            }
             if (data.advertencias && data.advertencias.length) {
                 const det = data.advertencias.slice(0, 8).map((a) =>
                     `• ${a.concepto || a.formulacode || a.formulaheader}: ${a.mensaje || a.error || ''}`
@@ -1305,14 +1355,15 @@
             }
             if (data.errores && data.errores.length) {
                 const det = data.errores.slice(0, 8).map((e) =>
-                    `• ${e.formulaheader || ''}: ${e.error || ''}`
+                    `• ${e.concepto || e.formulacode || e.formulaheader || ''}: ${e.error || ''}`
                 ).join('\n');
                 texto += `\n\nErrores (${data.errores.length}):\n${det}`;
                 if (data.errores.length > 8) texto += '\n…';
             }
-            alert(texto);
+            if (data.errores && data.errores.length) hmError(texto);
+            else hmAdvertencia(texto);
         } catch (err) {
-            alert(err.message || 'No se pudo replicar.');
+            hmError(err.message || 'No se pudo replicar.');
         } finally {
             btn.innerHTML = txt;
             actualizarBotonesLista();

@@ -4858,7 +4858,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'dias_label': f'{dias_txt} DIAS',
         'formula_anios': base_fmt,
         'formula_meses': f'({base_fmt} / 12)',
-        'formula_dias': f'({base_fmt} / 30)',
+        'formula_dias': f'({base_fmt} / 360)',
         'x_anio_fmt': _formato_liquidacion_moneda(x_anio),
         'x_mes_fmt': _formato_liquidacion_moneda(x_mes),
         'x_dia_fmt': _formato_liquidacion_moneda(x_dia),
@@ -4881,7 +4881,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'otros_ingresos_afectos_fc': 'LIQINGRESOAFECTO',
         'formula_anios_fc': 'Σ rem.VACA × ANIOSVACTRUNCA → VACACIONANIO',
         'formula_meses_fc': '(Σ rem.VACA / 12) × MESES_VAC_TRUN → VACXMES',
-        'formula_dias_fc': '(Σ rem.VACA / 30) × DIAS_VAC_TRUN → VACXDIA',
+        'formula_dias_fc': '(Σ rem.VACA / 360) × DIAS_VAC_TRUN → VACXDIA',
     }
 
 

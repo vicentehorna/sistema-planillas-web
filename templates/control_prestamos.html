@@ -1,0 +1,701 @@
+{% extends "layout.html" %}
+
+{% block title %}Control de Préstamos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .prest-layout {
+        display: flex;
+        gap: 1rem;
+        align-items: stretch;
+        min-height: 72vh;
+    }
+
+    .prest-panel-izq {
+        flex: 0 0 30%;
+        max-width: 30%;
+        min-width: 240px;
+        display: flex;
+        flex-direction: column;
+        align-self: stretch;
+    }
+
+    .prest-panel-der {
+        flex: 1 1 70%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        align-self: stretch;
+    }
+
+    .prest-grilla-trabajadores {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 12rem;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .prest-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .prest-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #dee2e6;
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .table-trabajadores-prest {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-trabajadores-prest th,
+    .table-trabajadores-prest td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-trabajadores-prest thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+    }
+
+    .table-trabajadores-prest tbody tr.trabajador-row {
+        cursor: pointer;
+        border-color: #eef1f5;
+    }
+
+    .table-trabajadores-prest tbody tr.trabajador-row:hover {
+        background-color: #eef4fb;
+    }
+
+    .table-trabajadores-prest tbody tr.trabajador-row.active {
+        background-color: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-trabajadores-prest tbody tr.trabajador-row.active td {
+        font-weight: 600;
+    }
+
+    .table-trabajadores-prest .col-dni { width: 5.5rem; max-width: 5.5rem; }
+    .table-trabajadores-prest .col-nombre {
+        min-width: 6rem;
+        max-width: 9.5rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .table-trabajadores-prest .col-saldo {
+        width: 5.5rem;
+        text-align: right;
+    }
+
+    .table-prestamos {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+        border-color: #e6ebf1;
+    }
+
+    .table-prestamos th,
+    .table-prestamos td {
+        padding: 0.4rem 0.55rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+
+    .table-prestamos thead th {
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 1;
+        border-bottom: 1px solid #d7dee8;
+    }
+
+    .table-prestamos tbody tr:nth-child(even) { background-color: #f8fafc; }
+
+    .table-prestamos tbody tr.prestamo-row { cursor: pointer; }
+    .table-prestamos tbody tr.prestamo-row:hover { background-color: #eef4fb; }
+    .table-prestamos tbody tr.prestamo-row.active {
+        background-color: #e7f1ff !important;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+    .table-prestamos tbody tr.prestamo-row.active td { font-weight: 600; }
+
+    .table-scroll-sm,
+    .table-scroll-md {
+        max-height: 220px;
+        overflow: auto;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+    .table-scroll-md { max-height: 300px; }
+
+    .prest-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+    }
+
+    .prest-dw-titlebar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        padding: 0.45rem 0.75rem;
+        background: linear-gradient(180deg, #f7f9fc 0%, #eef3f9 100%);
+        border-bottom: 1px solid #d7dee8;
+    }
+
+    .prest-dw-title-text {
+        font-size: 0.82rem;
+        font-weight: 700;
+        color: #1a4b84;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
+    }
+
+    .prest-dw-body { padding: 0.55rem 0.65rem 0.7rem; }
+
+    .prest-placeholder {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-align: center;
+        color: #6c757d;
+        border: 1px dashed #ced4da;
+        border-radius: 0.4rem;
+        background: #fafbfc;
+        min-height: 16rem;
+        padding: 1.5rem;
+    }
+
+    .prest-hint {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin: 0.45rem 0 0;
+    }
+
+    .badge-estado-P { background: #fff3cd; color: #856404; }
+    .badge-estado-A { background: #d1e7dd; color: #0f5132; }
+    .badge-estado-N { background: #f8d7da; color: #842029; }
+
+    @media (max-width: 991.98px) {
+        .prest-layout { flex-direction: column; }
+        .prest-panel-izq { flex: none; max-width: none; min-width: 0; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0"><i class="bi bi-cash-coin text-primary"></i> Control de Préstamos</h4>
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmControlPrestamos" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto">
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="chkIncluirCeros">
+                    <label class="form-check-label small" for="chkIncluirCeros">Pendiente con ceros</label>
+                </div>
+            </div>
+            <div class="col-12 col-md-4 col-lg-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="prest-layout">
+    <aside class="prest-panel-izq">
+        <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Buscar trabajador</label>
+        <div class="input-group input-group-sm mb-2">
+            <span class="input-group-text"><i class="bi bi-search"></i></span>
+            <input type="search" id="txtBuscarTrabajador" class="form-control" placeholder="Nombre, código o DNI..." autocomplete="off">
+        </div>
+        <div class="prest-grilla-trabajadores" id="grillaTrabajadoresPrest">
+            <div class="prest-grilla-scroll" id="grillaScrollTrabajadores" tabindex="0"
+                 role="listbox" aria-label="Lista de trabajadores con préstamos">
+                <table class="table table-bordered table-sm table-hover table-trabajadores-prest align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-dni">Código</th>
+                            <th class="col-nombre">Nombre</th>
+                            <th class="col-saldo">Saldo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyTrabajadoresPrest">
+                        <tr>
+                            <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoTrabajadores" class="prest-grilla-footer">0 trabajadores</div>
+        </div>
+    </aside>
+
+    <section class="prest-panel-der" id="panelDetalle">
+        <div id="placeholderDetalle" class="prest-placeholder">
+            <div>
+                <i class="bi bi-cash-stack fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione un trabajador de la lista para ver sus préstamos y cuotas.
+            </div>
+        </div>
+
+        <div id="contenidoDetalle" class="d-none flex-column gap-3" style="display: none;">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body py-3">
+                    <div>
+                        <h5 class="mb-1" id="lblNombreTrabajador">—</h5>
+                        <div class="small text-muted">
+                            <span>DNI: <span id="lblDniTrabajador"></span></span>
+                            <span class="mx-1">·</span>
+                            <span>Saldo pendiente: <strong id="lblSaldoPendiente">0.00</strong></span>
+                            <span class="mx-1">·</span>
+                            <span>Total préstamo: <span id="lblTotalPrestamo">0.00</span></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="prest-dw-panel">
+                <div class="prest-dw-titlebar">
+                    <span class="prest-dw-title-text">Préstamos</span>
+                    <span class="badge text-bg-primary" id="badgePrestamoSeleccionado">Sin préstamo</span>
+                </div>
+                <div class="prest-dw-body">
+                    <div class="table-scroll-sm">
+                        <table class="table table-sm table-hover table-prestamos mb-0" id="tblPrestamos">
+                            <thead>
+                                <tr>
+                                    <th>Fecha</th>
+                                    <th class="text-end">Monto</th>
+                                    <th>Periodo</th>
+                                    <th class="text-end">Nro. cuotas</th>
+                                    <th class="text-end">Monto cuota</th>
+                                    <th>Estado</th>
+                                    <th>Referencia</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <p class="prest-hint">
+                        <i class="bi bi-hand-index-thumb"></i>
+                        Haga clic en un préstamo para ver sus cuotas abajo.
+                    </p>
+                </div>
+            </div>
+
+            <div class="prest-dw-panel">
+                <div class="prest-dw-titlebar">
+                    <span class="prest-dw-title-text">Amortizaciones / Cuotas</span>
+                    <span class="small text-muted" id="lblSumaPendiente">Suma pendiente: 0.00</span>
+                </div>
+                <div class="prest-dw-body">
+                    <div class="table-scroll-md">
+                        <table class="table table-sm table-hover table-prestamos mb-0" id="tblCuotas">
+                            <thead>
+                                <tr>
+                                    <th>Periodo</th>
+                                    <th class="text-end">Monto</th>
+                                    <th>Estado</th>
+                                    <th>Proceso</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const chkCeros = document.getElementById('chkIncluirCeros');
+    const txtBuscar = document.getElementById('txtBuscarTrabajador');
+    const tbodyTrab = document.getElementById('tbodyTrabajadoresPrest');
+    const lblConteo = document.getElementById('lblConteoTrabajadores');
+    const placeholder = document.getElementById('placeholderDetalle');
+    const contenido = document.getElementById('contenidoDetalle');
+
+    let trabajadoresCache = [];
+    let trabajadorSel = null;
+    let prestamosCache = [];
+    let cuotasCache = [];
+    let prestamoSel = null;
+    let buscarTimer = null;
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function fmtNum(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fmtFecha(v) {
+        if (!v) return '';
+        const s = String(v);
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+            const [y, m, d] = s.slice(0, 10).split('-');
+            return `${d}/${m}/${y}`;
+        }
+        return s;
+    }
+
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || data.message || `Error HTTP ${res.status}`);
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    async function poblarSelect(url, selectElement, opciones) {
+        opciones = opciones || {};
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const textoTodos = opciones.textoTodos || 'Todos';
+        const incluyeTodos = !!opciones.incluyeTodos;
+
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function badgeEstado(codigo, texto) {
+        const c = String(codigo || '').toUpperCase();
+        const cls = c === 'P' || c === 'A' || c === 'N' ? `badge-estado-${c}` : 'text-bg-secondary';
+        return `<span class="badge ${cls}">${escHtml(texto || codigo || '—')}</span>`;
+    }
+
+    function mostrarPlaceholder() {
+        placeholder.classList.remove('d-none');
+        contenido.classList.add('d-none');
+        contenido.style.display = 'none';
+        trabajadorSel = null;
+        prestamoSel = null;
+        prestamosCache = [];
+        cuotasCache = [];
+    }
+
+    function renderTrabajadores(rows) {
+        if (!rows.length) {
+            tbodyTrab.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin trabajadores con préstamos</td></tr>';
+            lblConteo.textContent = '0 trabajadores';
+            return;
+        }
+        tbodyTrab.innerHTML = rows.map((r) => {
+            const activo = trabajadorSel && trabajadorSel.person === r.person;
+            return `<tr class="trabajador-row ${activo ? 'active' : ''}" data-person="${escHtml(r.person)}">
+                <td class="col-dni">${escHtml(r.codigo || r.documento || r.person)}</td>
+                <td class="col-nombre" title="${escHtml(r.nombre)}">${escHtml(r.nombre)}</td>
+                <td class="col-saldo">${fmtNum(r.totalpending)}</td>
+            </tr>`;
+        }).join('');
+        lblConteo.textContent = `${rows.length} trabajador${rows.length === 1 ? '' : 'es'}`;
+
+        tbodyTrab.querySelectorAll('.trabajador-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const person = this.getAttribute('data-person');
+                const row = trabajadoresCache.find((x) => x.person === person);
+                if (row) await seleccionarTrabajador(row);
+            });
+        });
+    }
+
+    function filtrarLocal() {
+        const q = (txtBuscar.value || '').trim().toLowerCase();
+        if (!q) {
+            renderTrabajadores(trabajadoresCache);
+            return;
+        }
+        const filtrados = trabajadoresCache.filter((r) => {
+            const blob = `${r.nombre || ''} ${r.documento || ''} ${r.codigo || ''} ${r.person || ''}`.toLowerCase();
+            return blob.includes(q);
+        });
+        renderTrabajadores(filtrados);
+    }
+
+    async function cargarTrabajadores() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            tbodyTrab.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td></tr>';
+            lblConteo.textContent = '0 trabajadores';
+            mostrarPlaceholder();
+            return;
+        }
+        tbodyTrab.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando…</td></tr>';
+        try {
+            const res = await fetch('/api/prestamos/trabajadores', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype: cboPlanilla.value.trim() || '0',
+                    busqueda: '',
+                    incluir_ceros: chkCeros.checked ? 'Y' : 'N',
+                }),
+            });
+            const data = await leerJson(res);
+            trabajadoresCache = data.rows || [];
+            filtrarLocal();
+            if (trabajadorSel) {
+                const still = trabajadoresCache.find((x) => x.person === trabajadorSel.person);
+                if (still) await seleccionarTrabajador(still);
+                else mostrarPlaceholder();
+            }
+        } catch (err) {
+            tbodyTrab.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+            lblConteo.textContent = '0 trabajadores';
+        }
+    }
+
+    function renderPrestamos(rows) {
+        const tbody = document.querySelector('#tblPrestamos tbody');
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin préstamos</td></tr>';
+            document.getElementById('badgePrestamoSeleccionado').textContent = 'Sin préstamo';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => {
+            const activo = prestamoSel && Number(prestamoSel.secuence) === Number(r.secuence);
+            return `<tr class="prestamo-row ${activo ? 'active' : ''}" data-sec="${escHtml(r.secuence)}">
+                <td>${escHtml(fmtFecha(r.loandate))}</td>
+                <td class="text-end">${fmtNum(r.loadamount)}</td>
+                <td>${escHtml(r.prperiod || '')}</td>
+                <td class="text-end">${escHtml(r.numberquotes)}</td>
+                <td class="text-end">${fmtNum(r.amountquote)}</td>
+                <td>${badgeEstado(r.status, r.status_texto)}</td>
+                <td title="${escHtml(r.reference || '')}">${escHtml(r.reference || '')}</td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.prestamo-row').forEach((tr) => {
+            tr.addEventListener('click', function () {
+                const sec = Number(this.getAttribute('data-sec'));
+                const row = prestamosCache.find((x) => Number(x.secuence) === sec);
+                if (row) seleccionarPrestamo(row);
+            });
+        });
+    }
+
+    function renderCuotas(rows) {
+        const tbody = document.querySelector('#tblCuotas tbody');
+        let sumaPend = 0;
+        rows.forEach((r) => {
+            if (String(r.status || '').toUpperCase() === 'P') {
+                sumaPend += Number(r.amount) || 0;
+            }
+        });
+        document.getElementById('lblSumaPendiente').textContent = `Suma pendiente: ${fmtNum(sumaPend)}`;
+
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin cuotas para el préstamo seleccionado</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => `
+            <tr>
+                <td>${escHtml(r.prperiod || '')}</td>
+                <td class="text-end">${fmtNum(r.amount)}</td>
+                <td>${badgeEstado(r.status, r.status_texto)}</td>
+                <td>${escHtml(r.proceso_texto || '—')}</td>
+            </tr>
+        `).join('');
+    }
+
+    function seleccionarPrestamo(row) {
+        prestamoSel = row;
+        document.getElementById('badgePrestamoSeleccionado').textContent =
+            `Préstamo #${row.secuence} · ${fmtNum(row.loadamount)}`;
+        renderPrestamos(prestamosCache);
+        const cuotas = cuotasCache.filter((c) => Number(c.loansecuence) === Number(row.secuence));
+        renderCuotas(cuotas);
+    }
+
+    async function seleccionarTrabajador(row) {
+        trabajadorSel = row;
+        renderTrabajadores(
+            txtBuscar.value.trim()
+                ? trabajadoresCache.filter((r) => {
+                    const q = txtBuscar.value.trim().toLowerCase();
+                    const blob = `${r.nombre || ''} ${r.documento || ''} ${r.codigo || ''} ${r.person || ''}`.toLowerCase();
+                    return blob.includes(q);
+                })
+                : trabajadoresCache
+        );
+
+        placeholder.classList.add('d-none');
+        contenido.classList.remove('d-none');
+        contenido.style.display = 'flex';
+
+        document.getElementById('lblNombreTrabajador').textContent = row.nombre || '—';
+        document.getElementById('lblDniTrabajador').textContent = row.documento || row.person || '—';
+        document.getElementById('lblSaldoPendiente').textContent = fmtNum(row.totalpending);
+        document.getElementById('lblTotalPrestamo').textContent = fmtNum(row.totalloan);
+
+        document.querySelector('#tblPrestamos tbody').innerHTML =
+            '<tr><td colspan="7" class="text-center text-muted py-3">Cargando…</td></tr>';
+        document.querySelector('#tblCuotas tbody').innerHTML =
+            '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
+
+        try {
+            const res = await fetch('/api/prestamos/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: row.person,
+                }),
+            });
+            const data = await leerJson(res);
+            const emp = data.empleado || {};
+            document.getElementById('lblNombreTrabajador').textContent = emp.nombre || row.nombre || '—';
+            document.getElementById('lblDniTrabajador').textContent = emp.documento || row.documento || '—';
+            document.getElementById('lblSaldoPendiente').textContent = fmtNum(emp.totalpending != null ? emp.totalpending : row.totalpending);
+            document.getElementById('lblTotalPrestamo').textContent = fmtNum(emp.totalloan != null ? emp.totalloan : row.totalloan);
+
+            prestamosCache = data.prestamos || [];
+            cuotasCache = data.cuotas || [];
+            prestamoSel = null;
+            renderPrestamos(prestamosCache);
+            if (prestamosCache.length) {
+                seleccionarPrestamo(prestamosCache[0]);
+            } else {
+                document.getElementById('badgePrestamoSeleccionado').textContent = 'Sin préstamo';
+                renderCuotas([]);
+            }
+        } catch (err) {
+            document.querySelector('#tblPrestamos tbody').innerHTML =
+                `<tr><td colspan="7" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    document.getElementById('frmControlPrestamos').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await cargarTrabajadores();
+    });
+
+    txtBuscar.addEventListener('input', () => {
+        clearTimeout(buscarTimer);
+        buscarTimer = setTimeout(filtrarLocal, 180);
+    });
+
+    cboCia.addEventListener('change', async function () {
+        const cia = this.value.trim();
+        mostrarPlaceholder();
+        trabajadoresCache = [];
+        renderTrabajadores([]);
+        if (cia) {
+            await poblarSelect(
+                `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+                cboPlanilla,
+                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            );
+        } else {
+            cboPlanilla.innerHTML = '<option value="0">Todos</option>';
+            cboPlanilla.disabled = true;
+        }
+    });
+
+    (async function init() {
+        try {
+            await poblarSelect('/api/selectores/companias', cboCia);
+            const DEFAULT_CIA = 'BGT';
+            if (!cboCia.value) {
+                const opt = Array.from(cboCia.options).find((o) => o.value === DEFAULT_CIA);
+                if (opt) cboCia.value = DEFAULT_CIA;
+            }
+            if (cboCia.value.trim()) {
+                await poblarSelect(
+                    `/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`,
+                    cboPlanilla,
+                    { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+                );
+                await cargarTrabajadores();
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    })();
+})();
+</script>
+{% endblock %}

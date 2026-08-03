@@ -189,14 +189,24 @@
         </div>
 
         <table class="table table-sm table-bordered mapa-table mb-3">
+            {% if vaca_calc.mostrar_devolucion_quinta %}
             <tr>
                 <td>Devolución de Quinta</td>
                 <td class="text-end">{{ celda_monto(vaca_calc.devolucion_quinta_fmt, vaca_calc.devolucion_quinta_fc) }}</td>
             </tr>
+            {% endif %}
+            {% if vaca_calc.mostrar_otros_ingresos_afectos %}
             <tr>
                 <td>Otros Ingresos Afectos</td>
                 <td class="text-end">{{ celda_monto(vaca_calc.otros_ingresos_afectos_fmt, vaca_calc.otros_ingresos_afectos_fc) }}</td>
             </tr>
+            {% endif %}
+            {% if vaca_calc.mostrar_indemnizacion_despido %}
+            <tr>
+                <td>Indemnización por Despido</td>
+                <td class="text-end">{{ celda_monto(vaca_calc.indemnizacion_despido_fmt, vaca_calc.indemnizacion_despido_fc) }}</td>
+            </tr>
+            {% endif %}
             <tr class="table-secondary fw-bold">
                 <td>TOTAL INGRESOS</td>
                 <td class="text-end">{{ total_ingresos_fmt }}</td>

@@ -4467,6 +4467,7 @@ _FORMATO_LIQ_VACA_FORMULACODES = (
     'DIASFALTAVACLIQ',
     'DEVOLUCION_QUINTA',
     'LIQINGRESOAFECTO',
+    'INDEMNIZACION_DESPID',
 )
 
 _FORMATO_LIQ_DESCUENTOS_DEF = (
@@ -4850,6 +4851,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     dias_falta = _formato_liquidacion_fc_valor(formula_values, 'XFALTASVACA', 'DIASFALTAVACLIQ')
     devolucion_quinta = _formato_liquidacion_fc_valor(formula_values, 'DEVOLUCION_QUINTA')
     otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
+    indemnizacion_despido = _formato_liquidacion_fc_valor(formula_values, 'INDEMNIZACION_DESPID')
+
+    def _mostrar_ingreso(val):
+        try:
+            return abs(float(val or 0)) > 0.005
+        except (TypeError, ValueError):
+            return False
 
     return {
         'base_fmt': base_fmt,
@@ -4867,8 +4875,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'dias_falta_txt': _formato_liquidacion_cantidad(dias_falta),
         'devolucion_quinta': devolucion_quinta,
         'devolucion_quinta_fmt': _formato_liquidacion_moneda(devolucion_quinta),
+        'mostrar_devolucion_quinta': _mostrar_ingreso(devolucion_quinta),
         'otros_ingresos_afectos': otros_ingresos_afectos,
         'otros_ingresos_afectos_fmt': _formato_liquidacion_moneda(otros_ingresos_afectos),
+        'mostrar_otros_ingresos_afectos': _mostrar_ingreso(otros_ingresos_afectos),
+        'indemnizacion_despido': indemnizacion_despido,
+        'indemnizacion_despido_fmt': _formato_liquidacion_moneda(indemnizacion_despido),
+        'mostrar_indemnizacion_despido': _mostrar_ingreso(indemnizacion_despido),
         'anios_fc': 'ANIOSVACTRUNCA',
         'meses_fc': 'MESES_VAC_TRUN',
         'dias_fc': 'DIAS_VAC_TRUN',
@@ -4879,6 +4892,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'total_fc': 'VACACIONANIO + VACXMES + VACXDIA',
         'devolucion_quinta_fc': 'DEVOLUCION_QUINTA',
         'otros_ingresos_afectos_fc': 'LIQINGRESOAFECTO',
+        'indemnizacion_despido_fc': 'INDEMNIZACION_DESPID',
         'formula_anios_fc': 'Σ rem.VACA × ANIOSVACTRUNCA → VACACIONANIO',
         'formula_meses_fc': '(Σ rem.VACA / 12) × MESES_VAC_TRUN → VACXMES',
         'formula_dias_fc': '(Σ rem.VACA / 360) × DIAS_VAC_TRUN → VACXDIA',
@@ -4947,6 +4961,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         + float(grati_calc.get('bono_9') or 0)
         + float(vaca_calc.get('devolucion_quinta') or 0)
         + float(vaca_calc.get('otros_ingresos_afectos') or 0)
+        + float(vaca_calc.get('indemnizacion_despido') or 0)
     )
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
@@ -6465,6 +6480,12 @@ def asignacion_conceptos_page():
 @login_required
 def registro_vacaciones_page():
     return render_template('registro_vacaciones.html')
+
+
+@app.route('/control-prestamos')
+@login_required
+def control_prestamos_page():
+    return render_template('control_prestamos.html')
 
 
 @app.route('/registro-descansos-medicos')
@@ -20057,6 +20078,159 @@ def api_vacaciones_trabajadores():
         return jsonify({"rows": resultado, "total": len(resultado)})
     except Exception as e:
         logging.exception("api_vacaciones_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/trabajadores', methods=['POST'])
+@login_required
+def api_prestamos_trabajadores():
+    """sp_pr_prestamos_listar_trabajadores_web: trabajadores con cuenta corriente / préstamos."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    busqueda = str(body.get('busqueda') or body.get('nombre') or body.get('q') or '').strip()
+    incluir_ceros = str(body.get('incluir_ceros') or body.get('allzeros') or 'N').strip().upper()[:1] or 'N'
+    if incluir_ceros not in ('Y', 'N'):
+        incluir_ceros = 'N'
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_listar_trabajadores_web "
+            "@company=?, @payrolltype=?, @busqueda=?, @incluir_ceros=?",
+            (cia, payrolltype, busqueda, incluir_ceros),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                'company': _jsonable_value(r.get('company')),
+                'person': _jsonable_value(r.get('person')),
+                'codigo': _jsonable_value(r.get('codigo')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'documento': _jsonable_value(r.get('documento')),
+                'moneda': _jsonable_value(r.get('moneda')),
+                'totalloan': _jsonable_value(r.get('totalloan')),
+                'totalpayed': _jsonable_value(r.get('totalpayed')),
+                'totalpending': _jsonable_value(r.get('totalpending')),
+                'xlastdate': _jsonable_value(r.get('xlastdate')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+                'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_prestamos_trabajadores")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/obtener', methods=['POST'])
+@login_required
+def api_prestamos_obtener():
+    """sp_pr_prestamos_obtener_trabajador_web: préstamos y cuotas del trabajador."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_obtener_trabajador_web @company=?, @person=?",
+            (cia, person),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=5)
+        emp_row = sets[0][0] if len(sets) > 0 and sets[0] else None
+        prestamos_rows = sets[1] if len(sets) > 1 else []
+        cuotas_rows = sets[2] if len(sets) > 2 else []
+
+        empleado = None
+        if emp_row:
+            empleado = {
+                'person': _jsonable_value(emp_row.get('person')),
+                'company': _jsonable_value(emp_row.get('company')),
+                'codigo': _jsonable_value(emp_row.get('codigo')),
+                'nombre': _jsonable_value(emp_row.get('nombre')),
+                'documento': _jsonable_value(emp_row.get('documento')),
+                'moneda': _jsonable_value(emp_row.get('moneda')),
+                'totalloan': _jsonable_value(emp_row.get('totalloan')),
+                'totalpayed': _jsonable_value(emp_row.get('totalpayed')),
+                'totalpending': _jsonable_value(emp_row.get('totalpending')),
+            }
+
+        prestamos = []
+        for r in prestamos_rows:
+            prestamos.append({
+                'person': _jsonable_value(r.get('person')),
+                'company': _jsonable_value(r.get('company')),
+                'secuence': _jsonable_value(r.get('secuence')),
+                'loandate': _jsonable_value(r.get('loandate')),
+                'prperiod': _jsonable_value(r.get('prperiod')),
+                'moneda': _jsonable_value(r.get('moneda')),
+                'loadamount': _jsonable_value(r.get('loadamount')),
+                'numberquotes': _jsonable_value(r.get('numberquotes')),
+                'amountquote': _jsonable_value(r.get('amountquote')),
+                'status': _jsonable_value(r.get('status')),
+                'status_texto': _jsonable_value(r.get('status_texto')),
+                'loanclass': _jsonable_value(r.get('loanclass')),
+                'loantype': _jsonable_value(r.get('loantype')),
+                'loanreason': _jsonable_value(r.get('loanreason')),
+                'reference': _jsonable_value(r.get('reference')),
+                'costcenter': _jsonable_value(r.get('costcenter')),
+                'costcentercode': _jsonable_value(r.get('costcentercode')),
+                'rateinterest': _jsonable_value(r.get('rateinterest')),
+                'xlastdate': _jsonable_value(r.get('xlastdate')),
+            })
+
+        cuotas = []
+        for r in cuotas_rows:
+            cuotas.append({
+                'person': _jsonable_value(r.get('person')),
+                'company': _jsonable_value(r.get('company')),
+                'secuence': _jsonable_value(r.get('secuence')),
+                'loansecuence': _jsonable_value(r.get('loansecuence')),
+                'prperiod': _jsonable_value(r.get('prperiod')),
+                'moneda': _jsonable_value(r.get('moneda')),
+                'amount': _jsonable_value(r.get('amount')),
+                'interest': _jsonable_value(r.get('interest')),
+                'amounttotal': _jsonable_value(r.get('amounttotal')),
+                'status': _jsonable_value(r.get('status')),
+                'status_texto': _jsonable_value(r.get('status_texto')),
+                'flagliquidation': _jsonable_value(r.get('flagliquidation')),
+                'proceso_texto': _jsonable_value(r.get('proceso_texto')),
+                'comments': _jsonable_value(r.get('comments')),
+                'xlastdate': _jsonable_value(r.get('xlastdate')),
+            })
+
+        return jsonify({
+            "empleado": empleado,
+            "prestamos": prestamos,
+            "cuotas": cuotas,
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_obtener")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

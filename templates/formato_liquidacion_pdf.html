@@ -627,6 +627,7 @@
                 </table>
             </div>
 
+            {% if vaca_calc.mostrar_devolucion_quinta %}
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">
                     <tr class="cts-titulo-row">
@@ -638,7 +639,9 @@
                     </tr>
                 </table>
             </div>
+            {% endif %}
 
+            {% if vaca_calc.mostrar_otros_ingresos_afectos %}
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">
                     <tr class="cts-titulo-row">
@@ -650,6 +653,21 @@
                     </tr>
                 </table>
             </div>
+            {% endif %}
+
+            {% if vaca_calc.mostrar_indemnizacion_despido %}
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="2">Indemnización por Despido</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.indemnizacion_despido_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
+            {% endif %}
 
             <table class="neto-table">
                 <tr>

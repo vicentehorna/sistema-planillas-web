@@ -1147,6 +1147,31 @@
                 </li>
                 {% endif %}
 
+                {% set prestamos_active = request.endpoint in ('control_prestamos_page',) %}
+                {% set show_prestamos = can_menu('control_prestamos') %}
+                {% if show_prestamos %}
+                <li class="sidebar-menu-parent {{ 'active' if prestamos_active else '' }}">
+                    <a href="#submenuPrestamos"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if prestamos_active else 'false' }}"
+                       aria-controls="submenuPrestamos"
+                       title="Préstamos">
+                        <i class="bi bi-cash-coin"></i><span class="sidebar-link-text">Préstamos</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if prestamos_active else '' }}" id="submenuPrestamos">
+                        {% if can_menu('control_prestamos') %}
+                        <li class="{{ 'active' if request.endpoint == 'control_prestamos_page' else '' }}">
+                            <a href="{{ url_for('control_prestamos_page') }}" title="Control de Préstamos">
+                                <i class="bi bi-wallet2"></i><span class="sidebar-link-text">Control de Préstamos</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>

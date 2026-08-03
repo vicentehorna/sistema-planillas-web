@@ -777,7 +777,7 @@
             <div>
                 <h4>{% if modo_nuevo %}Nuevo trabajador{% elif modo_reingreso %}Reingreso de trabajador{% else %}Edición de trabajador{% endif %}</h4>
                 <p class="te-subtitle">
-                    {% if modo_nuevo %}Alta de trabajador: complete los datos generales, laborales, pensiones e información bancaria
+                    {% if modo_nuevo %}Alta de trabajador: complete los datos generales, laborales, educación (opcional), pensiones e información bancaria
                     {% elif modo_reingreso %}Registre la nueva fecha de reingreso. Se limpiarán cese y motivo; el trabajador quedará activo.
                     {% elif seccion == 'generales' %}Datos generales del trabajador
                     {% elif seccion == 'laborales' %}Datos laborales del trabajador
@@ -813,6 +813,8 @@
                href="#" data-seccion="generales">Datos Generales</a>
             <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'laborales' %}active{% endif %}"
                href="#" data-seccion="laborales">Datos Laborales</a>
+            <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'educacion' %}active{% endif %}"
+               href="#" data-seccion="educacion">Datos Educación</a>
             <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'pensiones' %}active{% endif %}"
                href="#" data-seccion="pensiones">Pensiones</a>
             <a class="nav-link te-nav-link te-nav-modo-nuevo {% if seccion == 'bancario' %}active{% endif %}"
@@ -859,6 +861,10 @@
             <div class="te-panel-nuevo" data-seccion="laborales"
                  style="{{ '' if seccion == 'laborales' else 'display:none' }}">
                 {{ campos_laborales() }}
+            </div>
+            <div class="te-panel-nuevo" data-seccion="educacion"
+                 style="{{ '' if seccion == 'educacion' else 'display:none' }}">
+                {{ campos_educacion() }}
             </div>
             <div class="te-panel-nuevo" data-seccion="pensiones"
                  style="{{ '' if seccion == 'pensiones' else 'display:none' }}">
@@ -1305,11 +1311,17 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const frmEducacion = document.getElementById('frmEducacion');
-        if (frmEducacion) {
-            frmEducacion.addEventListener('submit', function (e) {
+        const frmValidacionEducacion = modoNuevo ? frmActivo : frmEducacion;
+        if (frmValidacionEducacion) {
+            frmValidacionEducacion.addEventListener('submit', function (e) {
+                if (modoNuevo && enviandoNuevo) {
+                    // validarYEnviarNuevo ya validó educación antes de enviar.
+                    return;
+                }
                 const anio = (txtAnio?.value || '').trim();
                 if (anio && !/^(19|20)\d{2}$/.test(anio)) {
                     e.preventDefault();
+                    if (modoNuevo) mostrarPanelNuevo('educacion');
                     mostrarError('Año de egreso no válido. Use formato YYYY (ej. 1997).');
                     txtAnio?.focus();
                     return;
@@ -1318,6 +1330,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 const institucion = (cboInstitution?.value || '').trim();
                 if (carrera && !institucion) {
                     e.preventDefault();
+                    if (modoNuevo) mostrarPanelNuevo('educacion');
                     mostrarError('Seleccione la institución antes de la carrera.');
                     cboInstitution?.focus();
                 }
@@ -1516,6 +1529,22 @@ document.addEventListener('DOMContentLoaded', function () {
             }
         }
 
+        const anioEgreso = (document.getElementById('txtAnioEgreso')?.value || '').trim();
+        if (anioEgreso && !/^(19|20)\d{2}$/.test(anioEgreso)) {
+            mostrarPanelNuevo('educacion');
+            mostrarError('Año de egreso no válido. Use formato YYYY (ej. 1997).');
+            document.getElementById('txtAnioEgreso')?.focus();
+            return;
+        }
+        const carreraEdu = (document.getElementById('cboCareer')?.value || '').trim();
+        const institucionEdu = (document.getElementById('cboInstitution')?.value || '').trim();
+        if (carreraEdu && !institucionEdu) {
+            mostrarPanelNuevo('educacion');
+            mostrarError('Seleccione la institución antes de la carrera.');
+            document.getElementById('cboInstitution')?.focus();
+            return;
+        }
+
         try {
             const resp = await fetch('/api/trabajadores/validar-alta', {
                 method: 'POST',
@@ -1582,7 +1611,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (modoNuevo || seccion === 'generales') wireGenerales();
     if (modoNuevo || seccion === 'laborales') wireLaborales();
-    if (!modoNuevo && seccion === 'educacion') wireEducacion();
+    if (modoNuevo || seccion === 'educacion') wireEducacion();
     if (modoNuevo || seccion === 'pensiones') wirePensiones();
     if (modoNuevo || seccion === 'bancario') wireBancario();
 

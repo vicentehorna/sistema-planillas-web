@@ -6036,6 +6036,14 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'ctsbank': '',
         'ctsaccount': '',
         'ctscurrency': 'LO',
+        'instructionlevel': '',
+        'costcenter1': '',
+        'costcenter2': '',
+        'anio_egreso': '',
+        'specialty': '',
+        'profesionalstudiescentertype': '',
+        'istrainer': 'N',
+        'indicator': '',
     }
 
 
@@ -6126,8 +6134,6 @@ def trabajadores_nuevo():
     """Alta de trabajador: misma ficha de edición en modo nuevo."""
     cia = str(request.args.get('cia') or request.form.get('cia') or session.get('company') or '').strip()
     seccion = _trabajadores_editar_seccion(request.args.get('seccion') or request.form.get('seccion') or 'generales')
-    if seccion == 'educacion':
-        seccion = 'generales'
 
     if not cia:
         flash('Seleccione la compañía antes de registrar un trabajador.', 'warning')
@@ -6143,11 +6149,13 @@ def trabajadores_nuevo():
         pension_types, regime_health = _cargar_selectores_pensiones(cursor, cia)
         tipos_documento, unidades, usuarios = _cargar_selectores_generales(cursor, cia)
         labor_selectors = _cargar_selectores_laborales(cursor, cia)
+        instruction_levels, institutions, careers = _cargar_selectores_educacion(cursor, cia, None)
 
         if request.method == 'POST':
             generales = _empleado_generales_desde_form(request.form)
             laborales = _empleado_laborales_desde_form(request.form)
             pensiones = _empleado_pensiones_desde_form(request.form)
+            educacion = _empleado_educacion_desde_form(request.form)
             person = str(request.form.get('person') or '').strip().upper()
             confirmar_nombre = 'Y' if str(request.form.get('confirmar_nombre') or '').strip().upper() == 'Y' else 'N'
 
@@ -6174,6 +6182,8 @@ def trabajadores_nuevo():
                     @pensiontype=?, @pensioninscriptiondate=?, @regimehealth=?, @flagmixta=?, @cuspp=?,
                     @collectionform=?, @salarybank=?, @salaryaccounttype=?, @salaryaccount=?,
                     @cci=?, @ctsbank=?, @ctsaccount=?, @ctscurrency=?,
+                    @instructionlevel=?, @costcenter1=?, @costcenter2=?, @anio_egreso=?,
+                    @specialty=?, @profesionalstudiescentertype=?, @istrainer=?, @indicator=?,
                     @confirmar_nombre=?, @xlastuser=?,
                     @person_out=@person_out OUTPUT, @mensaje_out=@mensaje_out OUTPUT;
                 SELECT @person_out AS person_out, @mensaje_out AS mensaje_out;
@@ -6220,6 +6230,14 @@ def trabajadores_nuevo():
                     str(request.form.get('ctsbank') or '').strip() or None,
                     str(request.form.get('ctsaccount') or '').strip() or None,
                     str(request.form.get('ctscurrency') or 'LO').strip() or 'LO',
+                    educacion['instructionlevel'] or None,
+                    educacion['costcenter1'] or None,
+                    educacion['costcenter2'] or None,
+                    educacion['anio_egreso'] or None,
+                    educacion['specialty'] or None,
+                    educacion['profesionalstudiescentertype'] or None,
+                    educacion['istrainer'] or 'N',
+                    educacion['indicator'] or None,
                     confirmar_nombre,
                     xlastuser,
                 ),
@@ -6259,6 +6277,9 @@ def trabajadores_nuevo():
             payroll_types=labor_selectors[7],
             account_profiles=labor_selectors[8],
             cease_reasons=labor_selectors[9],
+            instruction_levels=instruction_levels,
+            institutions=institutions,
+            careers=careers,
             modo_nuevo=True,
         )
     except Exception as e:

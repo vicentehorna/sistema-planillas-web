@@ -9,6 +9,9 @@
     - Si flag asignación familiar = Y: asigna FLAG_ASIG_FAM permanente con valor 1
     - Si régimen AFP: asigna AFP_FLUJO permanente con valor 1
     - Si AFP: asigna AFP_FLUJO = 1
+    - Educación opcional: InstructionLevel, CostCenter1/2 (institución/carrera),
+      DriverLicenseAntiquity (año egreso), Specialty, ProfesionalStudiesCenterType,
+      IsTrainer, Indicator
 
     Validaciones bloqueantes:
       - Código (person) único en SY_Person
@@ -61,6 +64,14 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
     @ctsbank                VARCHAR(20) = NULL,
     @ctsaccount             VARCHAR(20) = NULL,
     @ctscurrency            CHAR(2) = 'LO',
+    @instructionlevel       VARCHAR(20) = NULL,
+    @costcenter1            VARCHAR(20) = NULL,
+    @costcenter2            VARCHAR(20) = NULL,
+    @anio_egreso            VARCHAR(10) = NULL,
+    @specialty              VARCHAR(100) = NULL,
+    @profesionalstudiescentertype CHAR(1) = NULL,
+    @istrainer              CHAR(1) = 'N',
+    @indicator              CHAR(1) = NULL,
     @confirmar_nombre       CHAR(1) = 'N',
     @xlastuser              VARCHAR(20) = NULL,
     @person_out             VARCHAR(20) = NULL OUTPUT,
@@ -89,6 +100,7 @@ BEGIN
     DECLARE @cc_asignacion      VARCHAR(20);
     DECLARE @cc_code_asignacion VARCHAR(20);
     DECLARE @hay_similares      INT = 0;
+    DECLARE @anio_int           INT = NULL;
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
@@ -131,6 +143,14 @@ BEGIN
     SET @ctsbank = NULLIF(LTRIM(RTRIM(ISNULL(@ctsbank, ''))), '');
     SET @ctsaccount = NULLIF(LTRIM(RTRIM(ISNULL(@ctsaccount, ''))), '');
     SET @ctscurrency = CASE WHEN UPPER(ISNULL(@ctscurrency, 'LO')) = 'EX' THEN 'EX' ELSE 'LO' END;
+    SET @instructionlevel = NULLIF(LTRIM(RTRIM(ISNULL(@instructionlevel, ''))), '');
+    SET @costcenter1 = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter1, ''))), '');
+    SET @costcenter2 = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter2, ''))), '');
+    SET @anio_egreso = NULLIF(LTRIM(RTRIM(ISNULL(@anio_egreso, ''))), '');
+    SET @specialty = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@specialty, '')))), '');
+    SET @profesionalstudiescentertype = NULLIF(LTRIM(RTRIM(ISNULL(@profesionalstudiescentertype, ''))), '');
+    SET @istrainer = CASE WHEN UPPER(ISNULL(@istrainer, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @indicator = NULLIF(LTRIM(RTRIM(ISNULL(@indicator, ''))), '');
     SET @confirmar_nombre = CASE WHEN UPPER(ISNULL(@confirmar_nombre, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
     SET @person_out = NULL;
@@ -208,6 +228,77 @@ BEGIN
             RAISERROR('El sueldo indicado no es un valor numérico válido.', 16, 1);
             RETURN;
         END;
+    END;
+
+    /* Educación (opcional): validar solo si el usuario envió valores. */
+    IF @instructionlevel IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1 FROM PR_InstructionLevel (NOLOCK)
+            WHERE InstructionLevel = @instructionlevel
+       )
+    BEGIN
+        RAISERROR('Nivel de instrucción no válido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @costcenter1 IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1 FROM PR_Institution (NOLOCK)
+            WHERE Company = @cia AND pdt = @costcenter1
+       )
+    BEGIN
+        RAISERROR('Institución no válida para la compañía.', 16, 1);
+        RETURN;
+    END;
+
+    IF @costcenter2 IS NOT NULL
+    BEGIN
+        IF @costcenter1 IS NULL
+        BEGIN
+            RAISERROR('Seleccione la institución antes de la carrera.', 16, 1);
+            RETURN;
+        END;
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM PR_Career c (NOLOCK)
+                INNER JOIN PR_Institution i (NOLOCK)
+                    ON i.Institution = c.Institution
+                   AND i.Company = c.Company
+            WHERE c.Company = @cia
+              AND i.pdt = @costcenter1
+              AND c.pdt = @costcenter2
+        )
+        BEGIN
+            RAISERROR('Carrera no válida para la institución seleccionada.', 16, 1);
+            RETURN;
+        END;
+    END;
+
+    IF @anio_egreso IS NOT NULL
+    BEGIN
+        IF ISNUMERIC(@anio_egreso) = 0
+           OR LEN(@anio_egreso) <> 4
+           OR CAST(@anio_egreso AS INT) < 1900
+           OR CAST(@anio_egreso AS INT) > 2100
+        BEGIN
+            RAISERROR('Año de egreso no válido. Use formato YYYY (ej. 1997).', 16, 1);
+            RETURN;
+        END;
+        SET @anio_int = CAST(@anio_egreso AS INT);
+    END;
+
+    IF @profesionalstudiescentertype IS NOT NULL
+       AND @profesionalstudiescentertype NOT IN ('1', '2', '3', '4')
+    BEGIN
+        RAISERROR('Tipo de centro de formación no válido.', 16, 1);
+        RETURN;
+    END;
+
+    IF @indicator IS NOT NULL AND LEN(@indicator) > 1
+    BEGIN
+        RAISERROR('Indicador no válido.', 16, 1);
+        RETURN;
     END;
 
     SET @doc_norm = @documentnumber;
@@ -370,7 +461,9 @@ BEGIN
             EmployeeDocumentType, FlagKeep, FlagName, FlagOutsourcingIn,
             FlagOutsourcingOut, IsDomiciled, Nacionalidad, FlagPerceptionAgent,
             FlagSunat5, IsTrainer, IsRecruiter, IsSupervisor, Indicator,
-            FlagLockCA, LicenseCondition, UserID
+            FlagLockCA, LicenseCondition, UserID,
+            InstructionLevel, CostCenter1, CostCenter2, DriverLicenseAntiquity,
+            Specialty, ProfesionalStudiesCenterType
         )
         VALUES (
             @person, 'N', 'NN', @nombre_completo, @address,
@@ -380,8 +473,10 @@ BEGIN
             @name1, NULLIF(@lastname2, ''), @birthdate_dt, @sex,
             @employeedocumenttype, 'N', 'P', 'N',
             'N', '1', @nacionalidad, 'N',
-            'N', 'N', 'N', 'N', NULL,
-            'N', 'L', @userid_norm
+            'N', @istrainer, 'N', 'N', @indicator,
+            'N', 'L', @userid_norm,
+            @instructionlevel, @costcenter1, @costcenter2, @anio_int,
+            @specialty, @profesionalstudiescentertype
         );
 
         INSERT INTO PR_Employee (

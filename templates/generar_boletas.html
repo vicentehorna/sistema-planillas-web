@@ -119,6 +119,13 @@
                 <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Localizar trabajador</label>
                 <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
+            <div class="col-6 col-lg-2">
+                <label class="form-label small fw-bold text-muted mb-1 d-block">&nbsp;</label>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="chkSinFirma" value="1">
+                    <label class="form-check-label small fw-bold text-muted" for="chkSinFirma">Sin Firma</label>
+                </div>
+            </div>
             <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top pt-3 mt-2">
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarBoletas"><i class="bi bi-search"></i> Consultar</button>
@@ -196,7 +203,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPer = document.getElementById('cboPeriodo');
     const cboUnidad = document.getElementById('cboUnidad');
     const cboCentroCosto = document.getElementById('cboCentroCosto');
+    const chkSinFirma = document.getElementById('chkSinFirma');
     const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
+
+    function flagSinFirma() {
+        return !!(chkSinFirma && chkSinFirma.checked);
+    }
 
     let boletasCache = [];
     let filtrosListaActuales = null;
@@ -554,7 +566,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             cia: data.cia || cboCia.value.trim(),
             payroll_type: data.payroll_type || cboPt.value.trim(),
             process: data.process || cboProc.value.trim(),
-            period: data.period || cboPer.value.trim()
+            period: data.period || cboPer.value.trim(),
+            sin_firma: flagSinFirma() ? '1' : '0'
         }).toString();
         window.open(`${URL_PREVIEW}?${params}`, '_blank');
     }
@@ -575,7 +588,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             process,
             period,
             repunit,
-            costcenter
+            costcenter,
+            sin_firma: flagSinFirma() ? '1' : '0'
         };
     }
 
@@ -689,7 +703,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     empleados: ids,
                     period: filtros.period,
                     payroll_type: filtros.payroll_type,
-                    process: filtros.process
+                    process: filtros.process,
+                    sin_firma: filtros.sin_firma || '0'
                 })
             });
             if (!resEnv.ok) {
@@ -815,7 +830,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             period: per,
             company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
             repunit: String(cboUnidad?.value || '0').trim() || '0',
-            costcenter: String(cboCentroCosto?.value || '0').trim() || '0'
+            costcenter: String(cboCentroCosto?.value || '0').trim() || '0',
+            sin_firma: flagSinFirma() ? '1' : '0'
         });
         if (seleccionados.length) {
             qs.set('trabajadores', seleccionados.join(','));
@@ -831,6 +847,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtBuscarTrabajador.addEventListener('input', function () {
             if (filtrosPersist) filtrosPersist.guardar();
             aplicarLocalizadorBoletas();
+        });
+    }
+    if (chkSinFirma) {
+        chkSinFirma.addEventListener('change', function () {
+            if (filtrosPersist) filtrosPersist.guardar();
         });
     }
     document.querySelectorAll('input[name="modoProceso"]').forEach((r) => {

@@ -3794,6 +3794,14 @@ def _bool_env(name, default=False):
     return raw in ('1', 'true', 'yes', 'on')
 
 
+def _truthy_param(value):
+    """Interpreta flags de request/body (1/true/yes/on/s/si)."""
+    if isinstance(value, bool):
+        return value
+    raw = str(value or '').strip().lower()
+    return raw in ('1', 'true', 'yes', 'y', 'on', 's', 'si')
+
+
 def formatear_periodo_texto(periodo_str):
     # Asumiendo formato YYYYMM... (ej: 20251212)
     meses = {
@@ -3944,15 +3952,21 @@ def generar_pdf_en_memoria(params):
 
     ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
     logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
+    sin_firma = _truthy_param(
+        params.get('sin_firma')
+        if params.get('sin_firma') is not None
+        else params.get('sinfirma')
+    )
+    firma_src = '' if sin_firma else _image_data_uri(ruta_firma)
     if _bool_env('LOG_BOLETA_ASSETS', False):
         logging.info(
-            '[boleta assets] cia=%s logo="%s" exists=%s | firma="%s" exists=%s',
+            '[boleta assets] cia=%s logo="%s" exists=%s | firma="%s" exists=%s | sin_firma=%s',
             cia,
             ruta_logo,
             os.path.exists(ruta_logo),
             ruta_firma,
             os.path.exists(ruta_firma),
+            sin_firma,
         )
 
     if WEASYPRINT_AVAILABLE:
@@ -16704,6 +16718,7 @@ def procesar_boletas_masivo():
     period = _normalize_pr_period(body.get('period'))
     modo = str(body.get('modo') or '').strip().lower()
     seleccionados = body.get('trabajadores') or []
+    sin_firma = _truthy_param(body.get('sin_firma') if body.get('sin_firma') is not None else body.get('sinfirma'))
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
     if not isinstance(seleccionados, list) or not seleccionados:
@@ -16740,6 +16755,7 @@ def procesar_boletas_masivo():
                         'payroll_type': payroll_type,
                         'process': process,
                         'period': period,
+                        'sin_firma': '1' if sin_firma else '0',
                     }
                 )
                 emp = by_person.get(pid, {})
@@ -16779,6 +16795,11 @@ def descargar_zip_boletas():
     seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
     repunit = str(request.args.get('repunit') or request.args.get('unidad') or '0').strip() or '0'
     costcenter = str(request.args.get('costcenter') or request.args.get('centrocosto') or '0').strip() or '0'
+    sin_firma = _truthy_param(
+        request.args.get('sin_firma')
+        if request.args.get('sin_firma') is not None
+        else request.args.get('sinfirma')
+    )
 
     if not (cia and payroll_type and processtype and period):
         flash('Faltan filtros para generar el ZIP de boletas.', 'warning')
@@ -16812,6 +16833,7 @@ def descargar_zip_boletas():
                     'process': processtype,
                     'period': period,
                     'person': person_id,
+                    'sin_firma': '1' if sin_firma else '0',
                 }
                 pdf_io = generar_pdf_en_memoria(params)
                 emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
@@ -16845,6 +16867,9 @@ def enviar_boletas_masivo():
     process = str(data.get('process') or data.get('processtype') or '').strip()
     period = _normalize_pr_period(data.get('period'))
     seleccionados = data.get('empleados', data.get('trabajadores', []))
+    sin_firma = _truthy_param(
+        data.get('sin_firma') if data.get('sin_firma') is not None else data.get('sinfirma')
+    )
 
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
@@ -16886,6 +16911,7 @@ def enviar_boletas_masivo():
                         'process': process,
                         'period': period,
                         'person': emp_code,
+                        'sin_firma': '1' if sin_firma else '0',
                     }
                 )
                 exito, msg = enviar_correo_boleta(

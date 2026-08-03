@@ -1954,6 +1954,7 @@
                     periodo: val('cboPeriodo'),
                     repunit: val('cboUnidad') || '0',
                     costcenter: val('cboCentroCosto') || '0',
+                    sin_firma: document.getElementById('chkSinFirma')?.checked ? '1' : '0',
                     nombre: val('txtBuscarTrabajador'),
                     timestamp: Date.now()
                 };
@@ -2057,6 +2058,12 @@
                 }
             }
 
+            const chkSinFirma = document.getElementById('chkSinFirma');
+            if (chkSinFirma) {
+                const sinFirma = String(filtros.sin_firma || '').trim().toLowerCase();
+                chkSinFirma.checked = ['1', 'true', 'yes', 'y', 'on', 's', 'si'].includes(sinFirma);
+            }
+
             guardar();
             return true;
         }
@@ -2066,6 +2073,8 @@
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });
+            const chkSinFirma = document.getElementById('chkSinFirma');
+            if (chkSinFirma) chkSinFirma.addEventListener('change', guardar);
             const txtNombre = document.getElementById('txtBuscarTrabajador');
             if (txtNombre) {
                 txtNombre.addEventListener('change', guardar);

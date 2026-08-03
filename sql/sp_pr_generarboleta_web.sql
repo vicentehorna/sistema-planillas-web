@@ -330,15 +330,20 @@ BEGIN
            AND pr_concept.formulacode = 'DIAFALLECIMIENTO'
            AND PERSON = pr_employee.Person) AS dias_fallecimiento,
 
-        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
-         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
-         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
-           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
-           AND PROCESSTYPE = @process
-           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
-           AND PRPERIOD = @period
-           AND pr_concept.formulacode = 'CANT_DIAS_AUS_JUSTI'
-           AND PERSON = pr_employee.Person) AS dias_faltas_justif,
+        CASE
+            WHEN ISNULL((
+                SELECT SUM(ISNULL(CONCEPTVALUE, 0.00))
+                FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+                WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+                  AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+                  AND PROCESSTYPE = @process
+                  AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+                  AND PRPERIOD = @period
+                  AND pr_concept.formulacode = 'REM_ACUM_OTRA_EM'
+                  AND PERSON = pr_employee.Person
+            ), 0) <> 0 THEN 'Si'
+            ELSE 'No'
+        END AS otros_empleadores_5ta,
 
         CASE WHEN (SELECT PDT FROM PR_pensionType WHERE PR_pensionType.PensionType = pr_employee.pensionType) <> '02' THEN
             CASE WHEN (SELECT COUNT(*)

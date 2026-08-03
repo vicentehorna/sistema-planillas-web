@@ -1952,6 +1952,8 @@
                     payroll: val('cboTipoPlanilla'),
                     proceso: val('cboProceso'),
                     periodo: val('cboPeriodo'),
+                    repunit: val('cboUnidad') || '0',
+                    costcenter: val('cboCentroCosto') || '0',
                     nombre: val('txtBuscarTrabajador'),
                     timestamp: Date.now()
                 };
@@ -1976,7 +1978,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect } = opts;
+            const { poblarSelect, cargarCentrosCosto } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -2032,12 +2034,35 @@
                 txtNombre.value = String(filtros.nombre);
             }
 
+            const cboUnidad = document.getElementById('cboUnidad');
+            if (cboUnidad) {
+                const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                if (repunit && optionExists(cboUnidad, repunit)) {
+                    cboUnidad.value = repunit;
+                } else if (optionExists(cboUnidad, '0')) {
+                    cboUnidad.value = '0';
+                }
+            }
+
+            const cboCentroCosto = document.getElementById('cboCentroCosto');
+            if (cboCentroCosto) {
+                if (typeof cargarCentrosCosto === 'function') {
+                    await cargarCentrosCosto();
+                }
+                const costcenter = filtros.costcenter != null ? String(filtros.costcenter).trim() : '0';
+                if (costcenter && optionExists(cboCentroCosto, costcenter)) {
+                    cboCentroCosto.value = costcenter;
+                } else if (optionExists(cboCentroCosto, '0')) {
+                    cboCentroCosto.value = '0';
+                }
+            }
+
             guardar();
             return true;
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo', 'cboUnidad', 'cboCentroCosto'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

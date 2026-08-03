@@ -79,7 +79,7 @@
     </div>
     <div class="card-body">
         <form id="frmGenerarBoletas" class="row g-2 align-items-end">
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-2">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
@@ -103,7 +103,19 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted mb-1">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
+                <label for="cboCentroCosto" class="form-label small fw-bold text-muted mb-1">Centro de costo</label>
+                <select id="cboCentroCosto" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-6 col-lg-2">
                 <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Localizar trabajador</label>
                 <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
@@ -175,12 +187,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_DESCARGA_ZIP = {{ url_for('descargar_zip_boletas') | tojson }};
     const URL_ENVIO_MASIVO = {{ url_for('enviar_boletas_masivo') | tojson }};
     const URL_SUBIR_PORTAL = {{ url_for('subir_boletas_portal') | tojson }};
+    const URL_UNIDADES = {{ url_for('api_unidades') | tojson }};
     const MOSTRAR_SUBIR_PORTAL = {{ (mostrar_subir_portal|default(false)) | tojson }};
 
     const cboCia = document.getElementById('cboCompania');
     const cboPt = document.getElementById('cboTipoPlanilla');
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
+    const cboUnidad = document.getElementById('cboUnidad');
+    const cboCentroCosto = document.getElementById('cboCentroCosto');
     const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
 
     let boletasCache = [];
@@ -422,12 +437,73 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     };
 
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim();
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch(URL_UNIDADES);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            const ok = Array.from(cboUnidad.options).some((o) => String(o.value).trim() === prev);
+            cboUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
+        }
+    }
+
+    async function cargarCentrosCosto() {
+        if (!cboCentroCosto) return;
+        const prev = String(cboCentroCosto.value || '0').trim();
+        const cia = String(cboCia?.value || '').trim();
+        cboCentroCosto.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todos';
+        cboCentroCosto.appendChild(optAll);
+        if (!cia) {
+            cboCentroCosto.value = '0';
+            return;
+        }
+        try {
+            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboCentroCosto.appendChild(opt);
+            });
+            const ok = Array.from(cboCentroCosto.options).some((o) => String(o.value).trim() === prev);
+            cboCentroCosto.value = ok ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cboCentroCosto.value = '0';
+        }
+    }
+
     async function cargarListaBoletas() {
         const btn = document.getElementById('btnConsultarBoletas');
         const cia = cboCia.value.trim();
         const payroll_type = cboPt.value.trim();
         const process = cboProc.value.trim();
         const period = cboPer.value.trim();
+        const repunit = String(cboUnidad?.value || '0').trim() || '0';
+        const costcenter = String(cboCentroCosto?.value || '0').trim() || '0';
         if (!cia || !payroll_type || !process || !period) {
             alert('Seleccione compañía, tipo de planilla, proceso y periodo.');
             return;
@@ -435,7 +511,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (filtrosPersist) filtrosPersist.guardar();
         btn.disabled = true;
         boletasCache = [];
-        filtrosListaActuales = { cia, payroll_type, process, period };
+        filtrosListaActuales = { cia, payroll_type, process, period, repunit, costcenter };
         document.getElementById('tbodyBoletas').innerHTML = '';
         actualizarConteoBoletas(0);
         try {
@@ -447,7 +523,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                     payroll_type: payroll_type,
                     process: process,
                     period: period,
-                    person: '0'
+                    person: '0',
+                    repunit: repunit,
+                    costcenter: costcenter
                 })
             });
             const data = await res.json();
@@ -488,12 +566,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         const payroll_type = String(base.payroll_type || cboPt.value || '').trim();
         const process = String(base.process || cboProc.value || '').trim();
         const period = String(base.period || cboPer.value || '').trim();
+        const repunit = String(base.repunit || cboUnidad?.value || '0').trim() || '0';
+        const costcenter = String(base.costcenter || cboCentroCosto?.value || '0').trim() || '0';
         return {
             cia,
             company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
             payroll_type,
             process,
-            period
+            period,
+            repunit,
+            costcenter
         };
     }
 
@@ -731,7 +813,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             payroll_type: pt,
             process: proc,
             period: per,
-            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim()
+            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
+            repunit: String(cboUnidad?.value || '0').trim() || '0',
+            costcenter: String(cboCentroCosto?.value || '0').trim() || '0'
         });
         if (seleccionados.length) {
             qs.set('trabajadores', seleccionados.join(','));
@@ -757,10 +841,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     syncModoProcesoUI();
 
     await poblarSelect('/api/selectores/companias', cboCia);
+    await cargarUnidades();
 
     let filtrosRestaurados = false;
     if (filtrosPersist) {
-        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({
+            poblarSelect,
+            cargarCentrosCosto
+        });
     }
     if (!filtrosRestaurados) {
         limpiarValorComboSiObsoleto(cboCia);
@@ -769,6 +857,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (cboCia.value.trim()) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
+            await cargarCentrosCosto();
         }
         limpiarValorComboSiObsoleto(cboCia);
         limpiarValorComboSiObsoleto(cboPt);
@@ -795,9 +884,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cboPeriodo').disabled = true;
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+            await cargarCentrosCosto();
         } else {
             cboPt.innerHTML = '<option value="">Seleccione...</option>';
             cboPt.disabled = true;
+            await cargarCentrosCosto();
         }
     });
 

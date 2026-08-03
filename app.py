@@ -1234,14 +1234,16 @@ def _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, peri
                 pass
 
 
-def _listar_trabajadores_proceso(cia, payroll_type, processtype, period, person='0', nombre=None):
+def _listar_trabajadores_proceso(cia, payroll_type, processtype, period, person='0', nombre=None, repunit='0', costcenter='0'):
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        repunit_val = str(repunit or '0').strip() or '0'
+        costcenter_val = str(costcenter or '0').strip() or '0'
         cursor.execute(
-            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?',
-            (cia, payroll_type, processtype, period, person, nombre),
+            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?, @repunit=?, @costcenter=?',
+            (cia, payroll_type, processtype, period, person, nombre, repunit_val, costcenter_val),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = []
@@ -16629,6 +16631,8 @@ def get_lista_boletas():
     period = _normalize_pr_period(body.get('period'))
     person = str(body.get('person') or '0').strip() or '0'
     nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+    repunit = str(body.get('repunit') or body.get('unidad') or '0').strip() or '0'
+    costcenter = str(body.get('costcenter') or body.get('centrocosto') or '0').strip() or '0'
 
     if not cia or not payroll_type or not processtype or not period:
         return jsonify({'error': 'Faltan compañía, tipo de planilla, proceso o periodo.'}), 400
@@ -16638,8 +16642,8 @@ def get_lista_boletas():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?',
-            (cia, payroll_type, processtype, period, person, nombre),
+            'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?, @repunit=?, @costcenter=?',
+            (cia, payroll_type, processtype, period, person, nombre, repunit, costcenter),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = []
@@ -16773,12 +16777,16 @@ def descargar_zip_boletas():
     company_name = (request.args.get('company_name') or '').strip()
     trabajadores_raw = (request.args.get('trabajadores') or '').strip()
     seleccionados = [x.strip() for x in trabajadores_raw.split(',') if x.strip()]
+    repunit = str(request.args.get('repunit') or request.args.get('unidad') or '0').strip() or '0'
+    costcenter = str(request.args.get('costcenter') or request.args.get('centrocosto') or '0').strip() or '0'
 
     if not (cia and payroll_type and processtype and period):
         flash('Faltan filtros para generar el ZIP de boletas.', 'warning')
         return redirect(url_for('generar_boletas_page'))
 
-    empleados = get_listado_generar_boletas(cia, payroll_type, processtype, period, '0')
+    empleados = get_listado_generar_boletas(
+        cia, payroll_type, processtype, period, '0', repunit=repunit, costcenter=costcenter
+    )
     if not empleados:
         flash('No hay boletas para procesar en este periodo.', 'warning')
         return redirect(url_for('generar_boletas_page'))

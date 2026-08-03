@@ -300,14 +300,15 @@ BEGIN
         sy_department.name,
         sy_person.birthdate,
 
-        (SELECT SUM(ISNULL(E2.conceptvalue, 0))
-         FROM pr_employeepayrollconcept AS E2
-         WHERE E2.COMPANY = @cia
-           AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-           AND E2.processtype = @process
-           AND E2.Concept IN (SELECT mrcompanydaysconcept FROM PR_Mapping2 WHERE PR_Mapping2.company = @cia)
-           AND E2.PRPERIOD = @period
-           AND E2.PERSON = SY_Person.Person) AS dias_no_subsidiados,
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'DIAS_DESCANSO_EMPRES'
+           AND PERSON = pr_employee.Person) AS dias_no_subsidiados,
 
         (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
          FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
@@ -398,6 +399,26 @@ BEGIN
            AND PROCESSTYPE = @process
            AND PAYROLLTYPE = pr_employeepayroll.PayRollType
            AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'CANT_HORAS_25'
+           AND PERSON = pr_employee.Person) AS CANT_HORAS_25,
+
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'CANT_HORAS_35'
+           AND PERSON = pr_employee.Person) AS CANT_HORAS_35,
+
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
            AND pr_concept.formulacode = 'CANT_HORAS_60'
            AND PERSON = pr_employee.Person) AS CANT_HORAS_60,
 
@@ -411,13 +432,14 @@ BEGIN
            AND pr_concept.formulacode = 'CANT_HORAS_NOC'
            AND PERSON = pr_employee.Person) AS CANT_HORAS_NOC,
 
-        (SELECT CONCEPTVALUE
-         FROM PR_EMPLOYEEPAYROLLCONCEPT
-         WHERE COMPANY = @cia
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
            AND PROCESSTYPE = @process
            AND PAYROLLTYPE = pr_employeepayroll.PayRollType
            AND PRPERIOD = @period
-           AND CONCEPT = pr_mapping.salaryconcept
+           AND pr_concept.formulacode = 'REM_BASICA'
            AND PERSON = pr_employee.Person) AS salaryconcept,
 
         (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
@@ -450,31 +472,35 @@ BEGIN
            AND pr_concept.formulacode = 'DIAS_PAGADOS'
            AND PERSON = pr_employee.Person) AS dias_laborables,
 
-        (SELECT SUM(ISNULL(E2.conceptvalue, 0))
-         FROM pr_employeepayrollconcept AS E2
-         WHERE E2.COMPANY = @cia
-           AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-           AND E2.Concept IN (SELECT absencesdaysconcept FROM PR_Mapping WHERE PR_Mapping.company = @cia)
-           AND E2.PRPERIOD = @period
-           AND E2.PERSON = SY_Person.Person) AS dias_faltas_injustif,
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'CANT_DIAS_AUSENCIA'
+           AND PERSON = pr_employee.Person) AS dias_faltas_injustif,
 
-        (SELECT SUM(ISNULL(E2.conceptvalue, 0))
-         FROM pr_employeepayrollconcept AS E2
-         WHERE E2.COMPANY = @cia
-           AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-           AND E2.processtype = @process
-           AND E2.Concept IN (SELECT mrvacationdaystaxconcept FROM PR_Mapping WHERE PR_Mapping.company = @cia)
-           AND E2.PRPERIOD = @period
-           AND E2.PERSON = SY_Person.Person) AS diassingoce,
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'DIAS_LIC_SINGOCE'
+           AND PERSON = pr_employee.Person) AS diassingoce,
 
-        (SELECT SUM(ISNULL(E2.conceptvalue, 0))
-         FROM pr_employeepayrollconcept AS E2
-         WHERE E2.COMPANY = @cia
-           AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-           AND E2.processtype = @process
-           AND E2.Concept IN (SELECT mrvacationdaysnotaxconcept FROM PR_Mapping WHERE PR_Mapping.company = @cia)
-           AND E2.PRPERIOD = @period
-           AND E2.PERSON = SY_Person.Person) AS diascongoce,
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode = 'DIAS_LICENCIA_GOCE'
+           AND PERSON = pr_employee.Person) AS diascongoce,
 
         (SELECT PR_EMPLOYEEPAYROLLCONCEPT.CONCEPTVALUE
          FROM PR_EMPLOYEEPAYROLLCONCEPT

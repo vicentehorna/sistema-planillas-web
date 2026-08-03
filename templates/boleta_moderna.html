@@ -187,22 +187,16 @@
                 <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
             </tr>
             <tr>
-                <td class="label">Aporte:</td>
-                <td class="value">{{ cabecera.aporte|pct }}</td>
-                <td class="label">Com. Flujo:</td>
-                <td class="value">{{ cabecera.comisionflujo|pct }}</td>
+                <td class="label">Horas Trabajadas:</td>
+                <td class="value">{{ cabecera.horassemana|dias }}</td>
+                <td class="label">Horas 25%:</td>
+                <td class="value">{{ cabecera.cant_horas_25|dias }}</td>
             </tr>
             <tr>
-                <td class="label">Com. Mixta:</td>
-                <td class="value">{{ cabecera.comisionmixta|pct }}</td>
-                <td class="label">Seguro:</td>
-                <td class="value">{{ cabecera.seguro|pct }}</td>
-            </tr>
-            <tr>
-                <td class="label">SNP:</td>
-                <td class="value">{{ cabecera.snp|pct }}</td>
-                <td class="label"></td>
-                <td class="value"></td>
+                <td class="label">Horas 35%:</td>
+                <td class="value">{{ cabecera.cant_horas_35|dias }}</td>
+                <td class="label">Horas 100%:</td>
+                <td class="value">{{ cabecera.cant_horas_100|dias }}</td>
             </tr>
         </table>
 

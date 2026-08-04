@@ -60,6 +60,10 @@ BEGIN
             ISNULL(p.Name1, '') + ' ' +
             ISNULL(p.Name2, '')
         )) AS nombre_completo,
+        LTRIM(RTRIM(ISNULL(p.LastName1, ''))) AS apellido_paterno,
+        LTRIM(RTRIM(ISNULL(p.LastName2, ''))) AS apellido_materno,
+        LTRIM(RTRIM(ISNULL(p.Name1, ''))) AS nombre1,
+        LTRIM(RTRIM(ISNULL(p.Name2, ''))) AS nombre2,
         ISNULL(dt.Description, '') AS tipo_documento,
         ISNULL(p.DocumentNumber, '') AS numero_documento,
         ISNULL(p.Telephone, '') AS telefono,

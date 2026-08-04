@@ -16758,6 +16758,11 @@ def procesar_boletas_masivo():
         period_yyyymm = period[:6] if len(period) >= 6 else period
         safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
         nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}.zip'
+        lote = str(body.get('lote') or body.get('batch') or '').strip()
+        if lote:
+            safe_lote = re.sub(r'[^A-Za-z0-9_\\-]+', '_', lote).strip('_')
+            if safe_lote:
+                nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}_lote{safe_lote}.zip'
 
         empleados_periodo = get_listado_generar_boletas(cia, payroll_type, process, period, '0')
         by_person = {}
@@ -16767,31 +16772,54 @@ def procesar_boletas_masivo():
                 by_person[pid_map] = e
 
         memory_file = io.BytesIO()
-        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-            for pid in ids:
-                pdf_data = generar_pdf_en_memoria(
-                    {
-                        'person': pid,
-                        'cia': cia,
-                        'payroll_type': payroll_type,
-                        'process': process,
-                        'period': period,
-                        'sin_firma': '1' if sin_firma else '0',
-                    }
-                )
-                emp = by_person.get(pid, {})
-                emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
-                zf.writestr(
-                    _boleta_pdf_filename(pid, period, nombre=emp_nombre),
-                    pdf_data.getvalue(),
-                )
+        generadas = 0
+        omitidas = 0
+        try:
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for pid in ids:
+                    try:
+                        pdf_data = generar_pdf_en_memoria(
+                            {
+                                'person': pid,
+                                'cia': cia,
+                                'payroll_type': payroll_type,
+                                'process': process,
+                                'period': period,
+                                'sin_firma': '1' if sin_firma else '0',
+                            }
+                        )
+                        emp = by_person.get(pid, {})
+                        emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
+                        zf.writestr(
+                            _boleta_pdf_filename(pid, period, nombre=emp_nombre),
+                            pdf_data.getvalue(),
+                        )
+                        generadas += 1
+                    except Exception:
+                        omitidas += 1
+                        logging.exception('procesar_boletas_masivo persona=%s', pid)
+                        continue
+            if generadas <= 0:
+                return jsonify({
+                    'error': 'No se pudo generar ninguna boleta PDF para el lote indicado.',
+                    'omitidas': omitidas,
+                    'total': len(ids),
+                }), 500
+        except Exception as e:
+            logging.exception('procesar_boletas_masivo zip')
+            return jsonify({'error': f'Error al armar el ZIP: {e}'}), 500
+
         memory_file.seek(0)
-        return send_file(
+        resp = send_file(
             memory_file,
             mimetype='application/zip',
             download_name=nombre_zip,
             as_attachment=True,
         )
+        if omitidas:
+            resp.headers['X-Boletas-Generadas'] = str(generadas)
+            resp.headers['X-Boletas-Omitidas'] = str(omitidas)
+        return resp
 
     # Stub controlado para modo correo (pendiente integración real de SMTP/servicio).
     return jsonify(

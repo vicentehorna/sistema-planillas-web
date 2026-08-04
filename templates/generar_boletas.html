@@ -210,6 +210,123 @@ document.addEventListener('DOMContentLoaded', async function () {
         return !!(chkSinFirma && chkSinFirma.checked);
     }
 
+    // Cloudflare corta ~100-125s; lotes pequeños evitan timeout al armar ZIP masivo.
+    const ZIP_LOTE_TAMANO = 35;
+
+    function partirEnLotes(arr, tamano) {
+        const out = [];
+        const n = Math.max(1, Number(tamano) || 35);
+        for (let i = 0; i < arr.length; i += n) {
+            out.push(arr.slice(i, i + n));
+        }
+        return out;
+    }
+
+    function descargarBlobComoArchivo(blob, fileName) {
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = fileName || 'boletas.zip';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    function nombreZipDesdeContentDisposition(cd, fallback) {
+        let fileName = fallback || 'boletas.zip';
+        const m = String(cd || '').match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+        if (m) {
+            fileName = decodeURIComponent(m[1] || m[2] || fileName);
+        }
+        return fileName;
+    }
+
+    function mensajeErrorZip(res, err) {
+        if (err && err.error) return String(err.error);
+        if (res && (res.status === 524 || res.status === 504 || res.status === 502)) {
+            return 'La generación masiva tardó demasiado (timeout del proxy). Se reintentará por lotes más pequeños.';
+        }
+        if (res && res.status) {
+            return `No se pudo generar el ZIP (HTTP ${res.status}).`;
+        }
+        return 'No se pudo generar el ZIP.';
+    }
+
+    async function generarZipLotes(ids, filtros) {
+        const lotes = partirEnLotes(ids, ZIP_LOTE_TAMANO);
+        let ok = 0;
+        let fallidos = 0;
+        const errores = [];
+
+        Swal.fire({
+            title: 'Generando ZIP',
+            html: `<div id="zip-progreso-texto">Preparando ${ids.length} boleta(s) en ${lotes.length} lote(s)...</div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading(),
+        });
+
+        for (let i = 0; i < lotes.length; i += 1) {
+            const loteIds = lotes[i];
+            const texto = document.getElementById('zip-progreso-texto');
+            if (texto) {
+                texto.textContent = `Lote ${i + 1} de ${lotes.length}: generando ${loteIds.length} boleta(s)...`;
+            }
+            try {
+                const res = await fetch(URL_MASIVO, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...filtros,
+                        modo: 'zip',
+                        trabajadores: loteIds,
+                        lote: `${i + 1}de${lotes.length}`,
+                    }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    fallidos += 1;
+                    errores.push(`Lote ${i + 1}: ${mensajeErrorZip(res, err)}`);
+                    continue;
+                }
+                const blob = await res.blob();
+                const fileName = nombreZipDesdeContentDisposition(
+                    res.headers.get('content-disposition'),
+                    `boletas_lote_${i + 1}_de_${lotes.length}.zip`
+                );
+                descargarBlobComoArchivo(blob, fileName);
+                ok += 1;
+                // Breve pausa para que el navegador procese cada descarga.
+                await new Promise((r) => setTimeout(r, 400));
+            } catch (e) {
+                console.error(e);
+                fallidos += 1;
+                errores.push(`Lote ${i + 1}: error de red o timeout.`);
+            }
+        }
+
+        if (ok <= 0) {
+            Swal.fire(
+                'Error',
+                errores[0] || 'No se pudo generar el ZIP. Pruebe con menos trabajadores o por lotes.',
+                'error'
+            );
+            return false;
+        }
+
+        const detalle = fallidos
+            ? `<br><small class="text-muted">${fallidos} lote(s) fallaron. ${errores.slice(0, 3).join(' | ')}</small>`
+            : '';
+        Swal.fire({
+            icon: fallidos ? 'warning' : 'success',
+            title: fallidos ? 'Completado con avisos' : 'Completado',
+            html: `Se descargaron <b>${ok}</b> de <b>${lotes.length}</b> ZIP(s) `
+                + `(${ids.length} trabajadores, lotes de hasta ${ZIP_LOTE_TAMANO}).${detalle}`,
+        });
+        return true;
+    }
+
     let boletasCache = [];
     let filtrosListaActuales = null;
 
@@ -616,37 +733,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Procesando...';
         try {
             if (modo === 'zip') {
-                const payloadZip = {
-                    ...filtros,
-                    modo: 'zip',
-                    trabajadores: ids
-                };
-                const res = await fetch(URL_MASIVO, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payloadZip)
-                });
-                if (!res.ok) {
-                    const err = await res.json().catch(() => ({}));
-                    Swal.fire('Error', err.error || 'No se pudo generar el ZIP.', 'error');
-                    return;
-                }
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const cd = res.headers.get('content-disposition') || '';
-                let fileName = 'boletas.zip';
-                const m = cd.match(/filename\\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i);
-                if (m) {
-                    fileName = decodeURIComponent(m[1] || m[2] || fileName);
-                }
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                window.URL.revokeObjectURL(url);
-                Swal.fire('Completado', 'ZIP generado correctamente.', 'success');
+                await generarZipLotes(ids, filtros);
                 return;
             }
 
@@ -815,28 +902,35 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    function descargarMasivo() {
-        const pt = cboPt.value.trim();
-        const proc = cboProc.value.trim();
-        const per = cboPer.value.trim();
-        if (!per || !pt || !proc) {
-            alert('Por favor seleccione tipo de planilla, proceso y periodo.');
+    async function descargarMasivo() {
+        const filtros = filtrosAccionActuales();
+        if (!filtros.cia || !filtros.payroll_type || !filtros.process || !filtros.period) {
+            alert('Por favor seleccione compañía, tipo de planilla, proceso y periodo.');
             return;
         }
-        const seleccionados = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
-        const qs = new URLSearchParams({
-            payroll_type: pt,
-            process: proc,
-            period: per,
-            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
-            repunit: String(cboUnidad?.value || '0').trim() || '0',
-            costcenter: String(cboCentroCosto?.value || '0').trim() || '0',
-            sin_firma: flagSinFirma() ? '1' : '0'
-        });
-        if (seleccionados.length) {
-            qs.set('trabajadores', seleccionados.join(','));
+        let seleccionados = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
+        if (!seleccionados.length) {
+            // Sin selección: todos los del listado consultado.
+            seleccionados = (boletasCache || []).map((t) => String(t.person || '').trim()).filter(Boolean);
         }
-        window.location.href = `${URL_DESCARGA_ZIP}?${qs.toString()}`;
+        if (!seleccionados.length) {
+            Swal.fire('Atención', 'No hay trabajadores para descargar. Pulse Consultar primero.', 'warning');
+            return;
+        }
+        const btn = document.getElementById('btnDescargarTodoZip');
+        const prev = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando...';
+        }
+        try {
+            await generarZipLotes(seleccionados, filtros);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = prev;
+            }
+        }
     }
 
     document.getElementById('frmGenerarBoletas').addEventListener('submit', async function (e) {

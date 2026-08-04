@@ -6362,6 +6362,12 @@ def reporte_planilla_anual_trabajador_page():
     return render_template('reporte_planilla_anual_trabajador.html')
 
 
+@app.route('/reporte-trabajadores')
+@login_required
+def reporte_trabajadores_page():
+    return render_template('reporte_trabajadores.html')
+
+
 @app.route('/procesar_planilla')
 @login_required
 def procesar_planilla_page():
@@ -19371,6 +19377,124 @@ def reporte_contratos_post():
         })
     except Exception as e:
         logging.exception("reporte_contratos_post")
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/lista-trabajadores', methods=['POST'])
+@login_required
+def api_reporte_lista_trabajadores():
+    """sp_pr_reportelistatrabajadores_web: reporte detallado de trabajadores."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('name') or '').strip()
+    docnro = str(body.get('docnro') or body.get('dni') or '').strip()
+    activos = str(body.get('activos') or body.get('active') or 'Y').strip().upper()[:1] or 'Y'
+    if activos not in ('Y', 'N'):
+        activos = 'Y'
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
+
+    headers_es = [
+        'Tipo Planilla',
+        'Código',
+        'Nombre Completo',
+        'Tipo Documento',
+        'Documento',
+        'Teléfono',
+        'Correo',
+        'Sexo',
+        'F.Nacimiento',
+        'F.Ingreso',
+        'F.Reingreso',
+        'F.Cese',
+        'Motivo Cese',
+        'Inactivo',
+        'C.Costo',
+        'Centro Costo',
+        'Régimen Pensión',
+        'AFP',
+        'CUSPP',
+        'Banco Salario',
+        'Moneda',
+        'Tipo Cuenta',
+        'Cuenta Salario',
+        'Banco CTS',
+        'Moneda CTS',
+        'Cuenta CTS',
+        'Categoría',
+        'Tipo Trabajador',
+        'Situación Trabajador',
+        'Perfil Contable',
+        'Cargo',
+        'Categoría Ocupacional',
+        'Tipo Pago',
+        'Tipo Contrato',
+        'Dirección',
+        'Celular',
+        'Situación Trab.',
+        'Sueldo',
+        'Asig. Familiar',
+        'AFP Mixta',
+        'ESS Vida',
+    ]
+    keys_datos = [
+        'tipo_planilla', 'codigo_persona', 'nombre_completo', 'tipo_documento',
+        'numero_documento', 'telefono', 'mail', 'sexo', 'fecha_nacimiento',
+        'fecha_ingreso', 'fecha_reingreso', 'fecha_cese', 'motivo_cese',
+        'inactivo', 'centro_costo_codigo', 'nombre_centro_costo',
+        'regimen_pension', 'afp', 'cuspp', 'banco_remuneracion',
+        'moneda_remuneracion', 'tipo_cuenta_remuneracion', 'cuenta_remuneracion',
+        'banco_cts', 'moneda_cts', 'cuenta_cts', 'categoria', 'tipo_trabajador',
+        'situacion_trabajador', 'perfil_contable', 'cargo',
+        'categoria_ocupacional', 'tipo_pago', 'tipocontrato', 'direccion',
+        'celular', 'situacion', 'sueldo', 'familiar', 'mixta', 'flagessaludvida',
+    ]
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
+        fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
+        cursor.execute(
+            "EXEC sp_pr_reportelistatrabajadores_web "
+            "@cia=?, @payrolltype=?, @nombre=?, @docnro=?, "
+            "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, "
+            "@activos=?, @cesados=?",
+            (
+                cia, payroll_type, nombre, docnro,
+                fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
+                activos, cesados,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            fila = [_jsonable_value(r.get(key)) for key in keys_datos]
+            resultado.append(fila)
+        return jsonify({
+            "headers": headers_es,
+            "data": resultado,
+            "meta": {"total": len(resultado)},
+        })
+    except Exception as e:
+        logging.exception("api_reporte_lista_trabajadores")
         return jsonify({"error": _reporte_sql_error_message(e)}), 500
     finally:
         if conn:

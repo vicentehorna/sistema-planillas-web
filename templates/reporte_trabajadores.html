@@ -1,0 +1,398 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte de Trabajadores{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-planilla-vertical {
+        --sticky-col1-w: 5.75rem;
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-planilla-vertical th,
+    .table-planilla-vertical td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-planilla-vertical thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-planilla-vertical .sticky-col-1 {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background-color: #fff;
+        min-width: var(--sticky-col1-w);
+        width: var(--sticky-col1-w);
+        max-width: var(--sticky-col1-w);
+        box-sizing: border-box;
+    }
+
+    .table-planilla-vertical .sticky-col-2 {
+        position: sticky;
+        left: var(--sticky-col1-w);
+        z-index: 1;
+        background-color: #fff;
+        min-width: 13rem;
+        max-width: 18rem;
+        box-sizing: border-box;
+    }
+
+    .table-planilla-vertical thead th.sticky-col-1,
+    .table-planilla-vertical thead th.sticky-col-2 {
+        z-index: 3;
+        background-color: #f8f9fa;
+    }
+
+    .filtro-fecha-ingreso .input-fecha-ingreso {
+        width: 9.5rem;
+        max-width: 100%;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmReporteTrabajadores" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre del trabajador</label>
+                <input type="text" id="txtNombre" class="form-control form-control-sm" placeholder="Buscar por nombre" maxlength="100" autocomplete="off">
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtDni" class="form-label small fw-bold text-muted">Nro. de documento</label>
+                <input type="text" id="txtDni" class="form-control form-control-sm" placeholder="Número de documento" maxlength="20" autocomplete="off">
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboActivos" class="form-label small fw-bold text-muted">Activos</label>
+                <select id="cboActivos" class="form-select form-select-sm">
+                    <option value="Y" selected>Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto filtro-fecha-ingreso">
+                <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
+                <div class="d-flex align-items-center flex-wrap gap-1">
+                    <div class="form-check mb-0 me-1">
+                        <input class="form-check-input" type="checkbox" id="chkFechaIngreso" value="1">
+                        <label class="form-check-label small" for="chkFechaIngreso">Filtrar</label>
+                    </div>
+                    <input type="date" id="txtFechaIngresoDesde" class="form-control form-control-sm input-fecha-ingreso" title="Desde" disabled>
+                    <span class="small text-muted px-0">—</span>
+                    <input type="date" id="txtFechaIngresoHasta" class="form-control form-control-sm input-fecha-ingreso" title="Hasta" disabled>
+                </div>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-3">REPORTE DETALLADO DE TRABAJADORES</h4>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-planilla-vertical align-middle">
+                <thead id="thead-reporte"></thead>
+                <tbody id="tbody-reporte"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
+    const URL_REPORTE = {{ url_for('api_reporte_lista_trabajadores') | tojson }};
+    const IDX_STICKY_1 = 1;
+    const IDX_STICKY_2 = 2;
+    const IDX_FECHA = new Set([8, 9, 10, 11]);
+    const IDX_NUM = new Set([37]);
+    const COLSPAN = 41;
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const txtNombre = document.getElementById('txtNombre');
+    const txtDni = document.getElementById('txtDni');
+    const cboActivos = document.getElementById('cboActivos');
+    const cboCesados = document.getElementById('cboCesados');
+    const chkFecha = document.getElementById('chkFechaIngreso');
+    const txtDesde = document.getElementById('txtFechaIngresoDesde');
+    const txtHasta = document.getElementById('txtFechaIngresoHasta');
+    const frm = document.getElementById('frmReporteTrabajadores');
+    const card = document.getElementById('cardResultado');
+    const thead = document.getElementById('thead-reporte');
+    const tbody = document.getElementById('tbody-reporte');
+    const lblCount = document.getElementById('lblRowCount');
+    const btnExcel = document.getElementById('btnExportExcel');
+
+    let lastExport = null;
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function seleccionarInsensitive(select, codigo) {
+        const want = String(codigo || '').trim().toUpperCase();
+        if (!want || !select) return false;
+        const opt = Array.from(select.options).find(
+            (o) => String(o.value || '').trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function syncFechaIngreso() {
+        const on = !!chkFecha.checked;
+        txtDesde.disabled = !on;
+        txtHasta.disabled = !on;
+        if (!on) {
+            txtDesde.value = '';
+            txtHasta.value = '';
+        }
+    }
+
+    function fmtFecha(val) {
+        if (!val) return '';
+        const s = String(val).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) {
+            const [y, m, d] = s.slice(0, 10).split('-');
+            return `${d}/${m}/${y}`;
+        }
+        return s;
+    }
+
+    function fmtNumero(val) {
+        if (val === null || val === undefined || val === '') return '';
+        const n = Number(val);
+        if (Number.isNaN(n)) return String(val);
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fmtCelda(valor, idx) {
+        if (valor === null || valor === undefined || valor === '') return '';
+        if (IDX_FECHA.has(idx)) return fmtFecha(valor);
+        if (IDX_NUM.has(idx)) return fmtNumero(valor);
+        return String(valor);
+    }
+
+    async function poblarSelect(url, select, firstOption) {
+        select.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            const items = Array.isArray(data) ? data : [];
+            select.innerHTML = '';
+            if (firstOption) {
+                const o0 = document.createElement('option');
+                o0.value = firstOption.value;
+                o0.textContent = firstOption.text;
+                select.appendChild(o0);
+            }
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                select.appendChild(opt);
+            });
+            select.disabled = false;
+        } catch (err) {
+            console.error(err);
+            select.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value.trim();
+        cboPt.innerHTML = '<option value="0">Todos</option>';
+        cboPt.disabled = !cia;
+        if (!cia) return;
+        try {
+            const res = await fetch(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`);
+            const items = await res.json();
+            (Array.isArray(items) ? items : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                cboPt.appendChild(opt);
+            });
+            cboPt.value = '0';
+            cboPt.disabled = false;
+        } catch (e) {
+            console.error(e);
+            cboPt.disabled = false;
+        }
+    }
+
+    function renderTabla(response) {
+        const headers = Array.isArray(response.headers) ? response.headers : [];
+        const data = Array.isArray(response.data) ? response.data : [];
+        thead.innerHTML = '';
+        tbody.innerHTML = '';
+
+        const trh = document.createElement('tr');
+        headers.forEach((h, i) => {
+            const th = document.createElement('th');
+            th.textContent = h;
+            if (i === IDX_STICKY_1) th.classList.add('sticky-col-1');
+            if (i === IDX_STICKY_2) th.classList.add('sticky-col-2');
+            if (IDX_FECHA.has(i) || IDX_NUM.has(i)) th.classList.add('text-center');
+            trh.appendChild(th);
+        });
+        thead.appendChild(trh);
+
+        data.forEach((row) => {
+            const tr = document.createElement('tr');
+            (Array.isArray(row) ? row : []).forEach((val, i) => {
+                const td = document.createElement('td');
+                td.textContent = fmtCelda(val, i);
+                if (i === IDX_STICKY_1) td.classList.add('sticky-col-1');
+                if (i === IDX_STICKY_2) td.classList.add('sticky-col-2');
+                if (IDX_FECHA.has(i) || IDX_NUM.has(i)) td.classList.add('text-center');
+                if (IDX_NUM.has(i)) td.classList.add('text-end');
+                tr.appendChild(td);
+            });
+            tbody.appendChild(tr);
+        });
+
+        lblCount.textContent = String(data.length);
+        btnExcel.disabled = data.length === 0;
+        card.classList.remove('d-none');
+        lastExport = { headers, data };
+    }
+
+    async function consultar(ev) {
+        if (ev) ev.preventDefault();
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            if (window.HmUi) HmUi.advertencia('Seleccione una compañía.');
+            else alert('Seleccione una compañía.');
+            return;
+        }
+        const usarFecha = !!chkFecha.checked;
+        const desde = (txtDesde.value || '').trim();
+        const hasta = (txtHasta.value || '').trim();
+        if (usarFecha) {
+            if (!desde || !hasta) {
+                if (window.HmUi) HmUi.advertencia('Indique fecha de ingreso desde y hasta.');
+                else alert('Indique fecha de ingreso desde y hasta.');
+                return;
+            }
+            if (desde > hasta) {
+                if (window.HmUi) HmUi.advertencia('La fecha de ingreso desde no puede ser mayor que hasta.');
+                else alert('La fecha de ingreso desde no puede ser mayor que hasta.');
+                return;
+            }
+        }
+
+        tbody.innerHTML = `<tr><td class="text-center text-muted py-3" colspan="${COLSPAN}">Consultando...</td></tr>`;
+        card.classList.remove('d-none');
+        btnExcel.disabled = true;
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payroll_type: cboPt.value.trim() || '0',
+                    nombre: (txtNombre.value || '').trim(),
+                    docnro: (txtDni.value || '').trim(),
+                    activos: cboActivos.value || 'Y',
+                    cesados: cboCesados.value || 'T',
+                    fecha_ingreso_activo: usarFecha,
+                    fecha_ingreso_desde: usarFecha ? desde : '',
+                    fecha_ingreso_hasta: usarFecha ? hasta : '',
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al consultar');
+            renderTabla(data);
+        } catch (err) {
+            console.error(err);
+            if (window.HmUi) HmUi.error(err.message || String(err));
+            else alert(err.message || String(err));
+            tbody.innerHTML = `<tr><td class="text-center text-danger py-3" colspan="${COLSPAN}">${escapeHtml(err.message || err)}</td></tr>`;
+            lblCount.textContent = '0';
+            lastExport = null;
+        }
+    }
+
+    async function exportarExcel() {
+        if (!lastExport || !lastExport.data || !lastExport.data.length) return;
+        if (typeof ExcelJS === 'undefined') {
+            if (window.HmUi) HmUi.error('No se pudo cargar ExcelJS.');
+            return;
+        }
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Trabajadores');
+        ws.addRow(lastExport.headers || []);
+        lastExport.data.forEach((row) => {
+            ws.addRow((row || []).map((v, i) => fmtCelda(v, i)));
+        });
+        ws.getRow(1).font = { bold: true };
+        ws.columns.forEach((col) => { col.width = 14; });
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `reporte_trabajadores_${cboCia.value.trim() || 'cia'}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    chkFecha.addEventListener('change', syncFechaIngreso);
+    frm.addEventListener('submit', consultar);
+    btnExcel.addEventListener('click', exportarExcel);
+    cboCia.addEventListener('change', cargarPlanillas);
+
+    syncFechaIngreso();
+    await poblarSelect('/api/selectores/companias', cboCia, { value: '', text: 'Seleccione...' });
+    if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
+    if (cboCia.value) await cargarPlanillas();
+});
+</script>
+{% endblock %}

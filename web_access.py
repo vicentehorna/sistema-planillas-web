@@ -77,6 +77,8 @@ ENDPOINT_MENU_MAP = {
     'reporte_liquidaciones': 'reporte_promedio_liquidaciones',
     'reporte_planilla_por_conceptos_page': 'reporte_planilla_por_conceptos',
     'reporte_planilla_anual_trabajador_page': 'reporte_planilla_anual_trabajador',
+    'reporte_trabajadores_page': 'reporte_trabajadores',
+    'api_reporte_lista_trabajadores': 'reporte_trabajadores',
     'generar_boletas_page': 'generar_boletas',
     'formato_utilidades_page': 'formato_utilidades',
 }
@@ -134,6 +136,8 @@ PATH_PREFIX_MENU_MAP = {
     '/api/carga-masiva': 'importacion_conceptos',
     '/api/reportes/planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
     '/reporte-planilla-anual-trabajador': 'reporte_planilla_anual_trabajador',
+    '/api/reportes/lista-trabajadores': 'reporte_trabajadores',
+    '/reporte-trabajadores': 'reporte_trabajadores',
     '/api/liquidaciones/mapa-conceptos': 'mapa_conceptos_liquidacion',
     '/liquidaciones/mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
 }

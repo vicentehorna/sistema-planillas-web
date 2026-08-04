@@ -1215,8 +1215,8 @@
                 </li>
                 {% endif %}
 
-                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page') %}
-                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') %}
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page', 'reporte_trabajadores_page') %}
+                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') or can_menu('reporte_trabajadores') %}
                 {% if show_planillas_reportes %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
@@ -1275,6 +1275,13 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_anual_trabajador_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_anual_trabajador_page') }}" title="Planilla Anual por Trabajador">
                                 <i class="bi bi-calendar3"></i><span class="sidebar-link-text">Planilla Anual por Trabajador</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('reporte_trabajadores') %}
+                        <li class="{{ 'active' if request.endpoint == 'reporte_trabajadores_page' else '' }}">
+                            <a href="{{ url_for('reporte_trabajadores_page') }}" title="Reporte de Trabajadores">
+                                <i class="bi bi-people"></i><span class="sidebar-link-text">Reporte de Trabajadores</span>
                             </a>
                         </li>
                         {% endif %}

@@ -43,7 +43,7 @@ BEGIN
             WHEN 10 THEN 'Octubre' WHEN 11 THEN 'Noviembre' WHEN 12 THEN 'Diciembre'
         END AS contract_end_month,
         YEAR(pc.EndDate) AS contract_end_year,
-        ISNULL(pp.Description, 'Sin Cargo Asignado') AS person_position,
+        ISNULL(NULLIF(LTRIM(RTRIM(pp.name)), ''), ISNULL(pp.Description, 'Sin Cargo Asignado')) AS person_position,
         sc.Representative AS representative,
         RTRIM(ISNULL(dt2.Description, '')) + ' N°' + ISNULL(sc.Rep_DocNumber, '') AS company_representative_numdoc,
         DAY(GETDATE()) AS day_print,

@@ -89,7 +89,7 @@ BEGIN
         VALUES (
             @position_nuevo,
             @name,
-            LEFT(@name, 50),
+            LEFT(@name, 255),
             @company,
             @replicationunit,
             @xlastuser,
@@ -127,7 +127,7 @@ BEGIN
 
     UPDATE PR_Position
     SET name = @name,
-        Description = LEFT(@name, 50),
+        Description = LEFT(@name, 255),
         XLastUser = @xlastuser,
         XLastDate = GETDATE()
     WHERE Company = @company

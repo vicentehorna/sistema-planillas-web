@@ -32,7 +32,7 @@ BEGIN
             ISNULL(sp.LastName1, '') + ' ' + ISNULL(sp.LastName2, '') + ' '
             + ISNULL(sp.Name1, '') + ' ' + ISNULL(sp.Name2, '')
         )) AS person_name,
-        ISNULL(pp.Description, '') AS person_position,
+        ISNULL(NULLIF(LTRIM(RTRIM(pp.name)), ''), ISNULL(pp.Description, '')) AS person_position,
         ISNULL(cm.Description, '') AS contract_modality,
         ISNULL((
             SELECT SUM(EC.ConceptValue)

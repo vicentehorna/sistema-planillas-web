@@ -11,7 +11,7 @@ BEGIN
 
     SELECT
         LTRIM(RTRIM(p.Position)) AS id,
-        LTRIM(RTRIM(ISNULL(NULLIF(p.Description, ''), p.Name))) AS text
+        LTRIM(RTRIM(ISNULL(NULLIF(p.Name, ''), p.Description))) AS text
     FROM PR_Position p (NOLOCK)
     WHERE p.Company = @cia
     ORDER BY text ASC, id ASC;

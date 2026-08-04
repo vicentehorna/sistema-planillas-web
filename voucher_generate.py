@@ -103,7 +103,7 @@ class VoucherResult:
 
 SQL_VOUCHER_DATA = """
 SELECT
-    person, costcenter, costcentername, concept, abbrev,
+    person, costcenter, costcentername, costcentercode, concept, abbrev,
     debitaccount, debitaccountcode, creditaccount, creditaccountcode,
     flagsumtype, currency, valuelo, valueex
 FROM (
@@ -111,6 +111,10 @@ FROM (
         e.Person AS person,
         e.CostCenter AS costcenter,
         e.costcentername AS costcentername,
+        ISNULL(
+            NULLIF(LTRIM(RTRIM(cc.CCCode)), ''),
+            ISNULL(NULLIF(LTRIM(RTRIM(cc.Abbrev)), ''), LTRIM(RTRIM(e.costcentername)))
+        ) AS costcentercode,
         epc.Concept AS concept,
         CAST(NULL AS VARCHAR(20)) AS abbrev,
         apd.DebitAccount AS debitaccount,
@@ -127,6 +131,7 @@ FROM (
        AND ep.processtype = epc.processtype AND ep.prperiod = epc.prperiod
        AND ep.person = epc.person
     INNER JOIN PR_Employee e ON e.Person = epc.Person AND e.Company = epc.Company
+    LEFT JOIN AC_CostCenter cc ON cc.CostCenter = e.CostCenter
     INNER JOIN PR_AccountProfileDetail apd
         ON apd.AccountProfile = ep.AccountProfile
        AND apd.ProcessType = epc.ProcessType AND apd.Concept = epc.Concept
@@ -138,7 +143,7 @@ FROM (
       AND epc.processtype = ?
       AND epc.prperiod LIKE ?
       AND LTRIM(RTRIM(ct.shortname)) IN ('I', 'D', 'A', 'T', 'G', 'X')
-    GROUP BY e.Person, e.CostCenter, e.costcentername, epc.Concept,
+    GROUP BY e.Person, e.CostCenter, e.costcentername, cc.CCCode, cc.Abbrev, epc.Concept,
              apd.DebitAccount, apd.DebitAccountCode, apd.CreditAccount,
              apd.CreditAccountCode, apd.flagsumtype, apd.currency
 
@@ -148,6 +153,10 @@ FROM (
         CAST(NULL AS VARCHAR(20)) AS person,
         e.CostCenter AS costcenter,
         e.costcentername AS costcentername,
+        ISNULL(
+            NULLIF(LTRIM(RTRIM(cc.CCCode)), ''),
+            ISNULL(NULLIF(LTRIM(RTRIM(cc.Abbrev)), ''), LTRIM(RTRIM(e.costcentername)))
+        ) AS costcentercode,
         epc.Concept AS concept,
         CAST(NULL AS VARCHAR(20)) AS abbrev,
         apd.DebitAccount, apd.DebitAccountCode, apd.CreditAccount, apd.CreditAccountCode,
@@ -160,6 +169,7 @@ FROM (
        AND ep.processtype = epc.processtype AND ep.prperiod = epc.prperiod
        AND ep.person = epc.person
     INNER JOIN PR_Employee e ON e.Person = epc.Person AND e.Company = epc.Company
+    LEFT JOIN AC_CostCenter cc ON cc.CostCenter = e.CostCenter
     INNER JOIN PR_AccountProfileDetail apd
         ON apd.AccountProfile = ep.AccountProfile
        AND apd.ProcessType = epc.ProcessType AND apd.Concept = epc.Concept
@@ -171,7 +181,7 @@ FROM (
       AND epc.processtype = ?
       AND epc.prperiod LIKE ?
       AND LTRIM(RTRIM(ct.shortname)) IN ('I', 'D', 'A', 'T', 'G', 'X')
-    GROUP BY e.CostCenter, e.costcentername, epc.Concept,
+    GROUP BY e.CostCenter, e.costcentername, cc.CCCode, cc.Abbrev, epc.Concept,
              apd.DebitAccount, apd.DebitAccountCode, apd.CreditAccount,
              apd.CreditAccountCode, apd.flagsumtype, apd.currency
 
@@ -181,6 +191,7 @@ FROM (
         CAST(NULL AS VARCHAR(20)) AS person,
         CAST(NULL AS VARCHAR(20)) AS costcenter,
         CAST(NULL AS VARCHAR(20)) AS costcentername,
+        CAST(NULL AS VARCHAR(20)) AS costcentercode,
         epc.Concept AS concept,
         ap.abbrev AS abbrev,
         apd.DebitAccount, apd.DebitAccountCode, apd.CreditAccount, apd.CreditAccountCode,
@@ -417,7 +428,7 @@ def _build_detail_lines(
         debit_acc = _null_if_empty(r.get("debitaccount"))
         common = dict(
             costcenter=_null_if_empty(r.get("costcenter")),
-            costcentercode=_null_if_empty(r.get("costcentername")),
+            costcentercode=_null_if_empty(r.get("costcentercode") or r.get("costcentername")),
             accurrency=_trunc(r.get("currency") or currency, 2) or "LO",
             person=_trunc(r.get("person"), 20),
             comments=_trunc(r.get("printtext"), 255),

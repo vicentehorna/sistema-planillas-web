@@ -35,6 +35,7 @@ DEFAULT_CLIENT_DBS = [
     "hm_lumat2",
     "hm_alamo",
     "hm_ultra",
+    "hm_ngservicios",
 ]
 
 DEFAULT_SERVER = "179.61.14.224,54982"

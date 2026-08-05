@@ -1,0 +1,696 @@
+{% extends "layout.html" %}
+
+{% block title %}Planilla Anual por Concepto{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+    .table-planilla-anual {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-planilla-anual th,
+    .table-planilla-anual td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-planilla-anual thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        text-align: center;
+    }
+    .table-planilla-anual .col-codigo { min-width: 5.5rem; }
+    .table-planilla-anual .col-trabajador { min-width: 14rem; max-width: 20rem; }
+    .table-planilla-anual .col-mes,
+    .table-planilla-anual .col-total {
+        min-width: 4.25rem;
+        text-align: right;
+    }
+    .table-planilla-anual tr.fila-concepto td {
+        background: #e7f1ff;
+        font-weight: 700;
+        border-top: 2px solid #0d6efd;
+    }
+    .table-planilla-anual tr.fila-total-concepto td {
+        background: #f1f3f5;
+        font-weight: 700;
+    }
+    .table-planilla-anual tr.fila-total-general td {
+        background: #d9edf7;
+        font-weight: 700;
+        border-top: 2px solid #6c757d;
+    }
+    .titulo-reporte {
+        font-size: 1.05rem;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        width: 100%;
+        margin: 0;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-2">
+    <div class="card-body py-3">
+        <form id="frmPlanillaAnualConcepto" class="row g-2 align-items-end">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodoIni" class="form-label small fw-bold text-muted mb-1">Periodo inicial</label>
+                <select id="cboPeriodoIni" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodoFin" class="form-label small fw-bold text-muted mb-1">Periodo final</label>
+                <select id="cboPeriodoFin" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboConcepto" class="form-label small fw-bold text-muted mb-1">Concepto</label>
+                <select id="cboConcepto" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted mb-1">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+        </form>
+        <div id="msgEstado" class="small mt-2 text-muted"></div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body py-2">
+        <div class="mb-2">
+            <div class="titulo-reporte fw-bold" id="lblTituloReporte">Planilla Anual por Concepto</div>
+        </div>
+        <div class="table-scroll-container" id="wrapTabla">
+            <table class="table table-bordered table-sm table-hover table-planilla-anual align-middle">
+                <thead>
+                    <tr>
+                        <th class="col-codigo">Código</th>
+                        <th class="col-trabajador">Trabajador</th>
+                        <th class="col-mes">Enero</th>
+                        <th class="col-mes">Febrero</th>
+                        <th class="col-mes">Marzo</th>
+                        <th class="col-mes">Abril</th>
+                        <th class="col-mes">Mayo</th>
+                        <th class="col-mes">Junio</th>
+                        <th class="col-mes">Julio</th>
+                        <th class="col-mes">Agosto</th>
+                        <th class="col-mes">Setiembre</th>
+                        <th class="col-mes">Octubre</th>
+                        <th class="col-mes">Noviembre</th>
+                        <th class="col-mes">Diciembre</th>
+                        <th class="col-total">Total</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyAnual">
+                    <tr>
+                        <td colspan="15" class="text-center text-muted py-4">Sin datos</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_API = {{ url_for('api_reporte_planilla_anual_concepto') | tojson }};
+    const STORAGE_KEY = 'filtros_planilla_anual_concepto';
+    const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+    const DEFAULT_CIA = 'BGT';
+    const anioActual = new Date().getFullYear();
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodoIni = document.getElementById('cboPeriodoIni');
+    const cboPeriodoFin = document.getElementById('cboPeriodoFin');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+    const cboConcepto = document.getElementById('cboConcepto');
+    const cboUnidad = document.getElementById('cboUnidad');
+    const tbody = document.getElementById('tbodyAnual');
+    const lblCount = document.getElementById('lblRowCount');
+    const lblTitulo = document.getElementById('lblTituloReporte');
+    const msg = document.getElementById('msgEstado');
+    const btnExcel = document.getElementById('btnExportExcel');
+
+    let ultimoPayload = null;
+
+    function normalizarPeriodoYyyymm(v) {
+        const s = String(v || '').trim();
+        // PRPeriod suele ser YYYYMMDD (asig) o YYYYMM
+        if (/^\d{8}$/.test(s) || /^\d{6}$/.test(s)) return s.slice(0, 6);
+        const m = s.match(/^(\d{4})-(\d{2})/);
+        return m ? `${m[1]}${m[2]}` : '';
+    }
+
+    function monthsBetween(ini, fin) {
+        const a = normalizarPeriodoYyyymm(ini);
+        const b = normalizarPeriodoYyyymm(fin);
+        if (a.length !== 6 || b.length !== 6) return null;
+        const y1 = Number(a.slice(0, 4));
+        const m1 = Number(a.slice(4, 6));
+        const y2 = Number(b.slice(0, 4));
+        const m2 = Number(b.slice(4, 6));
+        if (![y1, m1, y2, m2].every(Number.isFinite)) return null;
+        if (m1 < 1 || m1 > 12 || m2 < 1 || m2 > 12) return null;
+        return (y2 - y1) * 12 + (m2 - m1) + 1;
+    }
+
+    function clonarOpcionesSelect(origen, destino) {
+        if (!origen || !destino) return;
+        destino.innerHTML = origen.innerHTML;
+        destino.disabled = origen.disabled;
+        destino.value = origen.value;
+    }
+
+    function seleccionarPeriodo(select, valor) {
+        if (!select || !valor) return false;
+        const want = normalizarPeriodoYyyymm(valor);
+        if (!want) return false;
+        const opt = Array.from(select.options).find(
+            (o) => normalizarPeriodoYyyymm(o.value) === want
+        );
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function rangoAnioActualDefecto(selectElement) {
+        const y = String(anioActual);
+        const mesActual = String(new Date().getMonth() + 1).padStart(2, '0');
+        const desdePreferido = `${y}01`;
+        const hastaPreferido = `${y}${mesActual}`;
+        const periodos = Array.from(selectElement.options)
+            .map((o) => normalizarPeriodoYyyymm(o.value))
+            .filter((p) => /^\d{6}$/.test(p) && p.startsWith(y));
+        if (!periodos.length) {
+            const todos = Array.from(selectElement.options)
+                .map((o) => normalizarPeriodoYyyymm(o.value))
+                .filter((p) => /^\d{6}$/.test(p))
+                .sort();
+            if (!todos.length) return { desde: '', hasta: '' };
+            return { desde: todos[0], hasta: todos[todos.length - 1] };
+        }
+        periodos.sort();
+        const desde = periodos.includes(desdePreferido) ? desdePreferido : periodos[0];
+        const candidatosHasta = periodos.filter((p) => p <= hastaPreferido);
+        const hasta = candidatosHasta.length
+            ? candidatosHasta[candidatosHasta.length - 1]
+            : periodos[periodos.length - 1];
+        return { desde, hasta };
+    }
+
+    async function poblarPeriodosAsig(cia, payrolltype, cboIni, cboFin, restore) {
+        cboIni.innerHTML = '<option value="">Seleccione...</option>';
+        cboFin.innerHTML = '<option value="">Seleccione...</option>';
+        cboIni.disabled = true;
+        cboFin.disabled = true;
+        if (!cia || !payrolltype) return;
+        cboIni.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(
+                `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json();
+            cboIni.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                cboIni.appendChild(opt);
+            });
+            cboIni.disabled = false;
+            clonarOpcionesSelect(cboIni, cboFin);
+
+            let okIni = false;
+            let okFin = false;
+            if (restore) {
+                okIni = seleccionarPeriodo(cboIni, restore.periodo_ini);
+                okFin = seleccionarPeriodo(cboFin, restore.periodo_fin);
+            }
+            if (!okIni || !okFin) {
+                const def = rangoAnioActualDefecto(cboIni);
+                if (!okIni && def.desde) seleccionarPeriodo(cboIni, def.desde);
+                if (!okFin && def.hasta) seleccionarPeriodo(cboFin, def.hasta);
+            }
+        } catch (err) {
+            console.error(err);
+            cboIni.innerHTML = '<option value="">Error</option>';
+            cboFin.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    const NOMBRES_MES = [
+        '', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Setiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    function textoPeriodoTitulo(periodo) {
+        const yyyymm = normalizarPeriodoYyyymm(periodo);
+        if (!yyyymm) return '';
+        const anio = yyyymm.slice(0, 4);
+        const mes = Number(yyyymm.slice(4, 6));
+        const nombre = NOMBRES_MES[mes] || '';
+        return nombre ? `${nombre} ${anio}` : '';
+    }
+
+    function actualizarTitulo() {
+        const ini = textoPeriodoTitulo(cboPeriodoIni.value);
+        const fin = textoPeriodoTitulo(cboPeriodoFin.value);
+        if (ini && fin) {
+            lblTitulo.textContent = `Planilla Mensual ${ini} a ${fin}`;
+        } else {
+            lblTitulo.textContent = 'Planilla Anual por Concepto';
+        }
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    function fmtNum(n) {
+        const v = Number(n || 0);
+        if (!Number.isFinite(v) || v === 0) return '0.00';
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function selectedText(el) {
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function optionExists(select, value) {
+        if (!select || value == null) return false;
+        const v = String(value);
+        return Array.from(select.options).some((o) => o.value === v);
+    }
+
+    function guardarFiltros() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                cia: cboCia.value,
+                periodo_ini: cboPeriodoIni.value,
+                periodo_fin: cboPeriodoFin.value,
+                payrolltype: cboPlanilla.value,
+                process: cboProceso.value,
+                person: cboTrabajador.value,
+                concept: cboConcepto.value,
+                unidad: cboUnidad.value || '0',
+            }));
+        } catch (e) { /* ignore */ }
+    }
+
+    function leerFiltros() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        catch (e) { return {}; }
+    }
+
+    async function poblarSelect(url, selectElement, opciones) {
+        opciones = opciones || {};
+        const prev = selectElement.value;
+        selectElement.innerHTML = '';
+        if (opciones.incluyeTodos) {
+            const o = document.createElement('option');
+            o.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
+            o.textContent = opciones.textoTodos || 'Todos';
+            selectElement.appendChild(o);
+        } else if (!opciones.sinPlaceholder) {
+            const o = document.createElement('option');
+            o.value = '';
+            o.textContent = opciones.placeholder || 'Seleccione...';
+            selectElement.appendChild(o);
+        }
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+            if (prev && optionExists(selectElement, prev)) selectElement.value = prev;
+            else if (opciones.incluyeTodos) {
+                selectElement.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
+            }
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function sumMeses(row) {
+        return MESES.reduce((acc, m) => acc + (Number(row[m]) || 0), 0);
+    }
+
+    function celdasMeses(row, bold) {
+        const tot = sumMeses(row);
+        const nums = MESES.map((m) => `<td class="col-mes">${fmtNum(row[m])}</td>`).join('');
+        return nums + `<td class="col-total${bold ? ' fw-bold' : ''}">${fmtNum(tot)}</td>`;
+    }
+
+    function vaciarMeses() {
+        const o = {};
+        MESES.forEach((m) => { o[m] = 0; });
+        return o;
+    }
+
+    function sumarFilas(rows) {
+        const out = vaciarMeses();
+        (rows || []).forEach((r) => {
+            MESES.forEach((m) => { out[m] += Number(r[m]) || 0; });
+        });
+        return out;
+    }
+
+    function renderRows(rows) {
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-muted py-4">Sin datos para los filtros seleccionados</td></tr>';
+            lblCount.textContent = '0';
+            btnExcel.disabled = true;
+            return;
+        }
+
+        const byConcept = new Map();
+        rows.forEach((r) => {
+            const key = String(r.concept || '') + '\u0001' + String(r.conceptname || '');
+            if (!byConcept.has(key)) {
+                byConcept.set(key, {
+                    concept: r.concept,
+                    conceptname: r.conceptname,
+                    workers: [],
+                });
+            }
+            byConcept.get(key).workers.push(r);
+        });
+
+        let html = '';
+        let nReg = 0;
+        const allRows = [];
+        byConcept.forEach((g) => {
+            html += `<tr class="fila-concepto"><td colspan="15">${esc(g.conceptname)}</td></tr>`;
+            g.workers.forEach((r) => {
+                nReg += 1;
+                allRows.push(r);
+                html += `<tr>
+                    <td class="col-codigo">${esc(r.person)}</td>
+                    <td class="col-trabajador">${esc(r.personname)}</td>
+                    ${celdasMeses(r, false)}
+                </tr>`;
+            });
+            const sub = sumarFilas(g.workers);
+            html += `<tr class="fila-total-concepto">
+                <td></td>
+                <td>Total por concepto</td>
+                ${celdasMeses(sub, true)}
+            </tr>`;
+        });
+        const tot = sumarFilas(allRows);
+        html += `<tr class="fila-total-general">
+            <td></td>
+            <td>Total general</td>
+            ${celdasMeses(tot, true)}
+        </tr>`;
+
+        tbody.innerHTML = html;
+        lblCount.textContent = String(nReg);
+        btnExcel.disabled = false;
+    }
+
+    async function consultar(e) {
+        if (e) e.preventDefault();
+        const cia = cboCia.value.trim();
+        const period_ini = normalizarPeriodoYyyymm(cboPeriodoIni.value);
+        const period_fin = normalizarPeriodoYyyymm(cboPeriodoFin.value);
+        const payrolltype = cboPlanilla.value.trim();
+        const process = cboProceso.value.trim();
+        const person = cboTrabajador.value.trim() || '0';
+        const concept = cboConcepto.value.trim() || '0';
+        const unidad = cboUnidad.value.trim() || '0';
+
+        if (!cia || !period_ini || !period_fin || !payrolltype || !process) {
+            hmAdvertencia('Complete compañía, rango de periodos, tipo de planilla y proceso.');
+            return;
+        }
+        if (period_fin < period_ini) {
+            hmAdvertencia('El periodo final no puede ser menor que el inicial.');
+            return;
+        }
+        const nMeses = monthsBetween(period_ini, period_fin);
+        if (nMeses == null || nMeses < 1) {
+            hmAdvertencia('Rango de periodos inválido.');
+            return;
+        }
+        if (nMeses > 12) {
+            hmAdvertencia('El rango de periodos no puede superar 12 meses.');
+            return;
+        }
+
+        msg.textContent = 'Consultando...';
+        msg.classList.add('text-primary');
+        guardarFiltros();
+        try {
+            const res = await fetch(URL_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia, period_ini, period_fin, payrolltype, process, person, concept, unidad
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Error al consultar');
+            ultimoPayload = data;
+            renderRows(data.rows || []);
+            actualizarTitulo();
+            msg.textContent = '';
+            msg.classList.remove('text-primary');
+        } catch (err) {
+            msg.textContent = '';
+            hmError(err.message || String(err));
+        }
+    }
+
+    async function exportExcel() {
+        if (!ultimoPayload || !ultimoPayload.rows || !ultimoPayload.rows.length) return;
+        if (typeof ExcelJS === 'undefined') {
+            hmError('No se pudo cargar ExcelJS.');
+            return;
+        }
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Planilla Anual Concepto');
+        const headers = ['Código','Trabajador','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre','Total'];
+        ws.addRow(headers);
+        ws.getRow(1).font = { bold: true };
+
+        const rows = ultimoPayload.rows;
+        let lastKey = null;
+        let buffer = [];
+        const allRows = [];
+
+        function flushConcept() {
+            if (!buffer.length) return;
+            const sub = sumarFilas(buffer);
+            const r = ws.addRow(['', 'Total por concepto', ...MESES.map((m) => Number(sub[m]) || 0), sumMeses(sub)]);
+            r.font = { bold: true };
+            buffer = [];
+        }
+
+        rows.forEach((row) => {
+            const key = String(row.concept || '') + '\u0001' + String(row.conceptname || '');
+            if (lastKey !== null && lastKey !== key) flushConcept();
+            if (lastKey !== key) {
+                ws.addRow([row.conceptname || '']);
+                ws.lastRow.font = { bold: true };
+                lastKey = key;
+            }
+            buffer.push(row);
+            allRows.push(row);
+            ws.addRow([
+                row.person, row.personname,
+                ...MESES.map((m) => Number(row[m]) || 0),
+                sumMeses(row),
+            ]);
+        });
+        flushConcept();
+        const tot = sumarFilas(allRows);
+        const rTot = ws.addRow(['', 'Total general', ...MESES.map((m) => Number(tot[m]) || 0), sumMeses(tot)]);
+        rTot.font = { bold: true };
+
+        for (let c = 3; c <= 15; c++) {
+            ws.getColumn(c).numFmt = '#,##0.00';
+            ws.getColumn(c).width = 11;
+        }
+        ws.getColumn(1).width = 14;
+        ws.getColumn(2).width = 36;
+
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const ini = String(ultimoPayload.period_ini || normalizarPeriodoYyyymm(cboPeriodoIni.value) || '');
+        const fin = String(ultimoPayload.period_fin || normalizarPeriodoYyyymm(cboPeriodoFin.value) || '');
+        a.download = `planilla_anual_concepto_${ini}_${fin}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('frmPlanillaAnualConcepto').addEventListener('submit', consultar);
+    btnExcel.addEventListener('click', exportExcel);
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/unidades', cboUnidad, {
+        incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
+    });
+
+    const guardado = leerFiltros();
+    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
+    if (guardado.unidad && optionExists(cboUnidad, guardado.unidad)) cboUnidad.value = guardado.unidad;
+
+    async function cargarDependientesCia(cia, restore) {
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        cboProceso.disabled = true;
+        cboPeriodoIni.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodoFin.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodoIni.disabled = true;
+        cboPeriodoFin.disabled = true;
+        if (!cia) {
+            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            cboPlanilla.disabled = true;
+            cboTrabajador.innerHTML = '<option value="">Todos</option>';
+            cboTrabajador.disabled = true;
+            cboConcepto.innerHTML = '<option value="0">Todos</option>';
+            cboConcepto.disabled = true;
+            return;
+        }
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador, {
+            incluyeTodos: true, valorTodos: '', textoTodos: 'Todos'
+        });
+        await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto, {
+            incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
+        });
+        if (restore) {
+            if (restore.payrolltype && optionExists(cboPlanilla, restore.payrolltype)) {
+                cboPlanilla.value = restore.payrolltype;
+            }
+            if (restore.person && optionExists(cboTrabajador, restore.person)) {
+                cboTrabajador.value = restore.person;
+            }
+            if (restore.concept && optionExists(cboConcepto, restore.concept)) {
+                cboConcepto.value = restore.concept;
+            }
+        }
+    }
+
+    async function cargarProcesos(cia, payrolltype, restoreProcess) {
+        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia || !payrolltype) {
+            cboProceso.disabled = true;
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            cboProceso
+        );
+        if (restoreProcess && optionExists(cboProceso, restoreProcess)) {
+            cboProceso.value = restoreProcess;
+        }
+    }
+
+    const ciaIni = cboCia.value.trim();
+    if (ciaIni) {
+        await cargarDependientesCia(ciaIni, guardado);
+        const ptIni = cboPlanilla.value.trim();
+        await cargarProcesos(ciaIni, ptIni, guardado.process);
+        await poblarPeriodosAsig(ciaIni, ptIni, cboPeriodoIni, cboPeriodoFin, guardado);
+    }
+
+    cboCia.addEventListener('change', async function () {
+        await cargarDependientesCia(this.value.trim(), null);
+        const pt = cboPlanilla.value.trim();
+        await cargarProcesos(this.value.trim(), pt, null);
+        await poblarPeriodosAsig(this.value.trim(), pt, cboPeriodoIni, cboPeriodoFin, null);
+        guardarFiltros();
+        refreshTitulo();
+    });
+    cboPlanilla.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const pt = this.value.trim();
+        await cargarProcesos(cia, pt, null);
+        await poblarPeriodosAsig(cia, pt, cboPeriodoIni, cboPeriodoFin, null);
+        guardarFiltros();
+        refreshTitulo();
+    });
+    [cboPeriodoIni, cboPeriodoFin, cboProceso, cboTrabajador, cboConcepto, cboUnidad].forEach((el) => {
+        el.addEventListener('change', guardarFiltros);
+    });
+    function refreshTitulo() {
+        actualizarTitulo();
+    }
+    cboPeriodoIni.addEventListener('change', refreshTitulo);
+    cboPeriodoFin.addEventListener('change', refreshTitulo);
+    cboProceso.addEventListener('change', refreshTitulo);
+    refreshTitulo();
+});
+</script>
+{% endblock %}

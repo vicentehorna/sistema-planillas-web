@@ -6362,6 +6362,12 @@ def reporte_planilla_anual_trabajador_page():
     return render_template('reporte_planilla_anual_trabajador.html')
 
 
+@app.route('/reporte-planilla-anual-concepto')
+@login_required
+def reporte_planilla_anual_concepto_page():
+    return render_template('reporte_planilla_anual_concepto.html')
+
+
 @app.route('/reporte-trabajadores')
 @login_required
 def reporte_trabajadores_page():
@@ -20851,6 +20857,100 @@ def api_reporte_planilla_anual_trabajador():
         })
     except Exception as e:
         logging.exception('api_reporte_planilla_anual_trabajador')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/planilla-anual-concepto', methods=['POST'])
+@login_required
+def api_reporte_planilla_anual_concepto():
+    """sp_pr_reporteplanillaanualconcepto_web: pivot mensual agrupado por concepto."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    period_ini = str(body.get('period_ini') or body.get('periodo_ini') or '').strip()
+    period_fin = str(body.get('period_fin') or body.get('periodo_fin') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    process = str(body.get('process') or body.get('processtype') or '').strip()
+    person = str(body.get('person') or '0').strip() or '0'
+    concept = str(body.get('concept') or '0').strip() or '0'
+    unidad = str(body.get('unidad') or body.get('repunit') or '0').strip() or '0'
+
+    # Acepta YYYYMM, YYYYMMDD o YYYY-MM → normaliza a YYYYMM
+    if len(period_ini) == 7 and period_ini[4] == '-':
+        period_ini = period_ini.replace('-', '')
+    if len(period_fin) == 7 and period_fin[4] == '-':
+        period_fin = period_fin.replace('-', '')
+    if period_ini.isdigit() and len(period_ini) in (6, 8):
+        period_ini = period_ini[:6]
+    if period_fin.isdigit() and len(period_fin) in (6, 8):
+        period_fin = period_fin[:6]
+
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    if (
+        len(period_ini) != 6 or not period_ini.isdigit()
+        or len(period_fin) != 6 or not period_fin.isdigit()
+    ):
+        return jsonify({'error': 'Indique periodos inicial y final válidos (YYYYMM).'}), 400
+    if period_fin < period_ini:
+        return jsonify({'error': 'El periodo final no puede ser menor que el inicial.'}), 400
+    try:
+        y1, m1 = int(period_ini[:4]), int(period_ini[4:6])
+        y2, m2 = int(period_fin[:4]), int(period_fin[4:6])
+        if not (1 <= m1 <= 12 and 1 <= m2 <= 12):
+            raise ValueError('mes')
+        n_meses = (y2 - y1) * 12 + (m2 - m1) + 1
+    except ValueError:
+        return jsonify({'error': 'Rango de periodos inválido.'}), 400
+    if n_meses > 12:
+        return jsonify({'error': 'El rango de periodos no puede superar 12 meses.'}), 400
+    if not process:
+        return jsonify({'error': 'Seleccione el proceso.'}), 400
+    if not payrolltype or payrolltype == '0':
+        return jsonify({'error': 'Seleccione el tipo de planilla.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            'EXEC sp_pr_reporteplanillaanualconcepto_web '
+            '@company=?, @period_ini=?, @period_fin=?, @processtype=?, @payrolltype=?, '
+            '@person=?, @concept=?, @repunit=?',
+            (cia, period_ini, period_fin, process, payrolltype, person, concept, unidad),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun',
+                 'jul', 'ago', 'sep', 'oct', 'nov', 'dic')
+        resultado = []
+        for r in rows:
+            item = {
+                'concept': str(r.get('concept') or '').strip(),
+                'conceptname': str(r.get('conceptname') or '').strip(),
+                'person': str(r.get('person') or '').strip(),
+                'personname': str(r.get('personname') or '').strip(),
+            }
+            for m in meses:
+                try:
+                    item[m] = float(r.get(m) or 0)
+                except (TypeError, ValueError):
+                    item[m] = 0.0
+            resultado.append(item)
+        return jsonify({
+            'rows': resultado,
+            'count': len(resultado),
+            'period_ini': period_ini,
+            'period_fin': period_fin,
+        })
+    except Exception as e:
+        logging.exception('api_reporte_planilla_anual_concepto')
         return jsonify({'error': _sp_error_message(e)}), 500
     finally:
         if conn:

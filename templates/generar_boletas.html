@@ -130,11 +130,16 @@
                 <div class="d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarBoletas"><i class="bi bi-search"></i> Consultar</button>
                     <button type="button" class="btn btn-success btn-sm px-4" id="btnDescargarTodoZip"><i class="bi bi-file-earmark-zip"></i> Descargar Todo en ZIP</button>
+                    <button type="button" class="btn btn-outline-danger btn-sm px-4 d-none" id="btnDescargarPdfUnico"><i class="bi bi-file-earmark-pdf"></i> Descargar PDF único</button>
                 </div>
                 <div class="d-flex justify-content-end align-items-center gap-3">
                     <div class="form-check form-check-inline m-0">
                         <input class="form-check-input" type="radio" name="modoProceso" id="radioDescargar" value="zip" checked>
                         <label class="form-check-label small" for="radioDescargar">Descargar ZIP</label>
+                    </div>
+                    <div class="form-check form-check-inline m-0">
+                        <input class="form-check-input" type="radio" name="modoProceso" id="radioPdfUnico" value="pdf">
+                        <label class="form-check-label small" for="radioPdfUnico">Descargar PDF único</label>
                     </div>
                     <div class="form-check form-check-inline m-0">
                         <input class="form-check-input" type="radio" name="modoProceso" id="radioEnviar" value="mail">
@@ -181,6 +186,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
@@ -210,8 +216,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         return !!(chkSinFirma && chkSinFirma.checked);
     }
 
-    // Cloudflare corta ~100-125s; lotes pequeños evitan timeout al armar ZIP masivo.
+    // Cloudflare corta ~100-125s; lotes pequeños evitan timeout al armar ZIP/PDF masivo.
     const ZIP_LOTE_TAMANO = 35;
+    const PDF_LOTE_TAMANO = 25;
 
     function partirEnLotes(arr, tamano) {
         const out = [];
@@ -233,13 +240,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.URL.revokeObjectURL(url);
     }
 
-    function nombreZipDesdeContentDisposition(cd, fallback) {
+    function nombreArchivoDesdeContentDisposition(cd, fallback) {
         let fileName = fallback || 'boletas.zip';
         const m = String(cd || '').match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
         if (m) {
             fileName = decodeURIComponent(m[1] || m[2] || fileName);
         }
         return fileName;
+    }
+
+    function nombreZipDesdeContentDisposition(cd, fallback) {
+        return nombreArchivoDesdeContentDisposition(cd, fallback);
     }
 
     function mensajeErrorZip(res, err) {
@@ -251,6 +262,33 @@ document.addEventListener('DOMContentLoaded', async function () {
             return `No se pudo generar el ZIP (HTTP ${res.status}).`;
         }
         return 'No se pudo generar el ZIP.';
+    }
+
+    function mensajeErrorPdf(res, err) {
+        if (err && err.error) return String(err.error);
+        if (res && (res.status === 524 || res.status === 504 || res.status === 502)) {
+            return 'La generación del PDF tardó demasiado (timeout del proxy). Continúe por lotes.';
+        }
+        if (res && res.status) {
+            return `No se pudo generar el PDF (HTTP ${res.status}).`;
+        }
+        return 'No se pudo generar el PDF.';
+    }
+
+    async function fusionarPdfsCliente(arrayBuffers) {
+        if (!window.PDFLib || !window.PDFLib.PDFDocument) {
+            throw new Error('No se pudo cargar la librería pdf-lib para unir los lotes.');
+        }
+        const { PDFDocument } = window.PDFLib;
+        const merged = await PDFDocument.create();
+        for (const buf of arrayBuffers) {
+            if (!buf || !buf.byteLength) continue;
+            const src = await PDFDocument.load(buf);
+            const pages = await merged.copyPages(src, src.getPageIndices());
+            pages.forEach((p) => merged.addPage(p));
+        }
+        const bytes = await merged.save();
+        return new Blob([bytes], { type: 'application/pdf' });
     }
 
     async function generarZipLotes(ids, filtros) {
@@ -323,6 +361,124 @@ document.addEventListener('DOMContentLoaded', async function () {
             title: fallidos ? 'Completado con avisos' : 'Completado',
             html: `Se descargaron <b>${ok}</b> de <b>${lotes.length}</b> ZIP(s) `
                 + `(${ids.length} trabajadores, lotes de hasta ${ZIP_LOTE_TAMANO}).${detalle}`,
+        });
+        return true;
+    }
+
+    async function generarPdfUnicoLotes(ids, filtros) {
+        const lotes = partirEnLotes(ids, PDF_LOTE_TAMANO);
+        const partes = [];
+        let generadasHdr = 0;
+        let omitidasHdr = 0;
+        const errores = [];
+        const safeCompany = String(filtros.company_name || filtros.cia || 'compania')
+            .replace(/[^A-Za-z0-9_\-]+/g, '_')
+            .replace(/^_+|_+$/g, '')
+            .toLowerCase() || 'compania';
+        const periodRaw = String(filtros.period || '');
+        const safePeriod = (periodRaw.length >= 6 ? periodRaw.slice(0, 6) : periodRaw)
+            .replace(/[^A-Za-z0-9_\-]+/g, '_') || 'periodo';
+        const nombreFinal = `boletas_${safeCompany}_${safePeriod}.pdf`;
+
+        Swal.fire({
+            title: 'Generando PDF único',
+            html: `<div id="pdf-progreso-texto">Preparando ${ids.length} boleta(s) en ${lotes.length} lote(s)...`
+                + `<br><small class="text-muted">Proceso mensual: no cierre esta ventana.</small></div>`,
+            allowOutsideClick: false,
+            allowEscapeKey: false,
+            didOpen: () => Swal.showLoading(),
+        });
+
+        for (let i = 0; i < lotes.length; i += 1) {
+            const loteIds = lotes[i];
+            const texto = document.getElementById('pdf-progreso-texto');
+            if (texto) {
+                texto.innerHTML = `Lote ${i + 1} de ${lotes.length}: generando ${loteIds.length} boleta(s)...`
+                    + `<br><small class="text-muted">${partes.length} lote(s) listos · ${ids.length} trabajadores</small>`;
+            }
+            try {
+                const res = await fetch(URL_MASIVO, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ...filtros,
+                        modo: 'pdf',
+                        trabajadores: loteIds,
+                        lote: `${i + 1}de${lotes.length}`,
+                    }),
+                });
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    errores.push(`Lote ${i + 1}: ${mensajeErrorPdf(res, err)}`);
+                    continue;
+                }
+                const g = Number(res.headers.get('X-Boletas-Generadas') || 0);
+                const o = Number(res.headers.get('X-Boletas-Omitidas') || 0);
+                if (g > 0) generadasHdr += g;
+                if (o > 0) omitidasHdr += o;
+                const buf = await res.arrayBuffer();
+                if (buf && buf.byteLength) {
+                    partes.push(buf);
+                } else {
+                    errores.push(`Lote ${i + 1}: respuesta PDF vacía.`);
+                }
+                await new Promise((r) => setTimeout(r, 250));
+            } catch (e) {
+                console.error(e);
+                errores.push(`Lote ${i + 1}: error de red o timeout.`);
+            }
+        }
+
+        if (!partes.length) {
+            Swal.fire(
+                'Error',
+                errores[0] || 'No se pudo generar el PDF. Pruebe con menos trabajadores.',
+                'error'
+            );
+            return false;
+        }
+
+        const texto = document.getElementById('pdf-progreso-texto');
+        if (texto) {
+            texto.innerHTML = `Uniendo ${partes.length} lote(s) en un solo PDF...`;
+        }
+
+        try {
+            const blob = await fusionarPdfsCliente(partes);
+            descargarBlobComoArchivo(blob, nombreFinal);
+        } catch (e) {
+            console.error(e);
+            // Fallback: descargar cada lote por separado para no perder el trabajo.
+            for (let i = 0; i < partes.length; i += 1) {
+                descargarBlobComoArchivo(
+                    new Blob([partes[i]], { type: 'application/pdf' }),
+                    `boletas_${safeCompany}_${safePeriod}_lote${i + 1}de${partes.length}.pdf`
+                );
+                await new Promise((r) => setTimeout(r, 400));
+            }
+            Swal.fire({
+                icon: 'warning',
+                title: 'PDF por lotes',
+                html: `No se pudo unir en un solo archivo (${String(e.message || e)}). `
+                    + `Se descargaron <b>${partes.length}</b> PDF(s) parciales.`,
+            });
+            return false;
+        }
+
+        const avisos = [];
+        if (errores.length) {
+            avisos.push(`${errores.length} lote(s) fallaron: ${errores.slice(0, 2).join(' | ')}`);
+        }
+        if (omitidasHdr > 0) {
+            avisos.push(`${omitidasHdr} boleta(s) omitida(s) por error individual.`);
+        }
+        const totalOk = generadasHdr || ids.length;
+        Swal.fire({
+            icon: avisos.length ? 'warning' : 'success',
+            title: avisos.length ? 'Completado con avisos' : 'Completado',
+            html: `Se descargó <b>${nombreFinal}</b> con las boletas generadas `
+                + `(~${totalOk} de ${ids.length}, lotes de hasta ${PDF_LOTE_TAMANO}).`
+                + (avisos.length ? `<br><small class="text-muted">${avisos.join('<br>')}</small>` : ''),
         });
         return true;
     }
@@ -511,7 +667,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         const modoEl = document.querySelector('input[name="modoProceso"]:checked');
         const modo = modoEl ? modoEl.value : 'zip';
         const btnZip = document.getElementById('btnDescargarTodoZip');
+        const btnPdf = document.getElementById('btnDescargarPdfUnico');
         if (btnZip) btnZip.classList.toggle('d-none', modo !== 'zip');
+        if (btnPdf) btnPdf.classList.toggle('d-none', modo !== 'pdf');
     }
 
     function sincronizarCheckAllBoletas() {
@@ -737,6 +895,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
 
+            if (modo === 'pdf') {
+                await generarPdfUnicoLotes(ids, filtros);
+                return;
+            }
+
             if (modo === 'portal') {
                 if (!MOSTRAR_SUBIR_PORTAL) {
                     Swal.fire('No disponible', 'La acción Subir Portal solo aplica en hm_aci.', 'warning');
@@ -933,6 +1096,36 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function descargarPdfUnicoMasivo() {
+        const filtros = filtrosAccionActuales();
+        if (!filtros.cia || !filtros.payroll_type || !filtros.process || !filtros.period) {
+            alert('Por favor seleccione compañía, tipo de planilla, proceso y periodo.');
+            return;
+        }
+        let seleccionados = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
+        if (!seleccionados.length) {
+            seleccionados = (boletasCache || []).map((t) => String(t.person || '').trim()).filter(Boolean);
+        }
+        if (!seleccionados.length) {
+            Swal.fire('Atención', 'No hay trabajadores para descargar. Pulse Consultar primero.', 'warning');
+            return;
+        }
+        const btn = document.getElementById('btnDescargarPdfUnico');
+        const prev = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Generando PDF...';
+        }
+        try {
+            await generarPdfUnicoLotes(seleccionados, filtros);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = prev;
+            }
+        }
+    }
+
     document.getElementById('frmGenerarBoletas').addEventListener('submit', async function (e) {
         e.preventDefault();
         await cargarListaBoletas();
@@ -952,6 +1145,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         r.addEventListener('change', syncModoProcesoUI);
     });
     document.getElementById('btnDescargarTodoZip').addEventListener('click', descargarMasivo);
+    const btnPdfUnico = document.getElementById('btnDescargarPdfUnico');
+    if (btnPdfUnico) {
+        btnPdfUnico.addEventListener('click', descargarPdfUnicoMasivo);
+    }
     document.getElementById('btnEjecutarBoletas').addEventListener('click', ejecutarAccion);
     syncModoProcesoUI();
 

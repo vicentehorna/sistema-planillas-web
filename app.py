@@ -1095,6 +1095,33 @@ def _boleta_pdf_filename(person, period_raw, nombre=None):
     return f'boleta_{person_part}_{period_part}.pdf'
 
 
+def _merge_pdf_buffers(pdf_buffers):
+    """Une varios PDF (BytesIO o bytes) en un solo BytesIO con pypdf."""
+    from pypdf import PdfReader, PdfWriter
+
+    writer = PdfWriter()
+    for item in pdf_buffers or []:
+        if item is None:
+            continue
+        if isinstance(item, (bytes, bytearray)):
+            raw = bytes(item)
+        else:
+            try:
+                item.seek(0)
+            except Exception:
+                pass
+            raw = item.read() if hasattr(item, 'read') else bytes(item)
+        if not raw:
+            continue
+        reader = PdfReader(io.BytesIO(raw))
+        for page in reader.pages:
+            writer.add_page(page)
+    out = io.BytesIO()
+    writer.write(out)
+    out.seek(0)
+    return out
+
+
 def _certificado_quinta_pdf_filename(person, anio):
     person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
     anio_safe = re.sub(r'[^0-9]+', '', str(anio or '')) or 'anio'
@@ -16763,8 +16790,8 @@ def procesar_boletas_masivo():
     modo = str(body.get('modo') or '').strip().lower()
     seleccionados = body.get('trabajadores') or []
     sin_firma = _truthy_param(body.get('sin_firma') if body.get('sin_firma') is not None else body.get('sinfirma'))
-    if modo not in ('zip', 'mail'):
-        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo not in ('zip', 'pdf', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip, pdf o mail.'}), 400
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not process or not period:
@@ -16774,18 +16801,16 @@ def procesar_boletas_masivo():
     if not ids:
         return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
 
-    if modo == 'zip':
+    if modo in ('zip', 'pdf'):
         company_name = str(body.get('company_name') or cia).strip()
         safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
         # Periodo de BD viene como yyyymmdd; pediste nombre con yyyymm.
         period_yyyymm = period[:6] if len(period) >= 6 else period
         safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
-        nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}.zip'
         lote = str(body.get('lote') or body.get('batch') or '').strip()
+        safe_lote = ''
         if lote:
             safe_lote = re.sub(r'[^A-Za-z0-9_\\-]+', '_', lote).strip('_')
-            if safe_lote:
-                nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}_lote{safe_lote}.zip'
 
         empleados_periodo = get_listado_generar_boletas(cia, payroll_type, process, period, '0')
         by_person = {}
@@ -16794,34 +16819,36 @@ def procesar_boletas_masivo():
             if pid_map:
                 by_person[pid_map] = e
 
-        memory_file = io.BytesIO()
         generadas = 0
         omitidas = 0
+        pdf_parts = []
+
         try:
-            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
-                for pid in ids:
-                    try:
-                        pdf_data = generar_pdf_en_memoria(
-                            {
-                                'person': pid,
-                                'cia': cia,
-                                'payroll_type': payroll_type,
-                                'process': process,
-                                'period': period,
-                                'sin_firma': '1' if sin_firma else '0',
-                            }
-                        )
-                        emp = by_person.get(pid, {})
-                        emp_nombre = str(emp.get('nombre') or emp.get('fullname') or '').strip()
-                        zf.writestr(
+            for pid in ids:
+                try:
+                    pdf_data = generar_pdf_en_memoria(
+                        {
+                            'person': pid,
+                            'cia': cia,
+                            'payroll_type': payroll_type,
+                            'process': process,
+                            'period': period,
+                            'sin_firma': '1' if sin_firma else '0',
+                        }
+                    )
+                    emp = by_person.get(pid, {})
+                    emp_nombre = str(emp.get('nombre') or emp.get('Name') or '').strip()
+                    pdf_parts.append(
+                        (
                             _boleta_pdf_filename(pid, period, nombre=emp_nombre),
                             pdf_data.getvalue(),
                         )
-                        generadas += 1
-                    except Exception:
-                        omitidas += 1
-                        logging.exception('procesar_boletas_masivo persona=%s', pid)
-                        continue
+                    )
+                    generadas += 1
+                except Exception:
+                    omitidas += 1
+                    logging.exception('procesar_boletas_masivo persona=%s', pid)
+                    continue
             if generadas <= 0:
                 return jsonify({
                     'error': 'No se pudo generar ninguna boleta PDF para el lote indicado.',
@@ -16829,10 +16856,42 @@ def procesar_boletas_masivo():
                     'total': len(ids),
                 }), 500
         except Exception as e:
+            logging.exception('procesar_boletas_masivo %s', modo)
+            return jsonify({'error': f'Error al generar boletas: {e}'}), 500
+
+        if modo == 'pdf':
+            try:
+                memory_file = _merge_pdf_buffers([raw for _, raw in pdf_parts])
+            except Exception as e:
+                logging.exception('procesar_boletas_masivo merge pdf')
+                return jsonify({'error': f'Error al unir PDFs: {e}'}), 500
+            nombre_pdf = f'boletas_{safe_company.lower()}_{safe_period}.pdf'
+            if safe_lote:
+                nombre_pdf = f'boletas_{safe_company.lower()}_{safe_period}_lote{safe_lote}.pdf'
+            resp = send_file(
+                memory_file,
+                mimetype='application/pdf',
+                download_name=nombre_pdf,
+                as_attachment=True,
+            )
+            resp.headers['X-Boletas-Generadas'] = str(generadas)
+            if omitidas:
+                resp.headers['X-Boletas-Omitidas'] = str(omitidas)
+            return resp
+
+        memory_file = io.BytesIO()
+        try:
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for fname, raw in pdf_parts:
+                    zf.writestr(fname, raw)
+        except Exception as e:
             logging.exception('procesar_boletas_masivo zip')
             return jsonify({'error': f'Error al armar el ZIP: {e}'}), 500
 
         memory_file.seek(0)
+        nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}.zip'
+        if safe_lote:
+            nombre_zip = f'boletas_{safe_company.lower()}_{safe_period}_lote{safe_lote}.zip'
         resp = send_file(
             memory_file,
             mimetype='application/zip',
@@ -16852,6 +16911,7 @@ def procesar_boletas_masivo():
             'total': len(ids),
         }
     ), 202
+
 
 
 @app.route('/descargar_zip_boletas')

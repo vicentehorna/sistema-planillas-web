@@ -64,6 +64,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(p.LastName2, ''))) AS apellido_materno,
         LTRIM(RTRIM(ISNULL(p.Name1, ''))) AS nombre1,
         LTRIM(RTRIM(ISNULL(p.Name2, ''))) AS nombre2,
+        ISNULL(ru.Description, '') AS unidad,
         ISNULL(dt.Description, '') AS tipo_documento,
         ISNULL(p.DocumentNumber, '') AS numero_documento,
         ISNULL(p.Telephone, '') AS telefono,
@@ -162,6 +163,8 @@ BEGIN
     FROM PR_Employee e (NOLOCK)
     INNER JOIN SY_Person p (NOLOCK)
         ON p.Person = e.Person
+    LEFT JOIN SY_ReplicationUnit ru (NOLOCK)
+        ON ru.ReplicationUnit = p.ReplicationUnit
     LEFT JOIN PR_PayRollType pt (NOLOCK)
         ON pt.PayRollType = e.PayRollType
        AND pt.Company = e.Company

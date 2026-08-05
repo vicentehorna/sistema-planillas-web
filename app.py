@@ -19417,6 +19417,7 @@ def api_reporte_lista_trabajadores():
         'Apellido Materno',
         'Nombre1',
         'Nombre2',
+        'Unidad',
         'Tipo Documento',
         'Documento',
         'Teléfono',
@@ -19459,6 +19460,7 @@ def api_reporte_lista_trabajadores():
     keys_datos = [
         'tipo_planilla', 'codigo_persona', 'nombre_completo',
         'apellido_paterno', 'apellido_materno', 'nombre1', 'nombre2',
+        'unidad',
         'tipo_documento', 'numero_documento', 'telefono', 'mail', 'sexo',
         'fecha_nacimiento', 'fecha_ingreso', 'fecha_reingreso', 'fecha_cese',
         'motivo_cese', 'inactivo', 'centro_costo_codigo', 'nombre_centro_costo',

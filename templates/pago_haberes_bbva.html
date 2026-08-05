@@ -102,6 +102,11 @@
                 <label for="txtFechaPago" class="form-label small fw-bold text-muted">Fecha de pago</label>
                 <input type="date" id="txtFechaPago" class="form-control form-control-sm" required>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
+                <input type="text" id="txtReferencia" class="form-control form-control-sm"
+                       maxlength="25" placeholder="LIQUIDACION" autocomplete="off" spellcheck="false">
+            </div>
             <div class="col-6 col-sm-4 col-md-3 col-lg-1">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
@@ -588,6 +593,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const currency = document.getElementById('cboMoneda').value.trim();
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
+        const referencia = (document.getElementById('txtReferencia')?.value || '').trim();
         const todosBancos = document.getElementById('chkTodosBancos').checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
@@ -603,6 +609,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate,
+                    referencia,
                     todos_bancos: todosBancos,
                     persons: seleccionados.map((r) => r.person)
                 })

@@ -1533,6 +1533,10 @@
                     const chk = document.getElementById('chkTodosBancos');
                     estado.todos_bancos = !!(chk && chk.checked);
                 }
+                const txtRef = document.getElementById('txtReferencia');
+                if (txtRef) {
+                    estado.referencia = String(txtRef.value || '').trim().slice(0, 25);
+                }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros pago haberes: no se pudo guardar', e);
@@ -1634,6 +1638,11 @@
                 chkTodosBancos.checked = !!filtros.todos_bancos;
             }
 
+            const txtReferencia = document.getElementById('txtReferencia');
+            if (txtReferencia && filtros.referencia != null) {
+                txtReferencia.value = String(filtros.referencia).slice(0, 25);
+            }
+
             guardar();
             return true;
         }
@@ -1648,6 +1657,11 @@
             });
             const txtFechaPago = document.getElementById('txtFechaPago');
             if (txtFechaPago) txtFechaPago.addEventListener('change', guardar);
+            const txtReferencia = document.getElementById('txtReferencia');
+            if (txtReferencia) {
+                txtReferencia.addEventListener('change', guardar);
+                txtReferencia.addEventListener('input', guardar);
+            }
             if (incluyeTodosBancos) {
                 const chkTodosBancos = document.getElementById('chkTodosBancos');
                 if (chkTodosBancos) chkTodosBancos.addEventListener('change', guardar);

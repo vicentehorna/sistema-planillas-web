@@ -14734,13 +14734,19 @@ def api_pago_haberes_continental_generar_txt():
         return jsonify({"error": "Seleccione al menos un trabajador."}), 400
 
     todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    referencia = str(
+        body.get('referencia') or body.get('par_referencia') or body.get('ref_cabecera') or ''
+    ).strip()
+    if len(referencia) > 25:
+        referencia = referencia[:25]
 
     log_sp = (
         '[continental generar] EXEC sp_pr_generar_continental_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@todos_bancos={todos_bancos!r} trabajadores_seleccionados={len(persons)}'
+        f'@todos_bancos={todos_bancos!r} @par_referencia={referencia!r} '
+        f'trabajadores_seleccionados={len(persons)}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -14756,10 +14762,12 @@ def api_pago_haberes_continental_generar_txt():
         cursor.execute(
             "EXEC sp_pr_generar_continental_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @todos_bancos=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
+            "@todos_bancos=?, @par_referencia=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
                 p['period'], p['processtype'], p['paydate'], todos_bancos,
+                referencia or None,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

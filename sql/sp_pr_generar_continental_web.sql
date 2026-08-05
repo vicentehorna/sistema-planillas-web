@@ -13,7 +13,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_continental_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
-    @todos_bancos    CHAR(1) = 'N'
+    @todos_bancos    CHAR(1) = 'N',
+    @par_referencia  VARCHAR(25) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,6 +24,7 @@ BEGIN
     IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
     SET @todos_bancos = UPPER(@todos_bancos);
     IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
+    SET @par_referencia = LTRIM(RTRIM(ISNULL(@par_referencia, '')));
 
     IF OBJECT_ID('tempdb..#ContinentalPersonas') IS NULL
     BEGIN
@@ -88,15 +90,21 @@ BEGIN
     ELSE
         SET @tipo_operacion = '700';
 
-    SELECT @ref_cabecera = LEFT(
-        LTRIM(RTRIM(ISNULL(pt.Description, ISNULL(pt.ShortName, @par_processtype)))),
-        25
-    )
-    FROM PR_ProcessType pt
-    WHERE pt.Company = @par_company
-      AND pt.ProcessType = @par_processtype;
+    /* Referencia de cabecera: texto del filtro, o descripción del proceso (ej. LIQUIDACION). */
+    IF @par_referencia <> ''
+        SET @ref_cabecera = LEFT(@par_referencia, 25);
+    ELSE
+    BEGIN
+        SELECT @ref_cabecera = LEFT(
+            LTRIM(RTRIM(ISNULL(pt.Description, ISNULL(pt.ShortName, @par_processtype)))),
+            25
+        )
+        FROM PR_ProcessType pt
+        WHERE pt.Company = @par_company
+          AND pt.ProcessType = @par_processtype;
 
-    IF @ref_cabecera IS NULL SET @ref_cabecera = '';
+        IF @ref_cabecera IS NULL SET @ref_cabecera = '';
+    END
     SET @ref_cabecera = LEFT(@ref_cabecera + REPLICATE(' ', 25), 25);
 
     SELECT @ref_detalle = LEFT(

@@ -4,7 +4,10 @@
 
     Resultset 1: detalle cuenta/concepto (debe/haber)
     Resultset 2: problemas de configuración que explican descuadres
-                 (concepto sin cuenta o cuenta en el lado incorrecto)
+                 - concepto I/A/D sin cuenta
+                 - ingreso solo en HABER / descuento solo en DEBE
+                 - devolución (o Debe 4017xx) solo en DEBE sin HABER
+                 - aporte con un solo lado
 
     @person: opcional. Vacío/NULL = Todos; con valor = solo ese trabajador (Person).
 
@@ -197,25 +200,41 @@ BEGIN
         creditcode AS cuenta_haber,
         CASE
             WHEN sin_apd = 1 OR (has_debe = 0 AND has_haber = 0) THEN
-                'Sin cuenta contable asociada en Configurar Conceptos'
+                CASE tiposhort
+                    WHEN 'D' THEN 'Descuento sin cuenta contable en Configurar Conceptos (falta HABER, p.ej. 401731)'
+                    WHEN 'A' THEN 'Aporte sin cuenta contable en Configurar Conceptos'
+                    WHEN 'I' THEN 'Ingreso sin cuenta contable en Configurar Conceptos'
+                    ELSE 'Sin cuenta contable asociada en Configurar Conceptos'
+                END
             WHEN tiposhort = 'I' AND has_haber = 1 AND has_debe = 0 THEN
                 'Ingreso configurado solo en HABER (falta cuenta DEBE)'
+            WHEN tiposhort = 'I' AND has_debe = 1 AND has_haber = 0
+                 AND (
+                    UPPER(conceptname) LIKE '%DEVOLUC%'
+                    OR UPPER(ISNULL(debitcode, '')) LIKE '4017%'
+                 ) THEN
+                'Devolución/ingreso solo en DEBE (falta cuenta HABER, p.ej. Neto 415401)'
             WHEN tiposhort = 'D' AND has_debe = 1 AND has_haber = 0 THEN
                 'Descuento configurado solo en DEBE (falta cuenta HABER)'
-            WHEN tiposhort = 'A' AND has_debe = 0 AND has_haber = 0 THEN
-                'Aporte sin cuentas DEBE/HABER'
-            WHEN tiposhort = 'I' AND has_debe = 0 AND has_haber = 0 THEN
-                'Ingreso sin cuentas DEBE/HABER'
-            WHEN tiposhort = 'D' AND has_debe = 0 AND has_haber = 0 THEN
-                'Descuento sin cuentas DEBE/HABER'
+            WHEN tiposhort = 'A' AND has_debe = 1 AND has_haber = 0 THEN
+                'Aporte configurado solo en DEBE (falta cuenta HABER)'
+            WHEN tiposhort = 'A' AND has_haber = 1 AND has_debe = 0 THEN
+                'Aporte configurado solo en HABER (falta cuenta DEBE)'
             ELSE
                 'Configuración de cuentas incompleta'
-        END AS problema,
+            END AS problema,
         CASE
             /* Lado incorrecto: el monto aparece en el lado opuesto → afecta 2x la diferencia */
             WHEN tiposhort = 'I' AND has_haber = 1 AND has_debe = 0 THEN ROUND(2 * total_monto, 2)
             WHEN tiposhort = 'D' AND has_debe = 1 AND has_haber = 0 THEN ROUND(2 * total_monto, 2)
-            /* Sin cuenta: el neto suele incluir el monto pero no hay contrapartida → 1x */
+            WHEN tiposhort = 'A' AND ((has_debe = 1 AND has_haber = 0) OR (has_haber = 1 AND has_debe = 0))
+                THEN ROUND(ABS(total_monto), 2)
+            /* Devolución solo DEBE o sin cuenta: falta contrapartida → 1x */
+            WHEN tiposhort = 'I' AND has_debe = 1 AND has_haber = 0
+                 AND (
+                    UPPER(conceptname) LIKE '%DEVOLUC%'
+                    OR UPPER(ISNULL(debitcode, '')) LIKE '4017%'
+                 ) THEN ROUND(ABS(total_monto), 2)
             WHEN sin_apd = 1 OR (has_debe = 0 AND has_haber = 0) THEN ROUND(ABS(total_monto), 2)
             ELSE ROUND(ABS(total_monto), 2)
         END AS impacto_estimado
@@ -224,9 +243,26 @@ BEGIN
         /* Lado incorrecto: causa típica de diferencia 2x */
         (tiposhort = 'I' AND has_haber = 1 AND has_debe = 0)
         OR (tiposhort = 'D' AND has_debe = 1 AND has_haber = 0)
-        /* Sin cuenta: ingresos/aportes (no descuentos componentes AFP) */
+        /* Aporte incompleto (debe faltar haber o viceversa) */
         OR (
-            tiposhort IN ('I', 'A')
+            tiposhort = 'A'
+            AND (
+                (has_debe = 1 AND has_haber = 0)
+                OR (has_haber = 1 AND has_debe = 0)
+            )
+        )
+        /* Devolución de quinta u homólogos: ingreso solo en DEBE sobre 4017xx */
+        OR (
+            tiposhort = 'I'
+            AND has_debe = 1 AND has_haber = 0
+            AND (
+                UPPER(conceptname) LIKE '%DEVOLUC%'
+                OR UPPER(ISNULL(debitcode, '')) LIKE '4017%'
+            )
+        )
+        /* Sin cuenta: ingresos, aportes y descuentos (p.ej. retención 5ta en liquidación) */
+        OR (
+            tiposhort IN ('I', 'A', 'D')
             AND (sin_apd = 1 OR (has_debe = 0 AND has_haber = 0))
         )
     ORDER BY impacto_estimado DESC, conceptname;

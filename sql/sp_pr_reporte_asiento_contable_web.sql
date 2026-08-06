@@ -6,6 +6,8 @@
     Resultset 2: problemas de configuración que explican descuadres
                  (concepto sin cuenta o cuenta en el lado incorrecto)
 
+    @person: opcional. Vacío/NULL = Todos; con valor = solo ese trabajador (Person).
+
     Usado por: POST /api/asientos/reporte-contable
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporte_asiento_contable_web]
@@ -13,7 +15,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporte_asiento_contable_web]
     @payrolltype VARCHAR(20),
     @processtype VARCHAR(20),
     @period VARCHAR(20),
-    @currency VARCHAR(2) = 'LO'
+    @currency VARCHAR(2) = 'LO',
+    @person VARCHAR(20) = NULL  /* vacío / NULL = Todos */
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,6 +26,7 @@ BEGIN
     SET @processtype = LTRIM(RTRIM(ISNULL(@processtype, '')));
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
     SET @currency = UPPER(LTRIM(RTRIM(ISNULL(@currency, 'LO'))));
+    SET @person = LTRIM(RTRIM(ISNULL(@person, '')));
     IF @currency NOT IN ('LO', 'EX')
         SET @currency = 'LO';
 
@@ -84,6 +88,7 @@ BEGIN
       AND EPC.PRPeriod = @period
       AND EPC.PayRollType = @payrolltype
       AND EPC.ProcessType = @processtype
+      AND (@person = '' OR EPC.Person = @person)
       AND EPC.FlagIsMonetary = 'Y'
       AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
     GROUP BY
@@ -157,6 +162,7 @@ BEGIN
           AND EPC.PRPeriod = @period
           AND EPC.PayRollType = @payrolltype
           AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
           AND EPC.FlagIsMonetary = 'Y'
           AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A')
           AND ABS(

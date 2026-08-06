@@ -9636,6 +9636,7 @@ def api_asientos_reporte_contable():
     processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
     currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+    person = str(body.get('person') or body.get('trabajador') or body.get('dni') or '').strip()
 
     if not cia or not payrolltype or not processtype or not period:
         return jsonify({"error": "Complete compañía, planilla, proceso y periodo."}), 400
@@ -9647,8 +9648,8 @@ def api_asientos_reporte_contable():
         _set_cursor_timeout_report(cursor)
         cursor.execute(
             "EXEC sp_pr_reporte_asiento_contable_web "
-            "@company=?, @payrolltype=?, @processtype=?, @period=?, @currency=?",
-            (cia, payrolltype, processtype, period, currency),
+            "@company=?, @payrolltype=?, @processtype=?, @period=?, @currency=?, @person=?",
+            (cia, payrolltype, processtype, period, currency, person or None),
         )
 
         # Resultset 1: detalle asiento; Resultset 2: problemas de configuración
@@ -9700,6 +9701,7 @@ def api_asientos_reporte_contable():
             })
 
         diferencia = round(abs(total_debe) - abs(total_haber), 2)
+        alcance = f" del trabajador {person}" if person else ""
         motivo = ''
         if abs(diferencia) >= 0.005:
             if problemas:
@@ -9710,24 +9712,49 @@ def api_asientos_reporte_contable():
                         f"(monto {p['monto']:,.2f}; impacto estimado {p['impacto_estimado']:,.2f})"
                     )
                 motivo = (
-                    f"El asiento no cuadra (diferencia {diferencia:,.2f}). "
+                    f"El asiento{alcance} no cuadra (diferencia {diferencia:,.2f}). "
                     "Revisar configuración de cuentas en Asientos → Configurar Conceptos. "
                     + " | ".join(partes)
                 )
             else:
                 motivo = (
-                    f"El asiento no cuadra (diferencia {diferencia:,.2f}). "
+                    f"El asiento{alcance} no cuadra (diferencia {diferencia:,.2f}). "
                     "No se detectaron conceptos I/D/A sin cuenta o con lado incorrecto; "
                     "revise otras causas (perfiles distintos por trabajador, auxiliares, etc.)."
                 )
         else:
-            motivo = 'Asiento cuadrado: débitos y créditos coinciden.'
+            motivo = (
+                f"Asiento cuadrado{alcance}: débitos y créditos coinciden."
+                if person
+                else "Asiento cuadrado: débitos y créditos coinciden."
+            )
 
         periodo_fmt = period
         if len(period) == 8 and period.isdigit():
             periodo_fmt = f"{period[:4]}-{period[4:6]}-{period[6:8]}"
         elif len(period) == 6 and period.isdigit():
             periodo_fmt = f"{period[:4]}-{period[4:6]}"
+
+        person_name = str(body.get('person_name') or body.get('trabajador_nombre') or '').strip()
+        if person and not person_name:
+            try:
+                cursor.execute(
+                    """
+                    SELECT TOP 1
+                        LTRIM(RTRIM(ISNULL(LastName1, ''))) + ' '
+                        + LTRIM(RTRIM(ISNULL(LastName2, ''))) + ' '
+                        + LTRIM(RTRIM(ISNULL(Name1, ''))) + ' '
+                        + LTRIM(RTRIM(ISNULL(Name2, '')))
+                    FROM SY_Person (NOLOCK)
+                    WHERE Person = ?
+                    """,
+                    (person,),
+                )
+                prow = cursor.fetchone()
+                if prow and prow[0]:
+                    person_name = " ".join(str(prow[0]).split())
+            except Exception:
+                person_name = ''
 
         return jsonify({
             'rows': out_rows,
@@ -9737,6 +9764,8 @@ def api_asientos_reporte_contable():
                 'processname': processname,
                 'period': period,
                 'periodo_fmt': periodo_fmt,
+                'person': person,
+                'person_name': person_name,
                 'total_debe': round(total_debe, 2),
                 'total_haber': round(total_haber, 2),
                 'diferencia': diferencia,

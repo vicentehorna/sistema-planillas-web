@@ -121,6 +121,12 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-2 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
                     <span class="btn-consultar-label"><i class="bi bi-search"></i> Consultar</span>
@@ -184,6 +190,7 @@
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboTrabajador = document.getElementById('cboTrabajador');
     const btnConsultar = document.getElementById('btnConsultar');
     const btnExport = document.getElementById('btnExportExcel');
     const cardResultado = document.getElementById('cardResultado');
@@ -225,6 +232,27 @@
         });
     }
 
+    async function cargarTrabajadores() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        cboTrabajador.innerHTML = '<option value="">Todos</option>';
+        cboTrabajador.disabled = true;
+        if (!cia) return;
+        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+        if (payroll) url += `&payrolltype=${encodeURIComponent(payroll)}`;
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'Error al cargar trabajadores');
+        (data || []).forEach(item => {
+            const opt = document.createElement('option');
+            opt.value = item.id;
+            opt.textContent = item.text || item.id;
+            cboTrabajador.appendChild(opt);
+        });
+        cboTrabajador.value = '';
+        cboTrabajador.disabled = false;
+    }
+
     async function obtenerPeriodoActivo(cia, payrolltype, processtype) {
         try {
             const url = `/api/selectores/periodo-activo?cia=${encodeURIComponent(cia)}`
@@ -246,6 +274,8 @@
         cboProceso.disabled = true;
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.disabled = true;
+        cboTrabajador.innerHTML = '<option value="">Todos</option>';
+        cboTrabajador.disabled = true;
         if (!cia) return;
         await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
         cboPlanilla.disabled = false;
@@ -255,7 +285,7 @@
                 break;
             }
         }
-        await cargarProcesos();
+        await Promise.all([cargarProcesos(), cargarTrabajadores()]);
     }
 
     async function cargarProcesos() {
@@ -300,7 +330,7 @@
     }
 
     function setBusy(busy, msg) {
-        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo].forEach(el => {
+        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador].forEach(el => {
             if (el) el.disabled = !!busy;
         });
         if (busy) {
@@ -311,6 +341,7 @@
             lblEstado.textContent = '';
             const label = btnConsultar.querySelector('.btn-consultar-label');
             if (label) label.innerHTML = '<i class="bi bi-search"></i> Consultar';
+            cboTrabajador.disabled = !cboCia.value;
         }
     }
 
@@ -340,7 +371,12 @@
         const planilla = tituloCaso(meta.payrolltypename);
         const proceso = tituloCaso(meta.processname);
         const periodo = tituloPeriodo(meta.period || meta.periodo_fmt);
-        return [planilla, proceso, periodo].filter(Boolean).join(' - ') || '—';
+        const partes = [planilla, proceso, periodo].filter(Boolean);
+        if (meta.person) {
+            const nom = String(meta.person_name || '').trim();
+            partes.push(nom ? `${meta.person} - ${nom}` : String(meta.person));
+        }
+        return partes.join(' - ') || '—';
     }
 
     function pintarResultado(payload) {
@@ -421,7 +457,8 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `asiento_contable_${meta.period || 'reporte'}.xlsx`;
+        const sufijo = meta.person ? `_${meta.person}` : '';
+        a.download = `asiento_contable_${meta.period || 'reporte'}${sufijo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -430,12 +467,16 @@
 
     frm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
+        const person = (cboTrabajador.value || '').trim();
+        const optTrab = cboTrabajador.options[cboTrabajador.selectedIndex];
         const body = {
             cia: cboCia.value,
             payrolltype: cboPlanilla.value,
             processtype: cboProceso.value,
             period: cboPeriodo.value,
-            currency: 'LO'
+            currency: 'LO',
+            person: person,
+            person_name: person && optTrab ? String(optTrab.textContent || '').trim() : ''
         };
         if (!body.cia || !body.payrolltype || !body.processtype || !body.period) {
             if (window.HmUi) HmUi.advertencia('Complete compañía, planilla, proceso y periodo.');
@@ -464,7 +505,9 @@
 
     btnExport.addEventListener('click', exportExcel);
     cboCia.addEventListener('change', cargarPlanillas);
-    cboPlanilla.addEventListener('change', cargarProcesos);
+    cboPlanilla.addEventListener('change', async () => {
+        await Promise.all([cargarProcesos(), cargarTrabajadores()]);
+    });
     cboProceso.addEventListener('change', cargarPeriodos);
 
     (async function init() {

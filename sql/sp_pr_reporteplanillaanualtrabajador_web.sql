@@ -3,7 +3,8 @@
     Basado en AUXILIARES/reporte35antiguo.txt (DW PowerBuilder).
 
     Pivot por mes (ene..dic) del año indicado.
-    Siempre solo conceptos incluidos en boleta (FlagPayrollTicket = 'Y').
+    @solo_boleta = 'Y' (default): solo conceptos con FlagPayrollTicket = 'Y'.
+    @solo_boleta = 'N': todos los conceptos (I/D/A/T), con o sin boleta.
     Tipos de concepto: I, D, A, T (Ingresos, Descuentos, Aportes, Totales).
 
     Usado por: POST /api/reportes/planilla-anual-trabajador
@@ -15,7 +16,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplanillaanualtrabajador_web]
     @payrolltype   VARCHAR(20) = '0',
     @person        VARCHAR(20) = '0',
     @concept       VARCHAR(20) = '0',
-    @repunit       VARCHAR(20) = '0'
+    @repunit       VARCHAR(20) = '0',
+    @solo_boleta   CHAR(1)     = 'Y'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -27,6 +29,8 @@ BEGIN
     SET @person = LTRIM(RTRIM(ISNULL(@person, '0')));
     SET @concept = LTRIM(RTRIM(ISNULL(@concept, '0')));
     SET @repunit = LTRIM(RTRIM(ISNULL(@repunit, '0')));
+    SET @solo_boleta = UPPER(LTRIM(RTRIM(ISNULL(@solo_boleta, 'Y'))));
+    IF @solo_boleta NOT IN ('Y', 'N') SET @solo_boleta = 'Y';
 
     IF @payrolltype = '' SET @payrolltype = '0';
     IF @person = '' SET @person = '0';
@@ -50,6 +54,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(ct.ShortName, ''))) AS conceptshort,
         LTRIM(RTRIM(ISNULL(ct.Description, ''))) AS concepttype,
         LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.PrintText)), ''), c.Description))) AS conceptname,
+        LTRIM(RTRIM(ISNULL(c.PDT, ''))) AS pdt,
         CAST(SUM(CASE WHEN SUBSTRING(epc.PRPeriod, 5, 2) = '01'
                       THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS DECIMAL(18, 4)) AS ene,
         CAST(SUM(CASE WHEN SUBSTRING(epc.PRPeriod, 5, 2) = '02'
@@ -90,7 +95,7 @@ BEGIN
       AND c.Company = @company
       AND epc.ProcessType = @processtype
       AND LEFT(LTRIM(RTRIM(epc.PRPeriod)), 4) = @anho
-      AND ISNULL(c.FlagPayrollTicket, 'N') = 'Y'
+      AND (@solo_boleta = 'N' OR ISNULL(c.FlagPayrollTicket, 'N') = 'Y')
       AND ct.ShortName IN ('I', 'D', 'A', 'T')
       AND (@payrolltype = '0' OR epc.PayRollType = @payrolltype)
       AND (@person = '0' OR epc.Person = @person)
@@ -100,7 +105,8 @@ BEGIN
         e.Person,
         sp.LastName1, sp.LastName2, sp.Name1, sp.Name2,
         ct.ShortName, ct.Description,
-        c.PrintText, c.Description
+        c.PrintText, c.Description,
+        c.PDT
     HAVING
         SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)) <> 0
     ORDER BY

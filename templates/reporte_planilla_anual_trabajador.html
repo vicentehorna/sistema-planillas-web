@@ -29,6 +29,12 @@
     }
     .table-planilla-anual .col-tipo { min-width: 5.5rem; }
     .table-planilla-anual .col-concepto { min-width: 14rem; max-width: 18rem; }
+    .table-planilla-anual .col-pdt {
+        min-width: 2.75rem;
+        max-width: 3.25rem;
+        text-align: center;
+        width: 3rem;
+    }
     .table-planilla-anual .col-mes,
     .table-planilla-anual .col-total {
         min-width: 4.25rem;
@@ -104,6 +110,14 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <div class="form-check mt-4 pt-1">
+                    <input class="form-check-input" type="checkbox" id="chkSoloBoleta" checked>
+                    <label class="form-check-label small fw-bold text-muted" for="chkSoloBoleta">
+                        Solo conceptos en boleta
+                    </label>
+                </div>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-2 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
                     <i class="bi bi-search"></i> Consultar
@@ -131,6 +145,7 @@
                     <tr>
                         <th class="col-tipo">Tipo</th>
                         <th class="col-concepto">Concepto</th>
+                        <th class="col-pdt">PDT</th>
                         <th class="col-mes">Enero</th>
                         <th class="col-mes">Febrero</th>
                         <th class="col-mes">Marzo</th>
@@ -148,7 +163,7 @@
                 </thead>
                 <tbody id="tbodyAnual">
                     <tr>
-                        <td colspan="15" class="text-center text-muted py-4">Sin datos</td>
+                        <td colspan="16" class="text-center text-muted py-4">Sin datos</td>
                     </tr>
                 </tbody>
             </table>
@@ -174,7 +189,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboTrabajador = document.getElementById('cboTrabajador');
     const cboConcepto = document.getElementById('cboConcepto');
     const cboUnidad = document.getElementById('cboUnidad');
+    const chkSoloBoleta = document.getElementById('chkSoloBoleta');
     const tbody = document.getElementById('tbodyAnual');
+    const COLS = 16;
     const lblCount = document.getElementById('lblRowCount');
     const lblTitulo = document.getElementById('lblTituloReporte');
     const msg = document.getElementById('msgEstado');
@@ -227,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 person: cboTrabajador.value,
                 concept: cboConcepto.value,
                 unidad: cboUnidad.value || '0',
+                solo_boleta: chkSoloBoleta.checked,
             }));
         } catch (e) { /* ignore */ }
     }
@@ -297,7 +315,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function renderRows(rows) {
         if (!rows || !rows.length) {
-            tbody.innerHTML = '<tr><td colspan="15" class="text-center text-muted py-4">Sin datos para los filtros seleccionados</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${COLS}" class="text-center text-muted py-4">Sin datos para los filtros seleccionados</td></tr>`;
             lblCount.textContent = '0';
             btnExcel.disabled = true;
             return;
@@ -318,7 +336,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         let html = '';
         let nConceptos = 0;
         byPerson.forEach((g) => {
-            html += `<tr class="fila-trabajador"><td colspan="15">${esc(g.person)} &nbsp; ${esc(g.personname)}</td></tr>`;
+            html += `<tr class="fila-trabajador"><td colspan="${COLS}">${esc(g.person)} &nbsp; ${esc(g.personname)}</td></tr>`;
             const allConceptRows = [];
             g.tipos.forEach((lista, tipo) => {
                 lista.forEach((r, idx) => {
@@ -327,6 +345,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     html += `<tr>
                         <td class="col-tipo">${idx === 0 ? esc(tipo) : ''}</td>
                         <td class="col-concepto">${esc(r.conceptname)}</td>
+                        <td class="col-pdt">${esc(r.pdt || '')}</td>
                         ${celdasMeses(r, false)}
                     </tr>`;
                 });
@@ -334,6 +353,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 html += `<tr class="fila-subtotal-tipo">
                     <td></td>
                     <td>Total ${esc(tipo)}</td>
+                    <td class="col-pdt"></td>
                     ${celdasMeses(sub, true)}
                 </tr>`;
             });
@@ -341,6 +361,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             html += `<tr class="fila-total-trabajador">
                 <td></td>
                 <td>Total por trabajador</td>
+                <td class="col-pdt"></td>
                 ${celdasMeses(tot, true)}
             </tr>`;
         });
@@ -359,6 +380,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const person = cboTrabajador.value.trim() || '0';
         const concept = cboConcepto.value.trim() || '0';
         const unidad = cboUnidad.value.trim() || '0';
+        const solo_boleta = chkSoloBoleta.checked;
 
         if (!cia || !anio || !payrolltype || !process) {
             hmAdvertencia('Complete compañía, año, tipo de planilla y proceso.');
@@ -373,7 +395,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cia, anio, payrolltype, process, person, concept, unidad
+                    cia, anio, payrolltype, process, person, concept, unidad, solo_boleta
                 }),
             });
             const data = await res.json();
@@ -397,7 +419,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Planilla Anual');
-        const headers = ['Tipo','Concepto','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre','Total'];
+        const headers = ['Tipo','Concepto','PDT','Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Setiembre','Octubre','Noviembre','Diciembre','Total'];
         ws.addRow(headers);
         ws.getRow(1).font = { bold: true };
 
@@ -410,7 +432,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         function flushTipo() {
             if (!tipoBuffer.length) return;
             const sub = sumarFilas(tipoBuffer);
-            const r = ws.addRow(['', `Total ${lastTipo}`, ...MESES.map((m) => Number(sub[m]) || 0), sumMeses(sub)]);
+            const r = ws.addRow(['', `Total ${lastTipo}`, '', ...MESES.map((m) => Number(sub[m]) || 0), sumMeses(sub)]);
             r.font = { bold: true };
             tipoBuffer = [];
         }
@@ -418,7 +440,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             flushTipo();
             if (!personBuffer.length) return;
             const tot = sumarFilas(personBuffer);
-            const r = ws.addRow(['', 'Total por trabajador', ...MESES.map((m) => Number(tot[m]) || 0), sumMeses(tot)]);
+            const r = ws.addRow(['', 'Total por trabajador', '', ...MESES.map((m) => Number(tot[m]) || 0), sumMeses(tot)]);
             r.font = { bold: true };
             personBuffer = [];
         }
@@ -436,19 +458,20 @@ document.addEventListener('DOMContentLoaded', async function () {
             tipoBuffer.push(row);
             personBuffer.push(row);
             ws.addRow([
-                row.concepttype, row.conceptname,
+                row.concepttype, row.conceptname, row.pdt || '',
                 ...MESES.map((m) => Number(row[m]) || 0),
                 sumMeses(row),
             ]);
         });
         flushPerson();
 
-        for (let c = 3; c <= 15; c++) {
+        for (let c = 4; c <= 16; c++) {
             ws.getColumn(c).numFmt = '#,##0.00';
             ws.getColumn(c).width = 11;
         }
         ws.getColumn(1).width = 14;
         ws.getColumn(2).width = 32;
+        ws.getColumn(3).width = 6;
 
         const buf = await wb.xlsx.writeBuffer();
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -473,6 +496,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
     if (guardado.anio) txtAnio.value = guardado.anio;
     if (guardado.unidad && optionExists(cboUnidad, guardado.unidad)) cboUnidad.value = guardado.unidad;
+    if (typeof guardado.solo_boleta === 'boolean') chkSoloBoleta.checked = guardado.solo_boleta;
+    else chkSoloBoleta.checked = true;
 
     async function cargarDependientesCia(cia, restore) {
         cboProceso.innerHTML = '<option value="">Seleccione...</option>';
@@ -536,7 +561,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         await cargarProcesos(cboCia.value.trim(), this.value.trim(), null);
         guardarFiltros();
     });
-    [txtAnio, cboProceso, cboTrabajador, cboConcepto, cboUnidad].forEach((el) => {
+    [txtAnio, cboProceso, cboTrabajador, cboConcepto, cboUnidad, chkSoloBoleta].forEach((el) => {
         el.addEventListener('change', guardarFiltros);
     });
     txtAnio.addEventListener('change', () => actualizarTitulo(txtAnio.value, selectedText(cboProceso)));

@@ -20911,6 +20911,19 @@ def api_reporte_planilla_anual_trabajador():
     person = str(body.get('person') or '0').strip() or '0'
     concept = str(body.get('concept') or '0').strip() or '0'
     unidad = str(body.get('unidad') or body.get('repunit') or '0').strip() or '0'
+    solo_raw = body.get('solo_boleta')
+    if solo_raw is None:
+        solo_raw = body.get('solo_conceptos_boleta')
+    if isinstance(solo_raw, bool):
+        solo_boleta = 'Y' if solo_raw else 'N'
+    else:
+        solo_boleta = str(solo_raw or 'Y').strip().upper() or 'Y'
+        if solo_boleta in ('1', 'TRUE', 'SI', 'S'):
+            solo_boleta = 'Y'
+        elif solo_boleta in ('0', 'FALSE', 'NO', 'N'):
+            solo_boleta = 'N'
+        elif solo_boleta not in ('Y', 'N'):
+            solo_boleta = 'Y'
 
     if not cia:
         return jsonify({'error': 'Seleccione una compañía.'}), 400
@@ -20929,8 +20942,8 @@ def api_reporte_planilla_anual_trabajador():
         cursor.execute(
             'EXEC sp_pr_reporteplanillaanualtrabajador_web '
             '@company=?, @anho=?, @processtype=?, @payrolltype=?, '
-            '@person=?, @concept=?, @repunit=?',
-            (cia, anio, process, payrolltype, person, concept, unidad),
+            '@person=?, @concept=?, @repunit=?, @solo_boleta=?',
+            (cia, anio, process, payrolltype, person, concept, unidad, solo_boleta),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         meses = ('ene', 'feb', 'mar', 'abr', 'may', 'jun',
@@ -20943,6 +20956,7 @@ def api_reporte_planilla_anual_trabajador():
                 'conceptshort': str(r.get('conceptshort') or '').strip(),
                 'concepttype': str(r.get('concepttype') or '').strip(),
                 'conceptname': str(r.get('conceptname') or '').strip(),
+                'pdt': str(r.get('pdt') or '').strip(),
             }
             for m in meses:
                 try:
@@ -20954,6 +20968,7 @@ def api_reporte_planilla_anual_trabajador():
             'rows': resultado,
             'count': len(resultado),
             'anio': anio,
+            'solo_boleta': solo_boleta,
         })
     except Exception as e:
         logging.exception('api_reporte_planilla_anual_trabajador')

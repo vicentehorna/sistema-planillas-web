@@ -1534,6 +1534,10 @@
                     const chk = document.getElementById('chkTodosBancos');
                     estado.todos_bancos = !!(chk && chk.checked);
                 }
+                const cboUnidad = document.getElementById('cboUnidad');
+                if (cboUnidad) {
+                    estado.unidad = val('cboUnidad') || '0';
+                }
                 const txtRef = document.getElementById('txtReferencia');
                 if (txtRef) {
                     estado.referencia = String(txtRef.value || '').trim().slice(0, 25);
@@ -1559,7 +1563,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes } = opts;
+            const { poblarSelect, poblarBancosHaberes, poblarUnidades } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -1571,6 +1575,7 @@
             const cboMoneda = document.getElementById('cboMoneda');
             const txtFechaPago = document.getElementById('txtFechaPago');
             const cboCesados = document.getElementById('cboCesados');
+            const cboUnidad = document.getElementById('cboUnidad');
             const chkTodosBancos = incluyeTodosBancos ? document.getElementById('chkTodosBancos') : null;
             if (!cboCia || !cboPt || !cboProc || !cboPer || !cboConcepto) return false;
 
@@ -1639,6 +1644,18 @@
                 chkTodosBancos.checked = !!filtros.todos_bancos;
             }
 
+            if (cboUnidad) {
+                if (typeof poblarUnidades === 'function') {
+                    await poblarUnidades();
+                }
+                const unidad = filtros.unidad != null ? String(filtros.unidad).trim() : '0';
+                if (unidad && optionExists(cboUnidad, unidad)) {
+                    cboUnidad.value = unidad;
+                } else if (optionExists(cboUnidad, '0')) {
+                    cboUnidad.value = '0';
+                }
+            }
+
             const txtReferencia = document.getElementById('txtReferencia');
             if (txtReferencia && filtros.referencia != null) {
                 txtReferencia.value = String(filtros.referencia).slice(0, 25);
@@ -1651,7 +1668,7 @@
         function registrarGuardadoEnCambio() {
             [
                 'cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo',
-                'cboMoneda', 'cboConcepto', 'cboCesados'
+                'cboMoneda', 'cboConcepto', 'cboCesados', 'cboUnidad'
             ].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);

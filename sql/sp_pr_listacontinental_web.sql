@@ -3,6 +3,7 @@
     Usa pr_mapping.continentalbank.
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
     @todos_bancos: N = solo cuenta propia Continental; Y = cuenta propia Continental + interbancarios.
+    @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listacontinental_web]
     @par_company     VARCHAR(10),
@@ -13,7 +14,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listacontinental_web]
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
     @cesados         CHAR(1),
-    @todos_bancos    CHAR(1) = 'N'
+    @todos_bancos    CHAR(1) = 'N',
+    @repunit         VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,6 +26,7 @@ BEGIN
     IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
     SET @todos_bancos = UPPER(@todos_bancos);
     IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
     ;WITH Pagos AS (
         SELECT
@@ -79,6 +82,7 @@ BEGIN
     WHERE e.company = @par_company
       AND e.payrolltype = @par_payrolltype
       AND e.salarycurrency = @par_currency
+      AND (@repunit = '0' OR sp.ReplicationUnit = @repunit)
       AND (
             @cesados = 'T'
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

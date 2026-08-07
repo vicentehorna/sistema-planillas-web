@@ -1099,6 +1099,7 @@
                     period: val('cboPeriodo'),
                     payroll: val('cboPlanilla'),
                     afp: val('cboAfp'),
+                    employee: val('cboTrabajador'),
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
@@ -1120,7 +1121,7 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboPeriodo', 'cboPlanilla', 'cboAfp'].forEach((id) => {
+            ['cboCompania', 'cboPeriodo', 'cboPlanilla', 'cboAfp', 'cboTrabajador'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

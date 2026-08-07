@@ -2315,6 +2315,15 @@ def _declaracion_afp_params_from_json(body):
     if afp_all == 'Y':
         afp = ''
 
+    employee = str(
+        body.get('employee') or body.get('person') or body.get('trabajador') or ''
+    ).strip()
+    employee_all = str(body.get('employee_all') or '').strip().upper()
+    if employee_all not in ('Y', 'N'):
+        employee_all = 'Y' if not employee or employee in ('0', 'T', 'TODOS', 'TODAS') else 'N'
+    if employee_all == 'Y':
+        employee = ''
+
     return {
         'cia': cia,
         'period': period,
@@ -2322,6 +2331,8 @@ def _declaracion_afp_params_from_json(body):
         'payroll': payroll,
         'afp_all': afp_all,
         'afp': afp,
+        'employee_all': employee_all,
+        'employee': employee,
     }
 
 
@@ -2649,6 +2660,12 @@ def _declaracion_afp_validaciones_sync_afp(validaciones, sync):
 
 
 def _declaracion_afp_ejecutar_listado(cursor, p):
+    employee_all = str(p.get('employee_all') or 'Y').strip().upper()
+    if employee_all not in ('Y', 'N'):
+        employee_all = 'Y'
+    employee = str(p.get('employee') or '').strip() or None
+    if employee_all == 'Y':
+        employee = None
     cursor.execute(
         "EXEC sp_pr_listado_declaracion_afp_web "
         "@cia=?, @period=?, @payroll_all=?, @payroll=?, "
@@ -2656,7 +2673,8 @@ def _declaracion_afp_ejecutar_listado(cursor, p):
         "@flagcostcenter=?, @costcenter=?, @employee_all=?, @employee=?",
         (
             p['cia'], p['period'], p['payroll_all'], p['payroll'] or None,
-            p['afp_all'], p['afp'] or None, 'Y', None, 'Y', None, 'Y', None,
+            p['afp_all'], p['afp'] or None, 'Y', None, 'Y', None,
+            employee_all, employee,
         ),
     )
     rows = _dicts_first_nonempty_resultset(cursor)

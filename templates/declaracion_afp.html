@@ -123,6 +123,12 @@
                     <option value="">Todas</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-warning btn-sm px-4" id="btnValidarAfpnet" disabled>
@@ -271,6 +277,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         return v ? 'N' : 'Y';
     }
 
+    function employeeAllFromCombo() {
+        const v = String(document.getElementById('cboTrabajador').value || '').trim();
+        return v ? 'N' : 'Y';
+    }
+
     function payloadFiltros() {
         return {
             cia: document.getElementById('cboCompania').value.trim(),
@@ -278,7 +289,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             payroll_all: payrollAllFromCombo(),
             payroll: document.getElementById('cboPlanilla').value.trim(),
             afp_all: afpAllFromCombo(),
-            afp: document.getElementById('cboAfp').value.trim()
+            afp: document.getElementById('cboAfp').value.trim(),
+            employee_all: employeeAllFromCombo(),
+            employee: document.getElementById('cboTrabajador').value.trim()
         };
     }
 
@@ -671,10 +684,41 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function onCompaniaChange(cia, periodoGuardado, planillaGuardada, afpGuardada) {
+    async function cargarTrabajadores(cia, payroll, employeeGuardado) {
+        const cboTrabajador = document.getElementById('cboTrabajador');
+        if (!cboTrabajador) return;
+        cboTrabajador.innerHTML = '<option value="">Todos</option>';
+        cboTrabajador.disabled = true;
+        if (!cia) return;
+        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+        if (payroll) url += `&payrolltype=${encodeURIComponent(payroll)}`;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                cboTrabajador.appendChild(opt);
+            });
+            cboTrabajador.disabled = false;
+            if (employeeGuardado && optionExists(cboTrabajador, employeeGuardado)) {
+                cboTrabajador.value = employeeGuardado;
+            } else {
+                cboTrabajador.value = '';
+            }
+        } catch (e) {
+            console.error(e);
+            cboTrabajador.innerHTML = '<option value="">Todos</option>';
+            cboTrabajador.disabled = false;
+        }
+    }
+
+    async function onCompaniaChange(cia, periodoGuardado, planillaGuardada, afpGuardada, employeeGuardado) {
         const cboPeriodo = document.getElementById('cboPeriodo');
         const cboPlanilla = document.getElementById('cboPlanilla');
         const cboAfp = document.getElementById('cboAfp');
+        const cboTrabajador = document.getElementById('cboTrabajador');
 
         if (!cia) {
             cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
@@ -683,6 +727,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             cboPlanilla.disabled = true;
             cboAfp.innerHTML = '<option value="">Todas</option>';
             cboAfp.disabled = true;
+            if (cboTrabajador) {
+                cboTrabajador.innerHTML = '<option value="">Todos</option>';
+                cboTrabajador.disabled = true;
+            }
             return;
         }
 
@@ -703,7 +751,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (opt) cboAfp.value = opt.value;
         }
 
-        await cargarPeriodos(cia, cboPlanilla.value.trim(), periodoGuardado || '');
+        await Promise.all([
+            cargarPeriodos(cia, cboPlanilla.value.trim(), periodoGuardado || ''),
+            cargarTrabajadores(cia, cboPlanilla.value.trim(), employeeGuardado || '')
+        ]);
     }
 
     async function ejecutarConsulta() {
@@ -863,11 +914,15 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('cboPlanilla').addEventListener('change', async function () {
         const cia = document.getElementById('cboCompania').value.trim();
-        await cargarPeriodos(cia, this.value.trim());
+        const payroll = this.value.trim();
+        await Promise.all([
+            cargarPeriodos(cia, payroll),
+            cargarTrabajadores(cia, payroll, '')
+        ]);
         if (filtrosPersist) filtrosPersist.guardar();
     });
 
-    ['cboPeriodo', 'cboPlanilla', 'cboAfp'].forEach((id) => {
+    ['cboPeriodo', 'cboPlanilla', 'cboAfp', 'cboTrabajador'].forEach((id) => {
         const el = document.getElementById(id);
         if (el) el.addEventListener('change', function () {
             if (id === 'cboPeriodo') actualizarTitulosAfpnet();
@@ -887,7 +942,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             guardado.cia,
             guardado.period || '',
             guardado.payroll || '',
-            guardado.afp || ''
+            guardado.afp || '',
+            guardado.employee || ''
         );
         if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
         if (guardado.cia && guardado.period && /^\d{6}$/.test(String(guardado.period))) {

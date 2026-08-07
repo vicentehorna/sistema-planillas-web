@@ -8,6 +8,8 @@
     Solo procesa combinaciones planilla/proceso que tengan concepto formulacode = TOTAL_REM_AFP
     en PR_EmployeePayRollConcept para el periodo indicado.
 
+    CUSPP: prioriza PR_Employee.AFPCard (ficha); si falta, usa PR_EmployeePayRoll.AFPCard.
+
     Parámetros:
       @cia         — compañía
       @period      — periodo YYYYMM (6 dígitos)
@@ -135,8 +137,8 @@ BEGIN
         ISNULL(EPC.ConceptValueLo, 0),
         ISNULL(EPC.ConceptValueEx, 0),
         LTRIM(RTRIM(COALESCE(
-            NULLIF(LTRIM(RTRIM(ISNULL(EP.AFPCard, ''))), ''),
             NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+            NULLIF(LTRIM(RTRIM(ISNULL(EP.AFPCard, ''))), ''),
             ''
         ))),
         EP.CeaseDate,
@@ -236,8 +238,8 @@ BEGIN
             S.payrolltype,
             S.ceasedate,
             LTRIM(RTRIM(COALESCE(
-                NULLIF(LTRIM(RTRIM(ISNULL(S.afpcard, ''))), ''),
                 NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(S.afpcard, ''))), ''),
                 ''
             ))),
             S.entrydate AS entrydate

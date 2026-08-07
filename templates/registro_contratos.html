@@ -317,8 +317,14 @@
     }
 
     .table-contratos-ct .col-acciones {
-        width: 4rem;
+        width: 4.5rem;
         text-align: center;
+        white-space: nowrap;
+    }
+
+    .table-contratos-ct .col-acciones .btn-link {
+        margin: 0 0.15rem;
+        vertical-align: middle;
     }
 
     .badge-ct-activo {
@@ -559,6 +565,7 @@
     let trabajadorActivo = null;
     let contratosCache = [];
     let contratoSeleccionado = null;
+    let contratoEditando = null;
     let filtroLocalTimer = null;
     let idxTrabajadorActivo = -1;
     let cargaTrabajadorSeq = 0;
@@ -650,12 +657,14 @@
     function ocultarFormNuevo() {
         frmNuevo.classList.add('d-none');
         frmNuevo.reset();
+        contratoEditando = null;
         cboEstado.disabled = false;
         actualizarBotonGuardar();
         programarAjusteAlturaGrilla();
     }
 
     function mostrarFormNuevo() {
+        contratoEditando = null;
         frmNuevo.classList.remove('d-none');
         txtInicio.value = hoyISO();
         txtFin.value = '';
@@ -664,6 +673,22 @@
         actualizarBotonGuardar();
         programarAjusteAlturaGrilla();
         txtInicio.focus();
+    }
+
+    function mostrarFormEditar(c) {
+        if (!c) return;
+        contratoEditando = c;
+        contratoSeleccionado = c;
+        frmNuevo.classList.remove('d-none');
+        txtInicio.value = c.startdate ? String(c.startdate).slice(0, 10) : '';
+        txtFin.value = c.enddate ? String(c.enddate).slice(0, 10) : '';
+        cboEstado.value = estadoEfectivo(c.status, c.enddate) === 'A' ? 'A' : 'I';
+        aplicarEstadoPorVencimiento();
+        programarAjusteAlturaGrilla();
+        txtInicio.focus();
+        tbodyContratos.querySelectorAll('tr').forEach((r) => {
+            r.classList.toggle('table-active', String(r.dataset.contractno) === String(c.contractno));
+        });
     }
 
     function ajustarAlturaGrillaTrabajadores() {
@@ -888,12 +913,19 @@
                 `<td class="col-estado">${badgeEstado(st)}</td>` +
                 `<td class="col-fecha">${escapeHtml(fmtFecha(c.startdate))}</td>` +
                 `<td class="col-fecha">${escapeHtml(fmtFecha(c.enddate))}</td>` +
-                `<td class="col-acciones"><button type="button" class="btn btn-link btn-sm text-danger p-0 btn-del-row" title="Borrar"><i class="bi bi-trash"></i></button></td>`;
+                `<td class="col-acciones">` +
+                `<button type="button" class="btn btn-link btn-sm text-primary p-0 btn-edit-row" title="Editar fechas"><i class="bi bi-pencil"></i></button>` +
+                `<button type="button" class="btn btn-link btn-sm text-danger p-0 btn-del-row" title="Borrar"><i class="bi bi-trash"></i></button>` +
+                `</td>`;
             tr.addEventListener('click', (ev) => {
-                if (ev.target.closest('.btn-del-row')) return;
+                if (ev.target.closest('.btn-del-row') || ev.target.closest('.btn-edit-row')) return;
                 tbodyContratos.querySelectorAll('tr').forEach((r) => r.classList.remove('table-active'));
                 tr.classList.add('table-active');
                 contratoSeleccionado = c;
+            });
+            tr.querySelector('.btn-edit-row').addEventListener('click', (ev) => {
+                ev.stopPropagation();
+                mostrarFormEditar(c);
             });
             tr.querySelector('.btn-del-row').addEventListener('click', (ev) => {
                 ev.stopPropagation();
@@ -946,8 +978,10 @@
         return a0 <= b1 && b0 <= a1;
     }
 
-    function validarCruceFechasLocal(startdate, enddate) {
+    function validarCruceFechasLocal(startdate, enddate, excluirContractno) {
+        const excluir = excluirContractno != null ? String(excluirContractno) : null;
         for (const c of contratosCache) {
+            if (excluir != null && String(c.contractno) === excluir) continue;
             if (rangosSeCruzan(startdate, enddate, c.startdate, c.enddate)) {
                 const ini = fmtFecha(c.startdate) || '—';
                 const fin = fmtFecha(c.enddate) || 'sin fin';
@@ -980,6 +1014,7 @@
         ev.preventDefault();
         if (!trabajadorActivo) return;
         aplicarEstadoPorVencimiento();
+        const editando = !!contratoEditando;
         const payload = {
             cia: cboCia.value.trim(),
             person: trabajadorActivo.person,
@@ -988,6 +1023,9 @@
             enddate: txtFin.value || null,
             status: cboEstado.value,
         };
+        if (editando) {
+            payload.contractno = contratoEditando.contractno;
+        }
         if (!payload.startdate) {
             hmAdvertencia('Indique la fecha de inicio.');
             return;
@@ -996,14 +1034,19 @@
             hmAdvertencia('La fecha fin no puede ser menor que la fecha inicio.');
             return;
         }
-        const cruce = validarCruceFechasLocal(payload.startdate, payload.enddate);
+        const cruce = validarCruceFechasLocal(
+            payload.startdate,
+            payload.enddate,
+            editando ? contratoEditando.contractno : null
+        );
         if (cruce) {
             hmAdvertencia(cruce);
             return;
         }
         if (btnGuardar) btnGuardar.disabled = true;
         try {
-            const res = await fetch('/api/contratos/guardar', {
+            const url = editando ? '/api/contratos/actualizar' : '/api/contratos/guardar';
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
@@ -1013,7 +1056,7 @@
             ocultarFormNuevo();
             await cargarContratos(trabajadorActivo.person, ++cargaTrabajadorSeq);
             actualizarFlagContratoActivoLocal();
-            hmExito('Contrato guardado.');
+            hmExito(editando ? 'Contrato actualizado.' : 'Contrato guardado.');
         } catch (err) {
             hmError(err.message || String(err));
             actualizarBotonGuardar();
@@ -1064,6 +1107,9 @@
             });
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'No se pudo eliminar');
+            if (contratoEditando && String(contratoEditando.contractno) === String(c.contractno)) {
+                ocultarFormNuevo();
+            }
             await cargarContratos(trabajadorActivo.person, ++cargaTrabajadorSeq);
             actualizarFlagContratoActivoLocal();
             hmExito('Contrato eliminado.');

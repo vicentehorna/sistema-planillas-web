@@ -5,6 +5,9 @@
 
     Basado en: AUXILIARES/REPORTE AFPNET.txt (DataWindow PowerBuilder).
 
+    CUSPP: prioriza PR_Employee.AFPCard (ficha del trabajador); si está vacío,
+    usa el snapshot de PR_EmployeeAFP.afpcard.
+
     Parámetros:
       @cia              — compañía
       @period           — periodo YYYYMM (6 dígitos)
@@ -105,8 +108,8 @@ BEGIN
         E.person,
         LTRIM(RTRIM(ISNULL(F.description, ''))) AS afp_description,
         LTRIM(RTRIM(COALESCE(
-            NULLIF(LTRIM(RTRIM(ISNULL(A.afpcard, ''))), ''),
             NULLIF(LTRIM(RTRIM(ISNULL(E.AFPCard, ''))), ''),
+            NULLIF(LTRIM(RTRIM(ISNULL(A.afpcard, ''))), ''),
             ''
         ))) AS cuspp,
         LTRIM(RTRIM(ISNULL(P.documentnumber, ''))) AS documentnumber,

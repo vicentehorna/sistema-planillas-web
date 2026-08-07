@@ -4,7 +4,7 @@
 
     Pivot por mes calendario (ene..dic) dentro del rango de periodos.
     @period_ini / @period_fin en formato YYYYMM; máximo 12 meses.
-    Solo conceptos incluidos en boleta (FlagPayrollTicket = 'Y').
+    Incluye todos los conceptos (con o sin FlagPayrollTicket).
 
     Agrupación esperada en UI: concepto → trabajadores → total concepto → total general.
 
@@ -121,7 +121,6 @@ BEGIN
       AND c.Company = @company
       AND epc.ProcessType = @processtype
       AND LEFT(LTRIM(RTRIM(epc.PRPeriod)), 6) BETWEEN @period_ini AND @period_fin
-      AND ISNULL(c.FlagPayrollTicket, 'N') = 'Y'
       AND (@payrolltype = '0' OR epc.PayRollType = @payrolltype)
       AND (@person = '0' OR epc.Person = @person)
       AND (@concept = '0' OR epc.Concept = @concept)

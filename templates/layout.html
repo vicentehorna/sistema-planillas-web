@@ -804,8 +804,8 @@
                 </li>
                 {% endif %}
 
-                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
-                {% set show_plame = can_menu('plame_archivo_14') or can_menu('plame_archivo_15') or can_menu('plame_archivo_18') or can_menu('plame_archivo_26') or can_menu('plame_archivos_4ta') or can_menu('plame_tregistro') or can_menu('plame_validar') or can_menu('tregistro_importar') %}
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_por_trabajador_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
+                {% set show_plame = can_menu('plame_archivo_14') or can_menu('plame_archivo_15') or can_menu('plame_archivo_18') or can_menu('plame_archivo_26') or can_menu('plame_archivos_4ta') or can_menu('plame_por_trabajador') or can_menu('plame_tregistro') or can_menu('plame_validar') or can_menu('tregistro_importar') %}
                 {% if show_plame %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
@@ -836,6 +836,13 @@
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo18_page' else '' }}">
                             <a href="{{ url_for('plame_archivo18_page') }}" title="Archivo 18 (.rem)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 18 (.rem)</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('plame_por_trabajador') %}
+                        <li class="{{ 'active' if request.endpoint == 'plame_por_trabajador_page' else '' }}">
+                            <a href="{{ url_for('plame_por_trabajador_page') }}" title="PLAME por Trabajador">
+                                <i class="bi bi-person-lines-fill"></i><span class="sidebar-link-text">PLAME por Trabajador</span>
                             </a>
                         </li>
                         {% endif %}

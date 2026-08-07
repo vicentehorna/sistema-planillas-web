@@ -1,0 +1,394 @@
+{% extends "layout.html" %}
+
+{% block title %}PLAME por Trabajador{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+    .table-plame-trab {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-plame-trab th,
+    .table-plame-trab td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+    .table-plame-trab thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-plame-trab .col-pdt {
+        min-width: 3rem;
+        max-width: 3.5rem;
+        text-align: center;
+    }
+    .table-plame-trab .col-monto {
+        min-width: 6rem;
+        text-align: right;
+    }
+    .table-plame-trab tr.fila-total td {
+        background: #f1f3f5;
+        font-weight: 700;
+    }
+    .titulo-reporte {
+        font-size: 1.05rem;
+        text-align: center;
+        margin: 0;
+    }
+    .plame-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border plame-info mb-3" role="note">
+    <strong>PLAME por Trabajador</strong> —
+    Detalle de conceptos calculados por proceso y código PDT en el periodo.
+    Sirve para auditar importes del Archivo 18 (p.ej. cuando un PDT suma más de un proceso).
+</div>
+
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmPlameTrabajador" class="row g-2 align-items-end">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-5 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-3 col-md-2 col-lg-1">
+                <label for="txtPdt" class="form-label small fw-bold text-muted mb-1">PDT</label>
+                <input type="text" id="txtPdt" class="form-control form-control-sm text-center"
+                       maxlength="4" placeholder="Todos" inputmode="numeric" pattern="[0-9]*">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+        </form>
+        <div id="msgEstado" class="small mt-2 text-muted"></div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body py-2">
+        <div class="mb-2">
+            <div class="titulo-reporte fw-bold" id="lblTitulo">PLAME por Trabajador</div>
+            <div class="text-center text-muted small" id="lblSubtitulo"></div>
+        </div>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-plame-trab align-middle">
+                <thead>
+                    <tr>
+                        <th>Proceso</th>
+                        <th>Concepto</th>
+                        <th class="col-pdt">PDT</th>
+                        <th class="col-monto">Importe</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyPlame"></tbody>
+                <tfoot>
+                    <tr class="fila-total">
+                        <td colspan="3" class="text-end">Total</td>
+                        <td class="col-monto" id="lblTotal">0.00</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_API = {{ url_for('api_plame_por_trabajador') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+    const STORAGE_KEY = 'filtros_plame_por_trabajador';
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+    const txtPdt = document.getElementById('txtPdt');
+    const tbody = document.getElementById('tbodyPlame');
+    const card = document.getElementById('cardResultado');
+    const lblCount = document.getElementById('lblRowCount');
+    const lblTitulo = document.getElementById('lblTitulo');
+    const lblSub = document.getElementById('lblSubtitulo');
+    const lblTotal = document.getElementById('lblTotal');
+    const msg = document.getElementById('msgEstado');
+    const btnExcel = document.getElementById('btnExportExcel');
+
+    let ultimo = null;
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+    function fmtNum(n) {
+        const v = Number(n || 0);
+        if (!Number.isFinite(v)) return '0.00';
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function optionExists(sel, value) {
+        if (!sel || value == null) return false;
+        const v = String(value);
+        return Array.from(sel.options).some((o) => o.value === v);
+    }
+    function selectedText(el) {
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+    function guardar() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                cia: cboCia.value,
+                payrolltype: cboPlanilla.value,
+                period: cboPeriodo.value,
+                person: cboTrabajador.value,
+                pdt: txtPdt.value.trim(),
+            }));
+        } catch (e) { /* ignore */ }
+    }
+    function leer() {
+        try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); }
+        catch (e) { return {}; }
+    }
+
+    async function poblarSelect(url, sel, opts) {
+        opts = opts || {};
+        const prev = sel.value;
+        sel.innerHTML = '';
+        if (!opts.sinPlaceholder) {
+            const o = document.createElement('option');
+            o.value = opts.valorTodos != null ? String(opts.valorTodos) : '';
+            o.textContent = opts.placeholder || 'Seleccione...';
+            sel.appendChild(o);
+        }
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                sel.appendChild(opt);
+            });
+            sel.disabled = false;
+            if (prev && optionExists(sel, prev)) sel.value = prev;
+        } catch (err) {
+            console.error(err);
+            sel.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function render(rows, meta) {
+        const person = meta && meta.person_name
+            ? `${meta.person || ''} — ${meta.person_name}`
+            : (meta && meta.person) || '';
+        const pdt = (meta && meta.pdt) ? `PDT ${meta.pdt}` : 'Todos los PDT';
+        const periodo = (meta && meta.periodo_fmt) || (meta && meta.period) || '';
+        lblTitulo.textContent = 'PLAME por Trabajador';
+        lblSub.textContent = [periodo, person, pdt].filter(Boolean).join(' · ');
+
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Sin datos</td></tr>';
+            lblTotal.textContent = '0.00';
+            lblCount.textContent = '0';
+            btnExcel.disabled = true;
+            card.classList.remove('d-none');
+            return;
+        }
+
+        let total = 0;
+        tbody.innerHTML = rows.map((r) => {
+            const imp = Number(r.importe) || 0;
+            total += imp;
+            const concepto = r.formulacode || r.conceptname || '';
+            return `<tr>
+                <td>${esc(r.processname)}</td>
+                <td title="${esc(r.conceptname || '')}">${esc(concepto)}</td>
+                <td class="col-pdt">${esc(r.pdt || '')}</td>
+                <td class="col-monto">${fmtNum(imp)}</td>
+            </tr>`;
+        }).join('');
+        lblTotal.textContent = fmtNum(total);
+        lblCount.textContent = String(rows.length);
+        btnExcel.disabled = false;
+        card.classList.remove('d-none');
+    }
+
+    async function consultar(e) {
+        if (e) e.preventDefault();
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        const period = cboPeriodo.value.trim();
+        const person = cboTrabajador.value.trim();
+        const pdt = txtPdt.value.trim();
+
+        if (!cia || !payrolltype || !period || !person) {
+            if (window.HmUi) HmUi.advertencia('Complete compañía, planilla, periodo y trabajador.');
+            else alert('Complete compañía, planilla, periodo y trabajador.');
+            return;
+        }
+        guardar();
+        msg.textContent = 'Consultando…';
+        msg.classList.add('text-primary');
+        try {
+            const res = await fetch(URL_API, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, period, person, pdt }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) throw new Error(data.error || 'Error al consultar');
+            ultimo = data;
+            render(data.rows || [], data.meta || {});
+            msg.textContent = '';
+            msg.classList.remove('text-primary');
+        } catch (err) {
+            msg.textContent = '';
+            if (window.HmUi) HmUi.error(err.message || String(err));
+            else alert(err.message || err);
+        }
+    }
+
+    async function exportExcel() {
+        if (!ultimo || !ultimo.rows || !ultimo.rows.length || typeof ExcelJS === 'undefined') return;
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('PLAME por Trabajador');
+        const meta = ultimo.meta || {};
+        ws.addRow([lblTitulo.textContent]);
+        ws.addRow([lblSub.textContent]);
+        ws.addRow([]);
+        ws.addRow(['Proceso', 'Concepto', 'PDT', 'Importe']);
+        ws.getRow(4).font = { bold: true };
+        let total = 0;
+        ultimo.rows.forEach((r) => {
+            const imp = Number(r.importe) || 0;
+            total += imp;
+            ws.addRow([r.processname, r.formulacode || r.conceptname, r.pdt || '', imp]);
+        });
+        const totRow = ws.addRow(['', '', 'Total', total]);
+        totRow.font = { bold: true };
+        ws.getColumn(4).numFmt = '#,##0.00';
+        ws.getColumn(1).width = 22;
+        ws.getColumn(2).width = 28;
+        ws.getColumn(3).width = 8;
+        ws.getColumn(4).width = 12;
+        const buf = await wb.xlsx.writeBuffer();
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([buf], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        }));
+        const suf = [meta.period || '', meta.person || '', meta.pdt || 'todos'].filter(Boolean).join('_');
+        a.download = `plame_por_trabajador_${suf}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value;
+        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        cboPlanilla.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        cboTrabajador.innerHTML = '<option value="">Seleccione...</option>';
+        cboTrabajador.disabled = true;
+        if (!cia) return;
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        for (const opt of cboPlanilla.options) {
+            if (/empleado/i.test(opt.textContent)) {
+                cboPlanilla.value = opt.value;
+                break;
+            }
+        }
+        await Promise.all([cargarPeriodos(), cargarTrabajadores()]);
+    }
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!cia) return;
+        await poblarSelect(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`, cboPeriodo);
+    }
+
+    async function cargarTrabajadores() {
+        const cia = cboCia.value;
+        const payroll = cboPlanilla.value;
+        cboTrabajador.innerHTML = '<option value="">Seleccione...</option>';
+        cboTrabajador.disabled = true;
+        if (!cia) return;
+        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+        if (payroll) url += `&payrolltype=${encodeURIComponent(payroll)}`;
+        await poblarSelect(url, cboTrabajador, { placeholder: 'Seleccione...' });
+    }
+
+    document.getElementById('frmPlameTrabajador').addEventListener('submit', consultar);
+    btnExcel.addEventListener('click', exportExcel);
+    cboCia.addEventListener('change', async () => { await cargarPlanillas(); guardar(); });
+    cboPlanilla.addEventListener('change', async () => {
+        await cargarTrabajadores();
+        guardar();
+    });
+    [cboPeriodo, cboTrabajador, txtPdt].forEach((el) => el.addEventListener('change', guardar));
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    const guardado = leer();
+    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
+    if (cboCia.value) {
+        await cargarPlanillas();
+        if (guardado.payrolltype && optionExists(cboPlanilla, guardado.payrolltype)) {
+            cboPlanilla.value = guardado.payrolltype;
+            await cargarTrabajadores();
+        }
+        if (guardado.period && optionExists(cboPeriodo, guardado.period)) cboPeriodo.value = guardado.period;
+        if (guardado.person && optionExists(cboTrabajador, guardado.person)) cboTrabajador.value = guardado.person;
+        if (guardado.pdt) txtPdt.value = guardado.pdt;
+    }
+});
+</script>
+{% endblock %}

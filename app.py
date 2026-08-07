@@ -12381,6 +12381,105 @@ def plame_archivo18_page():
     return render_template('plame_archivo18.html')
 
 
+@app.route('/plame/por-trabajador')
+@login_required
+def plame_por_trabajador_page():
+    return render_template('plame_por_trabajador.html')
+
+
+@app.route('/api/plame/por-trabajador', methods=['POST'])
+@login_required
+def api_plame_por_trabajador():
+    """sp_pr_reporte_plame_por_trabajador_web — conceptos por proceso/PDT de un trabajador."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip().replace('-', '')
+    if len(period) >= 6:
+        period = period[:6]
+    person = str(body.get('person') or body.get('trabajador') or body.get('dni') or '').strip()
+    pdt = str(body.get('pdt') or '').strip()
+
+    if not cia or not payrolltype or not period or len(period) != 6 or not person:
+        return jsonify({'error': 'Complete compañía, planilla, periodo y trabajador.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            'EXEC sp_pr_reporte_plame_por_trabajador_web '
+            '@company=?, @payrolltype=?, @period=?, @person=?, @pdt=?',
+            (cia, payrolltype, period, person, pdt or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        total = 0.0
+        for r in rows:
+            try:
+                importe = float(r.get('importe') or 0)
+            except (TypeError, ValueError):
+                importe = 0.0
+            total += importe
+            resultado.append({
+                'processname': str(r.get('processname') or '').strip(),
+                'processshort': str(r.get('processshort') or '').strip(),
+                'formulacode': str(r.get('formulacode') or '').strip(),
+                'conceptname': str(r.get('conceptname') or '').strip(),
+                'pdt': str(r.get('pdt') or '').strip(),
+                'importe': round(importe, 2),
+                'prperiod': str(r.get('prperiod') or '').strip(),
+                'processtype': str(r.get('processtype') or '').strip(),
+                'concept': str(r.get('concept') or '').strip(),
+            })
+
+        person_name = ''
+        try:
+            cursor.execute(
+                """
+                SELECT TOP 1
+                    LTRIM(RTRIM(ISNULL(LastName1, ''))) + ' '
+                    + LTRIM(RTRIM(ISNULL(LastName2, ''))) + ' '
+                    + LTRIM(RTRIM(ISNULL(Name1, ''))) + ' '
+                    + LTRIM(RTRIM(ISNULL(Name2, '')))
+                FROM SY_Person (NOLOCK)
+                WHERE Person = ?
+                """,
+                (person,),
+            )
+            prow = cursor.fetchone()
+            if prow and prow[0]:
+                person_name = ' '.join(str(prow[0]).split())
+        except Exception:
+            person_name = ''
+
+        periodo_fmt = f'{period[:4]}-{period[4:6]}' if len(period) == 6 else period
+        return jsonify({
+            'rows': resultado,
+            'count': len(resultado),
+            'meta': {
+                'cia': cia,
+                'payrolltype': payrolltype,
+                'period': period,
+                'periodo_fmt': periodo_fmt,
+                'person': person,
+                'person_name': person_name,
+                'pdt': pdt,
+                'total': round(total, 2),
+            },
+        })
+    except Exception as e:
+        logging.exception('api_plame_por_trabajador')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/afp/declaracion')
 @login_required
 def declaracion_afp_page():
@@ -20137,6 +20236,130 @@ def api_contratos_guardar():
         return jsonify({"ok": True, "contractno": int(next_no), "status": status})
     except Exception as e:
         logging.exception("api_contratos_guardar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/contratos/actualizar', methods=['POST'])
+@login_required
+def api_contratos_actualizar():
+    """Actualiza fechas (y estado) de un contrato existente en PR_PersonContract."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    contractno = body.get('contractno')
+    startdate = str(body.get('startdate') or '').strip()[:10]
+    enddate = str(body.get('enddate') or '').strip()[:10] or None
+    status = str(body.get('status') or 'A').strip().upper()[:1] or 'A'
+
+    if not cia or not person or contractno is None or str(contractno).strip() == '':
+        return jsonify({"error": "Faltan compañía, persona o nro. de contrato."}), 400
+    if not startdate:
+        return jsonify({"error": "La fecha inicio es obligatoria."}), 400
+    if status not in ('A', 'I'):
+        status = 'A'
+    if enddate and enddate < startdate:
+        return jsonify({"error": "La fecha fin no puede ser menor que la fecha inicio."}), 400
+    if enddate and enddate < date.today().isoformat():
+        status = 'I'
+
+    try:
+        user_id = str(getattr(current_user, 'id', None) or session.get('username') or 'web')[:20]
+    except Exception:
+        user_id = 'web'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT TOP 1 Contractno
+            FROM PR_PersonContract
+            WHERE Company = ? AND Person = ? AND Contractno = ?
+            """,
+            (cia, person, contractno),
+        )
+        if not cursor.fetchone():
+            return jsonify({"error": "No se encontró el contrato."}), 404
+
+        cursor.execute(
+            """
+            SELECT TOP 1
+                Contractno,
+                CONVERT(varchar(10), startdate, 23) AS startdate,
+                CONVERT(varchar(10), enddate, 23) AS enddate
+            FROM PR_PersonContract
+            WHERE Company = ?
+              AND Person = ?
+              AND Contractno <> ?
+              AND startdate IS NOT NULL
+              AND CONVERT(date, startdate) <= CONVERT(date, ISNULL(?, '99991231'))
+              AND CONVERT(date, ISNULL(enddate, '99991231')) >= CONVERT(date, ?)
+            ORDER BY startdate DESC, Contractno DESC
+            """,
+            (cia, person, contractno, enddate or '9999-12-31', startdate),
+        )
+        cruce = cursor.fetchone()
+        if cruce:
+            c_ini = cruce[1] or '—'
+            c_fin = cruce[2] or 'sin fin'
+            return jsonify({
+                "error": (
+                    f"El rango de fechas se cruza con otro contrato del trabajador "
+                    f"({c_ini} a {c_fin})."
+                )
+            }), 400
+
+        if status == 'A':
+            cursor.execute(
+                """
+                UPDATE PR_PersonContract
+                SET Status = 'I', xlastuser = ?, xlastdate = GETDATE()
+                WHERE Company = ? AND Person = ?
+                  AND Contractno <> ?
+                  AND ISNULL(Status, 'I') = 'A'
+                """,
+                (user_id, cia, person, contractno),
+            )
+
+        cursor.execute(
+            """
+            UPDATE PR_PersonContract
+            SET startdate = ?,
+                enddate = ?,
+                Status = ?,
+                xlastuser = ?,
+                xlastdate = GETDATE()
+            WHERE Company = ? AND Person = ? AND Contractno = ?
+            """,
+            (
+                startdate,
+                enddate if enddate else None,
+                status,
+                user_id,
+                cia,
+                person,
+                contractno,
+            ),
+        )
+        if cursor.rowcount <= 0:
+            return jsonify({"error": "No se encontró el contrato."}), 404
+        conn.commit()
+        return jsonify({"ok": True, "contractno": contractno, "status": status})
+    except Exception as e:
+        logging.exception("api_contratos_actualizar")
         try:
             if conn:
                 conn.rollback()

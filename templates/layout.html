@@ -1183,8 +1183,8 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>
 
-                {% set vacaciones_descansos_active = request.endpoint in ('reporte_vacaciones_detalle_page', 'reporte_saldo_vacaciones_page', 'reporte_descansos_medicos_detalle_page') %}
-                {% set show_vacaciones_descansos = can_menu('reporte_vacaciones_detalle') or can_menu('reporte_saldo_vacaciones') or can_menu('reporte_descansos_detalle') %}
+                {% set vacaciones_descansos_active = request.endpoint in ('reporte_vacaciones_detalle_page', 'reporte_saldo_vacaciones_page', 'reporte_formato_vacaciones_page', 'reporte_descansos_medicos_detalle_page') %}
+                {% set show_vacaciones_descansos = can_menu('reporte_vacaciones_detalle') or can_menu('reporte_saldo_vacaciones') or can_menu('reporte_formato_vacaciones') or can_menu('reporte_descansos_detalle') %}
                 {% if show_vacaciones_descansos %}
                 <li class="sidebar-menu-parent {{ 'active' if vacaciones_descansos_active else '' }}">
                     <a href="#submenuVacacionesDescansos"
@@ -1208,6 +1208,13 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_saldo_vacaciones_page' else '' }}">
                             <a href="{{ url_for('reporte_saldo_vacaciones_page') }}" title="Saldo de Vacaciones">
                                 <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Saldo de Vacaciones</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('reporte_formato_vacaciones') %}
+                        <li class="{{ 'active' if request.endpoint == 'reporte_formato_vacaciones_page' else '' }}">
+                            <a href="{{ url_for('reporte_formato_vacaciones_page') }}" title="Formato de Vacaciones">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de Vacaciones</span>
                             </a>
                         </li>
                         {% endif %}

@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Constancia de Goce Vacacional</title>
+    <style>
+        @page { size: A4; margin: 14mm 16mm; }
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 11px;
+            color: #222;
+            margin: 0;
+            padding: 0;
+            line-height: 1.45;
+        }
+        .documento {
+            border: 1px solid #333;
+            padding: 16px 22px 28px;
+            min-height: 250mm;
+            box-sizing: border-box;
+        }
+        .logo-wrap { margin-bottom: 10px; }
+        .logo-img {
+            max-height: 58px;
+            max-width: 280px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+        }
+        .titulo {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            text-decoration: underline;
+            text-transform: uppercase;
+            margin: 10px 0 22px;
+            letter-spacing: 0.3px;
+        }
+        .memo {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        .memo td {
+            padding: 2px 0;
+            vertical-align: top;
+            font-size: 11px;
+        }
+        .memo .lbl {
+            width: 72px;
+            white-space: nowrap;
+        }
+        .memo .sep {
+            width: 14px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .memo .val { font-weight: normal; }
+        .memo .val-cargo {
+            display: block;
+            margin-top: 1px;
+        }
+        .linea {
+            border: 0;
+            border-top: 1.5px solid #000;
+            margin: 10px 0 16px;
+        }
+        .parrafo {
+            text-align: justify;
+            margin: 0 0 12px;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .detalle-titulo { margin: 0 0 8px; }
+        .fechas-goce {
+            margin: 0 0 4px 28px;
+            font-size: 11px;
+        }
+        .fechas-goce .lbl-fecha {
+            display: inline-block;
+            width: 48px;
+        }
+        .cierre { margin-top: 18px; }
+        .firma-block {
+            text-align: center;
+            margin: 28px auto 8px;
+            width: 320px;
+        }
+        .firma-img {
+            max-height: 96px;
+            max-width: 240px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            object-position: center bottom;
+            display: block;
+            margin: 0 auto 2px;
+        }
+        .linea-firma {
+            border-top: 1.5px solid #000;
+            width: 280px;
+            margin: 0 auto 6px;
+        }
+        .rep-nombre {
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0 0 2px;
+        }
+        .rep-cargo {
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0;
+        }
+        .conformidad-titulo {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 36px 0 10px;
+        }
+        .conformidad-texto {
+            text-align: justify;
+            margin: 0 0 40px;
+            font-size: 11px;
+            line-height: 1.55;
+        }
+        .firma-trabajador {
+            text-align: center;
+            margin: 48px auto 0;
+            width: 320px;
+        }
+        .firma-trabajador .linea-firma { margin-top: 40px; }
+        .trab-nombre {
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0 0 2px;
+        }
+        .trab-rol {
+            font-size: 10px;
+            font-weight: bold;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="documento">
+        {% if logo_src %}
+        <div class="logo-wrap">
+            <img src="{{ logo_src }}" alt="Logo" class="logo-img">
+        </div>
+        {% endif %}
+
+        <div class="titulo">Constancia de Goce Vacacional</div>
+
+        <table class="memo">
+            <tr>
+                <td class="lbl">DE</td>
+                <td class="sep">:</td>
+                <td class="val">
+                    {{ doc.representative or '' }}
+                    {% if doc.rep_position %}<span class="val-cargo">{{ doc.rep_position }}</span>{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td class="lbl">PARA</td>
+                <td class="sep">:</td>
+                <td class="val">
+                    {{ doc.person_name or '' }}
+                    {% if doc.cargo %}<span class="val-cargo">{{ doc.cargo }}</span>{% endif %}
+                </td>
+            </tr>
+            <tr>
+                <td class="lbl">DNI</td>
+                <td class="sep">:</td>
+                <td class="val">{{ doc.documentnumber or '' }}</td>
+            </tr>
+            <tr>
+                <td class="lbl">ASUNTO</td>
+                <td class="sep">:</td>
+                <td class="val"><strong>VACACIONES</strong></td>
+            </tr>
+            <tr>
+                <td class="lbl">FECHA</td>
+                <td class="sep">:</td>
+                <td class="val">{{ fecha_memo_texto }}</td>
+            </tr>
+        </table>
+
+        <hr class="linea">
+
+        <p class="parrafo">
+            Mediante el presente hacemos de su conocimiento el goce de sus vacaciones correspondientes al periodo
+            {{ periodo_vacacional }} por un total de {{ total_dias }} días calendario.
+        </p>
+
+        <p class="parrafo detalle-titulo">El detalle de las vacaciones es el siguiente:</p>
+
+        {% for item in detalles %}
+        <div class="fechas-goce"><span class="lbl-fecha">Inicio:</span> {{ item.begin_texto }}</div>
+        <div class="fechas-goce"><span class="lbl-fecha">Fin:</span> {{ item.end_texto }}</div>
+        {% endfor %}
+
+        <p class="parrafo cierre">
+            En nombre de la empresa, le deseamos que disfrute de un merecido y provechoso descanso.
+        </p>
+        <p class="parrafo">Atentamente.</p>
+
+        <div class="firma-block">
+            {% if firma_src %}
+            <img src="{{ firma_src }}" alt="Firma" class="firma-img">
+            {% endif %}
+            <div class="linea-firma"></div>
+            <p class="rep-nombre">{{ doc.representative or '' }}</p>
+            <p class="rep-cargo">{{ doc.rep_position or 'REPRESENTANTE LEGAL' }}</p>
+        </div>
+
+        <div class="conformidad-titulo">Conformidad del Trabajador</div>
+        <p class="conformidad-texto">
+            Declaro haber tomado conocimiento del presente comunicado y manifiesto mi conformidad con las fechas programadas para el goce de mis vacaciones.
+        </p>
+
+        <div class="firma-trabajador">
+            <div class="linea-firma"></div>
+            <p class="trab-nombre">{{ doc.person_name or '' }}</p>
+            <p class="trab-rol">Empleado</p>
+        </div>
+    </div>
+</body>
+</html>

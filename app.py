@@ -4200,6 +4200,145 @@ def generar_pdf_certificado_trabajo(params):
     )
 
 
+def _formato_vacaciones_pdf_filename(person, fecha_raw=None, line=None):
+    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'trab').strip()) or 'trab'
+    fecha_dt = _parse_report_date(fecha_raw)
+    yyyymm = fecha_dt.strftime('%Y%m')
+    if line is not None and str(line).strip() != '':
+        try:
+            line_safe = str(int(line))
+        except Exception:
+            line_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(line).strip()) or '0'
+        return f'constancia_goce_vacacional_{person_safe}_{yyyymm}_L{line_safe}.pdf'
+    return f'constancia_goce_vacacional_{person_safe}_{yyyymm}.pdf'
+
+
+def _fecha_texto_es(dia, mes, anio):
+    dia_s = str(dia or '').strip()
+    mes_s = str(mes or '').strip()
+    anio_s = str(anio or '').strip()
+    if not (dia_s and mes_s and anio_s):
+        return ''
+    return f'{dia_s} de {mes_s} del {anio_s}'
+
+
+def generar_pdf_formato_vacaciones(params):
+    """Constancia de Goce Vacacional (logo/firma SY_Company → static/img)."""
+    cia_param = str(params.get('cia') or '').strip()
+    if not cia_param and has_request_context():
+        ensure_user_session()
+    cia = str(cia_param or (session.get('company') if has_request_context() else '') or '').strip()
+    payroll_type = str(params.get('payroll_type') or params.get('payroll') or '').strip()
+    person = str(params.get('person') or '').strip()
+    fecha = _parse_report_date(params.get('fecha'))
+    line_raw = params.get('line')
+    line = None
+    if line_raw is not None and str(line_raw).strip() != '':
+        try:
+            line = int(line_raw)
+        except Exception:
+            line = None
+
+    if not (cia and payroll_type and person):
+        raise ValueError('Faltan parámetros para generar el formato de vacaciones.')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_formatovacaciones_web '
+            '@cia=?, @payrolltype=?, @person=?, @fecha=?, @line=?',
+            (cia, payroll_type, person, fecha, line),
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+    if not rows:
+        raise ValueError('No se encontraron vacaciones para los filtros indicados.')
+
+    first = rows[0]
+    total_dias = first.get('total_days')
+    try:
+        total_dias = int(total_dias if total_dias is not None else first.get('days') or 0)
+    except Exception:
+        total_dias = 0
+
+    cy = str(first.get('header_controlyear') or first.get('controlyear') or '').strip()
+    cy_end = str(first.get('header_controlyear_end') or first.get('controlyear_end') or '').strip()
+    if cy and cy_end:
+        periodo_vacacional = f'{cy}-{cy_end}'
+    elif cy:
+        try:
+            periodo_vacacional = f'{cy}-{int(cy) + 1}'
+        except Exception:
+            periodo_vacacional = cy
+    else:
+        periodo_vacacional = ''
+
+    # Si el DW usa days del primer detalle en el párrafo cuando hay un solo tramo
+    header_days = first.get('header_days')
+    try:
+        header_days_n = int(header_days) if header_days is not None else total_dias
+    except Exception:
+        header_days_n = total_dias
+    if len(rows) == 1:
+        total_dias = header_days_n
+
+    fecha_memo_texto = _fecha_texto_es(
+        first.get('fecha_dia'), first.get('fecha_mes'), first.get('fecha_anio')
+    )
+
+    detalles = []
+    for r in rows:
+        detalles.append({
+            'begin_texto': _fecha_texto_es(r.get('begin_dia'), r.get('begin_mes'), r.get('begin_anio')),
+            'end_texto': _fecha_texto_es(r.get('end_dia'), r.get('end_mes'), r.get('end_anio')),
+            'days': r.get('days'),
+        })
+
+    doc = {
+        'representative': str(first.get('representative') or '').strip(),
+        'rep_position': str(first.get('rep_position') or '').strip(),
+        'person_name': str(first.get('person_name') or '').strip(),
+        'documentnumber': str(first.get('documentnumber') or '').strip(),
+        'cargo': str(first.get('cargo') or '').strip(),
+        'company_name': str(first.get('company_name') or '').strip(),
+    }
+
+    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+    logo_src = _image_data_uri(ruta_logo)
+    firma_src = _image_data_uri(ruta_firma)
+
+    html_renderizado = render_template(
+        'formato_vacaciones_pdf.html',
+        doc=doc,
+        detalles=detalles,
+        total_dias=total_dias,
+        periodo_vacacional=periodo_vacacional,
+        fecha_memo_texto=fecha_memo_texto,
+        logo_src=logo_src,
+        firma_src=firma_src,
+    )
+
+    if WEASYPRINT_AVAILABLE:
+        pdf_io = io.BytesIO()
+        HTML(string=html_renderizado).write_pdf(pdf_io)
+        pdf_io.seek(0)
+        return pdf_io
+
+    raise RuntimeError(
+        'WeasyPrint no está disponible para generar el formato de vacaciones. '
+        + str(_WEASYPRINT_IMPORT_ERROR or '')
+    )
+
+
 def enviar_correo_certificado_trabajo(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
     """Envía certificado de trabajo por Resend API con PDF adjunto."""
     if not destinatario or '@' not in str(destinatario):
@@ -6378,6 +6517,151 @@ def reporte_vacaciones_detalle_page():
 @login_required
 def reporte_saldo_vacaciones_page():
     return render_template('reporte_saldo_vacaciones.html')
+
+
+@app.route('/reporte-formato-vacaciones')
+@login_required
+def reporte_formato_vacaciones_page():
+    return render_template('formato_vacaciones.html')
+
+
+@app.route('/get_lista_formato_vacaciones', methods=['POST'])
+@login_required
+def get_lista_formato_vacaciones():
+    """sp_pr_listadoformatovacaciones_web — goce vacacional del YYYYMM de la fecha."""
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payroll') or '').strip()
+    fecha = _parse_report_date(body.get('fecha'))
+    cesados = _normalize_cesados_saldo_vacaciones(body.get('cesados'))
+    person = str(body.get('person') or '0').strip() or '0'
+    anio = str(body.get('anio') or body.get('periodo') or '0').strip() or '0'
+    if anio.isdigit() and len(anio) == 4:
+        pass
+    else:
+        anio = '0'
+
+    if not cia or not payroll_type:
+        return jsonify({'error': 'Faltan compañía o tipo de planilla.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout(cursor)
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_listadoformatovacaciones_web '
+            '@cia=?, @payrolltype=?, @fecha=?, @cesados=?, @person=?, @anio=?',
+            (cia, payroll_type, fecha, cesados, person, anio),
+        )
+        out = []
+        for r in rows:
+            out.append({
+                'person': str(r.get('person') or '').strip(),
+                'line': r.get('line'),
+                'nombre': str(r.get('nombre') or '').strip(),
+                'dni': str(r.get('dni') or '').strip(),
+                'datebegin': r.get('datebegin').strftime('%Y-%m-%d') if hasattr(r.get('datebegin'), 'strftime') else str(r.get('datebegin') or ''),
+                'dateend': r.get('dateend').strftime('%Y-%m-%d') if hasattr(r.get('dateend'), 'strftime') else str(r.get('dateend') or ''),
+                'days': int(r.get('days') or 0),
+                'controlyear': str(r.get('controlyear') or '').strip(),
+                'prperiod': str(r.get('prperiod') or '').strip(),
+                'cargo': str(r.get('cargo') or '').strip(),
+                'ingreso': str(r.get('ingreso') or '').strip(),
+                'cese': str(r.get('cese') or '').strip(),
+                'email': str(r.get('email') or '').strip(),
+            })
+        return jsonify(out)
+    except Exception as e:
+        logging.exception('get_lista_formato_vacaciones')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/preview_formato_vacaciones')
+@login_required
+def preview_formato_vacaciones():
+    params = request.args
+    person = str(params.get('person') or '').strip()
+    try:
+        pdf_buffer = generar_pdf_formato_vacaciones(params)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        logging.exception('preview_formato_vacaciones')
+        return jsonify({'error': str(e)}), 500
+    return send_file(
+        pdf_buffer,
+        mimetype='application/pdf',
+        as_attachment=False,
+        download_name=_formato_vacaciones_pdf_filename(person, params.get('fecha')),
+    )
+
+
+@app.route('/descargar_zip_formato_vacaciones', methods=['POST'])
+@login_required
+def descargar_zip_formato_vacaciones():
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payroll') or '').strip()
+    fecha_raw = body.get('fecha')
+    seleccionados = body.get('trabajadores') or []
+    if not cia or not payroll_type or not fecha_raw:
+        return jsonify({'error': 'Faltan compañía, tipo de planilla o fecha.'}), 400
+    if not isinstance(seleccionados, list) or not seleccionados:
+        return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
+
+    fecha_dt = _parse_report_date(fecha_raw)
+    yyyymm = fecha_dt.strftime('%Y%m')
+    safe_cia = re.sub(r'[^A-Za-z0-9_\\-]+', '_', cia).strip('_') or 'cia'
+    nombre_zip = f'formato_vacaciones_{safe_cia.lower()}_{yyyymm}.zip'
+
+    memory_file = io.BytesIO()
+    errores = []
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for item in seleccionados:
+            if isinstance(item, dict):
+                pid = str(item.get('person') or '').strip()
+                line = item.get('line')
+            else:
+                pid = str(item or '').strip()
+                line = None
+            if not pid:
+                continue
+            try:
+                pdf_data = generar_pdf_formato_vacaciones({
+                    'cia': cia,
+                    'payroll_type': payroll_type,
+                    'fecha': fecha_raw,
+                    'person': pid,
+                    'line': line,
+                })
+                zf.writestr(
+                    _formato_vacaciones_pdf_filename(pid, fecha_raw, line),
+                    pdf_data.getvalue(),
+                )
+            except Exception as e:
+                logging.exception('descargar_zip_formato_vacaciones person=%s', pid)
+                errores.append(f'{pid}: {e}')
+
+    if memory_file.tell() == 0 and errores:
+        return jsonify({'error': 'No se pudo generar ningún PDF. ' + '; '.join(errores[:5])}), 400
+
+    memory_file.seek(0)
+    return send_file(
+        memory_file,
+        mimetype='application/zip',
+        download_name=nombre_zip,
+        as_attachment=True,
+    )
 
 
 @app.route('/reporte-descansos-medicos-detalle')

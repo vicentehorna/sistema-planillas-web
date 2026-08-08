@@ -1,0 +1,498 @@
+{% extends "layout.html" %}
+
+{% block title %}Formato de Vacaciones{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-fmt-vac {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+    .table-fmt-vac {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-fmt-vac th,
+    .table-fmt-vac td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-fmt-vac thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-fmt-vac .form-check-input {
+        width: 0.75rem;
+        height: 0.75rem;
+        margin: 0;
+        vertical-align: middle;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-file-earmark-text"></i> Formato de Vacaciones</h5>
+        <p class="small text-muted mb-0 mt-1">Constancia de Goce Vacacional</p>
+    </div>
+    <div class="card-body">
+        <form id="frmFormatoVacaciones" class="row g-2 align-items-end">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtFecha" class="form-label small fw-bold text-muted mb-1">Fecha</label>
+                <input type="date" id="txtFecha" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted mb-1">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted mb-1">Empleado <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos (por defecto)</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="txtPeriodoAnio" class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                <input type="number" id="txtPeriodoAnio" class="form-control form-control-sm" min="2000" max="2100" step="1" placeholder="AAAA">
+            </div>
+            <div class="col-12 d-flex justify-content-between align-items-center flex-wrap gap-2 border-top pt-3 mt-2">
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-primary btn-sm px-4" id="btnBuscarFmtVac">
+                        <i class="bi bi-search"></i> Buscar
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm px-4" id="btnDescargarZipFmtVac" disabled>
+                        <i class="bi bi-file-earmark-zip"></i> Descargar ZIP
+                    </button>
+                </div>
+                <span class="text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCountFmtVac">0</span>
+                    · Seleccionados: <span id="lblSelCountFmtVac">0</span>
+                </span>
+            </div>
+        </form>
+
+        <div class="table-scroll-fmt-vac mt-4">
+            <table class="table table-bordered table-sm table-hover table-fmt-vac align-middle">
+                <thead>
+                    <tr>
+                        <th style="width: 2.5rem;" class="text-center">
+                            <input type="checkbox" id="checkAllFmtVac" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th style="width: 7rem;">Código</th>
+                        <th>Nombre</th>
+                        <th style="width: 6rem;">DNI</th>
+                        <th style="width: 6rem;">Inicio</th>
+                        <th style="width: 6rem;">Fin</th>
+                        <th style="width: 4rem;" class="text-end">Días</th>
+                        <th style="width: 6rem;">Periodo vac.</th>
+                        <th style="width: 5rem;" class="text-center">Ver</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyFmtVac"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const STORAGE_KEY = 'filtros_formato_vacaciones';
+    const URL_LISTA = {{ url_for('get_lista_formato_vacaciones') | tojson }};
+    const URL_PREVIEW = {{ url_for('preview_formato_vacaciones') | tojson }};
+    const URL_ZIP = {{ url_for('descargar_zip_formato_vacaciones') | tojson }};
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboTrab = document.getElementById('cboTrabajador');
+    const txtFecha = document.getElementById('txtFecha');
+    const cboCesados = document.getElementById('cboCesados');
+    const txtAnio = document.getElementById('txtPeriodoAnio');
+
+    let filasCache = [];
+    let filtrosActuales = null;
+
+    function hoyIsoLocal() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function guardarFiltros() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                cia: cboCia.value.trim(),
+                payroll: cboPt.value.trim(),
+                fecha: txtFecha.value.trim(),
+                cesados: cboCesados.value.trim() || 'T',
+                person: cboTrab.value.trim(),
+                anio: txtAnio.value.trim(),
+                timestamp: Date.now()
+            }));
+        } catch (e) { /* ignore */ }
+    }
+
+    function leerFiltros() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return null;
+            const o = JSON.parse(raw);
+            return o && typeof o === 'object' ? o : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function poblarSelect(url, selectElement, opts) {
+        opts = opts || {};
+        selectElement.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectElement.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = opts.defaultValue != null ? String(opts.defaultValue) : '';
+            def.textContent = opts.defaultText || 'Seleccione...';
+            selectElement.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id) : '';
+                if (opts.skipZero && (!id || id === '0')) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function fmtFecha(isoOrSql) {
+        const s = String(isoOrSql || '').trim();
+        if (!s) return '';
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+        if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+        return s;
+    }
+
+    function claveFila(row) {
+        return `${String(row.person || '').trim()}|${String(row.line != null ? row.line : '')}`;
+    }
+
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-fmt-vac').length;
+        const sel = document.querySelectorAll('.check-fmt-vac:checked').length;
+        document.getElementById('lblRowCountFmtVac').textContent = String(total);
+        document.getElementById('lblSelCountFmtVac').textContent = String(sel);
+        document.getElementById('btnDescargarZipFmtVac').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAll() {
+        const all = document.querySelectorAll('.check-fmt-vac');
+        const chk = document.getElementById('checkAllFmtVac');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let n = 0;
+        all.forEach((x) => { if (x.checked) n++; });
+        chk.checked = n === all.length;
+        chk.indeterminate = n > 0 && n < all.length;
+    }
+
+    function renderLista(rows) {
+        const tbody = document.getElementById('tbodyFmtVac');
+        tbody.innerHTML = '';
+        (Array.isArray(rows) ? rows : []).forEach((row) => {
+            const tr = document.createElement('tr');
+            const person = String(row.person || '').trim();
+            const line = row.line != null ? String(row.line) : '';
+            const key = claveFila(row);
+
+            const tdChk = document.createElement('td');
+            tdChk.className = 'text-center';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'check-fmt-vac form-check-input';
+            cb.value = key;
+            cb.dataset.person = person;
+            cb.dataset.line = line;
+            cb.checked = true;
+            tdChk.appendChild(cb);
+
+            const tdPerson = document.createElement('td');
+            tdPerson.className = 'font-monospace';
+            tdPerson.textContent = person;
+
+            const tdNombre = document.createElement('td');
+            tdNombre.textContent = String(row.nombre || '').trim();
+
+            const tdDni = document.createElement('td');
+            tdDni.textContent = String(row.dni || '').trim();
+
+            const tdIni = document.createElement('td');
+            tdIni.textContent = fmtFecha(row.datebegin);
+
+            const tdFin = document.createElement('td');
+            tdFin.textContent = fmtFecha(row.dateend);
+
+            const tdDays = document.createElement('td');
+            tdDays.className = 'text-end';
+            tdDays.textContent = row.days != null ? String(row.days) : '';
+
+            const tdCtrl = document.createElement('td');
+            const cy = String(row.controlyear || '').trim();
+            tdCtrl.textContent = cy ? `${cy}-${Number(cy) + 1 || ''}`.replace(/-$/, '') : '';
+
+            const tdAcc = document.createElement('td');
+            tdAcc.className = 'text-center';
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
+            btn.title = 'Ver constancia';
+            btn.innerHTML = '<i class="bi bi-eye"></i>';
+            btn.addEventListener('click', () => {
+                const f = filtrosActuales || {};
+                const qs = new URLSearchParams({
+                    cia: f.cia || cboCia.value.trim(),
+                    payroll_type: f.payroll_type || cboPt.value.trim(),
+                    fecha: f.fecha || txtFecha.value.trim(),
+                    person,
+                    line
+                });
+                window.open(`${URL_PREVIEW}?${qs.toString()}`, '_blank');
+            });
+            tdAcc.appendChild(btn);
+
+            tr.appendChild(tdChk);
+            tr.appendChild(tdPerson);
+            tr.appendChild(tdNombre);
+            tr.appendChild(tdDni);
+            tr.appendChild(tdIni);
+            tr.appendChild(tdFin);
+            tr.appendChild(tdDays);
+            tr.appendChild(tdCtrl);
+            tr.appendChild(tdAcc);
+            tbody.appendChild(tr);
+        });
+        sincronizarCheckAll();
+        actualizarContadores();
+    }
+
+    async function buscar() {
+        guardarFiltros();
+        const cia = cboCia.value.trim();
+        const payroll_type = cboPt.value.trim();
+        const fecha = txtFecha.value.trim();
+        const cesados = cboCesados.value.trim() || 'T';
+        const person = cboTrab.value.trim() || '0';
+        const anio = txtAnio.value.trim() || '0';
+
+        if (!cia || !payroll_type || !fecha) {
+            alert('Complete compañía, tipo de planilla y fecha.');
+            return;
+        }
+
+        filtrosActuales = { cia, payroll_type, fecha, cesados, person, anio };
+        try {
+            const res = await fetch(URL_LISTA, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type, fecha, cesados, person, anio })
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                filasCache = [];
+                renderLista([]);
+                alert(data.error || 'Error al listar.');
+                return;
+            }
+            filasCache = Array.isArray(data) ? data : (Array.isArray(data.rows) ? data.rows : []);
+            renderLista(filasCache);
+        } catch (e) {
+            console.error(e);
+            filasCache = [];
+            renderLista([]);
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function descargarZip() {
+        const seleccionados = [];
+        document.querySelectorAll('.check-fmt-vac:checked').forEach((cb) => {
+            seleccionados.push({
+                person: cb.dataset.person,
+                line: cb.dataset.line
+            });
+        });
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un registro.');
+            return;
+        }
+        const f = filtrosActuales || {};
+        const cia = f.cia || cboCia.value.trim();
+        const payroll_type = f.payroll_type || cboPt.value.trim();
+        const fecha = f.fecha || txtFecha.value.trim();
+        if (!cia || !payroll_type || !fecha) {
+            alert('Complete los filtros y busque primero.');
+            return;
+        }
+
+        const btn = document.getElementById('btnDescargarZipFmtVac');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_ZIP, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type, fecha, trabajadores: seleccionados })
+            });
+            if (!res.ok) {
+                let msg = 'Error al generar el ZIP.';
+                try {
+                    const payload = await res.json();
+                    msg = payload.error || msg;
+                } catch (e) { /* ignore */ }
+                alert(msg);
+                return;
+            }
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'formato_vacaciones.zip';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            actualizarContadores();
+        }
+    }
+
+    if (!txtFecha.value) txtFecha.value = hoyIsoLocal();
+    if (!txtAnio.value) txtAnio.value = String(new Date().getFullYear());
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+
+    const guardado = leerFiltros();
+    const DEFAULT_CIA = 'BGT';
+    if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {
+        cboCia.value = guardado.cia;
+    } else if (!cboCia.value) {
+        seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    }
+
+    async function cargarPlanillaYTrabajadores(preferPayroll, preferPerson) {
+        const cia = cboCia.value.trim();
+        cboPt.innerHTML = '<option value="">Seleccione...</option>';
+        cboPt.disabled = true;
+        cboTrab.innerHTML = '<option value="">Todos (por defecto)</option>';
+        cboTrab.disabled = true;
+        if (!cia) return;
+        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+        if (preferPayroll && optionExists(cboPt, preferPayroll)) cboPt.value = preferPayroll;
+        await poblarSelect(
+            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+            cboTrab,
+            { defaultValue: '', defaultText: 'Todos (por defecto)', skipZero: true }
+        );
+        if (preferPerson && optionExists(cboTrab, preferPerson)) cboTrab.value = preferPerson;
+    }
+
+    await cargarPlanillaYTrabajadores(
+        guardado ? guardado.payroll : '',
+        guardado ? guardado.person : ''
+    );
+    if (guardado) {
+        if (guardado.fecha) txtFecha.value = guardado.fecha;
+        if (guardado.cesados && optionExists(cboCesados, guardado.cesados)) cboCesados.value = guardado.cesados;
+        if (guardado.anio) txtAnio.value = guardado.anio;
+    }
+
+    cboCia.addEventListener('change', async () => {
+        await cargarPlanillaYTrabajadores('', '');
+        guardarFiltros();
+    });
+    cboPt.addEventListener('change', async () => {
+        const cia = cboCia.value.trim();
+        const payroll = cboPt.value.trim();
+        if (cia) {
+            const url = payroll
+                ? `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`
+                : `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+            await poblarSelect(url, cboTrab, { defaultValue: '', defaultText: 'Todos (por defecto)', skipZero: true });
+        }
+        guardarFiltros();
+    });
+    [cboCesados, cboTrab, txtFecha, txtAnio].forEach((el) => {
+        el.addEventListener('change', guardarFiltros);
+    });
+
+    document.getElementById('checkAllFmtVac').addEventListener('change', function () {
+        document.querySelectorAll('.check-fmt-vac').forEach((cb) => { cb.checked = this.checked; });
+        actualizarContadores();
+    });
+    document.getElementById('tbodyFmtVac').addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('check-fmt-vac')) {
+            sincronizarCheckAll();
+            actualizarContadores();
+        }
+    });
+
+    document.getElementById('frmFormatoVacaciones').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await buscar();
+    });
+    document.getElementById('btnDescargarZipFmtVac').addEventListener('click', descargarZip);
+});
+</script>
+{% endblock %}

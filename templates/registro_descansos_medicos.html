@@ -442,6 +442,11 @@
         font-size: 11px;
         line-height: 1;
         text-decoration: none;
+        padding: 0 0.15rem;
+    }
+
+    .table-historial-dm tbody tr.historial-editando > td {
+        background: #fff3cd !important;
     }
 
     .badge-cobertura-empleador {
@@ -626,11 +631,15 @@
 
             <div class="dm-dw-panel" id="panelNuevoDescanso">
                 <div class="dm-dw-titlebar">
-                    <span class="dm-dw-title-text">Registrar descanso médico</span>
+                    <span class="dm-dw-title-text" id="lblTituloRegistroDescanso">Registrar descanso médico</span>
                     <div class="dm-titlebar-actions">
+                        <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btnCancelarEdicionDescanso"
+                                title="Cancelar edición">
+                            Cancelar
+                        </button>
                         <button type="submit" form="frmNuevoDescanso" id="btnGuardarDescanso"
                                 class="btn btn-success btn-sm dm-btn-guardar" disabled title="Ctrl+S">
-                            <i class="bi bi-save"></i> Guardar
+                            <i class="bi bi-save"></i> <span id="lblBtnGuardarDescanso">Guardar</span>
                         </button>
                         <button type="button" class="dm-registro-toggle" id="btnToggleRegistroDescanso"
                                 aria-expanded="true" aria-label="Contraer panel de registro" title="Contraer panel">
@@ -640,6 +649,7 @@
                 </div>
                 <div class="dm-dw-body dm-registro-body">
                     <form id="frmNuevoDescanso" class="dm-form-descanso">
+                        <input type="hidden" id="hidLineEdit" name="line" value="">
                         <div class="row g-2 align-items-end dm-form-fila-principal mb-2">
                             <div class="col-auto dm-col-subsidio">
                                 <label for="cboDrawerSubsidio" class="form-label fw-bold text-muted">Subsidio</label>
@@ -900,7 +910,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     let buscarTimer = null;
     let idxTrabajadorActivo = -1;
     let cargaTrabajadorSeq = 0;
+    let lineEditando = null;
     const grillaScrollTrabajadores = document.getElementById('grillaScrollTrabajadores');
+    const hidLineEdit = document.getElementById('hidLineEdit');
+    const btnCancelarEdicionDescanso = document.getElementById('btnCancelarEdicionDescanso');
+    const lblTituloRegistroDescanso = document.getElementById('lblTituloRegistroDescanso');
+    const lblBtnGuardarDescanso = document.getElementById('lblBtnGuardarDescanso');
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -1090,6 +1105,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         return formatearFecha(valor);
     }
 
+    function toInputDate(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+        const m2 = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m2) return `${m2[3]}-${m2[2]}-${m2[1]}`;
+        return '';
+    }
+
+    function actualizarModoEdicionUI() {
+        const editando = lineEditando != null;
+        if (hidLineEdit) hidLineEdit.value = editando ? String(lineEditando) : '';
+        if (lblTituloRegistroDescanso) {
+            lblTituloRegistroDescanso.textContent = editando
+                ? 'Editar descanso médico'
+                : 'Registrar descanso médico';
+        }
+        if (lblBtnGuardarDescanso) {
+            lblBtnGuardarDescanso.textContent = editando ? 'Actualizar' : 'Guardar';
+        }
+        if (btnCancelarEdicionDescanso) {
+            btnCancelarEdicionDescanso.classList.toggle('d-none', !editando);
+        }
+        document.querySelectorAll('#tblHistorial tbody tr.historial-row').forEach((tr) => {
+            const line = Number(tr.getAttribute('data-line'));
+            tr.classList.toggle('historial-editando', editando && line === lineEditando);
+        });
+    }
+
+    function diasEmpleadorParaValidacion() {
+        const kpis = (datosDescansos && datosDescansos.kpis) ? datosDescansos.kpis : {};
+        let diasEmp = Number(kpis.dias_empleador || 0);
+        if (lineEditando == null || !datosDescansos || !Array.isArray(datosDescansos.historial)) {
+            return diasEmp;
+        }
+        const actual = datosDescansos.historial.find((h) => Number(h.line) === Number(lineEditando));
+        if (
+            actual
+            && String(actual.payreponsableflag || '').toUpperCase() === 'E'
+            && String(actual.pdt || '').trim() === '20'
+        ) {
+            diasEmp = Math.max(0, diasEmp - Number(actual.days || 0));
+        }
+        return diasEmp;
+    }
+
     function renderListaTrabajadores(rows) {
         if (!rows.length) {
             tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores activos</td></tr>';
@@ -1271,7 +1333,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         tbody.innerHTML = rows.map((h) => {
             const esEssalud = String(h.payreponsableflag || '').toUpperCase() === 'S';
             const badgeClass = esEssalud ? 'badge-cobertura-essalud' : 'badge-cobertura-empleador';
-            return `<tr class="historial-row" data-line="${h.line}">
+            const editando = lineEditando != null && Number(h.line) === Number(lineEditando);
+            return `<tr class="historial-row${editando ? ' historial-editando' : ''}" data-line="${h.line}">
                 <td>${escHtml(formatearPeriodo(h.prperiod))}</td>
                 <td>${escHtml(formatearFecha(h.datebegin))}</td>
                 <td>${escHtml(formatearFecha(h.dateend))}</td>
@@ -1280,12 +1343,26 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td><span class="badge ${badgeClass}">${escHtml(h.cobertura_texto || '')}</span></td>
                 <td>${escHtml(h.citt || '—')}</td>
                 <td class="col-acciones">
+                    <button type="button" class="btn btn-link text-primary p-0 btn-editar-descanso" title="Editar registro">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
                     <button type="button" class="btn btn-link text-danger p-0 btn-eliminar-descanso" title="Eliminar registro">
                         <i class="bi bi-trash"></i>
                     </button>
                 </td>
             </tr>`;
         }).join('');
+
+        tbody.querySelectorAll('.btn-editar-descanso').forEach((btn) => {
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                const tr = this.closest('.historial-row');
+                if (!tr) return;
+                const line = Number(tr.getAttribute('data-line'));
+                const row = (datosDescansos.historial || []).find((h) => Number(h.line) === line);
+                if (row) editarDescanso(row);
+            });
+        });
 
         tbody.querySelectorAll('.btn-eliminar-descanso').forEach((btn) => {
             btn.addEventListener('click', async function (e) {
@@ -1296,6 +1373,53 @@ document.addEventListener('DOMContentLoaded', async function () {
                 await eliminarDescanso(line);
             });
         });
+    }
+
+    async function editarDescanso(row) {
+        if (!trabajadorActivo || !row) return;
+
+        lineEditando = Number(row.line);
+        actualizarModoEdicionUI();
+
+        const pdt = String(row.pdt || '').trim();
+        const subsidio = esTipoSubsidiado(pdt) ? 'S' : 'N';
+        if (cboDrawerSubsidio) cboDrawerSubsidio.value = subsidio;
+        renderTiposDrawer(subsidio);
+
+        const tipoId = String(row.medicalresttype || '').trim();
+        if (tipoId) {
+            let opt = Array.from(cboDrawerTipo.options).find((o) => o.value === tipoId);
+            if (!opt) {
+                opt = document.createElement('option');
+                opt.value = tipoId;
+                opt.textContent = row.tipo_descanso || tipoId;
+                if (pdt) opt.setAttribute('data-pdt', pdt);
+                cboDrawerTipo.appendChild(opt);
+            }
+            cboDrawerTipo.value = tipoId;
+        }
+
+        document.getElementById('txtDrawerFechaInicio').value = toInputDate(row.datebegin);
+        document.getElementById('txtDrawerFechaFin').value = toInputDate(row.dateend);
+        document.getElementById('txtDrawerCitt').value = row.citt || '';
+        document.getElementById('txtDrawerCmp').value = row.cmp_medico || '';
+
+        const periodo = String(row.prperiod || '').trim();
+        if (cboDrawerPeriodo && periodo) {
+            let popt = Array.from(cboDrawerPeriodo.options).find((o) => o.value === periodo);
+            if (!popt) {
+                popt = document.createElement('option');
+                popt.value = periodo;
+                popt.textContent = formatearPeriodo(periodo);
+                cboDrawerPeriodo.appendChild(popt);
+            }
+            cboDrawerPeriodo.value = periodo;
+        }
+
+        actualizarFormularioHabilitado(true);
+        aplicarEstadoRegistro(false);
+        validarFormularioDrawer();
+        document.getElementById('txtDrawerFechaInicio')?.focus();
     }
 
     async function eliminarDescanso(line) {
@@ -1316,6 +1440,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!ok) return;
 
         try {
+            if (lineEditando != null && Number(lineEditando) === Number(line)) {
+                lineEditando = null;
+                actualizarModoEdicionUI();
+            }
             const res = await fetch('/descansos/eliminar', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1410,7 +1538,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         lblDias.textContent = dias != null ? String(dias) : '—';
 
         const kpis = (datosDescansos && datosDescansos.kpis) ? datosDescansos.kpis : {};
-        const diasEmpPrev = Number(kpis.dias_empleador || 0);
+        const diasEmpPrev = diasEmpleadorParaValidacion();
         const limite = Number(kpis.limite_empleador || 20);
         const aplicaRegla20 = subsidio === 'N' && pdt === '20';
         const supera20 = aplicaRegla20 && dias != null && (diasEmpPrev + dias) > limite;
@@ -1428,12 +1556,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function limpiarFormularioDrawer() {
+        lineEditando = null;
         frmNuevoDescanso.reset();
+        if (hidLineEdit) hidLineEdit.value = '';
         if (cboDrawerSubsidio) cboDrawerSubsidio.value = 'N';
         document.getElementById('lblDrawerDias').textContent = '—';
         document.getElementById('alertaCoberturaForzada').classList.add('d-none');
         renderTiposDrawer('N');
         seleccionarPeriodoActualDrawer();
+        actualizarModoEdicionUI();
         validarFormularioDrawer();
     }
 
@@ -1441,6 +1572,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         cboDrawerSubsidio.addEventListener('change', function () {
             renderTiposDrawer(this.value);
             validarFormularioDrawer();
+        });
+    }
+
+    if (btnCancelarEdicionDescanso) {
+        btnCancelarEdicionDescanso.addEventListener('click', function () {
+            limpiarFormularioDrawer();
         });
     }
 
@@ -1467,7 +1604,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!res.ok) throw new Error(data.error || 'No se pudo guardar.');
 
             if (window.HmUi && typeof HmUi.exito === 'function') {
-                HmUi.exito('Descanso médico guardado.');
+                HmUi.exito(lineEditando != null
+                    ? 'Descanso médico actualizado.'
+                    : 'Descanso médico guardado.');
             }
             limpiarFormularioDrawer();
             await cargarDetalleTrabajador(trabajadorActivo.person, ++cargaTrabajadorSeq);

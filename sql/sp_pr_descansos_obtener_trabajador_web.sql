@@ -38,14 +38,27 @@ BEGIN
 
     SELECT
         ISNULL(SUM(
-            CASE WHEN emr.PayReponsableFlag = 'E' THEN emr.Days ELSE 0 END
+            CASE
+                WHEN emr.PayReponsableFlag = 'E'
+                 AND LTRIM(RTRIM(ISNULL(mrt.PDT, ''))) = '20'
+                THEN emr.Days
+                ELSE 0
+            END
         ), 0) AS dias_empleador,
         ISNULL(SUM(
-            CASE WHEN emr.PayReponsableFlag = 'S' THEN emr.Days ELSE 0 END
+            CASE
+                WHEN emr.PayReponsableFlag = 'S'
+                 AND LTRIM(RTRIM(ISNULL(mrt.PDT, ''))) IN ('21', '22')
+                THEN emr.Days
+                ELSE 0
+            END
         ), 0) AS dias_essalud,
         ISNULL(SUM(emr.Days), 0) AS total_anio,
         20 AS limite_empleador
     FROM PR_EmployeeMedicalRest emr
+        INNER JOIN PR_MedicalRestType mrt
+            ON mrt.MedicalRestType = emr.MedicalRestType
+           AND mrt.Company = emr.Company
     WHERE emr.Company = @company
       AND emr.Person = @person
       AND YEAR(emr.DateBegin) = @anio;
@@ -62,6 +75,7 @@ BEGIN
             WHEN 'S' THEN 'Subsidio EsSalud'
             ELSE emr.PayReponsableFlag
         END AS cobertura_texto,
+        emr.MedicalRestType AS medicalresttype,
         PR_MedicalRestType.Description AS tipo_descanso,
         PR_MedicalRestType.PDT AS pdt,
         emr.citt AS citt,
@@ -72,6 +86,7 @@ BEGIN
     FROM PR_EmployeeMedicalRest emr
         INNER JOIN PR_MedicalRestType
             ON PR_MedicalRestType.MedicalRestType = emr.MedicalRestType
+           AND PR_MedicalRestType.Company = emr.Company
     WHERE emr.Company = @company
       AND emr.Person = @person
     ORDER BY emr.DateBegin DESC, emr.line DESC;

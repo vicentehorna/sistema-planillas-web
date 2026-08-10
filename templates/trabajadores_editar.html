@@ -732,10 +732,10 @@
                         <div class="col-md-6">
                             <label for="txtCci" class="form-label small fw-bold text-muted">CCI</label>
                             <input type="text" id="txtCci" name="cci" class="form-control form-control-sm font-monospace"
-                                   maxlength="20" inputmode="numeric" pattern="[0-9]{20}"
+                                   maxlength="20" inputmode="numeric" pattern="[0-9]{0,20}"
                                    value="{{ empleado.cci or '' }}" autocomplete="off"
-                                   placeholder="20 dígitos (obligatorio si es depósito)">
-                            <div class="invalid-feedback">El CCI debe tener exactamente 20 dígitos numéricos.</div>
+                                   placeholder="20 dígitos (opcional)">
+                            <div class="invalid-feedback">Si indica CCI, debe tener exactamente 20 dígitos numéricos.</div>
                         </div>
                     </div>
                 </div>
@@ -1400,7 +1400,8 @@ document.addEventListener('DOMContentLoaded', function () {
         function validarCci() {
             const cci = (txtCci.value || '').replace(/\D/g, '');
             txtCci.value = cci;
-            if (!esDeposito()) {
+            // Opcional: si está vacío OK; si tiene valor, debe ser 20 dígitos
+            if (!cci) {
                 txtCci.classList.remove('is-invalid');
                 return true;
             }
@@ -1493,7 +1494,7 @@ document.addEventListener('DOMContentLoaded', function () {
             return;
         }
 
-        // CCI / depósito checks if bancario filled
+        // CCI opcional: si se indica, debe tener 20 dígitos
         if (cboFormaPago && txtCci) {
             const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
             const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
@@ -1501,20 +1502,18 @@ document.addEventListener('DOMContentLoaded', function () {
             const esDep = text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
             const cci = (txtCci.value || '').replace(/\D/g, '');
             txtCci.value = cci;
-            if (esDep) {
-                if (cci.length !== 20) {
-                    mostrarPanelNuevo('bancario');
-                    txtCci.classList.add('is-invalid');
-                    mostrarError('El CCI debe tener exactamente 20 dígitos numéricos.');
-                    txtCci.focus();
-                    return;
-                }
-                if (cboBancoHaberes && !cboBancoHaberes.value.trim()) {
-                    mostrarPanelNuevo('bancario');
-                    mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
-                    cboBancoHaberes.focus();
-                    return;
-                }
+            if (cci && cci.length !== 20) {
+                mostrarPanelNuevo('bancario');
+                txtCci.classList.add('is-invalid');
+                mostrarError('Si indica CCI, debe tener exactamente 20 dígitos numéricos.');
+                txtCci.focus();
+                return;
+            }
+            if (esDep && cboBancoHaberes && !cboBancoHaberes.value.trim()) {
+                mostrarPanelNuevo('bancario');
+                mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
+                cboBancoHaberes.focus();
+                return;
             }
         }
 

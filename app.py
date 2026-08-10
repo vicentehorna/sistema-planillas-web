@@ -5980,23 +5980,10 @@ def trabajadores_editar(person_id):
             collectionform = str(request.form.get('collectionform') or '').strip()
             cci = re.sub(r'\D', '', str(request.form.get('cci') or ''))[:20]
 
-            forma_es_deposito = (
-                '000000000009' in collectionform
-                or 'DEPOSITO' in collectionform.upper()
-            )
-            if not forma_es_deposito and collectionform:
-                cursor.execute(
-                    "SELECT TOP 1 LTRIM(RTRIM(ISNULL(description, ''))) FROM te_collectionform WHERE collectionform = ? AND company = ?",
-                    (collectionform, cia),
-                )
-                cf_row = cursor.fetchone()
-                if cf_row and 'DEPOSITO' in str(cf_row[0] or '').upper():
-                    forma_es_deposito = True
-
             bancos, formas_pago, tipos_cuenta = _cargar_selectores_bancario(cursor, cia)
 
-            if forma_es_deposito and len(cci) != 20:
-                flash('El CCI debe tener 20 dígitos cuando la forma de pago es depósito.', 'danger')
+            if cci and len(cci) != 20:
+                flash('Si indica CCI, debe tener exactamente 20 dígitos numéricos.', 'danger')
                 cursor.execute(
                     'EXEC sp_pr_obtener_bancario_trabajador_web @cia=?, @person=?',
                     (cia, person_id),
@@ -6909,6 +6896,7 @@ def _descanso_historial_dict(r):
         'prperiod': _jsonable_value(r.get('prperiod')),
         'payreponsableflag': _jsonable_value(r.get('payreponsableflag')),
         'cobertura_texto': _jsonable_value(r.get('cobertura_texto')),
+        'medicalresttype': _jsonable_value(r.get('medicalresttype')),
         'tipo_descanso': _jsonable_value(r.get('tipo_descanso')),
         'pdt': _jsonable_value(r.get('pdt')),
         'citt': _jsonable_value(r.get('citt')),
@@ -7023,7 +7011,7 @@ def descansos_trabajador_get(person):
 @app.route('/descansos/guardar', methods=['POST'])
 @login_required
 def descansos_guardar_post():
-    """sp_pr_descansos_guardar_web: alta de descanso médico con validación de 20 días."""
+    """sp_pr_descansos_guardar_web: alta o edición de descanso médico con validación de 20 días."""
     cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
     person = str(request.form.get('person') or '').strip()
     medicalresttype = str(
@@ -7036,6 +7024,15 @@ def descansos_guardar_post():
     citt = str(request.form.get('citt') or '').strip()
     cmp_medico = str(request.form.get('cmp_medico') or request.form.get('medico') or '').strip()
     xlastuser = _xlastuser_id()
+    line_edit = None
+    try:
+        line_raw = request.form.get('line')
+        if line_raw is not None and str(line_raw).strip() != '':
+            line_edit = int(line_raw)
+            if line_edit <= 0:
+                line_edit = None
+    except Exception:
+        return jsonify({"error": "Identificador de registro inválido."}), 400
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -7086,6 +7083,18 @@ def descansos_guardar_post():
         sets_prev = _dicts_collect_nonempty_resultsets(cursor, max_sets=4)
         kpis_prev = _descanso_kpis_dict(sets_prev[1][0] if len(sets_prev) > 1 and sets_prev[1] else None)
         dias_empleador_prev = int(kpis_prev.get('dias_empleador') or 0)
+        historial_prev = [_descanso_historial_dict(r) for r in (sets_prev[2] if len(sets_prev) > 2 else [])]
+
+        if line_edit:
+            for h in historial_prev:
+                if int(h.get('line') or 0) != line_edit:
+                    continue
+                if (
+                    str(h.get('payreponsableflag') or '').upper() == 'E'
+                    and str(h.get('pdt') or '').strip() == '20'
+                ):
+                    dias_empleador_prev = max(0, dias_empleador_prev - int(h.get('days') or 0))
+                break
 
         cursor.execute(
             "SELECT LTRIM(RTRIM(PDT)) AS pdt FROM PR_MedicalRestType WHERE Company = ? AND MedicalRestType = ?",
@@ -7117,10 +7126,10 @@ def descansos_guardar_post():
         cursor.execute(
             "EXEC sp_pr_descansos_guardar_web "
             "@company=?, @person=?, @datebegin=?, @dateend=?, @medicalresttype=?, "
-            "@prperiod=?, @citt=?, @cmp_medico=?, @adjunto=?, @days=?, @xlastuser=?",
+            "@prperiod=?, @citt=?, @cmp_medico=?, @adjunto=?, @days=?, @line=?, @xlastuser=?",
             (
                 cia, person, fecha_inicio, fecha_fin, medicalresttype,
-                prperiod, citt or None, cmp_medico or None, adjunto, dias, xlastuser,
+                prperiod, citt or None, cmp_medico or None, adjunto, dias, line_edit, xlastuser,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

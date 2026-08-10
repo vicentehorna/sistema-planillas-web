@@ -261,37 +261,45 @@
 
     .table-formula-detalle th:nth-child(1),
     .table-formula-detalle td:nth-child(1) {
+        width: 2.1rem;
+        text-align: center;
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
+    }
+
+    .table-formula-detalle th:nth-child(2),
+    .table-formula-detalle td:nth-child(2) {
         width: 6.25rem;
     }
 
     /* Elemento: más estrecho (~1 cm menos que antes) */
-    .table-formula-detalle th:nth-child(2),
-    .table-formula-detalle td:nth-child(2) {
+    .table-formula-detalle th:nth-child(3),
+    .table-formula-detalle td:nth-child(3) {
         width: 10rem;
         max-width: 10rem;
     }
 
-    .table-formula-detalle th:nth-child(3),
-    .table-formula-detalle td:nth-child(3) {
+    .table-formula-detalle th:nth-child(4),
+    .table-formula-detalle td:nth-child(4) {
         width: 4.6rem;
     }
 
-    .table-formula-detalle th:nth-child(4),
-    .table-formula-detalle td:nth-child(4) {
-        width: 7rem;
-    }
-
     .table-formula-detalle th:nth-child(5),
-    .table-formula-detalle td:nth-child(5),
-    .table-formula-detalle th:nth-child(7),
-    .table-formula-detalle td:nth-child(7) {
-        width: 5.85rem;
+    .table-formula-detalle td:nth-child(5) {
+        width: 7rem;
     }
 
     .table-formula-detalle th:nth-child(6),
     .table-formula-detalle td:nth-child(6),
     .table-formula-detalle th:nth-child(8),
     .table-formula-detalle td:nth-child(8) {
+        width: 5.85rem;
+    }
+
+    .table-formula-detalle th:nth-child(7),
+    .table-formula-detalle td:nth-child(7),
+    .table-formula-detalle th:nth-child(9),
+    .table-formula-detalle td:nth-child(9) {
         width: 2.35rem;
     }
 
@@ -309,10 +317,10 @@
         margin: 0;
     }
 
-    .table-formula-detalle th:nth-child(9),
-    .table-formula-detalle td:nth-child(9),
     .table-formula-detalle th:nth-child(10),
-    .table-formula-detalle td:nth-child(10) {
+    .table-formula-detalle td:nth-child(10),
+    .table-formula-detalle th:nth-child(11),
+    .table-formula-detalle td:nth-child(11) {
         width: 4.1rem;
     }
 
@@ -325,6 +333,18 @@
 
     .table-formula-detalle tbody tr.active {
         background: #e7f1ff;
+    }
+
+    .table-formula-detalle tbody tr.active td:first-child {
+        box-shadow: inset 3px 0 0 #0d6efd;
+    }
+
+    .table-formula-detalle .radio-linea-detalle {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+        cursor: pointer;
+        vertical-align: middle;
     }
 
     .table-formula-detalle .form-select,
@@ -344,14 +364,14 @@
         background-size: 9px 7px;
     }
 
-    .table-formula-detalle td:nth-child(2) .form-select,
-    .table-formula-detalle td:nth-child(2) .form-control {
+    .table-formula-detalle td:nth-child(3) .form-select,
+    .table-formula-detalle td:nth-child(3) .form-control {
         text-overflow: ellipsis;
     }
 
-    .table-formula-detalle td:nth-child(3) .form-select,
-    .table-formula-detalle td:nth-child(5) .form-select,
-    .table-formula-detalle td:nth-child(7) .form-select {
+    .table-formula-detalle td:nth-child(4) .form-select,
+    .table-formula-detalle td:nth-child(6) .form-select,
+    .table-formula-detalle td:nth-child(8) .form-select {
         padding-right: 1.3rem;
     }
 
@@ -554,9 +574,12 @@
                 <div class="formulas-detalle-seccion">
                     <div class="formulas-detalle-toolbar">
                         <span class="formulas-seccion-titulo">Detalle de fórmula</span>
-                        <div class="btn-group btn-group-sm">
-                            <button type="button" class="btn btn-outline-primary" id="btnAgregarLinea">Agregar</button>
-                            <button type="button" class="btn btn-outline-danger" id="btnBorrarLinea">Borrar</button>
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="text-muted small">Marque la línea y pulse Borrar</span>
+                            <div class="btn-group btn-group-sm">
+                                <button type="button" class="btn btn-outline-primary" id="btnAgregarLinea">Agregar</button>
+                                <button type="button" class="btn btn-outline-danger" id="btnBorrarLinea">Borrar</button>
+                            </div>
                         </div>
                     </div>
                     <div id="ayudaTipoDetalle" class="formulas-tipo-ayuda" role="status" aria-live="polite"></div>
@@ -564,6 +587,7 @@
                         <table class="table table-bordered table-sm table-formula-detalle mb-0">
                             <thead class="table-light">
                                 <tr>
+                                    <th title="Seleccionar línea a borrar">Sel</th>
                                     <th title="Pase el mouse o enfoque el combo Tipo para ver la ayuda de cada función">Tipo</th>
                                     <th>Elemento</th>
                                     <th>Oper.</th>
@@ -685,12 +709,28 @@
     }
 
     function marcarLineaActiva(idx) {
-        if (lineaSeleccionada === idx) return;
+        if (idx == null || isNaN(idx)) return;
         lineaSeleccionada = idx;
         tbodyDetalle.querySelectorAll('.linea-detalle').forEach((r) => {
-            r.classList.toggle('active', parseInt(r.getAttribute('data-idx'), 10) === idx);
+            const i = parseInt(r.getAttribute('data-idx'), 10);
+            const activa = i === idx;
+            r.classList.toggle('active', activa);
+            const radio = r.querySelector('.radio-linea-detalle');
+            if (radio) radio.checked = activa;
         });
+        if (lineasDetalle[idx]) mostrarAyudaTipo(lineasDetalle[idx].tipo);
     }
+
+    tbodyDetalle.addEventListener('focusin', function (e) {
+        const tr = e.target.closest('tr.linea-detalle');
+        if (!tr) return;
+        marcarLineaActiva(parseInt(tr.getAttribute('data-idx'), 10));
+    });
+
+    tbodyDetalle.addEventListener('change', function (e) {
+        if (!e.target.classList.contains('radio-linea-detalle')) return;
+        marcarLineaActiva(parseInt(e.target.getAttribute('data-idx'), 10));
+    });
 
     function esControlDetalle(target) {
         return !!(target && target.closest && target.closest('select, input, textarea, button, label, option'));
@@ -1070,18 +1110,24 @@
 
     function renderDetalle() {
         if (!lineasDetalle.length) {
-            tbodyDetalle.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
+            tbodyDetalle.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-2">Sin líneas — use Agregar</td></tr>';
             return;
         }
         tbodyDetalle.innerHTML = lineasDetalle.map((ln, idx) => {
-            const activo = idx === lineaSeleccionada ? ' active' : '';
+            const activo = idx === lineaSeleccionada;
+            const activoCls = activo ? ' active' : '';
             const showProc = tipoDetalleMuestraSuma(ln.tipo);
             const showPerIni = tipoDetalleMuestraPerIni(ln.tipo);
             const showPerFin = tipoDetalleMuestraPerFin(ln.tipo);
             const showMin = tipoDetalleMuestraMinimo(ln.tipo);
             const showDiv = tipoDetalleMuestraDivisor(ln.tipo);
             const showTlq = tipoDetalleMuestraTipoLiq(ln.tipo);
-            return `<tr class="linea-detalle${activo}" data-idx="${idx}">
+            return `<tr class="linea-detalle${activoCls}" data-idx="${idx}">
+                <td>
+                    <input type="radio" class="radio-linea-detalle" name="selLineaDetalle"
+                        data-idx="${idx}" ${activo ? 'checked' : ''}
+                        title="Seleccionar línea ${idx + 1} para borrar" aria-label="Seleccionar línea ${idx + 1}">
+                </td>
                 <td><select class="form-select form-select-sm celda-tipo" data-idx="${idx}" title="${escHtml(textoAyudaTipo(ln.tipo))}">${opcionesHtml(TIPOS_DETALLE, ln.tipo, false)}</select></td>
                 <td>${renderElementoCelda(ln, idx)}</td>
                 <td><select class="form-select form-select-sm celda-operador" data-idx="${idx}">${opcionesHtml(OPERADORES, ln.operador, true)}</select></td>
@@ -1098,14 +1144,10 @@
 
         tbodyDetalle.querySelectorAll('.linea-detalle').forEach((tr) => {
             tr.addEventListener('click', function (e) {
+                if (e.target.classList.contains('radio-linea-detalle')) return;
                 if (esControlDetalle(e.target)) return;
                 marcarLineaActiva(parseInt(this.getAttribute('data-idx'), 10));
             });
-        });
-
-        tbodyDetalle.querySelectorAll('select, input').forEach((el) => {
-            el.addEventListener('mousedown', (e) => e.stopPropagation());
-            el.addEventListener('click', (e) => e.stopPropagation());
         });
 
         const bind = (sel, field, parser) => {
@@ -1477,7 +1519,7 @@
         const payrolltype = cboPlanilla.value.trim();
         mostrarPanelEdicion(true);
         document.getElementById('tituloEdicionFormula').textContent = row.concepto || 'Cargando...';
-        tbodyDetalle.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
+        tbodyDetalle.innerHTML = '<tr><td colspan="12" class="text-center text-muted py-2">Cargando detalle...</td></tr>';
 
         try {
             const [, data] = await Promise.all([
@@ -1688,11 +1730,15 @@
     });
     document.getElementById('btnBorrarLinea').addEventListener('click', function () {
         if (lineaSeleccionada < 0 || lineaSeleccionada >= lineasDetalle.length) {
-            alert('Seleccione una línea del detalle.');
+            alert('Marque la línea a borrar (columna Sel) y vuelva a intentar.');
             return;
         }
+        const n = lineaSeleccionada + 1;
+        if (!confirm(`¿Borrar la línea ${n} del detalle?`)) return;
         lineasDetalle.splice(lineaSeleccionada, 1);
-        lineaSeleccionada = Math.min(lineaSeleccionada, lineasDetalle.length - 1);
+        lineaSeleccionada = lineasDetalle.length
+            ? Math.min(lineaSeleccionada, lineasDetalle.length - 1)
+            : -1;
         renderDetalle();
     });
     document.getElementById('cboTipoHeader').addEventListener('change', syncTipoHeaderUI);

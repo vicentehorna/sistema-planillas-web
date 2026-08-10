@@ -20902,11 +20902,13 @@ def api_contratos_generar():
 @app.route('/api/vacaciones/trabajadores', methods=['POST'])
 @login_required
 def api_vacaciones_trabajadores():
-    """sp_pr_vacaciones_listar_trabajadores_web: trabajadores activos para panel izquierdo."""
+    """sp_pr_vacaciones_listar_trabajadores_web: listado para panel izquierdo (vacaciones/descansos)."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
     busqueda = str(body.get('busqueda') or body.get('nombre') or body.get('q') or '').strip()
+    # Vacaciones no envía cesados → N (solo vigentes). Descansos envía T/Y/N.
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='N')
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -20916,8 +20918,9 @@ def api_vacaciones_trabajadores():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_vacaciones_listar_trabajadores_web @company=?, @payrolltype=?, @busqueda=?",
-            (cia, payrolltype, busqueda),
+            "EXEC sp_pr_vacaciones_listar_trabajadores_web "
+            "@company=?, @payrolltype=?, @busqueda=?, @cesados=?",
+            (cia, payrolltype, busqueda, cesados),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []
@@ -20928,6 +20931,7 @@ def api_vacaciones_trabajadores():
                 'nombre': _jsonable_value(r.get('nombre')),
                 'documento': _jsonable_value(r.get('documento')),
                 'fechaingreso': _jsonable_value(r.get('fechaingreso')),
+                'fechacese': _jsonable_value(r.get('fechacese')),
                 'payrolltype': _jsonable_value(r.get('payrolltype')),
                 'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
             })

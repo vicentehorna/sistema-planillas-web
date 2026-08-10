@@ -1945,6 +1945,7 @@
                 localStorage.setItem(STORAGE_KEY_REGISTRO_DESCANSOS, JSON.stringify({
                     cia: val('cboCompania'),
                     payrolltype: val('cboTipoPlanilla') || '0',
+                    cesados: val('cboCesados') || 'T',
                 }));
             } catch (e) {
                 console.error(e);
@@ -1962,7 +1963,7 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboCesados'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

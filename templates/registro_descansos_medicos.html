@@ -504,7 +504,15 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted mb-1">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
                 <button type="submit" class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-search"></i> Consultar
                 </button>
@@ -776,6 +784,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboCesados = document.getElementById('cboCesados');
     const txtBuscar = document.getElementById('txtBuscarTrabajador');
     const tbodyTrabajadores = document.getElementById('tbodyTrabajadores');
     const lblConteo = document.getElementById('lblConteoTrabajadores');
@@ -1154,7 +1163,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function renderListaTrabajadores(rows) {
         if (!rows.length) {
-            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores activos</td></tr>';
+            tbodyTrabajadores.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">No hay trabajadores con los filtros indicados</td></tr>';
             lblConteo.textContent = '0 trabajadores';
             idxTrabajadorActivo = -1;
             return;
@@ -1240,6 +1249,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     cia,
                     payrolltype: cboPlanilla.value || '0',
                     busqueda: txtBuscar.value.trim(),
+                    cesados: (cboCesados && cboCesados.value) ? cboCesados.value : 'T',
                 }),
             });
             const data = await leerJson(res);
@@ -1690,6 +1700,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         const saved = filtrosPersist.leer();
         if (saved && saved.payrolltype && optionExists(cboPlanilla, saved.payrolltype)) {
             cboPlanilla.value = saved.payrolltype;
+        }
+        if (saved && cboCesados) {
+            const cesados = String(saved.cesados || 'T').trim().toUpperCase();
+            if (['T', 'Y', 'N'].includes(cesados) && optionExists(cboCesados, cesados)) {
+                cboCesados.value = cesados;
+            }
         }
     }
 

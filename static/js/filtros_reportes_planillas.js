@@ -200,7 +200,7 @@
         };
     }
 
-    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso) {
+    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso, incluyeUnidad) {
         function guardar() {
             try {
                 const estado = {
@@ -220,6 +220,9 @@
                     estado.fechaIngresoActivo = !!document.getElementById('chkFechaIngreso')?.checked;
                     estado.fechaIngresoDesde = val('txtFechaIngresoDesde');
                     estado.fechaIngresoHasta = val('txtFechaIngresoHasta');
+                }
+                if (incluyeUnidad) {
+                    estado.repunit = val('cboUnidad') || '0';
                 }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
@@ -245,7 +248,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes, cargarTrabajadores } = opts;
+            const { poblarSelect, poblarBancosHaberes, cargarTrabajadores, cargarUnidades } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -258,6 +261,19 @@
             const cia = String(filtros.cia).trim();
             if (!optionExists(cboCia, cia)) return false;
             cboCia.value = cia;
+
+            if (incluyeUnidad && typeof cargarUnidades === 'function') {
+                await cargarUnidades();
+                const cboUnidad = document.getElementById('cboUnidad');
+                if (cboUnidad) {
+                    const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                    if (repunit && optionExists(cboUnidad, repunit)) {
+                        cboUnidad.value = repunit;
+                    } else if (optionExists(cboUnidad, '0')) {
+                        cboUnidad.value = '0';
+                    }
+                }
+            }
 
             async function cargarEmpleadoSelect() {
                 if (!incluyeEmpleado) return;
@@ -356,6 +372,10 @@
                     if (el) el.addEventListener('change', guardar);
                 });
             }
+            if (incluyeUnidad) {
+                const u = document.getElementById('cboUnidad');
+                if (u) u.addEventListener('change', guardar);
+            }
         }
 
         return {
@@ -367,7 +387,7 @@
         };
     }
 
-    function crearPersistenciaReporteConsolidada(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso) {
+    function crearPersistenciaReporteConsolidada(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso, incluyeUnidad) {
         function guardar() {
             try {
                 const estado = {
@@ -386,6 +406,9 @@
                     estado.fechaIngresoActivo = !!document.getElementById('chkFechaIngreso')?.checked;
                     estado.fechaIngresoDesde = val('txtFechaIngresoDesde');
                     estado.fechaIngresoHasta = val('txtFechaIngresoHasta');
+                }
+                if (incluyeUnidad) {
+                    estado.repunit = val('cboUnidad') || '0';
                 }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
@@ -408,7 +431,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes } = opts;
+            const { poblarSelect, poblarBancosHaberes, cargarUnidades } = opts;
             const filtros = leer();
             if (!filtros) return false;
 
@@ -416,6 +439,19 @@
             const cboProc = document.getElementById('cboProceso');
             const cboPer = document.getElementById('cboPeriodo');
             if (!cboPt || !cboProc || !cboPer) return false;
+
+            if (incluyeUnidad && typeof cargarUnidades === 'function') {
+                await cargarUnidades();
+                const cboUnidad = document.getElementById('cboUnidad');
+                if (cboUnidad) {
+                    const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                    if (repunit && optionExists(cboUnidad, repunit)) {
+                        cboUnidad.value = repunit;
+                    } else if (optionExists(cboUnidad, '0')) {
+                        cboUnidad.value = '0';
+                    }
+                }
+            }
 
             await poblarSelect('/api/selectores/planillas-consolidada', cboPt);
 
@@ -503,6 +539,10 @@
                     const el = document.getElementById(id);
                     if (el) el.addEventListener('change', guardar);
                 });
+            }
+            if (incluyeUnidad) {
+                const u = document.getElementById('cboUnidad');
+                if (u) u.addEventListener('change', guardar);
             }
         }
 
@@ -1753,9 +1793,7 @@
                     estadoFiltro: val('cboEstado') || 'A',
                     cesados: val('cboCesados') || 'T',
                     salarybank: val('cboBancoHaberes') || '0',
-                    fechaIngresoActivo: !!document.getElementById('chkFechaIngreso')?.checked,
-                    fechaIngresoDesde: val('txtFechaIngresoDesde'),
-                    fechaIngresoHasta: val('txtFechaIngresoHasta'),
+                    repunit: val('cboUnidad') || '0',
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY_TRABAJADORES, JSON.stringify(estado));
@@ -1779,7 +1817,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes } = opts;
+            const { poblarSelect, poblarBancosHaberes, cargarUnidades } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -1790,6 +1828,19 @@
             const cia = String(filtros.cia).trim();
             if (!optionExists(cboCia, cia)) return false;
             cboCia.value = cia;
+
+            if (typeof cargarUnidades === 'function') {
+                await cargarUnidades();
+                const cboUnidad = document.getElementById('cboUnidad');
+                if (cboUnidad) {
+                    const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                    if (repunit && optionExists(cboUnidad, repunit)) {
+                        cboUnidad.value = repunit;
+                    } else if (optionExists(cboUnidad, '0')) {
+                        cboUnidad.value = '0';
+                    }
+                }
+            }
 
             if (typeof poblarBancosHaberes === 'function') {
                 await poblarBancosHaberes(cia);
@@ -1862,32 +1913,12 @@
                 txtDni.value = String(filtros.docnro);
             }
 
-            const chkFechaIngreso = document.getElementById('chkFechaIngreso');
-            const txtFechaIngresoDesde = document.getElementById('txtFechaIngresoDesde');
-            const txtFechaIngresoHasta = document.getElementById('txtFechaIngresoHasta');
-            const usarRango = filtros.fechaIngresoActivo === true;
-            if (chkFechaIngreso) {
-                chkFechaIngreso.checked = usarRango;
-            }
-            if (txtFechaIngresoDesde) {
-                txtFechaIngresoDesde.disabled = !usarRango;
-                txtFechaIngresoDesde.value = usarRango && filtros.fechaIngresoDesde
-                    ? String(filtros.fechaIngresoDesde).trim()
-                    : '';
-            }
-            if (txtFechaIngresoHasta) {
-                txtFechaIngresoHasta.disabled = !usarRango;
-                txtFechaIngresoHasta.value = usarRango && filtros.fechaIngresoHasta
-                    ? String(filtros.fechaIngresoHasta).trim()
-                    : '';
-            }
-
             guardar();
             return true;
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes', 'chkFechaIngreso', 'txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes', 'cboUnidad'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });
@@ -2810,10 +2841,10 @@
             return crearPersistenciaReporte(STORAGE_KEY_PROMEDIO_LIQ, true);
         },
         planillaVertical: function () {
-            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true);
+            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true, true);
         },
         planillaConsolidada: function () {
-            return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true);
+            return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true, true);
         },
         vacacionesDetalle: function () {
             return crearPersistenciaVacacionesDetalle();

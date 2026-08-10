@@ -383,20 +383,26 @@
 {% block content %}
 <div class="card shadow-sm border-0 mb-3">
     <div class="card-body py-3">
-        <form id="frmFiltrosContratos" class="row g-2 align-items-end">
-            <div class="col-12 col-md-4 col-lg-3">
+        <form id="frmFiltrosContratos" class="row g-2 align-items-end flex-nowrap flex-lg-nowrap overflow-auto">
+            <div class="col-auto" style="min-width: 11rem; flex: 1 1 11rem;">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-3">
+            <div class="col-auto" style="min-width: 10rem; flex: 1 1 10rem;">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted mb-1">Tipo planilla <span class="fw-normal opacity-75">(opcional)</span></label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
                     <option value="0">Todos</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
+            <div class="col-auto" style="min-width: 9rem; flex: 1 1 9rem;">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted mb-1">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-auto" style="width: 5.25rem; flex: 0 0 5.25rem;">
                 <label for="cboCesados" class="form-label small fw-bold text-muted mb-1">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
                     <option value="T">Todos</option>
@@ -404,8 +410,8 @@
                     <option value="N" selected>No</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
-                <button type="submit" class="btn btn-primary btn-sm px-4">
+            <div class="col-auto flex-shrink-0">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
                     <i class="bi bi-search"></i> Consultar
                 </button>
             </div>
@@ -541,6 +547,7 @@
     const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
     const cboCia = document.getElementById('cboCompania');
     const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboUnidad = document.getElementById('cboUnidad');
     const cboCesados = document.getElementById('cboCesados');
     const frmFiltros = document.getElementById('frmFiltrosContratos');
     const txtBuscar = document.getElementById('txtBuscarTrabajador');
@@ -872,13 +879,14 @@
         }
         const payrolltype = cboPt.value.trim() || '0';
         const cesados = String(cboCesados.value || 'N').trim().toUpperCase();
+        const repunit = String(cboUnidad?.value || '0').trim() || '0';
         tbodyTrab.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Cargando...</td></tr>';
         mostrarPlaceholder();
         try {
             const res = await fetch('/api/contratos/trabajadores', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payrolltype, cesados, busqueda: '' }),
+                body: JSON.stringify({ cia, payrolltype, cesados, repunit, busqueda: '' }),
             });
             const data = await res.json();
             if (!res.ok) {
@@ -1206,9 +1214,37 @@
         }
     });
 
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim();
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            const ok = Array.from(cboUnidad.options).some((o) => String(o.value).trim() === prev);
+            cboUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
+        }
+    }
+
     (async function init() {
         registrarObservadorAlturaGrilla();
         programarAjusteAlturaGrilla();
+        await cargarUnidades();
         await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
         if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
         if (cboCia.value) {

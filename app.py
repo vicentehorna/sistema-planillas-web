@@ -18848,7 +18848,7 @@ def api_periodos_asig():
 @app.route('/api/trabajadores/listado', methods=['POST'])
 @login_required
 def api_trabajadores_listado():
-    """sp_pr_listatrabajadores_web: listado con filtros incl. rango fecha de ingreso."""
+    """sp_pr_listatrabajadores_web: listado con filtros incl. unidad (repunit)."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
@@ -18858,15 +18858,10 @@ def api_trabajadores_listado():
     estado = _normalize_estado_trabajador(body.get('estado'))
     salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
-    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
-    if fecha_ingreso_all == 'N':
-        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
-            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
-        if fecha_ingreso_desde > fecha_ingreso_hasta:
-            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
 
     headers_es = [
         'Tipo planilla',
@@ -18888,15 +18883,13 @@ def api_trabajadores_listado():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
-        fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
         cursor.execute(
             "EXEC sp_pr_listatrabajadores_web "
             "@cia=?, @payrolltype=?, @person=?, @docnro=?, @nombre=?, @estado=?, "
-            "@salarybank=?, @cesados=?, @fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?",
+            "@salarybank=?, @cesados=?, @repunit=?",
             (
                 cia, payrolltype, person, docnro, nombre, estado, salarybank, cesados,
-                fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
+                repunit,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -19340,6 +19333,7 @@ def _fetch_planilla_vertical_for_company(
     fecha_ingreso_all,
     fecha_ingreso_desde,
     fecha_ingreso_hasta,
+    repunit='0',
 ):
     """
     Ejecuta sp_pr_reporteplamevertical_web para una compañía y devuelve
@@ -19348,13 +19342,14 @@ def _fetch_planilla_vertical_for_company(
     """
     fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
     fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
+    repunit_val = _normalize_replicationunit_asig(repunit)
     cursor.execute(
         "EXEC sp_pr_reporteplamevertical_web "
         "@cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?, "
-        "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?",
+        "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @repunit=?",
         (
             cia, payroll_type, process, period, person, salarybank,
-            fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
+            fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql, repunit_val,
         ),
     )
     _drain_all_cursor_resultsets(cursor)
@@ -19593,6 +19588,7 @@ def reporte_planilla_vertical_post():
     person = (body.get('person') or '0').strip() or '0'
     salarybank = str(body.get('salarybank') if body.get('salarybank') is not None else body.get('salary_bank') or '').strip()
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -19611,6 +19607,7 @@ def reporte_planilla_vertical_post():
         concept_headers, _, filas_dict = _fetch_planilla_vertical_for_company(
             cursor, cia, payroll_type, process, period, person, salarybank,
             fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta,
+            repunit=repunit,
         )
         headers = list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES) + concept_headers
         resultado = _planilla_vertical_rows_to_matrix(filas_dict, concept_headers)
@@ -19657,6 +19654,7 @@ def reporte_planilla_consolidada_post():
         or ''
     ).strip()
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     if not payroll_desc or not proceso_desc or not period:
         return jsonify({"error": "Debe indicar tipo de planilla, proceso y periodo."}), 400
@@ -19690,6 +19688,7 @@ def reporte_planilla_consolidada_post():
             _, concept_reporden, filas_dict = _fetch_planilla_vertical_for_company(
                 cursor, cia_code, payroll_type, process_type, period, person, salarybank,
                 fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta,
+                repunit=repunit,
             )
             if not filas_dict:
                 continue
@@ -20358,6 +20357,7 @@ def api_contratos_trabajadores():
     # Por defecto N = solo activos.
     cesados = str(body.get('cesados') or body.get('status') or 'N').strip().upper() or 'N'
     busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -20404,6 +20404,7 @@ def api_contratos_trabajadores():
                     OR (? = 'N' AND e.Status = 'N')
                     OR (? = 'Y' AND e.Status = 'Y')
               )
+              AND (? = '0' OR p.ReplicationUnit = ?)
               AND (
                     ? = ''
                     OR e.Person LIKE '%' + ? + '%'
@@ -20421,6 +20422,7 @@ def api_contratos_trabajadores():
                 cia,
                 payrolltype, payrolltype,
                 cesados, cesados, cesados,
+                repunit, repunit,
                 busqueda, busqueda, busqueda, busqueda,
             ),
         )

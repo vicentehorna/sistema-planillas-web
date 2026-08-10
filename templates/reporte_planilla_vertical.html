@@ -152,6 +152,12 @@
                     <option value="" selected>Todos</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
             <div class="col-12 col-md-auto filtro-fecha-ingreso">
                 <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
                 <div class="d-flex align-items-center flex-wrap gap-1">
@@ -593,6 +599,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
         const salarybank = document.getElementById('cboBancoHaberes').value.trim();
+        const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
         const fechaIngreso = leerFiltroFechaIngreso();
         if (fechaIngreso.activo) {
             if (!fechaIngreso.desde || !fechaIngreso.hasta) {
@@ -616,6 +623,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     period,
                     person,
                     salarybank,
+                    repunit,
                     fecha_ingreso_activo: fechaIngreso.activo,
                     fecha_ingreso_desde: fechaIngreso.desde,
                     fecha_ingreso_hasta: fechaIngreso.hasta
@@ -706,6 +714,34 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     };
 
+    async function cargarUnidades() {
+        const cboUnidad = document.getElementById('cboUnidad');
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim();
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            const ok = Array.from(cboUnidad.options).some((o) => String(o.value).trim() === prev);
+            cboUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
+        }
+    }
+
     async function poblarBancosHaberes(cia) {
         const cboBanco = document.getElementById('cboBancoHaberes');
         if (!cboBanco) return;
@@ -728,11 +764,12 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
+    await cargarUnidades();
 
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes });
+        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes, cargarUnidades });
         etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
     }
 

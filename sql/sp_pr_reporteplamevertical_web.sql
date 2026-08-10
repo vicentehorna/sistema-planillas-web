@@ -18,6 +18,7 @@
       @fecha_ingreso_all   — Y = todas las fechas, N = filtrar por rango
       @fecha_ingreso_desde — YYYY-MM-DD (fecha efectiva ISNULL(ReEntryDate, EntryDate))
       @fecha_ingreso_hasta — YYYY-MM-DD
+      @repunit     — unidad (ReplicationUnit); '0' = todas
 
     Resultado final: una fila por trabajador con columnas fijas + concept01..concept65.
 
@@ -39,7 +40,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @salarybank  VARCHAR(20),
     @fecha_ingreso_all    CHAR(1)     = 'Y',
     @fecha_ingreso_desde  VARCHAR(10) = '',
-    @fecha_ingreso_hasta  VARCHAR(10) = ''
+    @fecha_ingreso_hasta  VARCHAR(10) = '',
+    @repunit              VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -48,6 +50,7 @@ BEGIN
     IF @fecha_ingreso_all NOT IN ('Y', 'N') SET @fecha_ingreso_all = 'Y';
     SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
     SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
     DECLARE @fd DATE = NULL;
     DECLARE @fh DATE = NULL;
@@ -132,6 +135,7 @@ BEGIN
       AND EPC.ProcessType = @process
       AND (@salarybank = '' OR E.SalaryBank = @salarybank)
       AND (@person = '0' OR SY_PERSON.person = @person)
+      AND (@repunit = '0' OR SY_PERSON.ReplicationUnit = @repunit)
       AND (
             @fecha_ingreso_all = 'Y'
          OR (

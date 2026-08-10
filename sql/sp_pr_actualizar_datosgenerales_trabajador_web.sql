@@ -16,6 +16,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datosgenerales_trabajador_web]
     @email                  VARCHAR(255) = NULL,
     @address                VARCHAR(255) = NULL,
     @nacionalidad           VARCHAR(100) = NULL,
+    @localite               VARCHAR(20) = NULL,
     @employeedocumenttype   VARCHAR(20),
     @documentnumber         VARCHAR(15),
     @replicationunit        VARCHAR(4),
@@ -28,6 +29,10 @@ BEGIN
     DECLARE @nombre_completo VARCHAR(100);
     DECLARE @userid_norm     VARCHAR(20);
     DECLARE @birthdate_dt    DATETIME;
+    DECLARE @localite_norm   VARCHAR(20);
+    DECLARE @province_id     VARCHAR(20);
+    DECLARE @department_id   VARCHAR(20);
+    DECLARE @country_id      VARCHAR(20);
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
@@ -41,7 +46,11 @@ BEGIN
     SET @email = NULLIF(LTRIM(RTRIM(ISNULL(@email, ''))), '');
     SET @address = NULLIF(LTRIM(RTRIM(ISNULL(@address, ''))), '');
     SET @nacionalidad = NULLIF(LTRIM(RTRIM(ISNULL(@nacionalidad, ''))), '');
+    SET @localite_norm = NULLIF(LTRIM(RTRIM(ISNULL(@localite, ''))), '');
     SET @employeedocumenttype = LTRIM(RTRIM(ISNULL(@employeedocumenttype, '')));
+    SET @province_id = NULL;
+    SET @department_id = NULL;
+    SET @country_id = NULL;
     SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
     SET @userid_norm = NULLIF(LOWER(LTRIM(RTRIM(ISNULL(@userid, '')))), '');
@@ -166,6 +175,29 @@ BEGIN
         END;
     END;
 
+    IF @localite_norm IS NOT NULL
+    BEGIN
+        SELECT
+            @province_id = LTRIM(RTRIM(l.Province)),
+            @department_id = LTRIM(RTRIM(p.Department)),
+            @country_id = LTRIM(RTRIM(d.Country))
+        FROM SY_Localite l (NOLOCK)
+            INNER JOIN SY_Province p (NOLOCK)
+                ON p.Province = l.Province
+            INNER JOIN SY_Department d (NOLOCK)
+                ON d.Department = p.Department
+            INNER JOIN SY_Country c (NOLOCK)
+                ON c.Country = d.Country
+        WHERE l.Localite = @localite_norm
+          AND UPPER(LTRIM(RTRIM(ISNULL(c.Name, '')))) = 'PERU';
+
+        IF @province_id IS NULL
+        BEGIN
+            RAISERROR('Ubigeo / distrito no válido.', 16, 1);
+            RETURN;
+        END;
+    END;
+
     SET @nombre_completo = UPPER(LTRIM(RTRIM(
         ISNULL(@lastname1, '') + ' ' +
         ISNULL(@lastname2, '') + ' ' +
@@ -188,6 +220,10 @@ BEGIN
         email = @email,
         address = @address,
         nacionalidad = @nacionalidad,
+        localite = @localite_norm,
+        province = @province_id,
+        department = @department_id,
+        country = @country_id,
         employeedocumenttype = @employeedocumenttype,
         documenttype = @employeedocumenttype,
         documentnumber = @documentnumber,

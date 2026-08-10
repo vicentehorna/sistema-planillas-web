@@ -5570,6 +5570,7 @@ def _empleado_generales_desde_form(form):
         'email': str(form.get('email') or '').strip()[:255],
         'address': str(form.get('address') or '').strip()[:255],
         'nacionalidad': str(form.get('nacionalidad') or '').strip()[:100],
+        'localite': str(form.get('localite') or '').strip()[:20],
         'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
         'documentnumber': str(form.get('documentnumber') or '').strip()[:15],
         'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
@@ -5860,7 +5861,7 @@ def trabajadores_editar(person_id):
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
                 '@birthdate=?, @sex=?, '
-                '@sectelephone=?, @email=?, @address=?, @nacionalidad=?, '
+                '@sectelephone=?, @email=?, @address=?, @nacionalidad=?, @localite=?, '
                 '@employeedocumenttype=?, @documentnumber=?, '
                 '@replicationunit=?, @userid=?, @xlastuser=?',
                 (
@@ -5876,6 +5877,7 @@ def trabajadores_editar(person_id):
                     datos['email'] or None,
                     datos['address'] or None,
                     datos['nacionalidad'] or None,
+                    datos['localite'] or None,
                     datos['employeedocumenttype'],
                     datos['documentnumber'],
                     datos['replicationunit'],
@@ -6178,6 +6180,12 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'email': '',
         'address': '',
         'nacionalidad': 'PERUANA',
+        'localite': '',
+        'ubigeo_texto': '',
+        'distrito': '',
+        'provincia': '',
+        'departamento': '',
+        'ubigeo': '',
         'employeedocumenttype': dni_id,
         'documentnumber': '',
         'replicationunit': unidad_default,
@@ -6348,7 +6356,7 @@ def trabajadores_nuevo():
                 DECLARE @mensaje_out VARCHAR(500);
                 EXEC sp_pr_registrar_trabajador_web
                     @cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?,
-                    @birthdate=?, @sex=?, @sectelephone=?, @email=?, @address=?, @nacionalidad=?,
+                    @birthdate=?, @sex=?, @sectelephone=?, @email=?, @address=?, @nacionalidad=?, @localite=?,
                     @employeedocumenttype=?, @documentnumber=?, @replicationunit=?, @userid=?,
                     @employeetype=?, @employeecategory=?, @entrydate=?,
                     @contractmodality=?, @ocupation=?, @specialstatus=?, @position=?,
@@ -6375,6 +6383,7 @@ def trabajadores_nuevo():
                     generales['email'] or None,
                     generales['address'] or None,
                     generales['nacionalidad'] or None,
+                    generales['localite'] or None,
                     generales['employeedocumenttype'],
                     generales['documentnumber'],
                     generales['replicationunit'],
@@ -18024,6 +18033,52 @@ def api_tipos_documento_persona():
         return jsonify(items)
     except Exception:
         logging.exception("api_tipos_documento_persona")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/ubigeo')
+@login_required
+def api_selectores_ubigeo():
+    """sp_pr_selectorubigeo_web → distritos Perú (departamento / provincia / distrito)."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    busqueda = str(request.args.get('q') or request.args.get('busqueda') or '').strip()
+    try:
+        top = int(request.args.get('top') or 40)
+    except (TypeError, ValueError):
+        top = 40
+    top = max(1, min(top, 100))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorubigeo_web @cia=?, @busqueda=?, @top=?",
+            (cia or None, busqueda, top),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        items = []
+        for r in rows:
+            item_id = str(r.get('id') or '').strip()
+            if not item_id:
+                continue
+            items.append({
+                'id': item_id,
+                'text': str(r.get('text') or item_id).strip(),
+                'distrito': _jsonable_value(r.get('distrito')),
+                'provincia': _jsonable_value(r.get('provincia')),
+                'departamento': _jsonable_value(r.get('departamento')),
+                'ubigeo': _jsonable_value(r.get('ubigeo')),
+            })
+        return jsonify(items)
+    except Exception:
+        logging.exception("api_selectores_ubigeo")
         return jsonify([])
     finally:
         if conn:

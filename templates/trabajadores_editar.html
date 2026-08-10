@@ -235,6 +235,50 @@
         box-shadow: none !important;
     }
 
+    .te-ubigeo-wrap {
+        position: relative;
+    }
+
+    .te-ubigeo-lista {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 2px);
+        z-index: 1080;
+        max-height: 14rem;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
+        box-shadow: 0 4px 12px rgba(26, 75, 132, 0.12);
+    }
+
+    .te-ubigeo-lista .list-group-item {
+        border: 0;
+        border-bottom: 1px solid #eef2f7;
+        padding: 0.4rem 0.65rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        color: #495057;
+    }
+
+    .te-ubigeo-lista .list-group-item:last-child {
+        border-bottom: 0;
+    }
+
+    .te-ubigeo-lista .list-group-item:hover,
+    .te-ubigeo-lista .list-group-item.active {
+        background: #e7f1ff;
+        color: #1a4b84;
+    }
+
+    .te-ubigeo-hint {
+        font-size: 0.72rem;
+        color: #6c757d;
+        margin-top: 0.2rem;
+        min-height: 1rem;
+    }
+
     @media (max-width: 991.98px) {
         .te-page {
             height: auto;
@@ -353,10 +397,33 @@
                             <input type="email" id="txtEmail" name="email" class="form-control form-control-sm"
                                    maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off">
                         </div>
-                        <div class="col-md-8">
+                        <div class="col-md-6">
                             <label for="txtAddress" class="form-label small fw-bold text-muted">Dirección</label>
                             <input type="text" id="txtAddress" name="address" class="form-control form-control-sm"
                                    maxlength="255" value="{{ empleado.address or '' }}" autocomplete="off">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="txtUbigeo" class="form-label small fw-bold text-muted">Ubigeo / Distrito</label>
+                            <div class="te-ubigeo-wrap">
+                                <input type="hidden" id="hidLocalite" name="localite" value="{{ empleado.localite or '' }}">
+                                <div class="input-group input-group-sm">
+                                    <input type="search" id="txtUbigeo" class="form-control form-control-sm"
+                                           placeholder="Buscar distrito, provincia o departamento..."
+                                           value="{{ empleado.ubigeo_texto or '' }}"
+                                           autocomplete="off" spellcheck="false">
+                                    <button type="button" class="btn btn-outline-secondary" id="btnLimpiarUbigeo" title="Limpiar ubigeo">
+                                        <i class="bi bi-x-lg"></i>
+                                    </button>
+                                </div>
+                                <div id="listaUbigeo" class="list-group te-ubigeo-lista d-none" role="listbox"></div>
+                            </div>
+                            <div class="te-ubigeo-hint" id="lblUbigeoHint">
+                                {% if empleado.distrito %}
+                                    {{ empleado.departamento or '' }}{% if empleado.departamento and empleado.provincia %} · {% endif %}{{ empleado.provincia or '' }}{% if empleado.ubigeo %} · {{ empleado.ubigeo }}{% endif %}
+                                {% else %}
+                                    País: Perú. Escriba para buscar el distrito.
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="col-md-4">
                             <label for="txtNacionalidad" class="form-label small fw-bold text-muted">Nacionalidad</label>
@@ -1088,6 +1155,171 @@ document.addEventListener('DOMContentLoaded', function () {
         if (destino) destino.value = partes.join(' ');
     }
 
+    function wireUbigeo() {
+        const txt = document.getElementById('txtUbigeo');
+        const hid = document.getElementById('hidLocalite');
+        const lista = document.getElementById('listaUbigeo');
+        const hint = document.getElementById('lblUbigeoHint');
+        const btnClear = document.getElementById('btnLimpiarUbigeo');
+        if (!txt || !hid || !lista) return;
+
+        const ciaActual = {{ (cia or '') | tojson }};
+        let timer = null;
+        let items = [];
+        let idxActivo = -1;
+        let seleccionTexto = (txt.value || '').trim();
+
+        function escHtml(s) {
+            return String(s ?? '')
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;');
+        }
+
+        function actualizarHint(item) {
+            if (!hint) return;
+            if (!item) {
+                hint.textContent = 'País: Perú. Escriba para buscar el distrito.';
+                return;
+            }
+            const partes = [item.departamento, item.provincia, item.ubigeo].filter(Boolean);
+            hint.textContent = partes.join(' · ');
+        }
+
+        function cerrarLista() {
+            lista.classList.add('d-none');
+            lista.innerHTML = '';
+            idxActivo = -1;
+        }
+
+        function aplicarSeleccion(item) {
+            if (!item) return;
+            hid.value = item.id || '';
+            seleccionTexto = item.text || '';
+            txt.value = seleccionTexto;
+            actualizarHint(item);
+            cerrarLista();
+        }
+
+        function limpiarSeleccion() {
+            hid.value = '';
+            seleccionTexto = '';
+            txt.value = '';
+            actualizarHint(null);
+            cerrarLista();
+            txt.focus();
+        }
+
+        function renderLista(rows) {
+            items = Array.isArray(rows) ? rows : [];
+            idxActivo = items.length ? 0 : -1;
+            if (!items.length) {
+                lista.innerHTML = '<div class="list-group-item text-muted">Sin coincidencias</div>';
+                lista.classList.remove('d-none');
+                return;
+            }
+            lista.innerHTML = items.map((it, i) => {
+                const ubigeo = it.ubigeo ? ` <span class="text-muted">(${escHtml(it.ubigeo)})</span>` : '';
+                return `<button type="button" class="list-group-item list-group-item-action ${i === 0 ? 'active' : ''}" data-idx="${i}" role="option">${escHtml(it.text)}${ubigeo}</button>`;
+            }).join('');
+            lista.classList.remove('d-none');
+            lista.querySelectorAll('[data-idx]').forEach((btn) => {
+                btn.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    const idx = Number(this.getAttribute('data-idx'));
+                    aplicarSeleccion(items[idx]);
+                });
+            });
+        }
+
+        function marcarActivo(idx) {
+            const botones = lista.querySelectorAll('[data-idx]');
+            if (!botones.length) return;
+            idx = Math.max(0, Math.min(idx, botones.length - 1));
+            idxActivo = idx;
+            botones.forEach((b, i) => b.classList.toggle('active', i === idx));
+            botones[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        async function buscar(q) {
+            const query = String(q || '').trim();
+            if (query.length < 2) {
+                cerrarLista();
+                return;
+            }
+            try {
+                const url = `/api/selectores/ubigeo?cia=${encodeURIComponent(ciaActual)}&q=${encodeURIComponent(query)}&top=40`;
+                const res = await fetch(url);
+                const data = await res.json();
+                renderLista(Array.isArray(data) ? data : []);
+            } catch (err) {
+                console.error(err);
+                lista.innerHTML = '<div class="list-group-item text-danger">Error al buscar ubigeo</div>';
+                lista.classList.remove('d-none');
+            }
+        }
+
+        txt.addEventListener('input', function () {
+            const val = (this.value || '').trim();
+            if (hid.value && val !== seleccionTexto) {
+                hid.value = '';
+                actualizarHint(null);
+            }
+            clearTimeout(timer);
+            timer = setTimeout(() => buscar(val), 250);
+        });
+
+        txt.addEventListener('keydown', function (e) {
+            if (lista.classList.contains('d-none')) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                marcarActivo(idxActivo < 0 ? 0 : idxActivo + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                marcarActivo(idxActivo < 0 ? 0 : idxActivo - 1);
+            } else if (e.key === 'Enter' && idxActivo >= 0 && items[idxActivo]) {
+                e.preventDefault();
+                aplicarSeleccion(items[idxActivo]);
+            } else if (e.key === 'Escape') {
+                cerrarLista();
+            }
+        });
+
+        txt.addEventListener('blur', function () {
+            setTimeout(() => {
+                cerrarLista();
+                if (!hid.value) {
+                    // Si no hay selección válida, limpia el texto libre
+                    if ((txt.value || '').trim() && (txt.value || '').trim() !== seleccionTexto) {
+                        txt.value = '';
+                    }
+                } else {
+                    txt.value = seleccionTexto;
+                }
+            }, 150);
+        });
+
+        if (btnClear) {
+            btnClear.addEventListener('click', function (e) {
+                e.preventDefault();
+                limpiarSeleccion();
+            });
+        }
+
+        const ubigeoInicial = {{ {
+            'departamento': empleado.departamento or '',
+            'provincia': empleado.provincia or '',
+            'ubigeo': empleado.ubigeo or '',
+            'distrito': empleado.distrito or '',
+            'text': empleado.ubigeo_texto or ''
+        } | tojson }};
+        if (hid.value && ubigeoInicial && ubigeoInicial.text) {
+            seleccionTexto = ubigeoInicial.text;
+            actualizarHint(ubigeoInicial);
+        }
+    }
+
     function wireGenerales() {
         ['txtName1', 'txtName2', 'txtLastName1', 'txtLastName2'].forEach((id) => {
             normalizarMayusculas(document.getElementById(id));
@@ -1095,6 +1327,7 @@ document.addEventListener('DOMContentLoaded', function () {
             if (el) el.addEventListener('input', calcularNombreCompleto);
         });
         calcularNombreCompleto();
+        wireUbigeo();
 
         if (modoNuevo) {
             const txtPerson = document.getElementById('txtPerson');

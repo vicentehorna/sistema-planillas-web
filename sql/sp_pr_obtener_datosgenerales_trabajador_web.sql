@@ -26,6 +26,20 @@ BEGIN
         LTRIM(RTRIM(ISNULL(sp.sectelephone, ''))) AS sectelephone,
         LTRIM(RTRIM(ISNULL(sp.email, ''))) AS email,
         LTRIM(RTRIM(ISNULL(sp.address, ''))) AS address,
+        LTRIM(RTRIM(ISNULL(sp.localite, ''))) AS localite,
+        LTRIM(RTRIM(ISNULL(loc.name, ''))) AS distrito,
+        LTRIM(RTRIM(ISNULL(prov.name, ''))) AS provincia,
+        LTRIM(RTRIM(ISNULL(depto.name, ''))) AS departamento,
+        LTRIM(RTRIM(ISNULL(loc.pdt, ''))) AS ubigeo,
+        LTRIM(RTRIM(
+            CASE
+                WHEN NULLIF(LTRIM(RTRIM(ISNULL(loc.name, ''))), '') IS NULL THEN ''
+                ELSE
+                    ISNULL(depto.name, '') + ' / ' +
+                    ISNULL(prov.name, '') + ' / ' +
+                    ISNULL(loc.name, '')
+            END
+        )) AS ubigeo_texto,
         LTRIM(RTRIM(ISNULL(sp.nacionalidad, ''))) AS nacionalidad,
         LTRIM(RTRIM(ISNULL(
             COALESCE(
@@ -109,6 +123,12 @@ BEGIN
            AND dt.company = e.company
         LEFT JOIN sy_replicationunit ru (NOLOCK)
             ON ru.replicationunit = sp.replicationunit
+        LEFT JOIN sy_localite loc (NOLOCK)
+            ON loc.localite = sp.localite
+        LEFT JOIN sy_province prov (NOLOCK)
+            ON prov.province = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(sp.province, ''))), ''), loc.province)
+        LEFT JOIN sy_department depto (NOLOCK)
+            ON depto.department = ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(sp.department, ''))), ''), prov.department)
     WHERE e.company = @cia
       AND e.person = @person;
 END

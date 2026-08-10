@@ -1,0 +1,63 @@
+/*
+    Selector de ubigeo (distritos de Perú) para ficha del trabajador.
+    Usado por: GET /api/selectores/ubigeo
+
+    @cia      — opcional (filtra SY_Localite.Company si tiene valor).
+    @busqueda — nombre distrito/provincia/departamento o código PDT.
+    @top      — máximo de filas (default 40).
+*/
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorubigeo_web]
+    @cia      VARCHAR(10)  = NULL,
+    @busqueda VARCHAR(100) = '',
+    @top      INT          = 40
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    SET @cia = NULLIF(LTRIM(RTRIM(ISNULL(@cia, ''))), '');
+    SET @busqueda = LTRIM(RTRIM(ISNULL(@busqueda, '')));
+    IF ISNULL(@top, 0) <= 0 SET @top = 40;
+    IF @top > 100 SET @top = 100;
+
+    SELECT TOP (@top)
+        LTRIM(RTRIM(l.Localite)) AS id,
+        LTRIM(RTRIM(
+            ISNULL(d.Name, '') + ' / ' +
+            ISNULL(p.Name, '') + ' / ' +
+            ISNULL(l.Name, '')
+        )) AS text,
+        LTRIM(RTRIM(ISNULL(l.Name, ''))) AS distrito,
+        LTRIM(RTRIM(ISNULL(p.Name, ''))) AS provincia,
+        LTRIM(RTRIM(ISNULL(d.Name, ''))) AS departamento,
+        LTRIM(RTRIM(ISNULL(l.pdt, ''))) AS ubigeo,
+        LTRIM(RTRIM(ISNULL(l.Province, ''))) AS province,
+        LTRIM(RTRIM(ISNULL(p.Department, ''))) AS department,
+        LTRIM(RTRIM(ISNULL(d.Country, ''))) AS country
+    FROM SY_Localite l (NOLOCK)
+        INNER JOIN SY_Province p (NOLOCK)
+            ON p.Province = l.Province
+        INNER JOIN SY_Department d (NOLOCK)
+            ON d.Department = p.Department
+        INNER JOIN SY_Country c (NOLOCK)
+            ON c.Country = d.Country
+    WHERE UPPER(LTRIM(RTRIM(ISNULL(c.Name, '')))) = 'PERU'
+      AND (
+            @cia IS NULL
+         OR LTRIM(RTRIM(ISNULL(l.Company, ''))) = ''
+         OR l.Company = @cia
+      )
+      AND (
+            @busqueda = ''
+         OR l.Name LIKE '%' + @busqueda + '%'
+         OR p.Name LIKE '%' + @busqueda + '%'
+         OR d.Name LIKE '%' + @busqueda + '%'
+         OR LTRIM(RTRIM(ISNULL(l.pdt, ''))) LIKE @busqueda + '%'
+         OR (
+                ISNULL(d.Name, '') + ' / ' +
+                ISNULL(p.Name, '') + ' / ' +
+                ISNULL(l.Name, '')
+            ) LIKE '%' + @busqueda + '%'
+      )
+    ORDER BY d.Name, p.Name, l.Name;
+END
+GO

@@ -14,41 +14,14 @@
             line-height: 1.55;
         }
         .documento {
-            border: 1px solid #1a4b84;
+            border: none;
             padding: 18px 22px 24px;
             min-height: 255mm;
             box-sizing: border-box;
             position: relative;
         }
-        .encabezado {
-            display: table;
-            width: 100%;
-            margin-bottom: 6px;
-            padding-bottom: 6px;
-        }
-        .encabezado .logo-cell,
-        .encabezado .empresa-cell {
-            display: table-cell;
-            vertical-align: top;
-        }
-        .encabezado .logo-cell { width: 34%; }
-        .encabezado .empresa-cell {
-            width: 66%;
-            text-align: right;
-            font-size: 9px;
-            color: #555;
-            padding-top: 2px;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-        .empresa-nombre {
-            font-size: 11px;
-            font-weight: bold;
-            color: #1a4b84;
-            text-transform: uppercase;
-            margin-bottom: 2px;
-        }
         .cuerpo {
-            padding-top: 20px;
+            padding-top: 0;
         }
         .titulo-principal {
             text-align: center;
@@ -109,15 +82,6 @@
 </head>
 <body>
     <div class="documento">
-        <div class="encabezado">
-            <div class="logo-cell"></div>
-            <div class="empresa-cell">
-                <div class="empresa-nombre">{{ cert.company_name or '' }}</div>
-                <div>RUC: {{ cert.company_ruc or '' }}</div>
-                <div>{{ cert.company_address or '' }}</div>
-            </div>
-        </div>
-
         <div class="cuerpo">
             <div class="titulo-principal">Constancia de Cese</div>
             <div class="bloque-destino">

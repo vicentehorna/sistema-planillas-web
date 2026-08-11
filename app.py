@@ -9266,6 +9266,17 @@ def api_distribucion_porcentual_listado():
 @login_required
 def api_distribucion_porcentual_replicar():
     """sp_pr_replicar_distribucion_voucher_web: si vacío copia periodo anterior; siempre agrega activos faltantes."""
+    # Temporal: en hm_divisa no auto-replicar (solo listar lo existente).
+    from database import get_active_database
+    if str(get_active_database() or '').strip().lower() == 'hm_divisa':
+        return jsonify({
+            "ok": True,
+            "skipped": True,
+            "copiados": 0,
+            "nuevos": 0,
+            "mensaje": "Réplica deshabilitada temporalmente en hm_divisa.",
+        })
+
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()

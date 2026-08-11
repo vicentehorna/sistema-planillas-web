@@ -113,6 +113,8 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = 'BGT';
+    /* Temporal: en hm_divisa no auto-replicar; solo listar lo existente. */
+    const SKIP_REPLICAR_DISTRIBUCION = String({{ (sql_database or '')|tojson }}).toLowerCase() === 'hm_divisa';
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const txtLocalizar = document.getElementById('txtLocalizar');
@@ -293,6 +295,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         msg.textContent = 'Consultando...';
         try {
             let total = await cargarListado(cia, period);
+
+            /* Temporal hm_divisa: no confirmar ni replicar; solo lo que hay en la tabla. */
+            if (SKIP_REPLICAR_DISTRIBUCION) {
+                msg.textContent = '';
+                return;
+            }
 
             if (total === 0) {
                 const ok = await confirmar('Se va a replicar la distribución del periodo pasado');

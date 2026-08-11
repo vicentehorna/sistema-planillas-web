@@ -9221,7 +9221,8 @@ def api_centros_costo_eliminar():
 @app.route('/api/asientos/distribucion-porcentual/listado', methods=['POST'])
 @login_required
 def api_distribucion_porcentual_listado():
-    """sp_pr_listar_distribucion_voucher_web"""
+    """sp_pr_listar_distribucion_voucher_web (OT) o _cc_web (hm_divisa / tipo CC)."""
+    from database import get_active_database
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
@@ -9229,12 +9230,19 @@ def api_distribucion_porcentual_listado():
     if not cia or not period:
         return jsonify({"error": "Seleccione compañía y periodo."}), 400
 
+    es_divisa = str(get_active_database() or '').strip().lower() == 'hm_divisa'
+    sp_listar = (
+        'sp_pr_listar_distribucion_voucher_cc_web'
+        if es_divisa
+        else 'sp_pr_listar_distribucion_voucher_web'
+    )
+
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_listar_distribucion_voucher_web @company=?, @period=?, @busqueda=?",
+            f"EXEC {sp_listar} @company=?, @period=?, @busqueda=?",
             (cia, period, busqueda or None),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -9250,6 +9258,7 @@ def api_distribucion_porcentual_listado():
                 for r in rows
             ],
             "total": len(rows),
+            "modo": "CC" if es_divisa else "OT",
         })
     except Exception as e:
         logging.exception("api_distribucion_porcentual_listado")
@@ -9260,6 +9269,17 @@ def api_distribucion_porcentual_listado():
                 conn.close()
             except Exception:
                 pass
+
+
+@app.route('/api/asientos/distribucion-porcentual/centros-costo')
+@login_required
+def api_distribucion_porcentual_centros_costo():
+    """Selector Abbrev de AC_CostCenter (solo hm_divisa / distribución CC)."""
+    from database import get_active_database
+    if str(get_active_database() or '').strip().lower() != 'hm_divisa':
+        return jsonify([])
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    return jsonify(_api_selector_id_text('sp_pr_selector_cc_abbrev_distribucion_web', cia))
 
 
 @app.route('/api/asientos/distribucion-porcentual/replicar', methods=['POST'])
@@ -9355,7 +9375,8 @@ def api_distribucion_porcentual_replicar():
 @app.route('/api/asientos/distribucion-porcentual/guardar', methods=['POST'])
 @login_required
 def api_distribucion_porcentual_guardar():
-    """sp_pr_guardar_distribucion_voucher_web"""
+    """sp_pr_guardar_distribucion_voucher_web (OT) o _cc_web (hm_divisa)."""
+    from database import get_active_database
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
@@ -9378,12 +9399,19 @@ def api_distribucion_porcentual_guardar():
     if valor < 1 or valor > 100:
         return jsonify({"error": "El valor debe ser un entero entre 1 y 100."}), 400
 
+    es_divisa = str(get_active_database() or '').strip().lower() == 'hm_divisa'
+    sp_guardar = (
+        'sp_pr_guardar_distribucion_voucher_cc_web'
+        if es_divisa
+        else 'sp_pr_guardar_distribucion_voucher_web'
+    )
+
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_guardar_distribucion_voucher_web "
+            f"EXEC {sp_guardar} "
             "@modo=?, @company=?, @period=?, @fila=?, @dni=?, @nombre=?, "
             "@codigo=?, @valor=?, @xlastuser=?",
             (modo, cia, period, fila, dni, nombre, codigo, valor, _xlastuser_id()),

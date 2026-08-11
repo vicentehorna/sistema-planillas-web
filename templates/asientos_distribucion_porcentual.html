@@ -95,7 +95,7 @@
             <tr>
                 <th style="width:8rem; min-width:7rem">DNI</th>
                 <th style="min-width:16rem">Nombres</th>
-                <th style="width:10rem; min-width:8rem">Código</th>
+                <th style="width:10rem; min-width:8rem" id="thCodigo">Código</th>
                 <th style="width:6rem; min-width:5rem">Valor</th>
                 <th style="width:4.5rem" class="text-center">Acciones</th>
             </tr>
@@ -113,8 +113,9 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = 'BGT';
-    /* Temporal: en hm_divisa no auto-replicar; solo listar lo existente. */
-    const SKIP_REPLICAR_DISTRIBUCION = String({{ (sql_database or '')|tojson }}).toLowerCase() === 'hm_divisa';
+    /* hm_divisa: distribución por centro de costo (tipo CC / AC_CostCenter.Abbrev). */
+    const ES_HM_DIVISA = String({{ (sql_database or '')|tojson }}).toLowerCase() === 'hm_divisa';
+    const SKIP_REPLICAR_DISTRIBUCION = ES_HM_DIVISA;
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const txtLocalizar = document.getElementById('txtLocalizar');
@@ -123,9 +124,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     const msg = document.getElementById('msgDist');
     const btnAgregar = document.getElementById('btnAgregar');
     const btnGuardar = document.getElementById('btnGuardar');
+    const thCodigo = document.getElementById('thCodigo');
 
     let filas = [];
     let unidades = [];
+
+    if (ES_HM_DIVISA && thCodigo) {
+        thCodigo.textContent = 'C.Costo';
+    }
 
     function escHtml(value) {
         return String(value == null ? '' : value)
@@ -464,14 +470,23 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarUnidades() {
-        const response = await fetch('/api/selectores/unidades');
+        const cia = cboCia.value.trim();
+        let url = '/api/selectores/unidades';
+        if (ES_HM_DIVISA) {
+            if (!cia) {
+                unidades = [];
+                return;
+            }
+            url = `/api/asientos/distribucion-porcentual/centros-costo?cia=${encodeURIComponent(cia)}`;
+        }
+        const response = await fetch(url);
         const data = await response.json();
         unidades = (Array.isArray(data) ? data : []).map((item) => {
             const id = String(item.id || '').trim();
             const desc = String(item.text || '').trim();
             return {
                 id,
-                text: desc && desc !== id ? `${id} — ${desc}` : id
+                text: desc && desc !== id ? desc : id
             };
         });
     }
@@ -485,7 +500,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboCia.addEventListener('change', async function () {
         filas = [];
         tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Pulse Consultar para cargar la distribución</td></tr>';
-        await cargarPeriodos();
+        await Promise.all([cargarPeriodos(), cargarUnidades()]);
         actualizarBotones();
     });
     cboPeriodo.addEventListener('change', function () {
@@ -494,8 +509,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         actualizarBotones();
     });
 
-    await Promise.all([poblarCompanias(), cargarUnidades()]);
-    await cargarPeriodos();
+    await poblarCompanias();
+    await Promise.all([cargarPeriodos(), cargarUnidades()]);
     actualizarBotones();
 });
 </script>

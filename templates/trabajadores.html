@@ -71,6 +71,26 @@
     .table-trabajadores tbody tr {
         cursor: pointer;
     }
+
+    .filtro-fecha-ingreso {
+        width: auto;
+        max-width: 100%;
+    }
+
+    .filtro-fecha-ingreso .input-fecha-ingreso {
+        width: 6.85rem;
+        min-width: 6.85rem;
+        max-width: 6.85rem;
+        flex: 0 0 6.85rem;
+        padding: 0.2rem 0.3rem;
+        font-size: 0.78rem;
+    }
+
+    .filtro-fecha-ingreso .input-fecha-ingreso::-webkit-calendar-picker-indicator {
+        margin: 0;
+        padding: 0;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -104,7 +124,7 @@
                 <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre</label>
                 <input type="text" id="txtNombre" class="form-control form-control-sm" placeholder="Buscar por nombre" maxlength="100" autocomplete="off">
             </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
                 <label for="cboEstado" class="form-label small fw-bold text-muted">Estado</label>
                 <select id="cboEstado" class="form-select form-select-sm" required>
                     <option value="T">Todos</option>
@@ -112,6 +132,7 @@
                     <option value="I">Inactivo</option>
                 </select>
             </div>
+            <div class="w-100 d-none d-lg-block"></div>
             <div class="col-6 col-sm-4 col-md-3 col-lg-1">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
@@ -131,6 +152,18 @@
                 <select id="cboUnidad" class="form-select form-select-sm">
                     <option value="0">Todas</option>
                 </select>
+            </div>
+            <div class="col-12 col-md-auto filtro-fecha-ingreso">
+                <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
+                <div class="d-flex align-items-center flex-wrap gap-1">
+                    <div class="form-check mb-0 me-1">
+                        <input class="form-check-input" type="checkbox" id="chkFechaIngreso" value="1">
+                        <label class="form-check-label small" for="chkFechaIngreso">Filtrar</label>
+                    </div>
+                    <input type="date" id="txtFechaIngresoDesde" class="form-control form-control-sm input-fecha-ingreso" title="Desde" disabled>
+                    <span class="small text-muted px-0">—</span>
+                    <input type="date" id="txtFechaIngresoHasta" class="form-control form-control-sm input-fecha-ingreso" title="Hasta" disabled>
+                </div>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="button" class="btn btn-primary btn-sm px-4" id="btnConsultarTrabajadores" disabled>
@@ -317,6 +350,54 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function rangoMesActual() {
+        const hoy = new Date();
+        const y = hoy.getFullYear();
+        const m = hoy.getMonth();
+        const pad = (n) => String(n).padStart(2, '0');
+        const ultimoDia = new Date(y, m + 1, 0).getDate();
+        return {
+            desde: `${y}-${pad(m + 1)}-01`,
+            hasta: `${y}-${pad(m + 1)}-${pad(ultimoDia)}`
+        };
+    }
+
+    function actualizarFiltroFechaIngreso(aplicarMesActual) {
+        const chk = document.getElementById('chkFechaIngreso');
+        const desdeEl = document.getElementById('txtFechaIngresoDesde');
+        const hastaEl = document.getElementById('txtFechaIngresoHasta');
+        if (!chk || !desdeEl || !hastaEl) return;
+        const usarRango = chk.checked;
+        desdeEl.disabled = !usarRango;
+        hastaEl.disabled = !usarRango;
+        if (!usarRango) {
+            desdeEl.value = '';
+            hastaEl.value = '';
+            return;
+        }
+        const r = rangoMesActual();
+        if (aplicarMesActual) {
+            desdeEl.value = r.desde;
+            hastaEl.value = r.hasta;
+        } else {
+            if (!desdeEl.value.trim()) desdeEl.value = r.desde;
+            if (!hastaEl.value.trim()) hastaEl.value = r.hasta;
+        }
+    }
+
+    function leerFiltroFechaIngreso() {
+        const activo = !!document.getElementById('chkFechaIngreso')?.checked;
+        const desde = document.getElementById('txtFechaIngresoDesde')?.value.trim() || '';
+        const hasta = document.getElementById('txtFechaIngresoHasta')?.value.trim() || '';
+        return { activo, modo: activo ? 'R' : 'T', desde, hasta };
+    }
+
+    function etiquetaFechaIngresoFiltro(filtro) {
+        if (!filtro || !filtro.activo) return 'Todas';
+        if (filtro.desde && filtro.hasta) return `${filtro.desde} — ${filtro.hasta}`;
+        return 'Por rango';
+    }
+
     function renderizarTablaTrabajadores(response) {
         const thead = document.getElementById('thead-trabajadores');
         const tbody = document.getElementById('tbody-trabajadores');
@@ -413,10 +494,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             'DNI', meta.dni || '',
             'Estado', meta.estado || '',
             'Banco haberes', meta.bancoHaberes || '',
-            'Unidad', meta.unidad || ''
+            'Unidad', meta.unidad || '',
+            'Fecha ingreso', meta.fechaIngreso || ''
         ]);
         metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            if (colNumber <= 14) {
+            if (colNumber <= 16) {
                 cell.fill = fill('FFF8F9FA');
                 cell.font = { bold: colNumber % 2 === 1 };
             }
@@ -480,11 +562,24 @@ document.addEventListener('DOMContentLoaded', async function () {
         let salarybank = document.getElementById('cboBancoHaberes').value.trim();
         if (!salarybank) salarybank = '0';
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
+        const fechaIngreso = leerFiltroFechaIngreso();
 
         if (!cia) {
             alert('Seleccione una compañía.');
             if (consultaHabilitada) setBotonesConsultaEnabled(true);
             return;
+        }
+        if (fechaIngreso.activo) {
+            if (!fechaIngreso.desde || !fechaIngreso.hasta) {
+                alert('Indique fecha de ingreso desde y hasta.');
+                if (consultaHabilitada) setBotonesConsultaEnabled(true);
+                return;
+            }
+            if (fechaIngreso.desde > fechaIngreso.hasta) {
+                alert('La fecha de ingreso desde no puede ser mayor que hasta.');
+                if (consultaHabilitada) setBotonesConsultaEnabled(true);
+                return;
+            }
         }
 
         try {
@@ -493,7 +588,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, person, docnro, nombre, estado, cesados, salarybank,
-                    repunit
+                    repunit,
+                    fecha_ingreso_activo: fechaIngreso.activo,
+                    fecha_ingreso_desde: fechaIngreso.desde,
+                    fecha_ingreso_hasta: fechaIngreso.hasta
                 })
             });
             const payload = await res.json();
@@ -522,7 +620,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     nombre: nombre || '—',
                     estado: selectedText('cboEstado'),
                     bancoHaberes: salarybank === '0' ? 'Todos' : selectedText('cboBancoHaberes'),
-                    unidad: selectedText('cboUnidad')
+                    unidad: selectedText('cboUnidad'),
+                    fechaIngreso: etiquetaFechaIngresoFiltro(fechaIngreso)
                 }
             };
             document.getElementById('btnExportExcelTrab').disabled = false;
@@ -625,6 +724,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (filtrosPersist && ciaGuardada) {
         filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes, cargarUnidades });
+        actualizarFiltroFechaIngreso(false);
+    } else if (!esRetornoListado) {
+        document.getElementById('chkFechaIngreso').checked = false;
+        actualizarFiltroFechaIngreso(false);
     }
 
     limpiarValorComboSiObsoleto(cboCia);
@@ -667,6 +770,19 @@ document.addEventListener('DOMContentLoaded', async function () {
             cboTrabajadorEl.innerHTML = '<option value="0">Todos (por defecto)</option>';
             cboTrabajadorEl.disabled = true;
             await poblarBancosHaberes('');
+        }
+    });
+
+    document.getElementById('chkFechaIngreso').addEventListener('change', function () {
+        actualizarFiltroFechaIngreso(this.checked);
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+    ['txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el) {
+            el.addEventListener('change', function () {
+                if (filtrosPersist) filtrosPersist.guardar();
+            });
         }
     });
 

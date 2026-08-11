@@ -1794,6 +1794,9 @@
                     cesados: val('cboCesados') || 'T',
                     salarybank: val('cboBancoHaberes') || '0',
                     repunit: val('cboUnidad') || '0',
+                    fechaIngresoActivo: !!document.getElementById('chkFechaIngreso')?.checked,
+                    fechaIngresoDesde: val('txtFechaIngresoDesde'),
+                    fechaIngresoHasta: val('txtFechaIngresoHasta'),
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY_TRABAJADORES, JSON.stringify(estado));
@@ -1913,12 +1916,14 @@
                 txtDni.value = String(filtros.docnro);
             }
 
+            restaurarFechaIngresoDesdeFiltros(filtros);
+
             guardar();
             return true;
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes', 'cboUnidad'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboTrabajador', 'cboEstado', 'cboCesados', 'cboBancoHaberes', 'cboUnidad', 'chkFechaIngreso', 'txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

@@ -18985,7 +18985,7 @@ def api_periodos_asig():
 @app.route('/api/trabajadores/listado', methods=['POST'])
 @login_required
 def api_trabajadores_listado():
-    """sp_pr_listatrabajadores_web: listado con filtros incl. unidad (repunit)."""
+    """sp_pr_listatrabajadores_web: listado con filtros incl. unidad y rango fecha de ingreso."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
@@ -18996,9 +18996,15 @@ def api_trabajadores_listado():
     salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
 
     headers_es = [
         'Tipo planilla',
@@ -19020,13 +19026,16 @@ def api_trabajadores_listado():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
+        fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
         cursor.execute(
             "EXEC sp_pr_listatrabajadores_web "
             "@cia=?, @payrolltype=?, @person=?, @docnro=?, @nombre=?, @estado=?, "
-            "@salarybank=?, @cesados=?, @repunit=?",
+            "@salarybank=?, @cesados=?, @repunit=?, "
+            "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?",
             (
                 cia, payrolltype, person, docnro, nombre, estado, salarybank, cesados,
-                repunit,
+                repunit, fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

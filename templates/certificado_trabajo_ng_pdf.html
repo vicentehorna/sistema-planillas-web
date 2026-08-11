@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Certificado de Trabajo</title>
+    <style>
+        @page { size: A4; margin: 12mm 14mm; }
+        body {
+            font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+            font-size: 12px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.55;
+        }
+        .documento {
+            border: 1px solid #1a4b84;
+            padding: 18px 22px 24px;
+            min-height: 255mm;
+            box-sizing: border-box;
+            position: relative;
+        }
+        .encabezado {
+            display: table;
+            width: 100%;
+            margin-bottom: 6px;
+            padding-bottom: 6px;
+        }
+        .encabezado .logo-cell,
+        .encabezado .empresa-cell {
+            display: table-cell;
+            vertical-align: top;
+        }
+        .encabezado .logo-cell { width: 34%; }
+        .encabezado .empresa-cell {
+            width: 66%;
+            text-align: right;
+            font-size: 9px;
+            color: #555;
+            padding-top: 2px;
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .empresa-nombre {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+        .cuerpo {
+            padding-top: 20px;
+        }
+        .titulo-principal {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #1a4b84;
+            letter-spacing: 0.5px;
+            margin: 2cm 0 calc(36px + 1cm);
+            text-transform: uppercase;
+        }
+        .parrafo {
+            text-align: justify;
+            margin: 0 0 28px;
+            font-size: 12px;
+            line-height: 1.72;
+        }
+        .subtitulo-certifica {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.4px;
+            margin: 0 0 28px;
+            text-transform: uppercase;
+        }
+        .fecha-linea {
+            margin: 0 0 28px;
+            font-size: 12px;
+        }
+        .atentamente {
+            margin: 0 0 72px;
+            font-size: 12px;
+        }
+        .firma-block {
+            text-align: center;
+            margin-top: calc(28px + 1cm);
+            font-family: Arial, Helvetica, sans-serif;
+        }
+        .linea-firma {
+            border-top: 1.5px solid #000;
+            width: 300px;
+            margin: 0 auto 8px;
+        }
+        .rep-nombre {
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0 0 4px;
+        }
+        .rep-cargo {
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="documento">
+        <div class="encabezado">
+            <div class="logo-cell"></div>
+            <div class="empresa-cell">
+                <div class="empresa-nombre">{{ cert.company_name or '' }}</div>
+                <div>RUC: {{ cert.company_ruc or '' }}</div>
+                <div>{{ cert.company_address or '' }}</div>
+            </div>
+        </div>
+
+        <div class="cuerpo">
+            <div class="titulo-principal">Certificado de Trabajo</div>
+
+            <p class="parrafo">
+                El que suscribe, en representación de {{ cert.company_name or '' }} con RUC N° {{ cert.company_ruc or '' }}.
+            </p>
+
+            <div class="subtitulo-certifica">Certifica:</div>
+
+            <p class="parrafo">
+                Que, el Sr(a). {{ cert.person_name or '' }} identificado (a) con {{ cert.person_document_type or 'D.N.I.' }} N° {{ cert.person_document or '' }} ha laborado para nuestra empresa como {{ cert.person_position or '' }}, durante el periodo comprendido desde {{ fecha_ingreso_corta }} hasta el {{ fecha_cese_corta }}.
+            </p>
+
+            <p class="parrafo">
+                Se expide el presente documento, de acuerdo con Ley, para los fines que el interesado crea conveniente.
+            </p>
+
+            <div class="fecha-linea">{{ fecha_emision_texto }}</div>
+            <p class="atentamente">Atentamente,</p>
+
+            <div class="firma-block">
+                <div class="linea-firma"></div>
+                <p class="rep-nombre">{{ cert.representative or '' }}</p>
+                <p class="rep-cargo">{{ cert.rep_position or 'REPRESENTANTE LEGAL' }}</p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

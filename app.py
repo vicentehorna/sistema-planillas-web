@@ -1134,6 +1134,59 @@ def _certificado_trabajo_pdf_filename(person, period_raw):
     return f'certificado_trabajo_{person_safe}_{period_safe}.pdf'
 
 
+def _es_cliente_ngservicios():
+    """True cuando la BD activa del request es hm_ngservicios (formatos NG)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_ngservicios'
+    except Exception:
+        return False
+
+
+_MESES_ES_A_NUM = {
+    'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
+    'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
+    'octubre': 10, 'noviembre': 11, 'diciembre': 12,
+}
+
+
+def _fecha_dd_mm_yyyy(dia, mes, anio):
+    """Formato corto DD.MM.YYYY (formatos NG). mes puede ser nombre o número."""
+    try:
+        d = int(dia or 0)
+    except (TypeError, ValueError):
+        d = 0
+    try:
+        y = int(anio or 0)
+    except (TypeError, ValueError):
+        y = 0
+    mes_raw = str(mes or '').strip()
+    m = 0
+    try:
+        m = int(mes_raw)
+    except (TypeError, ValueError):
+        m = _MESES_ES_A_NUM.get(mes_raw.lower(), 0)
+    if d and m and y:
+        return f'{d:02d}.{m:02d}.{y:04d}'
+    return ''
+
+
+def _fecha_emision_lima(dia, mes, anio):
+    """Línea 'Lima, N de Mes del AAAA'."""
+    try:
+        d = int(dia or 0)
+    except (TypeError, ValueError):
+        d = 0
+    mes_s = str(mes or '').strip() or 'Mes'
+    try:
+        y = int(anio or 0)
+    except (TypeError, ValueError):
+        y = 0
+    if d and y:
+        return f'Lima, {d} de {mes_s} del {y}'
+    return 'Lima'
+
+
 def _tratamiento_certificado_trabajo(sex):
     """PowerBuilder dw r058: sex = '1' → el Sr., caso contrario la Srta."""
     return 'el Sr. ' if str(sex or '').strip() == '1' else 'la Srta '
@@ -1142,18 +1195,11 @@ def _tratamiento_certificado_trabajo(sex):
 def _fecha_emision_certificado_trabajo(cert):
     """Línea de fecha del certificado: Lima, día de mes del año (fecha de cese)."""
     cert = cert or {}
-    try:
-        dia = int(cert.get('ceasedate_day') or 0)
-    except (TypeError, ValueError):
-        dia = 0
-    mes = str(cert.get('ceasedate_month') or '').strip() or 'Mes'
-    try:
-        anio = int(cert.get('ceasedate_year') or 0)
-    except (TypeError, ValueError):
-        anio = 0
-    if dia and anio:
-        return f'Lima, {dia} de {mes} del {anio}'
-    return 'Lima'
+    return _fecha_emision_lima(
+        cert.get('ceasedate_day'),
+        cert.get('ceasedate_month'),
+        cert.get('ceasedate_year'),
+    )
 
 
 def _certificado_retiro_cts_pdf_filename(person, period_raw):
@@ -1189,6 +1235,69 @@ def _texto_autorizacion_retiro_cts(cert):
         f"de Compensación de Tiempo de Servicio (CTS), de la cuenta "
         f"{str(cert.get('cts_account') or '').strip()}, ya que ha dejado de laborar en nuestra "
         f"empresa {fecha_cese}.".replace('  ', ' ').strip()
+    )
+
+
+def _texto_intro_retiro_cts_ng(cert):
+    """Párrafo introductorio Constancia de Cese (formato NG)."""
+    cert = cert or {}
+    rep_doc = str(cert.get('company_representative_numdoc') or '').strip()
+    rep_doc = re.sub(r'N[°º]\s*', 'N° ', rep_doc, count=1)
+    if rep_doc and not rep_doc.lower().startswith('identificado'):
+        rep_doc_txt = f'identificado con {rep_doc}'
+    elif rep_doc:
+        rep_doc_txt = rep_doc
+    else:
+        rep_doc_txt = ''
+    rep_nombre = str(cert.get('representative') or '').strip()
+    partes = [
+        f"{str(cert.get('company_name') or '').strip()}, con RUC N° {str(cert.get('company_ruc') or '').strip()}",
+    ]
+    if rep_nombre:
+        intro_rep = f', y debidamente representada por el Sr. {rep_nombre}'
+        if rep_doc_txt:
+            intro_rep += f' {rep_doc_txt}'
+        partes.append(intro_rep)
+    return ''.join(partes).replace('  ', ' ').strip() + '.'
+
+
+def _texto_autorizacion_retiro_cts_ng(cert):
+    """Cuerpo de autorización Constancia de Cese / retiro CTS (formato NG)."""
+    cert = cert or {}
+    tipo_doc = str(cert.get('person_document_type') or '').strip() or 'DNI'
+    fecha_cese = _fecha_emision_lima(
+        cert.get('fecha_cese_day'),
+        cert.get('fecha_cese_month'),
+        cert.get('fecha_cese_year'),
+    )
+    # Quitar prefijo "Lima, " para el cuerpo ("ha dejado de laborar el 31 de julio del 2026")
+    fecha_cese_cuerpo = fecha_cese
+    if fecha_cese_cuerpo.lower().startswith('lima,'):
+        fecha_cese_cuerpo = fecha_cese_cuerpo.split(',', 1)[1].strip()
+    return (
+        f"Por el presente certificamos que la Sr (a). {str(cert.get('person_name') or '').strip()} "
+        f"identificado (a) con {tipo_doc} N° {str(cert.get('person_document') or '').strip()} "
+        f"ha dejado de laborar el {fecha_cese_cuerpo}, en tal sentido y con arreglo a lo dispuesto "
+        f"en el Art° 45° del D.S. N° 001-97-TR Ley CTS., solicitamos se le haga entrega del total "
+        f"de su Compensación por tiempo de Servicios y sus intereses acumulados a la fecha, "
+        f"depositado en la Cuenta N° {str(cert.get('cts_account') or '').strip()} en soles "
+        f"de vuestra entidad."
+    ).replace('  ', ' ').strip()
+
+
+def _fecha_emision_retiro_cts_ng(cert):
+    cert = cert or {}
+    # Preferir fecha de cese; si falta, usar fecha de impresión del SP.
+    if cert.get('fecha_cese_day') and cert.get('fecha_cese_year'):
+        return _fecha_emision_lima(
+            cert.get('fecha_cese_day'),
+            cert.get('fecha_cese_month'),
+            cert.get('fecha_cese_year'),
+        )
+    return _fecha_emision_lima(
+        cert.get('day_print'),
+        cert.get('month_print'),
+        cert.get('year_print'),
     )
 
 
@@ -4175,18 +4284,36 @@ def generar_pdf_certificado_trabajo(params):
     if not cert:
         raise ValueError('No se encontraron datos para el certificado de trabajo.')
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
-
-    html_renderizado = render_template(
-        'certificado_trabajo_pdf.html',
-        cert=cert,
-        logo_src=logo_src,
-        firma_src=firma_src,
-        tratamiento=_tratamiento_certificado_trabajo(cert.get('sex')),
-        fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
-    )
+    es_ng = _es_cliente_ngservicios()
+    if es_ng:
+        # Formato NG: mismo diseño general, sin logo ni firma; texto de AUXILIARES/FORMATOS NG.
+        html_renderizado = render_template(
+            'certificado_trabajo_ng_pdf.html',
+            cert=cert,
+            fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
+            fecha_ingreso_corta=_fecha_dd_mm_yyyy(
+                cert.get('fecha_entry_day'),
+                cert.get('fecha_entry_month'),
+                cert.get('fecha_entry_year'),
+            ),
+            fecha_cese_corta=_fecha_dd_mm_yyyy(
+                cert.get('ceasedate_day'),
+                cert.get('ceasedate_month'),
+                cert.get('ceasedate_year'),
+            ),
+        )
+    else:
+        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+        logo_src = _image_data_uri(ruta_logo)
+        firma_src = _image_data_uri(ruta_firma)
+        html_renderizado = render_template(
+            'certificado_trabajo_pdf.html',
+            cert=cert,
+            logo_src=logo_src,
+            firma_src=firma_src,
+            tratamiento=_tratamiento_certificado_trabajo(cert.get('sex')),
+            fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
+        )
 
     if WEASYPRINT_AVAILABLE:
         pdf_io = io.BytesIO()
@@ -4413,17 +4540,27 @@ def generar_pdf_certificado_retiro_cts(params):
     if not cert:
         raise ValueError('No se encontraron datos para el certificado retiro CTS.')
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
-
-    html_renderizado = render_template(
-        'certificado_retiro_cts_pdf.html',
-        cert=cert,
-        logo_src=logo_src,
-        firma_src=firma_src,
-        texto_autorizacion=_texto_autorizacion_retiro_cts(cert),
-    )
+    es_ng = _es_cliente_ngservicios()
+    if es_ng:
+        # Constancia de Cese (formato NG): mismo diseño general, sin logo ni firma.
+        html_renderizado = render_template(
+            'certificado_retiro_cts_ng_pdf.html',
+            cert=cert,
+            texto_intro_empresa=_texto_intro_retiro_cts_ng(cert),
+            texto_autorizacion=_texto_autorizacion_retiro_cts_ng(cert),
+            fecha_emision_texto=_fecha_emision_retiro_cts_ng(cert),
+        )
+    else:
+        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+        logo_src = _image_data_uri(ruta_logo)
+        firma_src = _image_data_uri(ruta_firma)
+        html_renderizado = render_template(
+            'certificado_retiro_cts_pdf.html',
+            cert=cert,
+            logo_src=logo_src,
+            firma_src=firma_src,
+            texto_autorizacion=_texto_autorizacion_retiro_cts(cert),
+        )
 
     if WEASYPRINT_AVAILABLE:
         pdf_io = io.BytesIO()

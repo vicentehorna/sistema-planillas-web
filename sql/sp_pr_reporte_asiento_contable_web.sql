@@ -8,6 +8,11 @@
                  - ingreso solo en HABER / descuento solo en DEBE
                  - devolución (o Debe 4017xx) solo en DEBE sin HABER
                  - aporte con un solo lado
+    Resultset 3: personas que explican el descuadre (neto teórico / asiento por trabajador)
+                 - ingresos I, descuentos D, neto teórico (I−D), FormulaCode NETO
+                 - Debe/Haber/diff del asiento de esa persona
+                 - top descuentos y causa textual
+                 - se listan si |asiento_diff|>=0.005 o neto teórico < 0 sin NETO
 
     @person: opcional. Vacío/NULL = Todos; con valor = solo ese trabajador (Person).
 
@@ -266,5 +271,185 @@ BEGIN
             AND (sin_apd = 1 OR (has_debe = 0 AND has_haber = 0))
         )
     ORDER BY impacto_estimado DESC, conceptname;
+
+    /* -------- Resultset 3: descuadre / neto por trabajador -------- */
+    ;WITH montos AS (
+        SELECT
+            EPC.Person,
+            LTRIM(RTRIM(T.ShortName)) AS tiposhort,
+            UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) AS formulacode,
+            C.Description AS conceptname,
+            CASE
+                WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+            END AS monto
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = EPC.Concept
+        INNER JOIN PR_Concepttype T (NOLOCK)
+            ON T.Concepttype = C.Concepttype
+        WHERE EPC.Company = @company
+          AND EPC.PRPeriod = @period
+          AND EPC.PayRollType = @payrolltype
+          AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
+          AND EPC.FlagIsMonetary = 'Y'
+          AND ABS(
+                CASE
+                    WHEN @currency = 'EX' THEN ISNULL(EPC.ConceptValueEx, 0)
+                    ELSE ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0))
+                END
+              ) > 0.0001
+    ),
+    id_agg AS (
+        SELECT
+            Person,
+            SUM(CASE WHEN tiposhort = 'I' THEN monto ELSE 0 END) AS ingresos,
+            SUM(CASE WHEN tiposhort = 'D' THEN monto ELSE 0 END) AS descuentos,
+            SUM(CASE WHEN formulacode = 'NETO' THEN monto ELSE 0 END) AS neto_formula,
+            MAX(CASE WHEN formulacode = 'NETO' THEN 1 ELSE 0 END) AS tiene_neto
+        FROM montos
+        GROUP BY Person
+    ),
+    asiento AS (
+        SELECT
+            EPC.Person,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.DebitAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) AS asiento_debe,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.CreditAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) AS asiento_haber
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+            ON EPC.Company = EP.Company
+           AND EPC.PayRollType = EP.PayRollType
+           AND EPC.ProcessType = EP.ProcessType
+           AND EPC.PRPeriod = EP.PRPeriod
+           AND EPC.Person = EP.Person
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = EPC.Concept
+        INNER JOIN PR_Concepttype T (NOLOCK)
+            ON T.Concepttype = C.Concepttype
+        INNER JOIN PR_AccountProfileDetail A (NOLOCK)
+            ON A.AccountProfile = EP.AccountProfile
+           AND A.Concept = EPC.Concept
+           AND A.ProcessType = EPC.ProcessType
+        INNER JOIN AC_Account AC (NOLOCK)
+            ON AC.Account = A.DebitAccount
+            OR AC.Account = A.CreditAccount
+        WHERE EPC.Company = @company
+          AND EPC.PRPeriod = @period
+          AND EPC.PayRollType = @payrolltype
+          AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
+          AND EPC.FlagIsMonetary = 'Y'
+          AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
+        GROUP BY EPC.Person
+    ),
+    topd AS (
+        SELECT
+            Person,
+            conceptname,
+            monto,
+            ROW_NUMBER() OVER (PARTITION BY Person ORDER BY monto DESC, conceptname) AS rn
+        FROM montos
+        WHERE tiposhort = 'D'
+    ),
+    topd_agg AS (
+        SELECT
+            Person,
+            STUFF((
+                SELECT TOP 5
+                    '; ' + t2.conceptname + ' ' + CONVERT(VARCHAR(32), CAST(t2.monto AS DECIMAL(18, 2)))
+                FROM topd t2
+                WHERE t2.Person = t1.Person
+                  AND t2.rn <= 5
+                ORDER BY t2.rn
+                FOR XML PATH(''), TYPE
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '') AS top_descuentos
+        FROM topd t1
+        WHERE t1.rn = 1
+        GROUP BY Person
+    ),
+    joined AS (
+        SELECT
+            i.Person,
+            ROUND(ISNULL(i.ingresos, 0), 2) AS ingresos,
+            ROUND(ISNULL(i.descuentos, 0), 2) AS descuentos,
+            ROUND(ISNULL(i.ingresos, 0) - ISNULL(i.descuentos, 0), 2) AS neto_teorico,
+            ROUND(ISNULL(i.neto_formula, 0), 2) AS neto_formula,
+            CASE WHEN ISNULL(i.tiene_neto, 0) = 1 THEN 'Y' ELSE 'N' END AS tiene_neto,
+            ROUND(ISNULL(a.asiento_debe, 0), 2) AS asiento_debe,
+            ROUND(ISNULL(a.asiento_haber, 0), 2) AS asiento_haber,
+            ROUND(ISNULL(a.asiento_debe, 0) - ISNULL(a.asiento_haber, 0), 2) AS asiento_diff,
+            ISNULL(td.top_descuentos, '') AS top_descuentos
+        FROM id_agg i
+        LEFT JOIN asiento a ON a.Person = i.Person
+        LEFT JOIN topd_agg td ON td.Person = i.Person
+    )
+    SELECT
+        j.Person AS person,
+        LTRIM(RTRIM(
+            LTRIM(RTRIM(ISNULL(SP.LastName1, ''))) + ' '
+            + LTRIM(RTRIM(ISNULL(SP.LastName2, ''))) + ' '
+            + LTRIM(RTRIM(ISNULL(SP.Name1, ''))) + ' '
+            + LTRIM(RTRIM(ISNULL(SP.Name2, '')))
+        )) AS person_name,
+        j.ingresos,
+        j.descuentos,
+        j.neto_teorico,
+        j.neto_formula,
+        j.tiene_neto,
+        j.asiento_debe,
+        j.asiento_haber,
+        j.asiento_diff,
+        j.top_descuentos,
+        CASE
+            WHEN ABS(j.asiento_diff) >= 0.005
+                 AND j.neto_teorico < -0.005
+                 AND (j.tiene_neto = 'N' OR ABS(j.neto_formula) < 0.005) THEN
+                'Neto teórico negativo (I−D) y sin Neto a recibir: el asiento de este trabajador queda descuadrado'
+            WHEN ABS(j.asiento_diff) >= 0.005
+                 AND j.neto_teorico < -0.005 THEN
+                'Neto teórico negativo (I−D); el asiento de este trabajador no cuadra'
+            WHEN ABS(j.asiento_diff) >= 0.005
+                 AND ABS(j.neto_teorico - j.neto_formula) >= 0.01
+                 AND j.tiene_neto = 'Y' THEN
+                'Asiento descuadrado: Neto registrado distinto del neto teórico (I−D)'
+            WHEN ABS(j.asiento_diff) >= 0.005 THEN
+                'Asiento de este trabajador no cuadra (Debe − Haber)'
+            WHEN j.neto_teorico < -0.005
+                 AND (j.tiene_neto = 'N' OR ABS(j.neto_formula) < 0.005) THEN
+                'Neto teórico negativo (I−D) y sin concepto Neto a recibir (descuentos > ingresos)'
+            ELSE
+                'Revisar conceptos del trabajador'
+        END AS causa
+    FROM joined j
+    LEFT JOIN SY_Person SP (NOLOCK) ON SP.Person = j.Person
+    WHERE
+        ABS(j.asiento_diff) >= 0.005
+        OR (
+            j.neto_teorico < -0.005
+            AND (j.tiene_neto = 'N' OR ABS(j.neto_formula) < 0.005)
+        )
+    ORDER BY
+        ABS(j.asiento_diff) DESC,
+        j.neto_teorico ASC,
+        j.Person;
 END
 GO

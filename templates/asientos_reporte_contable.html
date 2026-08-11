@@ -84,6 +84,24 @@
         padding-left: 1.1rem;
     }
 
+    .box-motivo-diff .motivo-secundario {
+        margin-top: 0.65rem;
+        padding-top: 0.55rem;
+        border-top: 1px dashed rgba(132, 32, 41, 0.35);
+        color: #6c757d;
+        font-size: 0.8rem;
+    }
+
+    .box-motivo-diff .motivo-secundario .motivo-lista {
+        color: #6c757d;
+    }
+
+    .box-motivo-diff .btn-ver-asiento {
+        font-size: 0.75rem;
+        padding: 0.05rem 0.4rem;
+        vertical-align: baseline;
+    }
+
     .reporte-estado-carga:not(:empty) {
         min-height: 1rem;
         margin-top: 0.25rem;
@@ -379,36 +397,122 @@
         return partes.join(' - ') || '—';
     }
 
+    function escHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function htmlProblemasConfig(problemas) {
+        if (!problemas.length) return '';
+        return '<ul class="motivo-lista">' + problemas.map(p => {
+            const cta = [p.cuenta_debe ? `Debe ${p.cuenta_debe}` : '', p.cuenta_haber ? `Haber ${p.cuenta_haber}` : '']
+                .filter(Boolean).join(', ');
+            return `<li><strong>${escHtml(p.conceptname || '')}</strong>: ${escHtml(p.problema || '')}`
+                + ` — monto ${fmtNum(p.monto)}`
+                + (cta ? ` (${escHtml(cta)})` : '')
+                + ` — impacto estimado ${fmtNum(p.impacto_estimado)}</li>`;
+        }).join('') + '</ul>'
+            + '<div class="mt-1 small">Corrija las cuentas en <strong>Asientos → Configurar Conceptos</strong>.</div>';
+    }
+
+    function htmlDescuadresPersona(descuadres, { mostrarVerAsiento } = { mostrarVerAsiento: true }) {
+        if (!descuadres.length) return '';
+        return '<ul class="motivo-lista">' + descuadres.map(d => {
+            const nom = [d.person, d.person_name].filter(Boolean).join(' — ');
+            const netoLbl = d.tiene_neto === 'Y'
+                ? `neto registrado ${fmtNum(d.neto_formula)}`
+                : 'sin Neto a recibir';
+            const top = d.top_descuentos
+                ? `<div class="small text-muted mt-1">Top descuentos: ${escHtml(d.top_descuentos)}</div>`
+                : '';
+            const btn = (mostrarVerAsiento && d.person)
+                ? ` <button type="button" class="btn btn-outline-danger btn-ver-asiento" data-person="${escHtml(d.person)}">Ver asiento</button>`
+                : '';
+            return `<li><strong>${escHtml(nom)}</strong>${btn}`
+                + `<div>${escHtml(d.causa || '')}</div>`
+                + `<div class="small">Ingresos ${fmtNum(d.ingresos)} − Descuentos ${fmtNum(d.descuentos)}`
+                + ` = <strong>neto teórico ${fmtNum(d.neto_teorico)}</strong> (${netoLbl}); `
+                + `asiento Debe ${fmtNum(d.asiento_debe)} / Haber ${fmtNum(d.asiento_haber)}`
+                + ` → diff ${fmtNum(d.asiento_diff)}</div>`
+                + top
+                + `</li>`;
+        }).join('') + '</ul>';
+    }
+
     function pintarResultado(payload) {
         const rows = payload.rows || [];
         const meta = payload.meta || {};
         const problemas = payload.problemas || [];
+        const descuadres = payload.descuadres || [];
         document.getElementById('lblTituloReporte').textContent = armarTitulo(meta);
 
         const boxMotivo = document.getElementById('boxMotivo');
         const diff = num(meta.diferencia);
         const cuadra = Math.abs(diff) < 0.005;
+        const filtroPersona = !!(meta.person);
         boxMotivo.classList.remove('d-none', 'is-ok', 'is-error');
         boxMotivo.classList.add(cuadra ? 'is-ok' : 'is-error');
         if (cuadra) {
-            boxMotivo.innerHTML = `<i class="bi bi-check-circle-fill me-1"></i>${meta.motivo || 'Asiento cuadrado.'}`;
+            let html = `<i class="bi bi-check-circle-fill me-1"></i>${escHtml(meta.motivo || 'Asiento cuadrado.')}`;
+            /* Aviso informativo si hay neto teórico negativo aunque el asiento cuadre */
+            const avisosNeto = descuadres.filter(d => Math.abs(num(d.asiento_diff)) < 0.005);
+            if (avisosNeto.length) {
+                html += '<div class="motivo-secundario mt-2">'
+                    + '<div><strong>Aviso</strong> (asiento cuadrado, pero hay trabajadores con neto teórico negativo):</div>'
+                    + htmlDescuadresPersona(avisosNeto, { mostrarVerAsiento: !filtroPersona })
+                    + '</div>';
+            }
+            boxMotivo.innerHTML = html;
         } else {
+            const causaAsiento = descuadres.filter(d => Math.abs(num(d.asiento_diff)) >= 0.005);
+            const causaNeto = causaAsiento.length
+                ? []
+                : descuadres.filter(d => num(d.neto_teorico) < -0.005);
+            const causaPrincipal = causaAsiento.length ? causaAsiento : causaNeto;
             let html = `<div><i class="bi bi-exclamation-triangle-fill me-1"></i><strong>Motivo de la diferencia (${fmtNum(diff)})</strong></div>`;
-            if (problemas.length) {
-                html += '<ul class="motivo-lista">' + problemas.map(p => {
-                    const cta = [p.cuenta_debe ? `Debe ${p.cuenta_debe}` : '', p.cuenta_haber ? `Haber ${p.cuenta_haber}` : '']
-                        .filter(Boolean).join(', ');
-                    return `<li><strong>${p.conceptname || ''}</strong>: ${p.problema || ''}`
-                        + ` — monto ${fmtNum(p.monto)}`
-                        + (cta ? ` (${cta})` : '')
-                        + ` — impacto estimado ${fmtNum(p.impacto_estimado)}</li>`;
-                }).join('') + '</ul>';
-                html += '<div class="mt-1 small">Corrija las cuentas en <strong>Asientos → Configurar Conceptos</strong>.</div>';
+            if (causaPrincipal.length) {
+                html += '<div class="mt-1 small fw-bold">Causa principal (por trabajador)</div>';
+                html += htmlDescuadresPersona(causaPrincipal, { mostrarVerAsiento: !filtroPersona });
+                if (problemas.length) {
+                    html += '<div class="motivo-secundario">'
+                        + '<div><strong>Posibles gaps de configuración</strong> '
+                        + '(pueden no explicar la diferencia):</div>'
+                        + htmlProblemasConfig(problemas)
+                        + '</div>';
+                }
+            } else if (problemas.length) {
+                html += htmlProblemasConfig(problemas);
             } else {
-                html += `<div class="mt-1">${meta.motivo || 'No se identificó el concepto causante.'}</div>`;
+                html += `<div class="mt-1">${escHtml(meta.motivo || 'No se identificó el concepto causante.')}</div>`;
             }
             boxMotivo.innerHTML = html;
         }
+
+        boxMotivo.querySelectorAll('.btn-ver-asiento').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const p = btn.getAttribute('data-person') || '';
+                if (!p || !cboTrabajador) return;
+                let found = false;
+                for (const opt of cboTrabajador.options) {
+                    if (String(opt.value) === p) {
+                        cboTrabajador.value = p;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) {
+                    const opt = document.createElement('option');
+                    opt.value = p;
+                    opt.textContent = p;
+                    cboTrabajador.appendChild(opt);
+                    cboTrabajador.value = p;
+                }
+                frm.requestSubmit();
+            });
+        });
 
         const tbody = document.getElementById('tbodyReporte');
         if (!rows.length) {
@@ -416,9 +520,9 @@
         } else {
             tbody.innerHTML = rows.map(r => `
                 <tr>
-                    <td>${r.account || ''}</td>
-                    <td>${r.accountname || ''}</td>
-                    <td>${r.conceptname || ''}</td>
+                    <td>${escHtml(r.account || '')}</td>
+                    <td>${escHtml(r.accountname || '')}</td>
+                    <td>${escHtml(r.conceptname || '')}</td>
                     <td class="col-importe">${fmtNum(r.conceptvaluedebe)}</td>
                     <td class="col-importe">${fmtNum(r.conceptvaluehaber)}</td>
                 </tr>
@@ -436,7 +540,7 @@
         lblRowCount.textContent = String(rows.length);
         cardResultado.classList.remove('d-none');
         btnExport.disabled = !rows.length;
-        lastExport = { rows, meta, problemas };
+        lastExport = { rows, meta, problemas, descuadres };
     }
 
     async function exportExcel() {

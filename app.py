@@ -10148,7 +10148,7 @@ def api_asientos_reporte_contable():
             (cia, payrolltype, processtype, period, currency, person or None),
         )
 
-        # Resultset 1: detalle asiento; Resultset 2: problemas de configuración
+        # Resultset 1: detalle; 2: problemas config; 3: descuadre por persona
         sets = []
         while True:
             if cursor.description:
@@ -10159,6 +10159,7 @@ def api_asientos_reporte_contable():
 
         detail_cols, detail_rows = sets[0] if sets else ([], [])
         problem_cols, problem_rows = sets[1] if len(sets) > 1 else ([], [])
+        descuadre_cols, descuadre_rows = sets[2] if len(sets) > 2 else ([], [])
 
         out_rows = []
         total_debe = total_haber = 0.0
@@ -10196,11 +10197,45 @@ def api_asientos_reporte_contable():
                 'impacto_estimado': _float_sp_cell(rd.get('impacto_estimado')),
             })
 
+        descuadres = []
+        for row in descuadre_rows:
+            rd = _row_dict_from_columns(descuadre_cols, row)
+            descuadres.append({
+                'person': str(rd.get('person') or '').strip(),
+                'person_name': " ".join(str(rd.get('person_name') or '').split()),
+                'ingresos': _float_sp_cell(rd.get('ingresos')),
+                'descuentos': _float_sp_cell(rd.get('descuentos')),
+                'neto_teorico': _float_sp_cell(rd.get('neto_teorico')),
+                'neto_formula': _float_sp_cell(rd.get('neto_formula')),
+                'tiene_neto': str(rd.get('tiene_neto') or '').strip().upper(),
+                'asiento_debe': _float_sp_cell(rd.get('asiento_debe')),
+                'asiento_haber': _float_sp_cell(rd.get('asiento_haber')),
+                'asiento_diff': _float_sp_cell(rd.get('asiento_diff')),
+                'top_descuentos': str(rd.get('top_descuentos') or '').strip(),
+                'causa': str(rd.get('causa') or '').strip(),
+            })
+
         diferencia = round(abs(total_debe) - abs(total_haber), 2)
         alcance = f" del trabajador {person}" if person else ""
         motivo = ''
         if abs(diferencia) >= 0.005:
-            if problemas:
+            if descuadres:
+                partes = []
+                for d in descuadres[:5]:
+                    etiqueta = d['person']
+                    if d['person_name']:
+                        etiqueta = f"{d['person']} — {d['person_name']}"
+                    partes.append(
+                        f"{etiqueta}: {d['causa']} "
+                        f"(I {d['ingresos']:,.2f} − D {d['descuentos']:,.2f} = "
+                        f"neto teórico {d['neto_teorico']:,.2f}; "
+                        f"asiento diff {d['asiento_diff']:,.2f})"
+                    )
+                motivo = (
+                    f"El asiento{alcance} no cuadra (diferencia {diferencia:,.2f}). "
+                    + " | ".join(partes)
+                )
+            elif problemas:
                 partes = []
                 for p in problemas[:5]:
                     partes.append(
@@ -10215,8 +10250,8 @@ def api_asientos_reporte_contable():
             else:
                 motivo = (
                     f"El asiento{alcance} no cuadra (diferencia {diferencia:,.2f}). "
-                    "No se detectaron conceptos I/D/A sin cuenta o con lado incorrecto; "
-                    "revise otras causas (perfiles distintos por trabajador, auxiliares, etc.)."
+                    "No se detectaron personas con neto teórico negativo ni conceptos I/D/A "
+                    "sin cuenta; revise perfiles, auxiliares u otras causas."
                 )
         else:
             motivo = (
@@ -10255,6 +10290,7 @@ def api_asientos_reporte_contable():
         return jsonify({
             'rows': out_rows,
             'problemas': problemas,
+            'descuadres': descuadres,
             'meta': {
                 'payrolltypename': payrolltypename,
                 'processname': processname,

@@ -105,6 +105,12 @@
                     <option value="N">No</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -308,6 +314,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -319,7 +326,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados
+                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
+                    repunit
                 })
             });
             const payload = await res.json();
@@ -380,12 +388,44 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboUnidad = document.getElementById('cboUnidad');
     const txtFechaPago = document.getElementById('txtFechaPago');
+
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim() || '0';
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            if (optionExists(cboUnidad, prev)) {
+                cboUnidad.value = prev;
+            } else {
+                cboUnidad.value = '0';
+            }
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
+        }
+    }
 
     if (!txtFechaPago.value) {
         txtFechaPago.value = hoyIsoLocal();
     }
 
+    await cargarUnidades();
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
@@ -393,7 +433,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
 
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarUnidades: cargarUnidades });
     } else if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();

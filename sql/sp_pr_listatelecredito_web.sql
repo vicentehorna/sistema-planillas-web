@@ -4,6 +4,7 @@
     (cuenta en banco de crédito configurado en pr_mapping.creditobank).
 
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecredito_web]
     @par_company     VARCHAR(10),
@@ -13,7 +14,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecredito_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
-    @cesados         CHAR(1)
+    @cesados         CHAR(1),
+    @repunit         VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -21,6 +23,7 @@ BEGIN
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
     DECLARE @flag_set_period CHAR(1);
     SELECT @flag_set_period = ISNULL(FlagSetPeriod, 'N')
@@ -80,6 +83,7 @@ BEGIN
             ON sp.EmployeeDocumentType = t.PersonDocumentType
     WHERE e.company = @par_company
       AND e.payrolltype = @par_payrolltype
+      AND (@repunit = '0' OR sp.ReplicationUnit = @repunit)
       AND (
             @cesados = 'T'
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

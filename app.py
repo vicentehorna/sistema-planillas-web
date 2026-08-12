@@ -14969,13 +14969,14 @@ def api_pago_haberes_telecredito_listado():
         return jsonify({"error": err}), 400
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     log_sp = (
         '[telecredito listado] EXEC sp_pr_listatelecredito_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@cesados={cesados!r}'
+        f'@cesados={cesados!r} @repunit={repunit!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -14987,10 +14988,11 @@ def api_pago_haberes_telecredito_listado():
         cursor.execute(
             "EXEC sp_pr_listatelecredito_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
+            "@cesados=?, @repunit=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], p['paydate'], cesados,
+                p['period'], p['processtype'], p['paydate'], cesados, repunit,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

@@ -4,6 +4,7 @@
     Banco destino: pr_mapping.continentalbank.
     Cuenta origen: TE_BankAccount vía continentalbank y moneda.
     @todos_bancos: N = solo cuenta propia Continental; Y = cuenta propia Continental + interbancarios.
+    Cuenta en detalle: mismo banco → SalaryAccount (P); otro banco → SocialAssistanceNumber / CCI (I).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_continental_web]
     @par_company     VARCHAR(10),
@@ -39,7 +40,6 @@ BEGIN
     DECLARE @continentalbank  VARCHAR(20);
     DECLARE @ref_cabecera     VARCHAR(25);
     DECLARE @ref_detalle      VARCHAR(40);
-    DECLARE @empresa_aci      CHAR(1);
     DECLARE @total_reg        INT;
     DECLARE @total_importe    DECIMAL(18, 2);
     DECLARE @importe15        VARCHAR(15);
@@ -118,15 +118,6 @@ BEGIN
     IF @ref_detalle IS NULL SET @ref_detalle = '';
     SET @ref_detalle = LEFT(@ref_detalle + REPLICATE(' ', 40), 40);
 
-    IF EXISTS (
-        SELECT 1 FROM sy_company sc
-        WHERE sc.company = @par_company
-          AND LTRIM(RTRIM(ISNULL(sc.email_server, ''))) = 'ACI'
-    )
-        SET @empresa_aci = 'Y';
-    ELSE
-        SET @empresa_aci = 'N';
-
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
         FROM #ContinentalPersonas tp
@@ -180,12 +171,13 @@ BEGIN
                 ISNULL(sp.name2, '')
             ))) AS nombre,
             CASE WHEN e.salarybank = m.continentalbank THEN 'P' ELSE 'I' END AS tipo_abono,
+            /* Mismo banco BBVA: cuenta propia. Otro banco (Falabella, etc.): CCI. */
             LEFT(
                 LTRIM(RTRIM(
                     CASE
-                        WHEN ISNULL(tat.abrev, '') = 'B' AND @empresa_aci = 'Y'
-                            THEN ISNULL(e.socialassistancenumber, '')
-                        ELSE ISNULL(e.salaryaccount, '')
+                        WHEN e.salarybank = m.continentalbank
+                            THEN ISNULL(e.salaryaccount, '')
+                        ELSE ISNULL(e.socialassistancenumber, '')
                     END
                 )) + REPLICATE(' ', 20),
                 20

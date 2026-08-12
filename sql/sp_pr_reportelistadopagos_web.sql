@@ -4,7 +4,8 @@
 
     Filtros (mismos que Telecrédito, sin fecha de pago) + banco haberes opcional:
       @par_company, @par_payrolltype, @par_processtype, @par_period,
-      @par_concept, @par_currency (LO/EX), @cesados, @salarybank (0 = todos).
+      @par_concept, @par_currency (LO/EX), @cesados, @salarybank (0 = todos),
+      @repunit ('0' = todas las unidades; filtra SY_Person.ReplicationUnit).
 
     Columnas alineadas al DataWindow ReportePagos (PowerBuilder).
 */
@@ -16,7 +17,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reportelistadopagos_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @cesados         CHAR(1),
-    @salarybank      VARCHAR(20) = '0'
+    @salarybank      VARCHAR(20) = '0',
+    @repunit         VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -24,6 +26,7 @@ BEGIN
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
     IF RTRIM(ISNULL(@salarybank, '')) = '' SET @salarybank = '0';
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
     ;WITH Importes AS (
         SELECT
@@ -111,6 +114,7 @@ BEGIN
            AND b_cts.Company = e.Company
     WHERE e.PayRollType = @par_payrolltype
       AND (@salarybank = '0' OR e.SalaryBank = @salarybank)
+      AND (@repunit = '0' OR sp.ReplicationUnit = @repunit)
       AND (
             @cesados = 'T'
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

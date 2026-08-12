@@ -21600,6 +21600,7 @@ def api_reporte_listado_pagos():
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
     salarybank = str(body.get('salarybank') or body.get('salary_bank') or '0').strip() or '0'
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
 
     conn = None
     try:
@@ -21608,10 +21609,11 @@ def api_reporte_listado_pagos():
         cursor.execute(
             "EXEC sp_pr_reportelistadopagos_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @cesados=?, @salarybank=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, "
+            "@cesados=?, @salarybank=?, @repunit=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], cesados, salarybank,
+                p['period'], p['processtype'], cesados, salarybank, repunit,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

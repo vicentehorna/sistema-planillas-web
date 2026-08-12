@@ -7,6 +7,7 @@
 
     2) Conceptos en más de una vía (solo MENSUAL / FIN_DE_MES):
       M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
+      Q — Maestro de conceptos: Insertar en = Quincena (flaginsertar = 'Q')
       S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
       F — Fórmulas del proceso (PR_FormulaHeader)
       Solo una vía debe estar activa por concepto.
@@ -283,6 +284,7 @@ BEGIN
             + STUFF((
                 SELECT ', ' + CASE V2.via
                     WHEN 'M' THEN 'Insertar en mensual'
+                    WHEN 'Q' THEN 'Insertar en quincena'
                     WHEN 'S' THEN 'Procedimiento de cálculo'
                     WHEN 'F' THEN 'Fórmulas del proceso'
                 END

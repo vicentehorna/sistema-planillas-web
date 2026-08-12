@@ -633,8 +633,8 @@
                 </li>
                 {% endif %}
 
-                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'centros_costo_page', 'tipos_documento_page', 'unidades_page') %}
-                {% set show_tablas = can_menu('cuentas_bancarias') or can_menu('cargos') or can_menu('centros_costo') or can_menu('tipos_documento') or can_menu('unidades') %}
+                {% set tablas_active = request.endpoint in ('cuentas_bancarias_page', 'cargos_page', 'centros_costo_page', 'tipos_documento_page', 'unidades_page', 'usuarios_page') %}
+                {% set show_tablas = can_menu('cuentas_bancarias') or can_menu('cargos') or can_menu('centros_costo') or can_menu('tipos_documento') or can_menu('unidades') or can_menu('usuarios') %}
                 {% if show_tablas %}
                 <li class="sidebar-menu-parent {{ 'active' if tablas_active else '' }}">
                     <a href="#submenuTablas"
@@ -679,6 +679,13 @@
                         <li class="{{ 'active' if request.endpoint == 'unidades_page' else '' }}">
                             <a href="{{ url_for('unidades_page') }}" title="Unidades">
                                 <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Unidades</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('usuarios') %}
+                        <li class="{{ 'active' if request.endpoint == 'usuarios_page' else '' }}">
+                            <a href="{{ url_for('usuarios_page') }}" title="Usuarios">
+                                <i class="bi bi-people"></i><span class="sidebar-link-text">Usuarios</span>
                             </a>
                         </li>
                         {% endif %}

@@ -1,0 +1,529 @@
+{% extends "layout.html" %}
+
+{% block title %}Usuarios{% endblock %}
+
+{% block extra_css %}
+<style>
+    .usr-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+
+    .usr-panel-izq {
+        flex: 0 0 42%;
+        max-width: 42%;
+        min-width: 300px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .usr-panel-der {
+        flex: 1 1 58%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .usr-grilla {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 7rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-usr-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-usr-lista th,
+    .table-usr-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-usr-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-usr-lista tbody tr.usr-row {
+        cursor: pointer;
+    }
+
+    .table-usr-lista tbody tr.usr-row:hover {
+        background: #f8f9fa;
+    }
+
+    .table-usr-lista tbody tr.usr-row.active {
+        background: #cfe2ff;
+    }
+
+    .table-usr-lista .col-userid {
+        font-weight: 600;
+        min-width: 5rem;
+    }
+
+    .table-usr-lista .col-nombre {
+        min-width: 10rem;
+        max-width: 14rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .usr-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+        flex: 1;
+    }
+
+    .usr-form-card .form-label {
+        font-size: 0.78rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .usr-perfiles-box {
+        min-height: 9rem;
+        max-height: 14rem;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .usr-perfiles-box .list-group-item {
+        font-size: 0.82rem;
+        padding: 0.35rem 0.6rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+
+    .usr-msg-guardado {
+        font-size: 0.82rem;
+        margin-top: 0.75rem;
+    }
+
+    .usr-count {
+        font-size: 0.78rem;
+        color: #6c757d;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosUsuarios" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-4">
+                <label for="txtBuscarNombre" class="form-label small fw-bold text-muted mb-1">Trabajador / Usuario</label>
+                <input type="text" id="txtBuscarNombre" class="form-control form-control-sm"
+                       placeholder="Nombre o usuario..." maxlength="100" autocomplete="off">
+            </div>
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboFiltroPerfil" class="form-label small fw-bold text-muted mb-1">Perfil</label>
+                <select id="cboFiltroPerfil" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-4 col-lg-5 d-flex flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevoUsuario">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+                <span class="align-self-center usr-count ms-auto">
+                    Registros: <strong id="lblCountUsuarios">0</strong>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="usr-layout">
+    <aside class="usr-panel-izq">
+        <div class="usr-grilla">
+            <table class="table table-sm table-hover table-usr-lista align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Password web</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyUsuarios"></tbody>
+            </table>
+        </div>
+    </aside>
+
+    <section class="usr-panel-der">
+        <div id="placeholderUsuario" class="usr-placeholder">
+            <div>
+                <div class="mb-1"><i class="bi bi-person-gear fs-3"></i></div>
+                <div>Seleccione un usuario de la lista<br>o pulse <strong>Nuevo</strong>.</div>
+            </div>
+        </div>
+
+        <div class="card shadow-sm border-0 usr-form-card d-none" id="panelEdicionUsuario">
+            <div class="card-header bg-white d-flex align-items-center justify-content-between py-2">
+                <strong id="lblTituloUsuario">Usuario</strong>
+                <button type="button" class="btn btn-primary btn-sm" id="btnGuardarUsuario">
+                    <i class="bi bi-save"></i> Guardar
+                </button>
+            </div>
+            <div class="card-body">
+                <form id="frmUsuario" class="row g-3" autocomplete="off">
+                    <input type="hidden" id="hidModo" value="I">
+
+                    <div class="col-12 col-md-6">
+                        <label for="txtUserId" class="form-label fw-semibold text-muted">Usuario</label>
+                        <input type="text" id="txtUserId" class="form-control form-control-sm" maxlength="20" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="txtPasswordWeb" class="form-label fw-semibold text-muted">Clave web</label>
+                        <input type="text" id="txtPasswordWeb" class="form-control form-control-sm" maxlength="20" required>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold text-muted">Código</label>
+                        <input type="text" id="txtPerson" class="form-control form-control-sm" readonly disabled>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold text-muted">Nombre</label>
+                        <input type="text" id="txtNombre" class="form-control form-control-sm" readonly disabled>
+                    </div>
+
+                    <div class="col-12">
+                        <label class="form-label fw-semibold text-muted mb-1">Perfiles del usuario</label>
+                        <div class="row g-2 align-items-end">
+                            <div class="col-12 col-md-8">
+                                <select id="cboPerfilAdd" class="form-select form-select-sm">
+                                    <option value="">Seleccione perfil...</option>
+                                </select>
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="btnAgregarPerfil">
+                                    <i class="bi bi-plus"></i> Agregar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="usr-perfiles-box mt-2">
+                            <ul class="list-group list-group-flush" id="listaPerfilesUsuario"></ul>
+                        </div>
+                    </div>
+                </form>
+                <div id="msgGuardadoUsuario" class="usr-msg-guardado d-none" role="status"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_LISTADO = {{ url_for('api_usuarios_listado') | tojson }};
+    const URL_OBTENER = {{ url_for('api_usuarios_obtener') | tojson }};
+    const URL_GUARDAR = {{ url_for('api_usuarios_guardar') | tojson }};
+    const URL_PERFILES = {{ url_for('api_selectores_perfiles_sy') | tojson }};
+
+    let perfilesCatalogo = [];
+    let perfilesAsignados = [];
+    let selectedUserId = '';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) {
+                throw new Error('Respuesta no válida del servidor.');
+            }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function mostrarMsg(texto, ok) {
+        const el = document.getElementById('msgGuardadoUsuario');
+        el.classList.remove('d-none', 'text-success', 'text-danger');
+        el.classList.add(ok ? 'text-success' : 'text-danger');
+        el.textContent = texto;
+    }
+
+    function ocultarMsg() {
+        const el = document.getElementById('msgGuardadoUsuario');
+        el.classList.add('d-none');
+        el.textContent = '';
+    }
+
+    function poblarSelectPerfiles(selectEl, incluirTodos) {
+        const prev = String(selectEl.value || '');
+        selectEl.innerHTML = '';
+        if (incluirTodos) {
+            const opt = document.createElement('option');
+            opt.value = '0';
+            opt.textContent = 'Todos';
+            selectEl.appendChild(opt);
+        } else {
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Seleccione perfil...';
+            selectEl.appendChild(opt);
+        }
+        perfilesCatalogo.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.text || p.id;
+            selectEl.appendChild(opt);
+        });
+        if (prev && Array.from(selectEl.options).some((o) => o.value === prev)) {
+            selectEl.value = prev;
+        }
+    }
+
+    async function cargarCatalogoPerfiles() {
+        const res = await fetch(URL_PERFILES);
+        const data = await leerJson(res);
+        perfilesCatalogo = Array.isArray(data) ? data : (data.rows || []);
+        poblarSelectPerfiles(document.getElementById('cboFiltroPerfil'), true);
+        poblarSelectPerfiles(document.getElementById('cboPerfilAdd'), false);
+    }
+
+    function renderPerfilesAsignados() {
+        const ul = document.getElementById('listaPerfilesUsuario');
+        ul.innerHTML = '';
+        if (!perfilesAsignados.length) {
+            const li = document.createElement('li');
+            li.className = 'list-group-item text-muted';
+            li.textContent = 'Sin perfiles asignados';
+            ul.appendChild(li);
+            return;
+        }
+        perfilesAsignados.forEach((p) => {
+            const li = document.createElement('li');
+            li.className = 'list-group-item';
+            const span = document.createElement('span');
+            span.textContent = `${p.profile}${p.description && p.description !== p.profile ? ' — ' + p.description : ''}`;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'btn btn-outline-danger btn-sm py-0 px-2';
+            btn.innerHTML = '<i class="bi bi-trash"></i>';
+            btn.title = 'Quitar';
+            btn.addEventListener('click', () => {
+                perfilesAsignados = perfilesAsignados.filter((x) => x.profile !== p.profile);
+                renderPerfilesAsignados();
+            });
+            li.appendChild(span);
+            li.appendChild(btn);
+            ul.appendChild(li);
+        });
+    }
+
+    function mostrarPlaceholder() {
+        document.getElementById('placeholderUsuario').classList.remove('d-none');
+        document.getElementById('panelEdicionUsuario').classList.add('d-none');
+        selectedUserId = '';
+        document.querySelectorAll('#tbodyUsuarios tr.usr-row').forEach((tr) => tr.classList.remove('active'));
+    }
+
+    function mostrarPanelEdicion() {
+        document.getElementById('placeholderUsuario').classList.add('d-none');
+        document.getElementById('panelEdicionUsuario').classList.remove('d-none');
+        ocultarMsg();
+    }
+
+    function modoNuevo() {
+        selectedUserId = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('lblTituloUsuario').textContent = 'Nuevo usuario';
+        const txtUser = document.getElementById('txtUserId');
+        txtUser.value = '';
+        txtUser.readOnly = false;
+        txtUser.disabled = false;
+        document.getElementById('txtPasswordWeb').value = '';
+        document.getElementById('txtPerson').value = '';
+        document.getElementById('txtNombre').value = '';
+        perfilesAsignados = [];
+        renderPerfilesAsignados();
+        document.querySelectorAll('#tbodyUsuarios tr.usr-row').forEach((tr) => tr.classList.remove('active'));
+        mostrarPanelEdicion();
+        txtUser.focus();
+    }
+
+    async function cargarListado() {
+        const nombre = document.getElementById('txtBuscarNombre').value.trim();
+        const profile = document.getElementById('cboFiltroPerfil').value.trim() || '0';
+        const tbody = document.getElementById('tbodyUsuarios');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-3">Cargando...</td></tr>';
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombre, profile })
+            });
+            const data = await leerJson(res);
+            const rows = Array.isArray(data.rows) ? data.rows : [];
+            document.getElementById('lblCountUsuarios').textContent = String(rows.length);
+            tbody.innerHTML = '';
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-3">Sin registros</td></tr>';
+                return;
+            }
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                tr.className = 'usr-row';
+                tr.dataset.userid = r.userid || '';
+                if (selectedUserId && selectedUserId === r.userid) tr.classList.add('active');
+                tr.innerHTML =
+                    `<td class="col-userid">${escHtml(r.userid)}</td>` +
+                    `<td>${escHtml(r.passwordweb)}</td>` +
+                    `<td>${escHtml(r.person)}</td>` +
+                    `<td class="col-nombre" title="${escHtml(r.nombre)}">${escHtml(r.nombre)}</td>`;
+                tr.addEventListener('click', () => seleccionarUsuario(r.userid));
+                tbody.appendChild(tr);
+            });
+        } catch (e) {
+            console.error(e);
+            tbody.innerHTML = `<tr><td colspan="4" class="text-danger text-center py-3">${escHtml(e.message)}</td></tr>`;
+            document.getElementById('lblCountUsuarios').textContent = '0';
+        }
+    }
+
+    async function seleccionarUsuario(userid) {
+        if (!userid) return;
+        selectedUserId = userid;
+        document.querySelectorAll('#tbodyUsuarios tr.usr-row').forEach((tr) => {
+            tr.classList.toggle('active', tr.dataset.userid === userid);
+        });
+        try {
+            const res = await fetch(URL_OBTENER, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ userid })
+            });
+            const data = await leerJson(res);
+            const u = data.usuario || {};
+            document.getElementById('hidModo').value = 'U';
+            document.getElementById('lblTituloUsuario').textContent = `Editar: ${u.userid || userid}`;
+            const txtUser = document.getElementById('txtUserId');
+            txtUser.value = u.userid || userid;
+            txtUser.readOnly = true;
+            txtUser.disabled = true;
+            document.getElementById('txtPasswordWeb').value = u.passwordweb || '';
+            document.getElementById('txtPerson').value = u.person || '';
+            document.getElementById('txtNombre').value = u.nombre || '';
+            perfilesAsignados = (Array.isArray(data.perfiles) ? data.perfiles : []).map((p) => ({
+                profile: String(p.profile || '').trim(),
+                description: String(p.description || '').trim()
+            })).filter((p) => p.profile);
+            renderPerfilesAsignados();
+            mostrarPanelEdicion();
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'No se pudo cargar el usuario.');
+        }
+    }
+
+    document.getElementById('btnAgregarPerfil').addEventListener('click', () => {
+        const cbo = document.getElementById('cboPerfilAdd');
+        const profile = String(cbo.value || '').trim();
+        if (!profile) {
+            alert('Seleccione un perfil.');
+            return;
+        }
+        if (perfilesAsignados.some((p) => p.profile === profile)) {
+            alert('El perfil ya está asignado.');
+            return;
+        }
+        const item = perfilesCatalogo.find((p) => String(p.id) === profile);
+        perfilesAsignados.push({
+            profile,
+            description: item ? String(item.text || profile) : profile
+        });
+        perfilesAsignados.sort((a, b) => a.profile.localeCompare(b.profile));
+        renderPerfilesAsignados();
+        cbo.value = '';
+    });
+
+    document.getElementById('frmFiltrosUsuarios').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await cargarListado();
+    });
+
+    document.getElementById('btnNuevoUsuario').addEventListener('click', () => modoNuevo());
+
+    document.getElementById('btnGuardarUsuario').addEventListener('click', async () => {
+        ocultarMsg();
+        const modo = document.getElementById('hidModo').value || 'I';
+        const userid = document.getElementById('txtUserId').value.trim();
+        const passwordweb = document.getElementById('txtPasswordWeb').value.trim();
+        if (!userid) {
+            alert('Indique el usuario.');
+            return;
+        }
+        if (!passwordweb) {
+            alert('Indique la clave web.');
+            return;
+        }
+        try {
+            const res = await fetch(URL_GUARDAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    modo,
+                    userid,
+                    passwordweb,
+                    perfiles: perfilesAsignados.map((p) => p.profile)
+                })
+            });
+            const data = await leerJson(res);
+            mostrarMsg(modo === 'I' ? 'Usuario creado.' : 'Usuario actualizado.', true);
+            selectedUserId = data.userid || userid;
+            document.getElementById('hidModo').value = 'U';
+            document.getElementById('lblTituloUsuario').textContent = `Editar: ${selectedUserId}`;
+            const txtUser = document.getElementById('txtUserId');
+            txtUser.readOnly = true;
+            txtUser.disabled = true;
+            await cargarListado();
+        } catch (e) {
+            console.error(e);
+            mostrarMsg(e.message || 'Error al guardar.', false);
+        }
+    });
+
+    try {
+        await cargarCatalogoPerfiles();
+    } catch (e) {
+        console.error(e);
+        alert(e.message || 'No se pudieron cargar los perfiles.');
+    }
+    await cargarListado();
+});
+</script>
+{% endblock %}

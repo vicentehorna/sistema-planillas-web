@@ -7434,6 +7434,12 @@ def cargos_page():
     return render_template('maestro_cargos.html')
 
 
+@app.route('/usuarios')
+@login_required
+def usuarios_page():
+    return render_template('maestro_usuarios.html')
+
+
 @app.route('/afps')
 @login_required
 def afps_page():
@@ -10492,6 +10498,146 @@ def api_cargos_eliminar():
         })
     except Exception as e:
         logging.exception("api_cargos_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _usuario_lista_dict(r):
+    return {
+        'userid': _jsonable_value(r.get('userid')),
+        'passwordweb': _jsonable_value(r.get('passwordweb')),
+        'person': _jsonable_value(r.get('person')),
+        'nombre': _jsonable_value(r.get('nombre')),
+    }
+
+
+@app.route('/api/usuarios/listado', methods=['POST'])
+@login_required
+def api_usuarios_listado():
+    """sp_pr_listarusuarios_web: listado maestro de usuarios SY_User."""
+    body = request.get_json(silent=True) or {}
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('q') or '').strip()
+    profile = str(body.get('profile') or body.get('perfil') or '0').strip() or '0'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarusuarios_web @nombre=?, @profile=?",
+            (nombre or None, None if profile in ('', '0') else profile),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_usuario_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_usuarios_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/usuarios/obtener', methods=['POST'])
+@login_required
+def api_usuarios_obtener():
+    """sp_pr_obtenerusuario_web: detalle + perfiles."""
+    body = request.get_json(silent=True) or {}
+    userid = str(body.get('userid') or body.get('user') or '').strip()
+    if not userid:
+        return jsonify({"error": "Seleccione un usuario."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_obtenerusuario_web @userid=?", (userid,))
+        sets = _dicts_collect_nonempty_resultsets(cursor)
+        _drain_pyodbc_cursor(cursor)
+        usuario = _usuario_lista_dict(sets[0][0]) if sets and sets[0] else None
+        if not usuario:
+            return jsonify({"error": "Usuario no encontrado."}), 404
+        perfiles = []
+        if len(sets) > 1:
+            for r in sets[1]:
+                perfiles.append({
+                    'profile': _jsonable_value(r.get('profile')),
+                    'description': _jsonable_value(r.get('description')),
+                })
+        return jsonify({"usuario": usuario, "perfiles": perfiles})
+    except Exception as e:
+        logging.exception("api_usuarios_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/usuarios/guardar', methods=['POST'])
+@login_required
+def api_usuarios_guardar():
+    """sp_pr_guardarusuario_web: alta/edición clave web + perfiles."""
+    body = request.get_json(silent=True) or {}
+    modo = str(body.get('modo') or 'U').strip().upper()
+    userid = str(body.get('userid') or '').strip()
+    passwordweb = str(body.get('passwordweb') or body.get('password_web') or '').strip()
+    perfiles_raw = body.get('perfiles') or body.get('profiles') or []
+    if isinstance(perfiles_raw, str):
+        perfiles_list = [p.strip() for p in perfiles_raw.split(',') if p.strip()]
+    elif isinstance(perfiles_raw, list):
+        perfiles_list = [str(p).strip() for p in perfiles_raw if str(p).strip()]
+    else:
+        perfiles_list = []
+    # únicos preservando orden
+    seen = set()
+    perfiles_list = [p for p in perfiles_list if not (p in seen or seen.add(p))]
+    perfiles_csv = ','.join(perfiles_list)
+    xlastuser = _xlastuser_id()
+    company = str(body.get('cia') or body.get('company') or session.get('company') or '').strip() or None
+
+    if modo not in ('I', 'U'):
+        return jsonify({"error": "Modo inválido."}), 400
+    if not userid:
+        return jsonify({"error": "Indique el usuario."}), 400
+    if not passwordweb:
+        return jsonify({"error": "Indique la clave web."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarusuario_web "
+            "@modo=?, @userid=?, @passwordweb=?, @perfiles=?, @xlastuser=?, @company=?",
+            (modo, userid, passwordweb, perfiles_csv, xlastuser, company),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "userid": _jsonable_value(row.get('userid')) or userid,
+            "resultado": _jsonable_value(row.get('resultado')) or 'OK',
+        })
+    except Exception as e:
+        logging.exception("api_usuarios_guardar")
         err = str(e)
         if 'RAISERROR' in err or '50000' in err:
             parts = err.split(']')
@@ -18221,6 +18367,34 @@ def api_unidades():
         return jsonify(data)
     except Exception:
         logging.exception("api_unidades")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/perfiles-sy')
+@login_required
+def api_selectores_perfiles_sy():
+    """sp_pr_selectorperfiles_web → id=Profile, text=Description."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_selectorperfiles_web")
+        rows = _dicts_first_nonempty_resultset(cursor)
+        data = []
+        for r in rows:
+            data.append({
+                "id": _jsonable_value(r.get('id') or r.get('profile')),
+                "text": _jsonable_value(r.get('text') or r.get('description')),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_selectores_perfiles_sy")
         return jsonify([])
     finally:
         if conn:

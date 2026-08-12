@@ -149,6 +149,9 @@
                 <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevoUsuario">
                     <i class="bi bi-plus-lg"></i> Nuevo
                 </button>
+                <button type="button" class="btn btn-outline-success btn-sm px-3" id="btnExportExcelUsuarios" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Descargar Excel
+                </button>
                 <span class="align-self-center usr-count ms-auto">
                     Registros: <strong id="lblCountUsuarios">0</strong>
                 </span>
@@ -237,6 +240,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_usuarios_listado') | tojson }};
@@ -247,6 +251,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     let perfilesCatalogo = [];
     let perfilesAsignados = [];
     let selectedUserId = '';
+    let lastRowsUsuarios = [];
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -380,6 +385,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         const nombre = document.getElementById('txtBuscarNombre').value.trim();
         const profile = document.getElementById('cboFiltroPerfil').value.trim() || '0';
         const tbody = document.getElementById('tbodyUsuarios');
+        const btnExcel = document.getElementById('btnExportExcelUsuarios');
+        lastRowsUsuarios = [];
+        btnExcel.disabled = true;
         tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-3">Cargando...</td></tr>';
         try {
             const res = await fetch(URL_LISTADO, {
@@ -389,7 +397,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const data = await leerJson(res);
             const rows = Array.isArray(data.rows) ? data.rows : [];
+            lastRowsUsuarios = rows;
             document.getElementById('lblCountUsuarios').textContent = String(rows.length);
+            btnExcel.disabled = rows.length === 0;
             tbody.innerHTML = '';
             if (!rows.length) {
                 tbody.innerHTML = '<tr><td colspan="4" class="text-muted text-center py-3">Sin registros</td></tr>';
@@ -410,9 +420,89 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
         } catch (e) {
             console.error(e);
+            lastRowsUsuarios = [];
+            btnExcel.disabled = true;
             tbody.innerHTML = `<tr><td colspan="4" class="text-danger text-center py-3">${escHtml(e.message)}</td></tr>`;
             document.getElementById('lblCountUsuarios').textContent = '0';
         }
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        if (!el || el.selectedIndex < 0) return '';
+        return String(el.options[el.selectedIndex]?.text || '').trim();
+    }
+
+    async function exportUsuariosExcel() {
+        if (!lastRowsUsuarios.length) {
+            alert('No hay usuarios para exportar. Ejecute una búsqueda primero.');
+            return;
+        }
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+
+        const headers = ['Usuario', 'Password web', 'Código', 'Nombre'];
+        const filtroNombre = document.getElementById('txtBuscarNombre').value.trim() || '(todos)';
+        const filtroPerfil = selectedText('cboFiltroPerfil') || 'Todos';
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Usuarios', { views: [{ showGridLines: true }] });
+
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+        const fillHeader = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8F9FA' } };
+
+        ws.mergeCells(1, 1, 1, 4);
+        const title = ws.getCell(1, 1);
+        title.value = 'Listado de Usuarios';
+        title.font = { bold: true, size: 14 };
+        title.alignment = { horizontal: 'center', vertical: 'middle' };
+        ws.getRow(1).height = 24;
+
+        ws.addRow(['Filtro trabajador/usuario', filtroNombre, 'Perfil', filtroPerfil]);
+        ws.addRow(['Registros', lastRowsUsuarios.length, '', '']);
+        ws.addRow([]);
+
+        const hRow = ws.addRow(headers);
+        hRow.font = { bold: true };
+        hRow.eachCell((cell) => {
+            cell.fill = fillHeader;
+            cell.border = allBorders;
+        });
+
+        lastRowsUsuarios.forEach((r) => {
+            const row = ws.addRow([
+                r.userid || '',
+                r.passwordweb || '',
+                r.person || '',
+                r.nombre || ''
+            ]);
+            row.eachCell((cell) => { cell.border = allBorders; });
+        });
+
+        ws.columns = [
+            { width: 18 },
+            { width: 18 },
+            { width: 14 },
+            { width: 45 }
+        ];
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[-:T]/g, '');
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `usuarios_${stamp}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+            URL.revokeObjectURL(a.href);
+            a.remove();
+        }, 1000);
     }
 
     async function seleccionarUsuario(userid) {
@@ -477,6 +567,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     document.getElementById('btnNuevoUsuario').addEventListener('click', () => modoNuevo());
+
+    document.getElementById('btnExportExcelUsuarios').addEventListener('click', async () => {
+        try {
+            await exportUsuariosExcel();
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'No se pudo generar el Excel.');
+        }
+    });
 
     document.getElementById('btnGuardarUsuario').addEventListener('click', async () => {
         ocultarMsg();

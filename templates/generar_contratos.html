@@ -67,6 +67,12 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
             <div class="col-6 col-sm-4 col-md-3 col-lg-1">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
@@ -153,6 +159,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCia = document.getElementById('cboCompania');
     const cboPlantilla = document.getElementById('cboPlantilla');
     const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboUnidad = document.getElementById('cboUnidad');
     const cboCesados = document.getElementById('cboCesados');
     const cboFormato = document.getElementById('cboFormato');
     const txtBusqueda = document.getElementById('txtBusqueda');
@@ -176,6 +183,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        const want = String(value || '').trim();
+        return Array.from(select.options).some((o) => String(o.value || '').trim() === want);
     }
 
     function toastOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
@@ -241,6 +253,32 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (chkAll) {
             chkAll.checked = checks.length > 0 && n === checks.length;
             chkAll.indeterminate = n > 0 && n < checks.length;
+        }
+    }
+
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim() || '0';
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            cboUnidad.value = optionExists(cboUnidad, prev) ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
         }
     }
 
@@ -344,6 +382,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     cia,
                     payrolltype: cboPt.value.trim() || '0',
+                    repunit: String(cboUnidad?.value || '0').trim() || '0',
                     cesados: cboCesados.value || 'N',
                     busqueda: txtBusqueda.value.trim(),
                 }),
@@ -483,6 +522,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     await poblarSelect('/api/selectores/companias', cboCia, { value: '', text: 'Seleccione...' });
+    await cargarUnidades();
     if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
     if (cboCia.value) {
         await Promise.all([cargarPlantillas(), cargarPlanillas()]);

@@ -54,13 +54,13 @@ def _centenas_a_letras(n: int) -> str:
 
 
 def numero_a_letras(valor) -> str:
-    """Convierte un monto a letras en español (enteros + centavos)."""
+    """Convierte un monto a letras en español (enteros + centavos + SOLES)."""
     try:
         if valor is None or valor == "":
-            return "CERO CON 00/100"
+            return "CERO CON 00/100 SOLES"
         dec = Decimal(str(valor).replace(",", "").strip())
     except (InvalidOperation, ValueError, TypeError):
-        return "CERO CON 00/100"
+        return "CERO CON 00/100 SOLES"
 
     negativo = dec < 0
     dec = abs(dec).quantize(Decimal("0.01"))
@@ -89,19 +89,39 @@ def numero_a_letras(valor) -> str:
 
     if negativo:
         texto = f"MENOS {texto}"
-    return f"{texto} CON {centavos:02d}/100"
+    return f"{texto} CON {centavos:02d}/100 SOLES"
+
+
+_MESES_FECHA = (
+    "", "enero", "febrero", "marzo", "abril", "mayo", "junio",
+    "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre",
+)
 
 
 def _fmt_fecha_display(iso_or_val) -> str:
+    """Fecha en letras: '01 de mayo del 2026' (marcadores de contrato)."""
     if iso_or_val is None or iso_or_val == "":
         return ""
-    if hasattr(iso_or_val, "strftime"):
-        return iso_or_val.strftime("%d/%m/%Y")
-    s = str(iso_or_val).strip()
-    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
-        y, m, d = s[:10].split("-")
-        return f"{d}/{m}/{y}"
-    return s
+    d = m = y = None
+    if hasattr(iso_or_val, "day") and hasattr(iso_or_val, "month") and hasattr(iso_or_val, "year"):
+        try:
+            d, m, y = int(iso_or_val.day), int(iso_or_val.month), int(iso_or_val.year)
+        except Exception:
+            d = m = y = None
+    if d is None:
+        s = str(iso_or_val).strip()
+        if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+            y_s, m_s, d_s = s[:10].split("-")
+            d, m, y = int(d_s), int(m_s), int(y_s)
+        else:
+            m2 = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", s)
+            if m2:
+                d, m, y = int(m2.group(1)), int(m2.group(2)), int(m2.group(3))
+            else:
+                return s
+    if not (1 <= m <= 12):
+        return f"{d:02d}/{m:02d}/{y}"
+    return f"{d:02d} de {_MESES_FECHA[m]} del {y}"
 
 
 def _fmt_sueldo(valor) -> str:
@@ -395,10 +415,10 @@ MARCADORES_AYUDA = [
     ("centro_costo", "Centro de costo"),
     ("modalidad", "Modalidad de contrato"),
     ("sueldo", "Sueldo numérico"),
-    ("sueldo_letras", "Sueldo en letras"),
-    ("fecha_ingreso", "Fecha de ingreso"),
-    ("inicio_contrato", "Inicio de contrato"),
-    ("fin_contrato", "Fin de contrato"),
+    ("sueldo_letras", "Sueldo en letras (… CON 00/100 SOLES)"),
+    ("fecha_ingreso", "Fecha de ingreso (01 de mayo del 2026)"),
+    ("inicio_contrato", "Inicio de contrato (01 de mayo del 2026)"),
+    ("fin_contrato", "Fin de contrato (01 de mayo del 2026)"),
     ("periodo_contrato", "Plazo del contrato (p.ej. 03 meses)"),
     ("inicio_dia", "Día inicio"),
     ("inicio_mes", "Mes inicio"),
@@ -407,7 +427,7 @@ MARCADORES_AYUDA = [
     ("fin_mes", "Mes fin"),
     ("fin_anio", "Año fin"),
     ("ciudad", "Ciudad / unidad"),
-    ("fecha_firma", "Fecha de firma"),
+    ("fecha_firma", "Fecha de firma (01 de mayo del 2026)"),
     ("dia_firma", "Día firma"),
     ("mes_firma", "Mes firma"),
     ("anio_firma", "Año firma"),

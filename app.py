@@ -20377,6 +20377,7 @@ def api_reporte_lista_trabajadores():
     if activos not in ('Y', 'N'):
         activos = 'Y'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
 
     if not cia:
@@ -20461,11 +20462,11 @@ def api_reporte_lista_trabajadores():
             "EXEC sp_pr_reportelistatrabajadores_web "
             "@cia=?, @payrolltype=?, @nombre=?, @docnro=?, "
             "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, "
-            "@activos=?, @cesados=?",
+            "@activos=?, @cesados=?, @repunit=?",
             (
                 cia, payroll_type, nombre, docnro,
                 fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
-                activos, cesados,
+                activos, cesados, repunit,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

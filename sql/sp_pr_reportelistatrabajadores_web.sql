@@ -11,6 +11,7 @@
       @fecha_ingreso_desde / @fecha_ingreso_hasta — YYYY-MM-DD
       @activos             — Y = solo activos (Status='N'), N = solo inactivos
       @cesados             — T=todos, Y=con cese, N=sin cese
+      @repunit             — unidad (SY_Person.ReplicationUnit); '0' = todas
 
     Fecha ingreso efectiva: ISNULL(ReEntryDate, EntryDate).
     Dirección: SY_Person.Address.
@@ -24,7 +25,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reportelistatrabajadores_web]
     @fecha_ingreso_desde  VARCHAR(10)  = '',
     @fecha_ingreso_hasta  VARCHAR(10)  = '',
     @activos              CHAR(1)      = 'Y',
-    @cesados              CHAR(1)      = 'T'
+    @cesados              CHAR(1)      = 'T',
+    @repunit              VARCHAR(20)  = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -45,6 +47,7 @@ BEGIN
     IF @activos NOT IN ('Y', 'N') SET @activos = 'Y';
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
     IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
 
     IF @fecha_ingreso_desde <> '' AND ISDATE(@fecha_ingreso_desde) = 1
         SET @fd = CONVERT(DATE, @fecha_ingreso_desde, 120);
@@ -236,6 +239,7 @@ BEGIN
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)
          OR (@cesados = 'N' AND e.CeaseDate IS NULL)
           )
+      AND (@repunit = '0' OR p.ReplicationUnit = @repunit)
       AND (
             @fecha_ingreso_all = 'Y'
          OR (

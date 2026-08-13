@@ -104,6 +104,12 @@
                     <option value="N">No</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
             <div class="col-12 col-md-auto filtro-fecha-ingreso">
                 <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
                 <div class="d-flex align-items-center flex-wrap gap-1">
@@ -156,6 +162,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const txtDni = document.getElementById('txtDni');
     const cboActivos = document.getElementById('cboActivos');
     const cboCesados = document.getElementById('cboCesados');
+    const cboUnidad = document.getElementById('cboUnidad');
     const chkFecha = document.getElementById('chkFechaIngreso');
     const txtDesde = document.getElementById('txtFechaIngresoDesde');
     const txtHasta = document.getElementById('txtFechaIngresoHasta');
@@ -173,6 +180,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
     }
 
     function seleccionarInsensitive(select, codigo) {
@@ -243,6 +256,36 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch (err) {
             console.error(err);
             select.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim() || '0';
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            if (optionExists(cboUnidad, prev)) {
+                cboUnidad.value = prev;
+            } else {
+                cboUnidad.value = '0';
+            }
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
         }
     }
 
@@ -343,6 +386,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     docnro: (txtDni.value || '').trim(),
                     activos: cboActivos.value || 'Y',
                     cesados: cboCesados.value || 'T',
+                    repunit: String(cboUnidad?.value || '0').trim() || '0',
                     fecha_ingreso_activo: usarFecha,
                     fecha_ingreso_desde: usarFecha ? desde : '',
                     fecha_ingreso_hasta: usarFecha ? hasta : '',
@@ -390,6 +434,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboCia.addEventListener('change', cargarPlanillas);
 
     syncFechaIngreso();
+    await cargarUnidades();
     await poblarSelect('/api/selectores/companias', cboCia, { value: '', text: 'Seleccione...' });
     if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
     if (cboCia.value) await cargarPlanillas();

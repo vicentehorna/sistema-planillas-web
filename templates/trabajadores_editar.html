@@ -520,7 +520,24 @@
                             </div>
                             {% endif %}
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-2">
+                            <label class="form-label small fw-bold text-muted d-block">Estado</label>
+                            {% if modo_reingreso %}
+                            <div class="form-check mt-1">
+                                <input class="form-check-input campo-bloqueado" type="checkbox" id="chkStatusInactivo" disabled>
+                                <label class="form-check-label small text-muted" for="chkStatusInactivo">Inactivo</label>
+                            </div>
+                            <input type="hidden" name="status" value="N">
+                            <div class="form-text text-muted">Quedará activo al reingresar.</div>
+                            {% else %}
+                            <div class="form-check mt-1">
+                                <input class="form-check-input" type="checkbox" id="chkStatusInactivo" name="status" value="Y"
+                                       {% if empleado.status == 'Y' %}checked{% endif %}>
+                                <label class="form-check-label small" for="chkStatusInactivo">Inactivo</label>
+                            </div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-5">
                             <label for="txtCeaseDate" class="form-label small fw-bold text-muted">Fecha de cese</label>
                             {% if modo_reingreso %}
                             <input type="date" id="txtCeaseDate" class="form-control form-control-sm campo-bloqueado"
@@ -532,7 +549,7 @@
                                    value="{{ empleado.ceasedate or '' }}">
                             {% endif %}
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-5">
                             <label for="cboCeaseReason" class="form-label small fw-bold text-muted">Motivo de cese</label>
                             {% if modo_reingreso %}
                             <select id="cboCeaseReason" class="form-select form-select-sm campo-bloqueado" disabled>

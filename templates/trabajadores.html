@@ -11,8 +11,10 @@
     }
 
     .table-trabajadores {
+        --sticky-col0-w: 7.5rem;
         --sticky-col1-w: 5.75rem;
         --sticky-col2-w: 14rem;
+        --sticky-acciones-w: 4.5rem;
         font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
@@ -32,9 +34,20 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
-    .table-trabajadores .sticky-col-1 {
+    .table-trabajadores .sticky-col-0 {
         position: sticky;
         left: 0;
+        z-index: 1;
+        background-color: #fff;
+        min-width: var(--sticky-col0-w);
+        width: var(--sticky-col0-w);
+        max-width: var(--sticky-col0-w);
+        box-sizing: border-box;
+    }
+
+    .table-trabajadores .sticky-col-1 {
+        position: sticky;
+        left: var(--sticky-col0-w);
         z-index: 1;
         background-color: #fff;
         min-width: var(--sticky-col1-w);
@@ -45,16 +58,30 @@
 
     .table-trabajadores .sticky-col-2 {
         position: sticky;
-        left: var(--sticky-col1-w);
+        left: calc(var(--sticky-col0-w) + var(--sticky-col1-w));
         z-index: 1;
         background-color: #fff;
         min-width: var(--sticky-col2-w);
         max-width: var(--sticky-col2-w);
         box-sizing: border-box;
+        box-shadow: 2px 0 4px -2px rgba(0, 0, 0, 0.12);
     }
 
+    .table-trabajadores .sticky-col-acciones {
+        position: sticky;
+        right: 0;
+        z-index: 1;
+        background-color: #fff;
+        min-width: var(--sticky-acciones-w);
+        width: var(--sticky-acciones-w);
+        box-sizing: border-box;
+        box-shadow: -2px 0 4px -2px rgba(0, 0, 0, 0.12);
+    }
+
+    .table-trabajadores thead th.sticky-col-0,
     .table-trabajadores thead th.sticky-col-1,
-    .table-trabajadores thead th.sticky-col-2 {
+    .table-trabajadores thead th.sticky-col-2,
+    .table-trabajadores thead th.sticky-col-acciones {
         z-index: 3;
         background-color: #f8f9fa;
     }
@@ -63,8 +90,10 @@
         background-color: #cfe2ff !important;
     }
 
+    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-0,
     .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-1,
-    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-2 {
+    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-2,
+    .table-trabajadores tbody tr.fila-seleccionada > td.sticky-col-acciones {
         background-color: #cfe2ff !important;
     }
 
@@ -252,9 +281,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const URL_LISTADO = {{ url_for('api_trabajadores_listado') | tojson }};
     const URL_ELIMINAR = {{ url_for('api_trabajadores_eliminar') | tojson }};
+    const IDX_STICKY_0 = 0;
     const IDX_STICKY_1 = 1;
     const IDX_STICKY_2 = 2;
-    const IDX_CENTRO = new Set([6, 7]);
+    const IDX_CENTRO = new Set([7, 8, 11]);
 
     let lastExportTrab = null;
 
@@ -409,9 +439,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         let htmlHeaders = '<tr>';
         headers.forEach((header, index) => {
             let sticky = '';
-            if (index === IDX_STICKY_1) sticky = 'sticky-col-1';
+            if (index === IDX_STICKY_0) sticky = 'sticky-col-0';
+            else if (index === IDX_STICKY_1) sticky = 'sticky-col-1';
             else if (index === IDX_STICKY_2) sticky = 'sticky-col-2';
-            const cen = IDX_CENTRO.has(index) ? ' text-center' : '';
+            else if (index === idxAcciones) sticky = 'sticky-col-acciones';
+            const cen = (IDX_CENTRO.has(index) || index === idxAcciones) ? ' text-center' : '';
             htmlHeaders += `<th class="${sticky}${cen}">${escapeHtml(header)}</th>`;
         });
         htmlHeaders += '</tr>';
@@ -440,11 +472,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                     const btn = (btnEdit || btnDel)
                         ? `${btnEdit}${btnDel}`
                         : '<span class="text-muted">—</span>';
-                    htmlBody += `<td class="text-center">${btn}</td>`;
+                    htmlBody += `<td class="text-center sticky-col-acciones">${btn}</td>`;
                     return;
                 }
                 let sticky = '';
-                if (index === IDX_STICKY_1) sticky = 'sticky-col-1 font-monospace fw-bold';
+                if (index === IDX_STICKY_0) sticky = 'sticky-col-0 text-truncate';
+                else if (index === IDX_STICKY_1) sticky = 'sticky-col-1 font-monospace fw-bold';
                 else if (index === IDX_STICKY_2) sticky = 'sticky-col-2 text-truncate';
                 const align = IDX_CENTRO.has(index) ? 'text-center' : '';
                 htmlBody += `<td class="${[sticky, align].filter(Boolean).join(' ')}">${escapeHtml(valor)}</td>`;

@@ -5904,6 +5904,8 @@ def _empleado_laborales_desde_form(form):
         'accountprofile': str(form.get('accountprofile') or '').strip(),
         'sueldo': sueldo_raw,
         'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
+        # Status: N = activo, Y = inactivo (checkbox marcado)
+        'status': 'Y' if str(form.get('status') or '').strip().upper() == 'Y' else 'N',
     }
 
 
@@ -5914,6 +5916,8 @@ def _empleado_laborales_para_form(empleado):
     out['entrydate'] = _sql_date_str_param(out.get('entrydate'))
     out['reentrydate'] = _sql_date_str_param(out.get('reentrydate'))
     out['ceasedate'] = _sql_date_str_param(out.get('ceasedate'))
+    status = str(out.get('status') or 'N').strip().upper()
+    out['status'] = 'N' if status == 'N' else 'Y'
     sueldo = out.get('sueldo')
     if sueldo is not None and str(sueldo).strip() != '':
         try:
@@ -6059,8 +6063,8 @@ def trabajadores_editar(person_id):
                 '@entrydate=?, @reentrydate=?, @ceasedate=?, @ceasereason=?, '
                 '@contractmodality=?, @ocupation=?, '
                 '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
-                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @xlastuser=?, '
-                '@modo_reingreso=?',
+                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @status=?, '
+                '@xlastuser=?, @modo_reingreso=?',
                 (
                     cia,
                     person_id,
@@ -6079,6 +6083,7 @@ def trabajadores_editar(person_id):
                     datos['accountprofile'],
                     datos['sueldo'] or None,
                     datos['flagasigfamiliar'],
+                    'N' if modo_reingreso_post else datos['status'],
                     xlastuser,
                     'Y' if modo_reingreso_post else 'N',
                 ),
@@ -6342,6 +6347,7 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'accountprofile': '',
         'sueldo': '',
         'flagasigfamiliar': 'N',
+        'status': 'N',
         'pensiontype': '',
         'pensioninscriptiondate': '',
         'regimehealth': '',
@@ -19264,14 +19270,17 @@ def api_trabajadores_listado():
         'Estado',
         'Tipo documento',
         'Nro. documento',
+        'Unidad',
         'F. ingreso',
         'F. cese',
         'Cargo',
+        'Régimen de pensión',
+        'Fecha de nacimiento',
         'Acciones',
     ]
     keys_datos = [
         'tipoplanilla', 'codigo', 'nombre', 'estado', 'tipodocumento', 'numerodocumento',
-        'fechaingreso', 'fechacese', 'cargo',
+        'unidad', 'fechaingreso', 'fechacese', 'cargo', 'regimenpension', 'fechanacimiento',
     ]
     conn = None
     try:

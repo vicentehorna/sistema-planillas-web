@@ -21,6 +21,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @accountprofile     VARCHAR(20) = NULL,
     @sueldo             VARCHAR(20) = NULL,
     @flagasigfamiliar   VARCHAR(1) = 'N',
+    @status             VARCHAR(1) = 'N',
     @xlastuser          VARCHAR(20) = NULL,
     @modo_reingreso     VARCHAR(1)  = 'N'
 AS
@@ -37,6 +38,8 @@ BEGIN
     END
 
     IF RTRIM(ISNULL(@flagasigfamiliar, '')) NOT IN ('Y', 'N') SET @flagasigfamiliar = 'N';
+    SET @status = UPPER(LTRIM(RTRIM(ISNULL(@status, 'N'))));
+    IF @status NOT IN ('Y', 'N') SET @status = 'N';
     SET @modo_reingreso = UPPER(LTRIM(RTRIM(ISNULL(@modo_reingreso, 'N'))));
     IF @modo_reingreso NOT IN ('Y', 'N') SET @modo_reingreso = 'N';
 
@@ -153,7 +156,7 @@ BEGIN
         END,
         Status = CASE
             WHEN @modo_reingreso = 'Y' THEN 'N'
-            ELSE Status
+            ELSE @status
         END,
         contractmodality = NULLIF(LTRIM(RTRIM(@contractmodality)), ''),
         ocupation = NULLIF(LTRIM(RTRIM(@ocupation)), ''),

@@ -36,6 +36,10 @@ BEGIN
             WHEN e.ceasedate IS NULL THEN ''
             ELSE CONVERT(VARCHAR(10), e.ceasedate, 23)
         END AS ceasedate,
+        CASE
+            WHEN LTRIM(RTRIM(ISNULL(e.Status, 'N'))) = 'N' THEN 'N'
+            ELSE 'Y'
+        END AS status,
         ISNULL(e.ceasereason, '') AS ceasereason,
         ISNULL(cr.description, '') AS ceasereason_desc,
         ISNULL(e.contractmodality, '') AS contractmodality,

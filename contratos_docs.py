@@ -111,10 +111,61 @@ def _fmt_sueldo(valor) -> str:
         return str(valor or "0.00")
 
 
+def _parse_fecha(iso_or_val):
+    if iso_or_val is None or iso_or_val == "":
+        return None
+    if hasattr(iso_or_val, "year") and hasattr(iso_or_val, "month") and hasattr(iso_or_val, "day"):
+        try:
+            return datetime(iso_or_val.year, iso_or_val.month, iso_or_val.day)
+        except Exception:
+            return None
+    s = str(iso_or_val).strip()
+    if re.match(r"^\d{4}-\d{2}-\d{2}", s):
+        y, m, d = s[:10].split("-")
+        try:
+            return datetime(int(y), int(m), int(d))
+        except Exception:
+            return None
+    m = re.match(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4})$", s)
+    if m:
+        d, mo, y = m.groups()
+        try:
+            return datetime(int(y), int(mo), int(d))
+        except Exception:
+            return None
+    return None
+
+
+def periodo_contrato_texto(inicio, fin) -> str:
+    """Texto de plazo (p.ej. '06 meses') a partir de fechas inicio/fin (meses inclusivos)."""
+    d0 = _parse_fecha(inicio)
+    d1 = _parse_fecha(fin)
+    if not d0 or not d1 or d1 < d0:
+        return str(fin or inicio or "").strip()
+    meses = (d1.year - d0.year) * 12 + (d1.month - d0.month) + 1
+    if d1.day < d0.day:
+        meses = max(0, meses - 1)
+    if meses <= 0:
+        dias = (d1.date() - d0.date()).days
+        if dias <= 0:
+            return "0 días"
+        if dias == 1:
+            return "01 día"
+        return f"{dias:02d} días"
+    if meses == 1:
+        return "01 mes"
+    return f"{meses:02d} meses"
+
+
 def contexto_desde_fila(row: dict) -> dict:
     """Normaliza fila del SP a contexto Jinja para la plantilla."""
     r = {str(k).lower(): v for k, v in (row or {}).items()}
     sueldo = r.get("sueldo")
+    inicio_raw = r.get("inicio_contrato")
+    fin_raw = r.get("fin_contrato")
+    periodo = str(r.get("periodo_contrato") or "").strip()
+    if not periodo:
+        periodo = periodo_contrato_texto(inicio_raw, fin_raw)
     return {
         "empresa": str(r.get("empresa") or "").strip(),
         "ruc": str(r.get("ruc") or "").strip(),
@@ -129,6 +180,10 @@ def contexto_desde_fila(row: dict) -> dict:
         "tipo_documento": str(r.get("tipo_documento") or "").strip(),
         "dni": str(r.get("dni") or "").strip(),
         "direccion": str(r.get("direccion") or "").strip(),
+        "distrito": str(r.get("distrito") or "").strip(),
+        "provincia": str(r.get("provincia") or "").strip(),
+        "departamento": str(r.get("departamento") or "").strip(),
+        "ubigeo": str(r.get("ubigeo") or "").strip(),
         "nacionalidad": str(r.get("nacionalidad") or "").strip(),
         "sexo": str(r.get("sexo") or "").strip(),
         "cargo": str(r.get("cargo") or "").strip(),
@@ -137,8 +192,9 @@ def contexto_desde_fila(row: dict) -> dict:
         "sueldo": _fmt_sueldo(sueldo),
         "sueldo_letras": numero_a_letras(sueldo),
         "fecha_ingreso": _fmt_fecha_display(r.get("fecha_ingreso")),
-        "inicio_contrato": _fmt_fecha_display(r.get("inicio_contrato")),
-        "fin_contrato": _fmt_fecha_display(r.get("fin_contrato")),
+        "inicio_contrato": _fmt_fecha_display(inicio_raw),
+        "fin_contrato": _fmt_fecha_display(fin_raw),
+        "periodo_contrato": periodo,
         "inicio_dia": str(r.get("inicio_dia") or "").strip(),
         "inicio_mes": str(r.get("inicio_mes") or "").strip(),
         "inicio_anio": str(r.get("inicio_anio") or "").strip(),
@@ -343,6 +399,7 @@ MARCADORES_AYUDA = [
     ("fecha_ingreso", "Fecha de ingreso"),
     ("inicio_contrato", "Inicio de contrato"),
     ("fin_contrato", "Fin de contrato"),
+    ("periodo_contrato", "Plazo del contrato (p.ej. 03 meses)"),
     ("inicio_dia", "Día inicio"),
     ("inicio_mes", "Mes inicio"),
     ("inicio_anio", "Año inicio"),
@@ -355,3 +412,23 @@ MARCADORES_AYUDA = [
     ("mes_firma", "Mes firma"),
     ("anio_firma", "Año firma"),
 ]
+
+# Equivalencia bookmarks legacy (PowerBuilder / Word) → marcadores web actuales.
+MARCADORES_LEGACY_MAP = {
+    "NOMBRETRAB": "trabajador",
+    "NOMBRETRAB1": "trabajador",
+    "NRODOCTRAB": "dni",
+    "NRODOCTRAB1": "dni",
+    "DIRECCIONTRAB1": "direccion",
+    "DISTRITO": "distrito",
+    "PROVINCIA": "provincia",
+    "DEPARTAMENTO": "departamento",
+    "CARGOTRAB": "cargo",
+    "CARGOTRAB1": "cargo",
+    "PERIODOCONTRATO": "periodo_contrato",
+    "FECHAINICONTRATO": "inicio_contrato",
+    "FECHAINICONTRATO1": "inicio_contrato",
+    "FECHAFINCONTRATO": "fin_contrato",
+    "SALARIONUMERO": "sueldo",
+    "SALARIO": "sueldo_letras",
+}

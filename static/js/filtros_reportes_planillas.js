@@ -224,6 +224,10 @@
                 if (incluyeUnidad) {
                     estado.repunit = val('cboUnidad') || '0';
                 }
+                const chkAgrupar = document.getElementById('chkAgruparCCosto');
+                if (chkAgrupar) {
+                    estado.agruparCCosto = !!chkAgrupar.checked;
+                }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros reporte: no se pudo guardar', e);
@@ -347,6 +351,11 @@
                 restaurarFechaIngresoDesdeFiltros(filtros);
             }
 
+            const chkAgrupar = document.getElementById('chkAgruparCCosto');
+            if (chkAgrupar) {
+                chkAgrupar.checked = filtros.agruparCCosto === true;
+            }
+
             guardar();
             return true;
         }
@@ -376,6 +385,8 @@
                 const u = document.getElementById('cboUnidad');
                 if (u) u.addEventListener('change', guardar);
             }
+            const chkAgrupar = document.getElementById('chkAgruparCCosto');
+            if (chkAgrupar) chkAgrupar.addEventListener('change', guardar);
         }
 
         return {
@@ -1627,6 +1638,23 @@
             if (!optionExists(cboCia, cia)) return false;
             cboCia.value = cia;
 
+            async function restaurarCentrosCosto() {
+                const cboCentroCosto = document.getElementById('cboCentroCosto');
+                if (!cboCentroCosto) return;
+                if (typeof poblarCentrosCosto === 'function') {
+                    await poblarCentrosCosto();
+                }
+                const costcenter = filtros.costcenter != null ? String(filtros.costcenter).trim() : '0';
+                if (costcenter && optionExists(cboCentroCosto, costcenter)) {
+                    cboCentroCosto.value = costcenter;
+                } else if (optionExists(cboCentroCosto, '0')) {
+                    cboCentroCosto.value = '0';
+                }
+            }
+
+            // Cargar centros apenas hay compañía (hay returns tempranos más abajo).
+            await restaurarCentrosCosto();
+
             if (incluyeBancoHaberes && typeof poblarBancosHaberes === 'function') {
                 await poblarBancosHaberes(cia);
                 const cboBanco = document.getElementById('cboBancoHaberes');
@@ -1697,19 +1725,6 @@
                     cboUnidad.value = unidad;
                 } else if (optionExists(cboUnidad, '0')) {
                     cboUnidad.value = '0';
-                }
-            }
-
-            const cboCentroCosto = document.getElementById('cboCentroCosto');
-            if (cboCentroCosto) {
-                if (typeof poblarCentrosCosto === 'function') {
-                    await poblarCentrosCosto();
-                }
-                const costcenter = filtros.costcenter != null ? String(filtros.costcenter).trim() : '0';
-                if (costcenter && optionExists(cboCentroCosto, costcenter)) {
-                    cboCentroCosto.value = costcenter;
-                } else if (optionExists(cboCentroCosto, '0')) {
-                    cboCentroCosto.value = '0';
                 }
             }
 

@@ -1186,6 +1186,32 @@
                 </li>
                 {% endif %}
 
+                {% set es_ultraseguros = (sql_database or '')|lower == 'hm_ultra' %}
+                {% set tareo_active = request.endpoint in ('tareo_tipo_dia_page',) %}
+                {% set show_tareo = es_ultraseguros and can_menu('tareo_tipo_dia') %}
+                {% if show_tareo %}
+                <li class="sidebar-menu-parent {{ 'active' if tareo_active else '' }}">
+                    <a href="#submenuTareo"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if tareo_active else 'false' }}"
+                       aria-controls="submenuTareo"
+                       title="Tareo">
+                        <i class="bi bi-calendar2-week"></i><span class="sidebar-link-text">Tareo</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if tareo_active else '' }}" id="submenuTareo">
+                        {% if can_menu('tareo_tipo_dia') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_tipo_dia_page' else '' }}">
+                            <a href="{{ url_for('tareo_tipo_dia_page') }}" title="Tipo de Día">
+                                <i class="bi bi-tags"></i><span class="sidebar-link-text">Tipo de Día</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>

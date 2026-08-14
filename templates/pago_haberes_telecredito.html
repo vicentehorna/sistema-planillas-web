@@ -543,11 +543,24 @@ document.addEventListener('DOMContentLoaded', async function () {
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
 
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({
+        const okRestore = await filtrosPersist.aplicarRestauracionCascada({
             poblarSelect,
             poblarUnidades: cargarUnidades,
             poblarCentrosCosto: cargarCentrosCosto
         });
+        if (!okRestore) {
+            if (!String(cboCia.value || '').trim()) {
+                seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+            }
+            const ciaFallback = cboCia.value.trim();
+            if (ciaFallback) {
+                await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaFallback)}`, cboPlanilla);
+                await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
+                    ciaFallback, document.getElementById('cboConcepto'), poblarSelect
+                );
+                await cargarCentrosCosto();
+            }
+        }
     } else if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();
@@ -565,6 +578,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             );
             await cargarCentrosCosto();
         }
+    }
+
+    // Seguridad: si hay compañía y el combo quedó solo en "Todos", reintentar carga.
+    if (String(cboCia.value || '').trim() && cboCentroCosto && cboCentroCosto.options.length <= 1) {
+        await cargarCentrosCosto();
     }
 
     if (filtrosPersist) {

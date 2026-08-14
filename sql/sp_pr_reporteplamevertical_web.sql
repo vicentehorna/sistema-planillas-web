@@ -19,8 +19,12 @@
       @fecha_ingreso_desde — YYYY-MM-DD (fecha efectiva ISNULL(ReEntryDate, EntryDate))
       @fecha_ingreso_hasta — YYYY-MM-DD
       @repunit     — unidad (ReplicationUnit); '0' = todas
+      @agrupar_cc  — Y = agrupar por centro de costo (Cod.Costo, C.Costo, Cantidad + SUM conceptos)
+                     N = detalle por trabajador (default; transparente para clientes sin la opción)
 
-    Resultado final: una fila por trabajador con columnas fijas + concept01..concept65.
+    Resultado final:
+      @agrupar_cc='N': una fila por trabajador con columnas fijas + concept01..concept65
+      @agrupar_cc='Y': una fila por costcenter con Cod.Costo, C.Costo, Cantidad + SUM concept01..65
 
     Ejemplo:
       EXEC sp_pr_reporteplamevertical_web
@@ -29,7 +33,8 @@
            @process = 'LIMABGT 000000000001',
            @period = '202604',
            @person = '0',
-           @salarybank = '';
+           @salarybank = '',
+           @agrupar_cc = 'N';
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @cia         CHAR(4),
@@ -41,7 +46,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @fecha_ingreso_all    CHAR(1)     = 'Y',
     @fecha_ingreso_desde  VARCHAR(10) = '',
     @fecha_ingreso_hasta  VARCHAR(10) = '',
-    @repunit              VARCHAR(20) = '0'
+    @repunit              VARCHAR(20) = '0',
+    @agrupar_cc           CHAR(1)     = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -51,6 +57,8 @@ BEGIN
     SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
     SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+    SET @agrupar_cc = UPPER(LTRIM(RTRIM(ISNULL(@agrupar_cc, 'N'))));
+    IF @agrupar_cc NOT IN ('Y', 'N') SET @agrupar_cc = 'N';
 
     DECLARE @fd DATE = NULL;
     DECLARE @fh DATE = NULL;
@@ -64,7 +72,6 @@ BEGIN
     DECLARE @conceptname  VARCHAR(255);
     DECLARE @columna      VARCHAR(50);
     DECLARE @currency     CHAR(2);
-    DECLARE @grupo        CHAR(1);
     DECLARE @conceptvalue NUMERIC(19, 4);
     DECLARE @orden        INT;
     DECLARE @k            INT;
@@ -73,7 +80,6 @@ BEGIN
     DECLARE @concepto     VARCHAR(100);
 
     SET @currency = 'LO';
-    SET @grupo = 'N';
 
     CREATE TABLE [#Temporal] (
         [concepto] VARCHAR(100) COLLATE SQL_Latin1_General_CP1_CI_AS NOT NULL,
@@ -220,7 +226,37 @@ BEGIN
     CLOSE listareporte;
     DEALLOCATE listareporte;
 
-    IF @grupo = 'N'
+    IF @agrupar_cc = 'Y'
+    BEGIN
+        /* Agrupado por C.Costo: misma matriz, SUM de importes + cantidad de trabajadores. */
+        SELECT
+            ISNULL((
+                SELECT CCCode FROM AC_CostCenter
+                WHERE CostCenter = r.costcenter
+            ), '') AS costcenter,
+            ISNULL((
+                SELECT Description FROM AC_CostCenter
+                WHERE CostCenter = r.costcenter
+            ), '') AS ccname,
+            COUNT(DISTINCT r.person) AS cantidad,
+            SUM(r.concept01), SUM(r.concept02), SUM(r.concept03), SUM(r.concept04), SUM(r.concept05),
+            SUM(r.concept06), SUM(r.concept07), SUM(r.concept08), SUM(r.concept09), SUM(r.concept10),
+            SUM(r.concept11), SUM(r.concept12), SUM(r.concept13), SUM(r.concept14), SUM(r.concept15),
+            SUM(r.concept16), SUM(r.concept17), SUM(r.concept18), SUM(r.concept19), SUM(r.concept20),
+            SUM(r.concept21), SUM(r.concept22), SUM(r.concept23), SUM(r.concept24), SUM(r.concept25),
+            SUM(r.concept26), SUM(r.concept27), SUM(r.concept28), SUM(r.concept29), SUM(r.concept30),
+            SUM(r.concept31), SUM(r.concept32), SUM(r.concept33), SUM(r.concept34), SUM(r.concept35),
+            SUM(r.concept36), SUM(r.concept37), SUM(r.concept38), SUM(r.concept39), SUM(r.concept40),
+            SUM(r.concept41), SUM(r.concept42), SUM(r.concept43), SUM(r.concept44), SUM(r.concept45),
+            SUM(r.concept46), SUM(r.concept47), SUM(r.concept48), SUM(r.concept49), SUM(r.concept50),
+            SUM(r.concept51), SUM(r.concept52), SUM(r.concept53), SUM(r.concept54), SUM(r.concept55),
+            SUM(r.concept56), SUM(r.concept57), SUM(r.concept58), SUM(r.concept59), SUM(r.concept60),
+            SUM(r.concept61), SUM(r.concept62), SUM(r.concept63), SUM(r.concept64), SUM(r.concept65)
+        FROM xx_reporteplanilla r
+        GROUP BY r.costcenter
+        ORDER BY 1, 2;
+    END
+    ELSE
     BEGIN
         SELECT
             person,
@@ -306,34 +342,6 @@ BEGIN
             concept61, concept62, concept63, concept64, concept65
         FROM xx_reporteplanilla
         ORDER BY 2;
-    END
-    ELSE
-    BEGIN
-        SELECT
-            person,
-            name,
-            MAX(entrydate),
-            MAX(ceasedate),
-            (SELECT Description FROM PR_Position WHERE Position = xx_reporteplanilla.position) AS position,
-            MAX(afp),
-            (SELECT Description FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS ccname,
-            (SELECT CCCode FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS costcenter,
-            '' AS unidad,
-            '' AS tipopago,
-            '' AS profile,
-            0 AS horas,
-            '' AS banco,
-            '' AS numcuenta,
-            SUM(concept01), SUM(concept02), SUM(concept03), SUM(concept04), SUM(concept05), SUM(concept06), SUM(concept07), SUM(concept08), SUM(concept09), SUM(concept10),
-            SUM(concept11), SUM(concept12), SUM(concept13), SUM(concept14), SUM(concept15), SUM(concept16), SUM(concept17), SUM(concept18), SUM(concept19), SUM(concept20),
-            SUM(concept21), SUM(concept22), SUM(concept23), SUM(concept24), SUM(concept25), SUM(concept26), SUM(concept27), SUM(concept28), SUM(concept29), SUM(concept30),
-            SUM(concept31), SUM(concept32), SUM(concept33), SUM(concept34), SUM(concept35), SUM(concept36), SUM(concept37), SUM(concept38), SUM(concept39), SUM(concept40),
-            SUM(concept41), SUM(concept42), SUM(concept43), SUM(concept44), SUM(concept45), SUM(concept46), SUM(concept47), SUM(concept48), SUM(concept49), SUM(concept50),
-            SUM(concept51), SUM(concept52), SUM(concept53), SUM(concept54), SUM(concept55), SUM(concept56), SUM(concept57), SUM(concept58), SUM(concept59), SUM(concept60),
-            SUM(concept61), SUM(concept62), SUM(concept63), SUM(concept64), SUM(concept65)
-        FROM xx_reporteplanilla
-        GROUP BY person, name, xx_reporteplanilla.position, xx_reporteplanilla.costcenter
-        ORDER BY name;
     END;
 
     DROP TABLE #Temporal;

@@ -1143,6 +1143,15 @@ def _es_cliente_ngservicios():
         return False
 
 
+def _es_cliente_ultraseguros():
+    """True cuando la BD activa es hm_ultra (Ultrasegur / Tareo)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_ultra'
+    except Exception:
+        return False
+
+
 _MESES_ES_A_NUM = {
     'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
     'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
@@ -7410,6 +7419,15 @@ def asientos_cuentas_contables_page():
     return render_template('asientos_cuentas_contables.html')
 
 
+@app.route('/tareo/tipo-dia')
+@login_required
+def tareo_tipo_dia_page():
+    """Maestro PR_TIPODIA — disponible inicialmente en hm_ultra (Ultrasegur)."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('tareo_tipo_dia.html')
+
+
 @app.route('/asientos/distribucion-porcentual')
 @login_required
 def asientos_distribucion_porcentual_page():
@@ -9092,6 +9110,147 @@ def api_asientos_cuentas_contables_eliminar():
             except Exception:
                 pass
         logging.exception("api_asientos_cuentas_contables_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/tipos-dia/listado', methods=['POST'])
+@login_required
+def api_tareo_tipos_dia_listado():
+    """sp_pr_listar_tipodia_web — maestro PR_TIPODIA (hm_ultra)."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_tipodia_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "fila": _jsonable_value(r.get('fila')),
+                    "codigo": _jsonable_value(r.get('codigo')),
+                    "nombre": _jsonable_value(r.get('nombre')),
+                    "horas": _float_sp_cell(r.get('horas')),
+                    "xlastuser": _jsonable_value(r.get('xlastuser')),
+                    "xlastdate": _jsonable_value(r.get('xlastdate')),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_tipos_dia_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/tipos-dia/guardar', methods=['POST'])
+@login_required
+def api_tareo_tipos_dia_guardar():
+    """sp_pr_guardar_tipodia_web — alta/edición PR_TIPODIA (hm_ultra)."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    fila_raw = body.get('fila')
+    fila = None
+    if fila_raw not in (None, ''):
+        try:
+            fila = int(fila_raw)
+        except (TypeError, ValueError):
+            return jsonify({"error": "Identificador de fila inválido."}), 400
+    modo = str(body.get('modo') or ('U' if fila else 'I')).strip().upper()
+    codigo = str(body.get('codigo') or '').strip()
+    nombre = str(body.get('nombre') or body.get('name') or '').strip()
+    try:
+        horas = float(body.get('horas') if body.get('horas') is not None else 0)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Horas inválidas."}), 400
+    if not codigo or not nombre:
+        return jsonify({"error": "Indique código y nombre."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardar_tipodia_web "
+            "@modo=?, @fila=?, @codigo=?, @nombre=?, @horas=?, @xlastuser=?",
+            (modo, fila, codigo, nombre, horas, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "fila": _jsonable_value(row.get('fila')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Tipo de día guardado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_tipos_dia_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/tipos-dia/eliminar', methods=['POST'])
+@login_required
+def api_tareo_tipos_dia_eliminar():
+    """sp_pr_eliminar_tipodia_web — elimina PR_TIPODIA (hm_ultra)."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    try:
+        fila = int(body.get('fila'))
+    except (TypeError, ValueError):
+        return jsonify({"error": "Indique el registro a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_eliminar_tipodia_web @fila=?", (fila,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "fila": _jsonable_value(row.get('fila')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Tipo de día eliminado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_tipos_dia_eliminar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
@@ -19750,6 +19909,29 @@ _PLANILLA_VERTICAL_STATIC_KEYS = [
     'banco',
     'numcuenta',
 ]
+_PLANILLA_VERTICAL_AGRUPADO_HEADERS_ES = [
+    'Cod.Costo',
+    'C.Costo',
+    'Cantidad',
+]
+_PLANILLA_VERTICAL_AGRUPADO_KEYS = [
+    'costcenter',
+    'ccname',
+    'cantidad',
+]
+
+
+def _normalize_agrupar_cc_flag(value):
+    flag = str(value or 'N').strip().upper()
+    return 'Y' if flag in ('Y', '1', 'S', 'TRUE', 'SI', 'SÍ') else 'N'
+
+
+def _es_bd_hm_divisa():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_divisa'
+    except Exception:
+        return False
 
 
 def _fetch_planilla_vertical_for_company(
@@ -19764,22 +19946,27 @@ def _fetch_planilla_vertical_for_company(
     fecha_ingreso_desde,
     fecha_ingreso_hasta,
     repunit='0',
+    agrupar_cc='N',
 ):
     """
     Ejecuta sp_pr_reporteplamevertical_web para una compañía y devuelve
     (concept_headers, concept_reporden, filas_dict).
   filas_dict: lista de dict con claves estáticas + '_concepts' {PrintText: valor}.
+  Si agrupar_cc='Y': claves Cod.Costo / C.Costo / Cantidad + conceptos sumados.
     """
     fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
     fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
     repunit_val = _normalize_replicationunit_asig(repunit)
+    agrupar_cc_val = _normalize_agrupar_cc_flag(agrupar_cc)
     cursor.execute(
         "EXEC sp_pr_reporteplamevertical_web "
         "@cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?, "
-        "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @repunit=?",
+        "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @repunit=?, "
+        "@agrupar_cc=?",
         (
             cia, payroll_type, process, period, person, salarybank,
             fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql, repunit_val,
+            agrupar_cc_val,
         ),
     )
     _drain_all_cursor_resultsets(cursor)
@@ -19814,71 +20001,98 @@ def _fetch_planilla_vertical_for_company(
 
     num_concepts = len(concept_headers)
     concept_cols_sql = ", ".join(f"concept{str(i).zfill(2)}" for i in range(1, 66))
-    sql_datos = f"""
-        SELECT
-            person,
-            name,
-            entrydate,
-            ceasedate,
-            (SELECT Description FROM PR_Position WHERE Position = xx_reporteplanilla.position) AS position,
-            afp,
-            (SELECT Description FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS ccname,
-            (SELECT CCCode FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS costcenter,
-            (SELECT Description FROM SY_ReplicationUnit
-             INNER JOIN SY_Person ON (SY_ReplicationUnit.ReplicationUnit = SY_Person.ReplicationUnit)
-             WHERE SY_Person.Person = xx_reporteplanilla.person) AS unidad,
-            (SELECT CASE WHEN ISNULL(SY_Person.isrecruiter, 'N') = 'Y' THEN 'H' ELSE 'P' END
-             FROM sy_person WHERE person = xx_reporteplanilla.person) AS tipopago,
-            (SELECT description FROM PR_AccountProfile
-             INNER JOIN PR_Employee ON (
-                 PR_AccountProfile.AccountProfile = PR_Employee.AccountProfile
-                 AND PR_AccountProfile.company = ?
-                 AND PR_Employee.Person = xx_reporteplanilla.person)) AS profile,
-            (SELECT SUM(hourday) FROM PR_REGISTERHOUR
-             WHERE period = ? AND Company = ? AND person = xx_reporteplanilla.person) AS horas,
-            CASE WHEN (
-                SELECT ShortName FROM PR_ProcessType
-                WHERE Company = ? AND ProcessType = ?
-            ) = 'CTS' THEN (
-                SELECT name FROM ERP_Bank
-                INNER JOIN PR_Employee ON (
-                    ERP_Bank.Bank = PR_Employee.CTSBank
-                    AND ERP_Bank.company = ?
-                    AND PR_Employee.Person = xx_reporteplanilla.person)
-            ) ELSE (
-                SELECT name FROM ERP_Bank
-                INNER JOIN PR_Employee ON (
-                    ERP_Bank.Bank = PR_Employee.SalaryBank
-                    AND ERP_Bank.company = ?
-                    AND PR_Employee.Person = xx_reporteplanilla.person)
-            ) END AS banco,
-            CASE WHEN (
-                SELECT ShortName FROM PR_ProcessType
-                WHERE Company = ? AND ProcessType = ?
-            ) = 'CTS' THEN (
-                SELECT CTSAccount FROM PR_Employee
-                WHERE PR_Employee.Person = xx_reporteplanilla.person AND PR_Employee.Company = ?
-            ) ELSE (
-                SELECT salaryaccount FROM PR_Employee
-                WHERE PR_Employee.Person = xx_reporteplanilla.person AND PR_Employee.Company = ?
-            ) END AS numcuenta,
-            {concept_cols_sql}
-        FROM xx_reporteplanilla
-        ORDER BY name
-    """
-    params_datos = (
-        cia,
-        period,
-        cia,
-        cia,
-        process,
-        cia,
-        cia,
-        cia,
-        process,
-        cia,
-        cia,
+    concept_sum_cols_sql = ", ".join(
+        f"SUM(xx_reporteplanilla.concept{str(i).zfill(2)}) AS concept{str(i).zfill(2)}"
+        for i in range(1, 66)
     )
+
+    if agrupar_cc_val == 'Y':
+        sql_datos = f"""
+            SELECT
+                ISNULL((
+                    SELECT CCCode FROM AC_CostCenter
+                    WHERE CostCenter = xx_reporteplanilla.costcenter
+                ), '') AS costcenter,
+                ISNULL((
+                    SELECT Description FROM AC_CostCenter
+                    WHERE CostCenter = xx_reporteplanilla.costcenter
+                ), '') AS ccname,
+                COUNT(DISTINCT xx_reporteplanilla.person) AS cantidad,
+                {concept_sum_cols_sql}
+            FROM xx_reporteplanilla
+            GROUP BY xx_reporteplanilla.costcenter
+            ORDER BY 1, 2
+        """
+        params_datos = ()
+        static_keys = _PLANILLA_VERTICAL_AGRUPADO_KEYS
+    else:
+        sql_datos = f"""
+            SELECT
+                person,
+                name,
+                entrydate,
+                ceasedate,
+                (SELECT Description FROM PR_Position WHERE Position = xx_reporteplanilla.position) AS position,
+                afp,
+                (SELECT Description FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS ccname,
+                (SELECT CCCode FROM AC_CostCenter WHERE CostCenter = xx_reporteplanilla.costcenter) AS costcenter,
+                (SELECT Description FROM SY_ReplicationUnit
+                 INNER JOIN SY_Person ON (SY_ReplicationUnit.ReplicationUnit = SY_Person.ReplicationUnit)
+                 WHERE SY_Person.Person = xx_reporteplanilla.person) AS unidad,
+                (SELECT CASE WHEN ISNULL(SY_Person.isrecruiter, 'N') = 'Y' THEN 'H' ELSE 'P' END
+                 FROM sy_person WHERE person = xx_reporteplanilla.person) AS tipopago,
+                (SELECT description FROM PR_AccountProfile
+                 INNER JOIN PR_Employee ON (
+                     PR_AccountProfile.AccountProfile = PR_Employee.AccountProfile
+                     AND PR_AccountProfile.company = ?
+                     AND PR_Employee.Person = xx_reporteplanilla.person)) AS profile,
+                (SELECT SUM(hourday) FROM PR_REGISTERHOUR
+                 WHERE period = ? AND Company = ? AND person = xx_reporteplanilla.person) AS horas,
+                CASE WHEN (
+                    SELECT ShortName FROM PR_ProcessType
+                    WHERE Company = ? AND ProcessType = ?
+                ) = 'CTS' THEN (
+                    SELECT name FROM ERP_Bank
+                    INNER JOIN PR_Employee ON (
+                        ERP_Bank.Bank = PR_Employee.CTSBank
+                        AND ERP_Bank.company = ?
+                        AND PR_Employee.Person = xx_reporteplanilla.person)
+                ) ELSE (
+                    SELECT name FROM ERP_Bank
+                    INNER JOIN PR_Employee ON (
+                        ERP_Bank.Bank = PR_Employee.SalaryBank
+                        AND ERP_Bank.company = ?
+                        AND PR_Employee.Person = xx_reporteplanilla.person)
+                ) END AS banco,
+                CASE WHEN (
+                    SELECT ShortName FROM PR_ProcessType
+                    WHERE Company = ? AND ProcessType = ?
+                ) = 'CTS' THEN (
+                    SELECT CTSAccount FROM PR_Employee
+                    WHERE PR_Employee.Person = xx_reporteplanilla.person AND PR_Employee.Company = ?
+                ) ELSE (
+                    SELECT salaryaccount FROM PR_Employee
+                    WHERE PR_Employee.Person = xx_reporteplanilla.person AND PR_Employee.Company = ?
+                ) END AS numcuenta,
+                {concept_cols_sql}
+            FROM xx_reporteplanilla
+            ORDER BY name
+        """
+        params_datos = (
+            cia,
+            period,
+            cia,
+            cia,
+            process,
+            cia,
+            cia,
+            cia,
+            process,
+            cia,
+            cia,
+        )
+        static_keys = _PLANILLA_VERTICAL_STATIC_KEYS
+
     cursor.execute(sql_datos, params_datos)
     desc = cursor.description
     if not desc:
@@ -19889,7 +20103,12 @@ def _fetch_planilla_vertical_for_company(
     filas_dict = []
     for row in rows:
         rd = {col_names[i]: row[i] for i in range(len(col_names))}
-        item = {key: _jsonable_value(rd.get(key)) for key in _PLANILLA_VERTICAL_STATIC_KEYS}
+        item = {key: _jsonable_value(rd.get(key)) for key in static_keys}
+        if agrupar_cc_val == 'Y':
+            try:
+                item['cantidad'] = float(rd.get('cantidad') or 0)
+            except (TypeError, ValueError):
+                item['cantidad'] = 0.0
         concepts = {}
         for i in range(num_concepts):
             cn = f"concept{str(i + 1).zfill(2)}"
@@ -19899,11 +20118,16 @@ def _fetch_planilla_vertical_for_company(
     return concept_headers, concept_reporden, filas_dict
 
 
-def _planilla_vertical_rows_to_matrix(filas_dict, concept_headers):
+def _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc='N'):
+    static_keys = (
+        _PLANILLA_VERTICAL_AGRUPADO_KEYS
+        if _normalize_agrupar_cc_flag(agrupar_cc) == 'Y'
+        else _PLANILLA_VERTICAL_STATIC_KEYS
+    )
     resultado = []
     for item in filas_dict:
         fila = []
-        for key in _PLANILLA_VERTICAL_STATIC_KEYS:
+        for key in static_keys:
             fila.append(item.get(key))
         concepts = item.get('_concepts') or {}
         for ch in concept_headers:
@@ -20007,8 +20231,9 @@ def _resolve_bank_id_by_name(cursor, cia, bank_name):
 def reporte_planilla_vertical_post():
     """
     sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank,
-    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta.
+    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta, @repunit, @agrupar_cc.
     Cabeceras dinámicas desde xx_plamevertical2 + PR_Concept; datos desde xx_reporteplanilla.
+    @agrupar_cc='Y' solo aplica en hm_divisa (otras BD siempre ven el detalle por trabajador).
     """
     body = request.get_json(silent=True) or {}
     cia = (body.get('cia') or '').strip()
@@ -20019,6 +20244,12 @@ def reporte_planilla_vertical_post():
     salarybank = str(body.get('salarybank') if body.get('salarybank') is not None else body.get('salary_bank') or '').strip()
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    agrupar_cc = _normalize_agrupar_cc_flag(
+        body.get('agrupar_cc') if body.get('agrupar_cc') is not None else body.get('agrupar')
+    )
+    # Solo hm_divisa puede usar el modo agrupado; resto transparente (siempre detalle).
+    if agrupar_cc == 'Y' and not _es_bd_hm_divisa():
+        agrupar_cc = 'N'
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -20038,10 +20269,18 @@ def reporte_planilla_vertical_post():
             cursor, cia, payroll_type, process, period, person, salarybank,
             fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta,
             repunit=repunit,
+            agrupar_cc=agrupar_cc,
         )
-        headers = list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES) + concept_headers
-        resultado = _planilla_vertical_rows_to_matrix(filas_dict, concept_headers)
-        return jsonify({"headers": headers, "data": resultado})
+        if agrupar_cc == 'Y':
+            headers = list(_PLANILLA_VERTICAL_AGRUPADO_HEADERS_ES) + concept_headers
+        else:
+            headers = list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES) + concept_headers
+        resultado = _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc=agrupar_cc)
+        return jsonify({
+            "headers": headers,
+            "data": resultado,
+            "agrupar_cc": agrupar_cc,
+        })
     except Exception as e:
         logging.exception("reporte_planilla_vertical_post")
         return jsonify({"error": str(e)}), 500

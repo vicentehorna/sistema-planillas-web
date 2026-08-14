@@ -15,7 +15,7 @@ from datetime import date, datetime
 from decimal import Decimal
 
 import resend
-from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, send_file, has_request_context, stream_with_context
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, send_file, has_request_context, stream_with_context, abort
 from flask_login import LoginManager, login_user, login_required, logout_user, current_user
 from dotenv import load_dotenv
 
@@ -15121,14 +15121,19 @@ def api_pago_haberes_telecredito_listado():
         return jsonify({"error": err}), 400
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    costcenter = _normalize_replicationunit_asig(
+        body.get('costcenter') or body.get('centrocosto')
+    )
 
     log_sp = (
         '[telecredito listado] EXEC sp_pr_listatelecredito_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@cesados={cesados!r} @repunit={repunit!r}'
+        f'@cesados={cesados!r} @repunit={repunit!r} @costcenter={costcenter!r} '
+        f'@todos_bancos={todos_bancos!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -15141,14 +15146,14 @@ def api_pago_haberes_telecredito_listado():
             "EXEC sp_pr_listatelecredito_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
             "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
-            "@cesados=?, @repunit=?",
+            "@cesados=?, @repunit=?, @costcenter=?, @todos_bancos=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
                 p['period'], p['processtype'], p['paydate'], cesados, repunit,
+                costcenter, todos_bancos,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
-        filas_pantalla = []
         filas_detalle = []
         for r in rows:
             person = str(r.get('person') or '').strip()
@@ -15160,24 +15165,39 @@ def api_pago_haberes_telecredito_listado():
                 importe_num = float(importe) if importe is not None else 0.0
             except Exception:
                 importe_num = 0.0
-            filas_pantalla.append([dni, tipodoc, nombre])
             filas_detalle.append({
                 "person": person,
                 "dni": dni,
                 "tipodoc": tipodoc,
                 "nombre": nombre,
+                "banco": str(r.get('banco') or '').strip(),
                 "importe": importe_num,
             })
-        log_result = f'[telecredito listado] registros devueltos={len(filas_detalle)}'
+        log_result = (
+            f'[telecredito listado] registros devueltos={len(filas_detalle)} '
+            f'todos_bancos={todos_bancos}'
+        )
         logging.info(log_result)
         print(log_result, flush=True)
+        headers = ['DNI', 'Tipo doc.', 'Nombre']
+        if todos_bancos == 'Y':
+            headers.append('Banco')
+        headers.append('Importe')
+        data_rows = []
+        for r in filas_detalle:
+            fila = [r['dni'], r['tipodoc'], r['nombre']]
+            if todos_bancos == 'Y':
+                fila.append(r['banco'])
+            fila.append(r['importe'])
+            data_rows.append(fila)
         return jsonify({
-            "headers": ['DNI', 'Tipo doc.', 'Nombre'],
-            "data": filas_pantalla,
+            "headers": headers,
+            "data": data_rows,
             "rows": filas_detalle,
             "meta": {
                 "total": len(filas_detalle),
                 "paydate": p['paydate'].strftime('%d/%m/%Y'),
+                "todos_bancos": todos_bancos == 'Y',
             },
         })
     except Exception as e:
@@ -15205,12 +15225,14 @@ def api_pago_haberes_telecredito_generar_txt():
     if not persons:
         return jsonify({"error": "Seleccione al menos un trabajador."}), 400
 
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
     log_sp = (
         '[telecredito generar] EXEC sp_pr_generar_telecredito_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'trabajadores_seleccionados={len(persons)}'
+        f'@todos_bancos={todos_bancos!r} trabajadores_seleccionados={len(persons)}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -15226,10 +15248,11 @@ def api_pago_haberes_telecredito_generar_txt():
         cursor.execute(
             "EXEC sp_pr_generar_telecredito_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
+            "@todos_bancos=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], p['paydate'],
+                p['period'], p['processtype'], p['paydate'], todos_bancos,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -15244,6 +15267,7 @@ def api_pago_haberes_telecredito_generar_txt():
         t_done = time.perf_counter()
         log_result = (
             f'[telecredito generar] seleccionados={len(persons)} '
+            f'todos_bancos={todos_bancos} '
             f'detalle_txt={detalle_count} '
             f'ms_conexion={int((t_conn - t0) * 1000)} '
             f'ms_temp={int((t_temp - t_conn) * 1000)} '

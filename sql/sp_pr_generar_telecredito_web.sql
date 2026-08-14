@@ -2,6 +2,8 @@
     Genera líneas del archivo Telecrédito BCP (cabecera tipo 1 + detalle tipo 2).
     Requiere tabla temporal #TelecreditoPersonas (person) creada por la app web
     con los trabajadores seleccionados antes de ejecutar este SP.
+    @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
+    Mismo banco → SalaryAccount (A/M/C); otro banco → SocialAssistanceNumber / CCI (B).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
     @par_company     VARCHAR(10),
@@ -10,13 +12,17 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
     @par_payrolltype VARCHAR(20),
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
-    @par_paydate     DATETIME = NULL
+    @par_paydate     DATETIME = NULL,
+    @todos_bancos    CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
+    IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
+    SET @todos_bancos = UPPER(@todos_bancos);
+    IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
 
     IF OBJECT_ID('tempdb..#TelecreditoPersonas') IS NULL
     BEGIN
@@ -101,8 +107,21 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
-            LEFT(ISNULL(e.salaryaccount, ''), 20) AS cuenta,
-            LEFT(ISNULL(tat.abrev, 'A'), 1) AS tipocuenta,
+            LEFT(
+                LTRIM(RTRIM(
+                    CASE
+                        WHEN e.salarybank = m.creditobank
+                            THEN ISNULL(e.salaryaccount, '')
+                        ELSE ISNULL(e.socialassistancenumber, '')
+                    END
+                )),
+                20
+            ) AS cuenta,
+            CASE
+                WHEN e.salarybank = m.creditobank
+                    THEN LEFT(ISNULL(tat.abrev, 'A'), 1)
+                ELSE 'B'
+            END AS tipocuenta,
             CASE
                 WHEN ISNULL(pdt.PDT, '') = '01' THEN '1'
                 WHEN ISNULL(pdt.PDT, '') IN ('03', '04') THEN '3'
@@ -150,9 +169,31 @@ BEGIN
                 ON pdt.PersonDocumentType = sp.EmployeeDocumentType
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
-          AND ISNULL(e.salaryaccount, '') <> ''
           AND ISNULL(m.creditobank, '') <> ''
-          AND e.salarybank = m.creditobank
+          AND (
+                (
+                    @todos_bancos = 'N'
+                    AND e.salarybank = m.creditobank
+                    AND ISNULL(e.salaryaccount, '') <> ''
+                )
+             OR (
+                    @todos_bancos = 'Y'
+                    AND (
+                        (
+                            e.salarybank = m.creditobank
+                            AND ISNULL(e.salaryaccount, '') <> ''
+                        )
+                     OR (
+                            e.salarybank <> m.creditobank
+                            AND (
+                                ISNULL(tat.abrev, '') = 'B'
+                             OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                            )
+                            AND ISNULL(e.socialassistancenumber, '') <> ''
+                        )
+                    )
+                )
+          )
           AND sp.status = 'A'
           AND (
                 CASE
@@ -186,7 +227,8 @@ BEGIN
             2
         ) AS importe_fmt
     INTO #Detalle
-    FROM DetalleBase;
+    FROM DetalleBase
+    WHERE LTRIM(RTRIM(ISNULL(cuenta, ''))) <> '';
 
     SELECT @total_reg = COUNT(*) FROM #Detalle;
     SELECT @monto_total = ISNULL(SUM(importe), 0) FROM #Detalle;

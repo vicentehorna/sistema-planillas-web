@@ -1578,6 +1578,10 @@
                 if (cboUnidad) {
                     estado.unidad = val('cboUnidad') || '0';
                 }
+                const cboCentroCosto = document.getElementById('cboCentroCosto');
+                if (cboCentroCosto) {
+                    estado.costcenter = val('cboCentroCosto') || '0';
+                }
                 const txtRef = document.getElementById('txtReferencia');
                 if (txtRef) {
                     estado.referencia = String(txtRef.value || '').trim().slice(0, 25);
@@ -1603,7 +1607,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes, poblarUnidades } = opts;
+            const { poblarSelect, poblarBancosHaberes, poblarUnidades, poblarCentrosCosto } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -1696,6 +1700,19 @@
                 }
             }
 
+            const cboCentroCosto = document.getElementById('cboCentroCosto');
+            if (cboCentroCosto) {
+                if (typeof poblarCentrosCosto === 'function') {
+                    await poblarCentrosCosto();
+                }
+                const costcenter = filtros.costcenter != null ? String(filtros.costcenter).trim() : '0';
+                if (costcenter && optionExists(cboCentroCosto, costcenter)) {
+                    cboCentroCosto.value = costcenter;
+                } else if (optionExists(cboCentroCosto, '0')) {
+                    cboCentroCosto.value = '0';
+                }
+            }
+
             const txtReferencia = document.getElementById('txtReferencia');
             if (txtReferencia && filtros.referencia != null) {
                 txtReferencia.value = String(filtros.referencia).slice(0, 25);
@@ -1708,7 +1725,7 @@
         function registrarGuardadoEnCambio() {
             [
                 'cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo',
-                'cboMoneda', 'cboConcepto', 'cboCesados', 'cboUnidad'
+                'cboMoneda', 'cboConcepto', 'cboCesados', 'cboUnidad', 'cboCentroCosto'
             ].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
@@ -2870,7 +2887,7 @@
             return crearPersistenciaTrabajadores();
         },
         telecredito: function () {
-            return crearPersistenciaPagoHaberes(STORAGE_KEY_TELECREDITO, false);
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_TELECREDITO, true);
         },
         interbank: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_INTERBANK, false);

@@ -45,6 +45,11 @@
         padding-right: 0.2rem;
     }
 
+    .table-telecredito .col-banco {
+        min-width: 10rem;
+        max-width: 14rem;
+    }
+
     .table-telecredito .col-importe {
         min-width: 5.5rem;
         text-align: right;
@@ -87,6 +92,14 @@
                     <option value="EX">Dólares (EX)</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2 d-flex align-items-end pb-1">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkTodosBancos">
+                    <label class="form-check-label small fw-bold text-muted" for="chkTodosBancos">
+                        Todos los Bancos
+                    </label>
+                </div>
+            </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <label for="cboConcepto" class="form-label small fw-bold text-muted">Concepto</label>
                 <select id="cboConcepto" class="form-select form-select-sm" required disabled>
@@ -111,6 +124,12 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCentroCosto" class="form-label small fw-bold text-muted">Centro de costo</label>
+                <select id="cboCentroCosto" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -130,17 +149,7 @@
     <div class="card-body pt-3">
         <div class="table-scroll-container">
             <table class="table table-bordered table-sm table-hover table-telecredito align-middle">
-                <thead>
-                    <tr>
-                        <th class="text-center" style="width: 2.5rem;">
-                            <input type="checkbox" id="checkAllTele" class="form-check-input" title="Marcar / desmarcar todos">
-                        </th>
-                        <th>DNI</th>
-                        <th class="col-tipodoc">Tipo</th>
-                        <th>Nombre</th>
-                        <th class="col-importe">Importe</th>
-                    </tr>
-                </thead>
+                <thead id="thead-telecredito"></thead>
                 <tbody id="tbody-telecredito"></tbody>
             </table>
         </div>
@@ -248,7 +257,57 @@ document.addEventListener('DOMContentLoaded', async function () {
         chk.indeterminate = marcados > 0 && marcados < all.length;
     }
 
-    function renderizarTabla(rows) {
+    function renderizarEncabezadoTabla(mostrarBanco) {
+        const thead = document.getElementById('thead-telecredito');
+        if (!thead) return;
+
+        const tr = document.createElement('tr');
+
+        const thChk = document.createElement('th');
+        thChk.className = 'text-center';
+        thChk.style.width = '2.5rem';
+        const chkAll = document.createElement('input');
+        chkAll.type = 'checkbox';
+        chkAll.id = 'checkAllTele';
+        chkAll.className = 'form-check-input';
+        chkAll.title = 'Marcar / desmarcar todos';
+        thChk.appendChild(chkAll);
+        tr.appendChild(thChk);
+
+        ['DNI', 'Tipo', 'Nombre'].forEach((texto, idx) => {
+            const th = document.createElement('th');
+            th.textContent = texto;
+            if (idx === 1) th.className = 'col-tipodoc';
+            tr.appendChild(th);
+        });
+
+        if (mostrarBanco) {
+            const thBanco = document.createElement('th');
+            thBanco.textContent = 'Banco';
+            thBanco.className = 'col-banco';
+            tr.appendChild(thBanco);
+        }
+
+        const thImporte = document.createElement('th');
+        thImporte.textContent = 'Importe';
+        thImporte.className = 'col-importe';
+        tr.appendChild(thImporte);
+
+        thead.innerHTML = '';
+        thead.appendChild(tr);
+
+        chkAll.addEventListener('change', function () {
+            document.querySelectorAll('.check-telecredito').forEach((cb) => {
+                cb.checked = this.checked;
+            });
+            sincronizarCheckAllTele();
+            actualizarContadoresTelecredito();
+        });
+    }
+
+    function renderizarTabla(rows, mostrarBanco) {
+        renderizarEncabezadoTabla(!!mostrarBanco);
+
         const tbody = document.getElementById('tbody-telecredito');
         tbody.innerHTML = '';
         const filas = Array.isArray(rows) ? rows : [];
@@ -259,6 +318,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const dni = String(row.dni || '').trim();
             const tipodoc = String(row.tipodoc || '').trim();
             const nombre = String(row.nombre || '').trim();
+            const banco = String(row.banco || '').trim();
             const importe = row.importe;
 
             const tdChk = document.createElement('td');
@@ -280,15 +340,23 @@ document.addEventListener('DOMContentLoaded', async function () {
             const tdNombre = document.createElement('td');
             tdNombre.textContent = nombre;
 
-            const tdImporte = document.createElement('td');
-            tdImporte.className = 'col-importe';
-            tdImporte.textContent = formatearImporte(importe);
-
             tr.appendChild(tdChk);
             tr.appendChild(tdDni);
             tr.appendChild(tdTipoDoc);
             tr.appendChild(tdNombre);
+
+            if (mostrarBanco) {
+                const tdBanco = document.createElement('td');
+                tdBanco.className = 'col-banco';
+                tdBanco.textContent = banco;
+                tr.appendChild(tdBanco);
+            }
+
+            const tdImporte = document.createElement('td');
+            tdImporte.className = 'col-importe';
+            tdImporte.textContent = formatearImporte(importe);
             tr.appendChild(tdImporte);
+
             tbody.appendChild(tr);
         });
 
@@ -297,10 +365,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function ejecutarListado() {
+        if (filtrosPersist) filtrosPersist.guardar();
+
         lastRowsTelecredito = [];
         document.getElementById('tbody-telecredito').innerHTML = '';
-        document.getElementById('checkAllTele').checked = false;
-        document.getElementById('checkAllTele').indeterminate = false;
+        const theadInicio = document.getElementById('thead-telecredito');
+        if (theadInicio) theadInicio.innerHTML = '';
         document.getElementById('lblRowCountTele').textContent = '0';
         document.getElementById('lblSeleccionadosTele').textContent = '0';
         document.getElementById('lblImporteTotalTele').textContent = '0.00';
@@ -314,7 +384,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const todosBancos = !!document.getElementById('chkTodosBancos')?.checked;
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
+        const costcenter = String(document.getElementById('cboCentroCosto')?.value || '0').trim() || '0';
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -327,7 +399,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
-                    repunit
+                    todos_bancos: todosBancos,
+                    repunit, costcenter
                 })
             });
             const payload = await res.json();
@@ -345,7 +418,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             lastRowsTelecredito = Array.isArray(payload.rows) ? payload.rows : [];
             document.getElementById('cardResultadoTelecredito').classList.remove('d-none');
-            renderizarTabla(lastRowsTelecredito);
+            const mostrarBanco = !!(payload.meta && payload.meta.todos_bancos);
+            renderizarTabla(lastRowsTelecredito, mostrarBanco);
         } catch (e) {
             console.error(e);
             document.getElementById('cardResultadoTelecredito').classList.add('d-none');
@@ -389,6 +463,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const cboUnidad = document.getElementById('cboUnidad');
+    const cboCentroCosto = document.getElementById('cboCentroCosto');
     const txtFechaPago = document.getElementById('txtFechaPago');
 
     async function cargarUnidades() {
@@ -421,6 +496,41 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function cargarCentrosCosto() {
+        if (!cboCentroCosto) return;
+        const prev = String(cboCentroCosto.value || '0').trim() || '0';
+        const cia = String(cboCia?.value || '').trim();
+        cboCentroCosto.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todos';
+        cboCentroCosto.appendChild(optAll);
+        if (!cia) {
+            cboCentroCosto.value = '0';
+            return;
+        }
+        try {
+            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboCentroCosto.appendChild(opt);
+            });
+            if (optionExists(cboCentroCosto, prev)) {
+                cboCentroCosto.value = prev;
+            } else {
+                cboCentroCosto.value = '0';
+            }
+        } catch (e) {
+            console.error(e);
+            cboCentroCosto.value = '0';
+        }
+    }
+
     if (!txtFechaPago.value) {
         txtFechaPago.value = hoyIsoLocal();
     }
@@ -433,7 +543,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
 
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarUnidades: cargarUnidades });
+        await filtrosPersist.aplicarRestauracionCascada({
+            poblarSelect,
+            poblarUnidades: cargarUnidades,
+            poblarCentrosCosto: cargarCentrosCosto
+        });
     } else if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();
@@ -441,6 +555,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
                 ciaNorm, document.getElementById('cboConcepto'), poblarSelect
             );
+            await cargarCentrosCosto();
         }
     } else {
         const ciaInicial = cboCia.value.trim();
@@ -448,6 +563,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
                 ciaInicial, document.getElementById('cboConcepto'), poblarSelect
             );
+            await cargarCentrosCosto();
         }
     }
 
@@ -483,10 +599,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanillaEl);
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(cia, cboConceptoEl, poblarSelect);
+            await cargarCentrosCosto();
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPlanillaEl.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanillaEl.disabled = true;
+            await cargarCentrosCosto();
         }
     });
 
@@ -528,14 +646,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    document.getElementById('checkAllTele').addEventListener('change', function () {
-        document.querySelectorAll('.check-telecredito').forEach((cb) => {
-            cb.checked = this.checked;
-        });
-        sincronizarCheckAllTele();
-        actualizarContadoresTelecredito();
-    });
-
     document.getElementById('tbody-telecredito').addEventListener('change', function (e) {
         if (e.target && e.target.classList && e.target.classList.contains('check-telecredito')) {
             sincronizarCheckAllTele();
@@ -568,6 +678,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const currency = document.getElementById('cboMoneda').value.trim();
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
+        const todosBancos = !!document.getElementById('chkTodosBancos')?.checked;
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -582,6 +693,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate,
+                    todos_bancos: todosBancos,
                     persons: seleccionados.map((r) => r.person)
                 })
             });

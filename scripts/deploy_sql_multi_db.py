@@ -36,6 +36,7 @@ DEFAULT_CLIENT_DBS = [
     "hm_alamo",
     "hm_ultra",
     "hm_ngservicios",
+    "hm_elclan",
 ]
 
 DEFAULT_SERVER = "179.61.14.224,54982"

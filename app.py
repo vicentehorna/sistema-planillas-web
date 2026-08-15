@@ -64,7 +64,7 @@ except Exception as _weasy_err:
     WEASYPRINT_AVAILABLE = False
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
-from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_listado_generar_boletas, get_listado_certificado_quinta
+from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta
 from tregistro_import import (
     construir_payload_registro_nuevos,
     construir_resumen_importacion,
@@ -3940,8 +3940,33 @@ def _boleta_imagen_ruta(img_dir, nombre_archivo):
     return ruta if os.path.exists(ruta) else ''
 
 
+def _mime_from_filename(nombre_archivo, fallback='image/png'):
+    ext = os.path.splitext(str(nombre_archivo or ''))[1].lower()
+    return {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+    }.get(ext, fallback)
+
+
+def _data_uri_from_bytes(raw_bytes, content_type='image/png'):
+    if not raw_bytes:
+        return ''
+    mime = str(content_type or 'image/png').strip() or 'image/png'
+    try:
+        if isinstance(raw_bytes, memoryview):
+            raw_bytes = raw_bytes.tobytes()
+        encoded = base64.b64encode(raw_bytes).decode('utf-8')
+        return f'data:{mime};base64,{encoded}'
+    except Exception:
+        logging.exception('_data_uri_from_bytes')
+        return ''
+
+
 def _boleta_imagenes_paths(cia):
-    """Logo y firma desde SY_Company (logoname, signaturename) en static/img."""
+    """Logo y firma desde SY_Company (logoname, signaturename) en static/img (legado)."""
     img_dir = os.path.join(app.root_path, 'static', 'img')
     cfg = get_config_empresa(cia)
     nombre_logo = str(cfg[0]).strip() if cfg and len(cfg) > 0 and cfg[0] else ''
@@ -3950,6 +3975,35 @@ def _boleta_imagenes_paths(cia):
         _boleta_imagen_ruta(img_dir, nombre_logo),
         _boleta_imagen_ruta(img_dir, nombre_firma),
     )
+
+
+def _boleta_logo_firma_src(cia):
+    """
+    Data-URIs de logo/firma para formatos PDF.
+    Prioridad: VARBINARY en SY_Company → archivo en static/img (legado).
+    """
+    branding = get_company_branding(cia) or {}
+    logo_src = ''
+    firma_src = ''
+
+    logo_blob = branding.get('logo_data')
+    if logo_blob:
+        mime = branding.get('logo_contenttype') or _mime_from_filename(branding.get('logoname'))
+        logo_src = _data_uri_from_bytes(logo_blob, mime)
+
+    firma_blob = branding.get('signature_data')
+    if firma_blob:
+        mime = branding.get('signature_contenttype') or _mime_from_filename(branding.get('signaturename'))
+        firma_src = _data_uri_from_bytes(firma_blob, mime)
+
+    if not logo_src or not firma_src:
+        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
+        if not logo_src:
+            logo_src = _image_data_uri(ruta_logo)
+        if not firma_src:
+            firma_src = _image_data_uri(ruta_firma)
+
+    return logo_src, firma_src
 
 
 def _bool_env(name, default=False):
@@ -4113,22 +4167,19 @@ def generar_pdf_en_memoria(params):
             except Exception:
                 pass
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
+    logo_src, firma_full = _boleta_logo_firma_src(cia)
     sin_firma = _truthy_param(
         params.get('sin_firma')
         if params.get('sin_firma') is not None
         else params.get('sinfirma')
     )
-    firma_src = '' if sin_firma else _image_data_uri(ruta_firma)
+    firma_src = '' if sin_firma else firma_full
     if _bool_env('LOG_BOLETA_ASSETS', False):
         logging.info(
-            '[boleta assets] cia=%s logo="%s" exists=%s | firma="%s" exists=%s | sin_firma=%s',
+            '[boleta assets] cia=%s logo=%s firma=%s sin_firma=%s',
             cia,
-            ruta_logo,
-            os.path.exists(ruta_logo),
-            ruta_firma,
-            os.path.exists(ruta_firma),
+            bool(logo_src),
+            bool(firma_src),
             sin_firma,
         )
 
@@ -4194,9 +4245,7 @@ def generar_pdf_certificado_quinta(params):
     if not cert:
         raise ValueError('No se encontraron datos para el certificado de quinta.')
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
+    logo_src, firma_src = _boleta_logo_firma_src(cia)
 
     try:
         cert['importe_remuneracion_bruta_total'] = (
@@ -4312,9 +4361,7 @@ def generar_pdf_certificado_trabajo(params):
             ),
         )
     else:
-        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-        logo_src = _image_data_uri(ruta_logo)
-        firma_src = _image_data_uri(ruta_firma)
+        logo_src, firma_src = _boleta_logo_firma_src(cia)
         html_renderizado = render_template(
             'certificado_trabajo_pdf.html',
             cert=cert,
@@ -4448,9 +4495,7 @@ def generar_pdf_formato_vacaciones(params):
         'company_name': str(first.get('company_name') or '').strip(),
     }
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
+    logo_src, firma_src = _boleta_logo_firma_src(cia)
 
     html_renderizado = render_template(
         'formato_vacaciones_pdf.html',
@@ -4560,9 +4605,7 @@ def generar_pdf_certificado_retiro_cts(params):
             fecha_emision_texto=_fecha_emision_retiro_cts_ng(cert),
         )
     else:
-        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-        logo_src = _image_data_uri(ruta_logo)
-        firma_src = _image_data_uri(ruta_firma)
+        logo_src, firma_src = _boleta_logo_firma_src(cia)
         html_renderizado = render_template(
             'certificado_retiro_cts_pdf.html',
             cert=cert,
@@ -4721,9 +4764,7 @@ def generar_pdf_formato_utilidades(params):
 
     fecha_pago_fmt = _formato_utilidades_fecha_pago_fmt(params, cab)
 
-    ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-    logo_src = _image_data_uri(ruta_logo)
-    firma_src = _image_data_uri(ruta_firma)
+    logo_src, firma_src = _boleta_logo_firma_src(cia)
 
     html_renderizado = render_template(
         'formato_utilidades_pdf.html',
@@ -5288,9 +5329,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
     logo_src = ''
     firma_src = ''
     if include_images:
-        ruta_logo, ruta_firma = _boleta_imagenes_paths(cia)
-        logo_src = _image_data_uri(ruta_logo)
-        firma_src = _image_data_uri(ruta_firma)
+        logo_src, firma_src = _boleta_logo_firma_src(cia)
 
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'
@@ -7476,6 +7515,12 @@ def centros_costo_page():
     return render_template('maestro_centros_costo.html')
 
 
+@app.route('/companias-branding')
+@login_required
+def companias_branding_page():
+    return render_template('maestro_companias_branding.html')
+
+
 @app.route('/tipos-documento')
 @login_required
 def tipos_documento_page():
@@ -9252,6 +9297,244 @@ def api_tareo_tipos_dia_eliminar():
                 pass
         logging.exception("api_tareo_tipos_dia_eliminar")
         return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/companias-branding/listado', methods=['POST'])
+@login_required
+def api_companias_branding_listado():
+    """Lista compañías con estado de logo/firma (blob + legado static/img)."""
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_companias_branding_web @busqueda=?",
+            (busqueda or None,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        img_dir = os.path.join(app.root_path, 'static', 'img')
+        out = []
+        for r in rows:
+            logoname = str(r.get('logoname') or '').strip()
+            signaturename = str(r.get('signaturename') or '').strip()
+            has_logo_blob = int(r.get('has_logo_blob') or 0) == 1
+            has_firma_blob = int(r.get('has_firma_blob') or 0) == 1
+            has_logo_file = bool(_boleta_imagen_ruta(img_dir, logoname))
+            has_firma_file = bool(_boleta_imagen_ruta(img_dir, signaturename))
+            out.append({
+                'company': _jsonable_value(r.get('company')),
+                'description': _jsonable_value(r.get('description')),
+                'logoname': logoname,
+                'signaturename': signaturename,
+                'has_logo': has_logo_blob or has_logo_file,
+                'has_firma': has_firma_blob or has_firma_file,
+                'has_logo_blob': has_logo_blob,
+                'has_firma_blob': has_firma_blob,
+                'status': _jsonable_value(r.get('status')),
+            })
+        out.sort(
+            key=lambda x: (
+                str(x.get('description') or '').strip().upper(),
+                str(x.get('company') or '').strip().upper(),
+            )
+        )
+        return jsonify({'rows': out, 'total': len(out)})
+    except Exception as e:
+        logging.exception('api_companias_branding_listado')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+_BRANDING_ALLOWED_EXT = {'.png', '.jpg', '.jpeg', '.gif', '.webp'}
+_BRANDING_MAX_BYTES = 2 * 1024 * 1024
+
+
+def _branding_content_type(filename, content_type_header=''):
+    mime = _mime_from_filename(filename, fallback='')
+    if mime:
+        return mime
+    hdr = str(content_type_header or '').split(';')[0].strip().lower()
+    if hdr.startswith('image/'):
+        return hdr
+    return 'image/png'
+
+
+@app.route('/api/companias-branding/imagen')
+@login_required
+def api_companias_branding_imagen():
+    """Sirve logo o firma (blob o static/img) para preview en la maestra."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    tipo = str(request.args.get('tipo') or 'logo').strip().lower()
+    if tipo in ('signature', 'firma', 'sign'):
+        tipo = 'firma'
+    else:
+        tipo = 'logo'
+    if not cia:
+        abort(400)
+    branding = get_company_branding(cia) or {}
+    raw = branding.get('logo_data') if tipo == 'logo' else branding.get('signature_data')
+    mime = branding.get('logo_contenttype') if tipo == 'logo' else branding.get('signature_contenttype')
+    nombre = branding.get('logoname') if tipo == 'logo' else branding.get('signaturename')
+    if raw:
+        if isinstance(raw, memoryview):
+            raw = raw.tobytes()
+        mime = str(mime or '').strip() or _mime_from_filename(nombre)
+        return Response(raw, mimetype=mime or 'image/png')
+    img_dir = os.path.join(app.root_path, 'static', 'img')
+    ruta = _boleta_imagen_ruta(img_dir, nombre)
+    if not ruta:
+        abort(404)
+    return send_file(ruta, mimetype=_mime_from_filename(nombre))
+
+
+@app.route('/api/companias-branding/subir', methods=['POST'])
+@login_required
+def api_companias_branding_subir():
+    """Sube logo o firma a SY_Company (VARBINARY)."""
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    tipo = str(request.form.get('tipo') or 'logo').strip().lower()
+    if tipo in ('signature', 'firma', 'sign'):
+        tipo = 'firma'
+    else:
+        tipo = 'logo'
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    f = request.files.get('archivo') or request.files.get('file') or request.files.get('imagen')
+    if not f or not f.filename:
+        return jsonify({'error': 'Seleccione un archivo de imagen.'}), 400
+    filename = os.path.basename(str(f.filename or ''))
+    ext = os.path.splitext(filename)[1].lower()
+    if ext not in _BRANDING_ALLOWED_EXT:
+        return jsonify({'error': 'Solo se admiten PNG, JPG, GIF o WEBP.'}), 400
+    content = f.read()
+    if not content:
+        return jsonify({'error': 'El archivo está vacío.'}), 400
+    if len(content) > _BRANDING_MAX_BYTES:
+        return jsonify({'error': 'El archivo supera el límite de 2 MB.'}), 400
+    content_type = _branding_content_type(filename, getattr(f, 'content_type', '') or '')
+    safe_name = re.sub(r'[^A-Za-z0-9._-]+', '_', filename)[:90] or f'{tipo}{ext}'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if tipo == 'logo':
+            cursor.execute(
+                """
+                UPDATE SY_Company
+                SET logo_data = ?,
+                    logo_contenttype = ?,
+                    logoname = ?
+                WHERE Company = ?
+                """,
+                (content, content_type, safe_name, cia),
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE SY_Company
+                SET signature_data = ?,
+                    signature_contenttype = ?,
+                    signaturename = ?
+                WHERE Company = ?
+                """,
+                (content, content_type, safe_name, cia),
+            )
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'No se encontró la compañía.'}), 404
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'cia': cia,
+            'tipo': tipo,
+            'nombre': safe_name,
+            'mensaje': f'{"Logo" if tipo == "logo" else "Firma"} actualizado.',
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('api_companias_branding_subir')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/companias-branding/eliminar', methods=['POST'])
+@login_required
+def api_companias_branding_eliminar():
+    """Quita logo o firma blob de SY_Company (no borra archivos de static/img)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    tipo = str(body.get('tipo') or 'logo').strip().lower()
+    if tipo in ('signature', 'firma', 'sign'):
+        tipo = 'firma'
+    else:
+        tipo = 'logo'
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if tipo == 'logo':
+            cursor.execute(
+                """
+                UPDATE SY_Company
+                SET logo_data = NULL,
+                    logo_contenttype = NULL,
+                    logoname = NULL
+                WHERE Company = ?
+                """,
+                (cia,),
+            )
+        else:
+            cursor.execute(
+                """
+                UPDATE SY_Company
+                SET signature_data = NULL,
+                    signature_contenttype = NULL,
+                    signaturename = NULL
+                WHERE Company = ?
+                """,
+                (cia,),
+            )
+        if cursor.rowcount == 0:
+            return jsonify({'error': 'No se encontró la compañía.'}), 404
+        conn.commit()
+        return jsonify({
+            'ok': True,
+            'cia': cia,
+            'tipo': tipo,
+            'mensaje': f'{"Logo" if tipo == "logo" else "Firma"} eliminado de la base.',
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception('api_companias_branding_eliminar')
+        return jsonify({'error': _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

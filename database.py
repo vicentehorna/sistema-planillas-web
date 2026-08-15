@@ -319,6 +319,18 @@ def get_config_empresa(company_id):
     """
     Logo y firma de boleta por compañía (SY_Company.logoname, SY_Company.signaturename).
     Retorna tupla (logoname, signaturename) o None.
+    Compat: mantiene firma histórica usada por código legado.
+    """
+    branding = get_company_branding(company_id)
+    if not branding:
+        return None
+    return (branding.get('logoname') or '', branding.get('signaturename') or '')
+
+
+def get_company_branding(company_id):
+    """
+    Branding por compañía: nombres, content-types y blobs (logo_data / signature_data).
+    Fallback de archivos: static/img vía logoname/signaturename en la app.
     """
     conn = None
     try:
@@ -328,16 +340,57 @@ def get_config_empresa(company_id):
             """
             SELECT
                 LTRIM(RTRIM(ISNULL(logoname, ''))),
-                LTRIM(RTRIM(ISNULL(signaturename, '')))
+                LTRIM(RTRIM(ISNULL(signaturename, ''))),
+                logo_data,
+                signature_data,
+                LTRIM(RTRIM(ISNULL(logo_contenttype, ''))),
+                LTRIM(RTRIM(ISNULL(signature_contenttype, '')))
             FROM SY_Company
             WHERE Company = ?
             """,
             (company_id,),
         )
         row = cursor.fetchone()
-        return row
+        if not row:
+            return None
+        return {
+            'logoname': str(row[0] or '').strip(),
+            'signaturename': str(row[1] or '').strip(),
+            'logo_data': row[2] if row[2] is not None else None,
+            'signature_data': row[3] if row[3] is not None else None,
+            'logo_contenttype': str(row[4] or '').strip(),
+            'signature_contenttype': str(row[5] or '').strip(),
+        }
     except Exception as e:
-        print(f"Error en get_config_empresa: {e}")
+        # Columnas blob pueden no existir aún en alguna BD: fallback a nombres.
+        try:
+            if conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT
+                        LTRIM(RTRIM(ISNULL(logoname, ''))),
+                        LTRIM(RTRIM(ISNULL(signaturename, '')))
+                    FROM SY_Company
+                    WHERE Company = ?
+                    """,
+                    (company_id,),
+                )
+                row = cursor.fetchone()
+                if not row:
+                    return None
+                return {
+                    'logoname': str(row[0] or '').strip(),
+                    'signaturename': str(row[1] or '').strip(),
+                    'logo_data': None,
+                    'signature_data': None,
+                    'logo_contenttype': '',
+                    'signature_contenttype': '',
+                }
+        except Exception as e2:
+            print(f"Error en get_company_branding: {e} / {e2}")
+            return None
+        print(f"Error en get_company_branding (blobs): {e}")
         return None
     finally:
         if conn:

@@ -445,6 +445,8 @@ MARCADORES_LEGACY_MAP = {
     "DEPARTAMENTO": "departamento",
     "CARGOTRAB": "cargo",
     "CARGOTRAB1": "cargo",
+    "CARGOTRAB2": "cargo",
+    "CARGOTRAB3": "cargo",
     "PERIODOCONTRATO": "periodo_contrato",
     "FECHAINICONTRATO": "inicio_contrato",
     "FECHAINICONTRATO1": "inicio_contrato",

@@ -1,0 +1,488 @@
+{% extends "layout.html" %}
+
+{% block title %}{{ 'Editar' if tareoheader else 'Nuevo' }} tareo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .te-grilla {
+        max-height: calc(100vh - 340px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-te {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-te th, .table-te td {
+        padding: 0.2rem 0.25rem;
+        vertical-align: middle;
+    }
+    .table-te thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 3;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-te th.sticky-col,
+    .table-te td.sticky-col {
+        position: sticky;
+        background: #fff;
+        z-index: 2;
+    }
+    .table-te thead th.sticky-col {
+        z-index: 4;
+        background: #f8f9fa;
+    }
+    .table-te th.sticky-col-num,
+    .table-te td.sticky-col-num {
+        left: 0;
+        width: 2.25rem;
+        min-width: 2.25rem;
+        max-width: 2.25rem;
+        text-align: center;
+    }
+    .table-te th.sticky-col-name,
+    .table-te td.sticky-col-name {
+        left: 2.25rem;
+        width: 13rem;
+        min-width: 13rem;
+        max-width: 13rem;
+        box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.18);
+    }
+    .day-cell {
+        min-width: 3.6rem;
+        max-width: 4.2rem;
+    }
+    .day-cell .form-select,
+    .day-cell .form-control {
+        font-size: 10px;
+        padding: 0.1rem 0.15rem;
+        min-height: 0;
+        height: 1.45rem;
+    }
+    .te-errores {
+        max-height: 160px;
+        overflow: auto;
+        border: 1px solid #f5c2c7;
+        background: #fff5f5;
+        border-radius: 0.375rem;
+        display: none;
+    }
+    .te-errores.show { display: block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">{{ 'Editar tareo' if tareoheader else 'Nuevo tareo' }}</h5>
+                <div class="small text-muted">
+                    Solo se importa la primera hoja del Excel. Celdas vacías = X.
+                    <span id="lblId" class="ms-1 text-secondary"></span>
+                </div>
+            </div>
+            <a class="btn btn-outline-secondary btn-sm" href="{{ url_for('tareo_registro_page') }}">
+                <i class="bi bi-arrow-left"></i> Volver
+            </a>
+        </div>
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Compañía</label>
+                <select id="selCia" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Tipo de planilla</label>
+                <select id="selPlanilla" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Periodo</label>
+                <select id="selPeriodo" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm"></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Archivo Excel</label>
+                <input type="file" id="fileExcel" class="form-control form-control-sm" accept=".xlsx,.xls">
+            </div>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 mt-3 align-items-center">
+            <button type="button" class="btn btn-outline-primary btn-sm" id="btnImportar">
+                <i class="bi bi-upload"></i> Validar e importar
+            </button>
+            <button type="button" class="btn btn-primary btn-sm" id="btnGuardar">
+                <i class="bi bi-save"></i> Guardar
+            </button>
+            <span id="lblMeta" class="small text-muted ms-auto"></span>
+        </div>
+        <div id="msgEdit" class="small mt-2"></div>
+        <div id="boxErrores" class="te-errores mt-2 p-2">
+            <div class="fw-semibold text-danger mb-1">Errores de validación</div>
+            <table class="table table-sm mb-0">
+                <thead><tr><th>Fila</th><th>DNI</th><th>Día</th><th>Código</th><th>Mensaje</th></tr></thead>
+                <tbody id="tbodyErrores"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="te-grilla">
+    <table class="table table-bordered table-sm table-te align-middle" id="tblDetalle">
+        <thead id="theadDetalle"></thead>
+        <tbody id="tbodyDetalle">
+            <tr><td class="text-center text-muted py-4">Importe un Excel o cargue un tareo existente</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const tareoIdInicial = {{ (tareoheader or '')|tojson }};
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+    const selCia = document.getElementById('selCia');
+    const selPlanilla = document.getElementById('selPlanilla');
+    const selPeriodo = document.getElementById('selPeriodo');
+    const selUnidad = document.getElementById('selUnidad');
+    const fileExcel = document.getElementById('fileExcel');
+    const tbody = document.getElementById('tbodyDetalle');
+    const thead = document.getElementById('theadDetalle');
+    const tbodyErrores = document.getElementById('tbodyErrores');
+    const boxErrores = document.getElementById('boxErrores');
+    const lblMeta = document.getElementById('lblMeta');
+    const lblId = document.getElementById('lblId');
+    const msg = document.getElementById('msgEdit');
+
+    let tipodia = [];
+    let tipodiaHoras = {};
+    let detalle = [];
+    let tareoheader = tareoIdInicial || '';
+    let lockHeader = !!tareoIdInicial;
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function toastOk(t) { if (window.HmUi) HmUi.exito(t); else alert(t); }
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            const err = new Error(data.error || ('Error HTTP ' + res.status));
+            err.payload = data;
+            throw err;
+        }
+        return data;
+    }
+    function diaKeys() {
+        return Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+    }
+    function opcionesTipo(selected) {
+        const sel = String(selected || 'X').toUpperCase();
+        return tipodia.map(t =>
+            `<option value="${esc(t.codigo)}" ${t.codigo === sel ? 'selected' : ''}>${esc(t.codigo)}</option>`
+        ).join('');
+    }
+
+    async function poblarSelect(url, selectEl, opciones) {
+        opciones = opciones || {};
+        const keep = opciones.keep != null ? String(opciones.keep) : '';
+        const placeholder = opciones.placeholder || 'Seleccione...';
+        selectEl.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectEl.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectEl.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = placeholder;
+            selectEl.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const o = document.createElement('option');
+                o.value = item.id != null ? String(item.id) : '';
+                o.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(o);
+            });
+            if (keep && [...selectEl.options].some(o => o.value === keep)) {
+                selectEl.value = keep;
+            }
+            selectEl.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectEl.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function mostrarErrores(errores) {
+        if (!errores || !errores.length) {
+            boxErrores.classList.remove('show');
+            tbodyErrores.innerHTML = '';
+            return;
+        }
+        tbodyErrores.innerHTML = errores.map(e => `
+            <tr>
+                <td>${esc(e.excel_row || e.line || '')}</td>
+                <td>${esc(e.person || '')}</td>
+                <td>${esc(e.dia == null ? '' : e.dia)}</td>
+                <td>${esc(e.codigo || '')}</td>
+                <td>${esc(e.mensaje || '')}</td>
+            </tr>
+        `).join('');
+        boxErrores.classList.add('show');
+    }
+
+    function renderDetalle() {
+        const keys = diaKeys();
+        thead.innerHTML = `<tr>
+            <th class="sticky-col sticky-col-num">#</th>
+            <th class="sticky-col sticky-col-name">DNI / Nombre</th>
+            ${keys.map(k => `<th class="text-center">${k}</th>`).join('')}
+        </tr>`;
+        if (!detalle.length) {
+            tbody.innerHTML = `<tr><td colspan="33" class="text-center text-muted py-4">Sin detalle</td></tr>`;
+            lblMeta.textContent = '0 trabajadores';
+            return;
+        }
+        tbody.innerHTML = detalle.map((row, idx) => {
+            const cells = keys.map(k => {
+                const tipo = row['tipo' + k] || 'X';
+                const hour = row['hour' + k] == null ? 0 : row['hour' + k];
+                return `<td class="day-cell">
+                    <select class="form-select form-select-sm tipo-dia" data-idx="${idx}" data-dia="${k}">${opcionesTipo(tipo)}</select>
+                    <input type="number" step="0.01" min="0" class="form-control form-control-sm mt-1 hour-dia"
+                           data-idx="${idx}" data-dia="${k}" value="${esc(hour)}">
+                </td>`;
+            }).join('');
+            return `<tr>
+                <td class="sticky-col sticky-col-num text-muted">${idx + 1}</td>
+                <td class="sticky-col sticky-col-name">
+                    <div class="fw-semibold">${esc(row.person)}</div>
+                    <div class="text-muted" style="max-width:12rem;overflow:hidden;text-overflow:ellipsis">${esc(row.person_name || '')}</div>
+                </td>
+                ${cells}
+            </tr>`;
+        }).join('');
+        lblMeta.textContent = detalle.length + ' trabajador(es)';
+    }
+
+    function syncHeaderLock() {
+        selCia.disabled = lockHeader;
+        selPlanilla.disabled = lockHeader;
+    }
+
+    async function cargarCompanias(keep) {
+        await poblarSelect('/api/selectores/companias', selCia, {
+            keep: keep || sessionCia
+        });
+        if (!selCia.value && selCia.options.length > 1) {
+            selCia.selectedIndex = 1;
+        }
+    }
+
+    async function cargarPlanillas(keep) {
+        const cia = selCia.value;
+        if (!cia) {
+            selPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            selPlanilla,
+            { keep: keep || selPlanilla.value }
+        );
+    }
+
+    async function cargarPeriodos(keep) {
+        const cia = selCia.value;
+        const pt = selPlanilla.value;
+        if (!cia || !pt) {
+            selPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+            selPeriodo,
+            { keep: keep || selPeriodo.value }
+        );
+    }
+
+    async function cargarUnidadesYTipodia(opts) {
+        opts = opts || {};
+        const cia = selCia.value;
+        if (!cia) {
+            selUnidad.innerHTML = '<option value="">Seleccione...</option>';
+            tipodia = [];
+            tipodiaHoras = {};
+            return;
+        }
+        const data = await leerJson(await fetch('/api/tareo/registro/catalogos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, prperiod: opts.prperiod || selPeriodo.value || '' })
+        }));
+        tipodia = data.tipodia || [];
+        tipodiaHoras = {};
+        tipodia.forEach(t => { tipodiaHoras[t.codigo] = t.horas; });
+
+        const keepUnidad = opts.costcenter || selUnidad.value;
+        selUnidad.innerHTML = '<option value="">Seleccione...</option>';
+        (data.unidades || []).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.costcenter;
+            opt.textContent = u.name || u.description || u.abbrev || u.costcenter;
+            selUnidad.appendChild(opt);
+        });
+        if (keepUnidad && [...selUnidad.options].some(o => o.value === keepUnidad)) {
+            selUnidad.value = keepUnidad;
+        }
+    }
+
+    async function cargarExistente(id) {
+        const data = await leerJson(await fetch('/api/tareo/registro/obtener', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tareoheader: id })
+        }));
+        const h = data.header || {};
+        tareoheader = h.tareoheader || id;
+        lblId.textContent = 'ID: ' + tareoheader;
+        await cargarCompanias(h.company);
+        await cargarPlanillas(h.payrolltype);
+        await cargarPeriodos(h.prperiod);
+        await cargarUnidadesYTipodia({ costcenter: h.costcenter, prperiod: h.prperiod });
+        detalle = data.detalle || [];
+        renderDetalle();
+        lockHeader = true;
+        syncHeaderLock();
+    }
+
+    tbody.addEventListener('change', (ev) => {
+        const tipoEl = ev.target.closest('.tipo-dia');
+        const hourEl = ev.target.closest('.hour-dia');
+        if (tipoEl) {
+            const idx = Number(tipoEl.dataset.idx);
+            const dia = tipoEl.dataset.dia;
+            const codigo = tipoEl.value;
+            detalle[idx]['tipo' + dia] = codigo;
+            const horas = tipodiaHoras[codigo];
+            if (horas != null) {
+                detalle[idx]['hour' + dia] = horas;
+                const inp = tbody.querySelector(`.hour-dia[data-idx="${idx}"][data-dia="${dia}"]`);
+                if (inp) inp.value = horas;
+            }
+        }
+        if (hourEl) {
+            const idx = Number(hourEl.dataset.idx);
+            const dia = hourEl.dataset.dia;
+            detalle[idx]['hour' + dia] = hourEl.value === '' ? 0 : Number(hourEl.value);
+        }
+    });
+
+    document.getElementById('btnImportar').addEventListener('click', async () => {
+        msg.textContent = '';
+        mostrarErrores([]);
+        if (!selCia.value) return toastErr('Seleccione compañía');
+        if (!fileExcel.files || !fileExcel.files[0]) return toastErr('Seleccione un archivo Excel');
+        const fd = new FormData();
+        fd.append('cia', selCia.value);
+        fd.append('file', fileExcel.files[0]);
+        try {
+            const res = await fetch('/api/tareo/registro/importar', { method: 'POST', body: fd });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok && !(data.detalle || data.errores)) {
+                throw new Error(data.error || ('Error HTTP ' + res.status));
+            }
+            detalle = data.detalle || [];
+            renderDetalle();
+            mostrarErrores(data.errores || []);
+            const meta = data.meta || {};
+            lblMeta.textContent = `${detalle.length} trabajador(es) · hoja ${meta.sheet || ''}`;
+            if ((data.errores || []).length) {
+                toastErr(`Importación con ${data.errores.length} error(es). Corrija antes de guardar.`);
+            } else {
+                toastOk('Importación validada. Revise el detalle y guarde.');
+            }
+        } catch (e) {
+            toastErr(e.message || String(e));
+        }
+    });
+
+    document.getElementById('btnGuardar').addEventListener('click', async () => {
+        msg.textContent = '';
+        mostrarErrores([]);
+        if (!selCia.value || !selPlanilla.value || !selPeriodo.value || !selUnidad.value) {
+            return toastErr('Complete compañía, planilla, periodo y unidad');
+        }
+        if (!detalle.length) return toastErr('No hay detalle para guardar');
+        try {
+            const data = await leerJson(await fetch('/api/tareo/registro/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    modo: tareoheader ? 'U' : 'I',
+                    tareoheader: tareoheader || null,
+                    cia: selCia.value,
+                    payrolltype: selPlanilla.value,
+                    prperiod: selPeriodo.value,
+                    costcenter: selUnidad.value,
+                    detalle
+                })
+            }));
+            tareoheader = data.tareoheader || tareoheader;
+            lblId.textContent = 'ID: ' + tareoheader;
+            lockHeader = true;
+            syncHeaderLock();
+            toastOk(data.mensaje || 'Guardado');
+            msg.textContent = data.mensaje || 'Guardado';
+            if (window.history && window.history.replaceState) {
+                const url = new URL(window.location.href);
+                url.searchParams.set('id', tareoheader);
+                window.history.replaceState({}, '', url.toString());
+            }
+        } catch (e) {
+            if (e.payload && e.payload.errores) mostrarErrores(e.payload.errores);
+            toastErr(e.message || String(e));
+        }
+    });
+
+    selCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        await cargarPeriodos();
+        await cargarUnidadesYTipodia();
+        if (detalle.length) renderDetalle();
+    });
+    selPlanilla.addEventListener('change', async () => {
+        await cargarPeriodos();
+    });
+
+    try {
+        await cargarCompanias();
+        await cargarPlanillas();
+        await cargarPeriodos();
+        await cargarUnidadesYTipodia();
+        renderDetalle();
+        if (tareoIdInicial) {
+            await cargarExistente(tareoIdInicial);
+        }
+        syncHeaderLock();
+    } catch (e) {
+        toastErr(e.message || String(e));
+    }
+});
+</script>
+{% endblock %}

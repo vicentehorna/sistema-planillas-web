@@ -7467,6 +7467,43 @@ def tareo_tipo_dia_page():
     return render_template('tareo_tipo_dia.html')
 
 
+@app.route('/tareo/registro')
+@login_required
+def tareo_registro_page():
+    """Listado Registro de Tareos — hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('tareo_registro.html')
+
+
+@app.route('/tareo/registro/editar')
+@login_required
+def tareo_registro_edit_page():
+    """Alta / edición de tareo — hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    tareoheader = str(request.args.get('id') or '').strip()
+    return render_template('tareo_registro_edit.html', tareoheader=tareoheader)
+
+
+@app.route('/tareo/reporte-resumen')
+@login_required
+def tareo_reporte_resumen_page():
+    """Reporte Resumen de Tareos — hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('tareo_reporte_resumen.html')
+
+
+@app.route('/tareo/asignacion')
+@login_required
+def tareo_asignacion_page():
+    """Asignación unificada tareo → conceptos + DM/PLAME — hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('tareo_asignacion.html')
+
+
 @app.route('/asientos/distribucion-porcentual')
 @login_required
 def asientos_distribucion_porcentual_page():
@@ -9296,6 +9333,822 @@ def api_tareo_tipos_dia_eliminar():
             except Exception:
                 pass
         logging.exception("api_tareo_tipos_dia_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _tareo_dia_keys():
+    return [f'{i:02d}' for i in range(1, 32)]
+
+
+def _tareo_norm_codigo(value):
+    return str(value or '').strip().upper()
+
+
+def _tareo_norm_person(value):
+    raw = str(value or '').strip()
+    if re.fullmatch(r'\d+\.0+', raw):
+        raw = raw.split('.', 1)[0]
+    return raw
+
+
+def _tareo_dias_mes_desde_periodo(prperiod):
+    """prperiod tipo 20250505 → cantidad de días del mes (4:6)."""
+    p = str(prperiod or '').strip()
+    if len(p) < 6 or not p[:6].isdigit():
+        return 31
+    try:
+        year = int(p[0:4])
+        month = int(p[4:6])
+        if month < 1 or month > 12:
+            return 31
+        if month == 12:
+            nxt = date(year + 1, 1, 1)
+        else:
+            nxt = date(year, month + 1, 1)
+        return (nxt - date(year, month, 1)).days
+    except Exception:
+        return 31
+
+
+def _tareo_load_tipodia_map(cursor):
+    cursor.execute(
+        "SELECT codigo, name, ValorDefecto FROM PR_TIPODIA (NOLOCK)"
+    )
+    out = {}
+    for row in cursor.fetchall():
+        raw = str(row[0] if row[0] is not None else '')
+        key = _tareo_norm_codigo(raw)
+        if not key:
+            continue
+        horas = 0.0
+        try:
+            if row[2] is not None:
+                horas = float(row[2])
+        except (TypeError, ValueError):
+            horas = 0.0
+        out[key] = {
+            'codigo': key,
+            'codigo_db': raw,
+            'nombre': str(row[1] or '').strip(),
+            'horas': horas,
+        }
+    return out
+
+
+def _tareo_parse_excel_primera_hoja(file_storage):
+    """Parsea solo la primera hoja. Retorna (filas, meta, error)."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return None, None, "Falta openpyxl para leer Excel."
+
+    try:
+        data = file_storage.read()
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:
+        return None, None, f"No se pudo leer el Excel: {exc}"
+
+    try:
+        if not wb.sheetnames:
+            return None, None, "El archivo no tiene hojas."
+        ws = wb[wb.sheetnames[0]]
+        sheet_name = ws.title
+        rows_raw = [list(r) for r in ws.iter_rows(values_only=True)]
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+    header_idx = None
+    day_cols = {}
+    codigo_col = None
+    nombre_col = None
+
+    for i, row in enumerate(rows_raw[:40]):
+        cells = [str(c).strip().upper() if c is not None else '' for c in row]
+        for j, cell in enumerate(cells):
+            if cell in ('CÓDIGO', 'CODIGO', 'CODIGO.', 'CÓDIGO.'):
+                codigo_col = j
+            if cell in ('APELLIDOS Y NOMBRES', 'NOMBRE', 'NOMBRES', 'APELLIDOS'):
+                nombre_col = j
+            if cell.isdigit():
+                d = int(cell)
+                if 1 <= d <= 31:
+                    day_cols[d] = j
+        if codigo_col is not None and len(day_cols) >= 28:
+            header_idx = i
+            break
+
+    if header_idx is None or codigo_col is None or not day_cols:
+        return None, None, (
+            "No se encontró la fila de encabezado con CÓDIGO y días 1..31 "
+            "en la primera hoja."
+        )
+
+    filas = []
+    for excel_row_num, row in enumerate(rows_raw[header_idx + 1:], start=header_idx + 2):
+        if not row or codigo_col >= len(row):
+            continue
+        person = _tareo_norm_person(row[codigo_col])
+        if not person:
+            continue
+        # Saltar fila de días de semana (J,V,S...) si no parece DNI
+        if not re.search(r'\d', person):
+            continue
+        nombre = ''
+        if nombre_col is not None and nombre_col < len(row) and row[nombre_col] is not None:
+            nombre = str(row[nombre_col]).strip()
+        tipos = {}
+        for d in range(1, 32):
+            key = f'{d:02d}'
+            if d not in day_cols:
+                tipos[key] = ''
+                continue
+            j = day_cols[d]
+            val = row[j] if j < len(row) else None
+            tipos[key] = '' if val is None else str(val).strip()
+        filas.append({
+            'excel_row': excel_row_num,
+            'person': person,
+            'nombre': nombre,
+            'tipos': tipos,
+        })
+
+    if not filas:
+        return None, None, "La primera hoja no tiene filas de trabajadores."
+
+    meta = {
+        'sheet': sheet_name,
+        'header_row': header_idx + 1,
+        'dias_detectados': sorted(day_cols.keys()),
+        'total_filas': len(filas),
+    }
+    return filas, meta, None
+
+
+def _tareo_validar_filas_import(cursor, company, filas, tipodia_map):
+    """Valida DNIs y códigos; vacíos → X. Retorna (detalle, errores)."""
+    errores = []
+    persons = sorted({f['person'] for f in filas if f.get('person')})
+    existentes = set()
+    nombres = {}
+    if persons:
+        # Chunk IN query
+        for i in range(0, len(persons), 400):
+            chunk = persons[i:i + 400]
+            placeholders = ','.join(['?'] * len(chunk))
+            cursor.execute(
+                f"""
+                SELECT e.person,
+                       LTRIM(RTRIM(
+                           ISNULL(p.LASTNAME1,'') + ' ' + ISNULL(p.LASTNAME2,'') + ' ' +
+                           ISNULL(p.NAME1,'') + ' ' + ISNULL(p.NAME2,'')
+                       )) AS nombre
+                FROM PR_Employee e (NOLOCK)
+                LEFT JOIN SY_Person p (NOLOCK) ON p.Person = e.person
+                WHERE e.company = ? AND e.person IN ({placeholders})
+                """,
+                [company] + chunk,
+            )
+            for row in cursor.fetchall():
+                per = _tareo_norm_person(row[0])
+                existentes.add(per)
+                nombres[per] = str(row[1] or '').strip()
+
+    seen = {}
+    detalle = []
+    for item in filas:
+        person = item['person']
+        excel_row = item.get('excel_row')
+        if person in seen:
+            errores.append({
+                'excel_row': excel_row,
+                'person': person,
+                'dia': None,
+                'codigo': None,
+                'mensaje': f'DNI duplicado en el archivo (también en fila {seen[person]}).',
+            })
+            continue
+        seen[person] = excel_row
+
+        if person not in existentes:
+            errores.append({
+                'excel_row': excel_row,
+                'person': person,
+                'dia': None,
+                'codigo': None,
+                'mensaje': f'El DNI {person} no existe en PR_Employee para la compañía.',
+            })
+
+        row_out = {
+            'person': person,
+            'person_name': nombres.get(person) or item.get('nombre') or '',
+        }
+        for key in _tareo_dia_keys():
+            raw = item['tipos'].get(key, '')
+            codigo = _tareo_norm_codigo(raw) or 'X'
+            meta = tipodia_map.get(codigo)
+            if not meta:
+                errores.append({
+                    'excel_row': excel_row,
+                    'person': person,
+                    'dia': int(key),
+                    'codigo': codigo,
+                    'mensaje': f'Tipo de día "{codigo}" no existe en el maestro.',
+                })
+                row_out[f'tipo{key}'] = codigo
+                row_out[f'hour{key}'] = 0
+            else:
+                row_out[f'tipo{key}'] = meta['codigo']
+                row_out[f'hour{key}'] = meta['horas']
+        detalle.append(row_out)
+
+    return detalle, errores
+
+
+def _tareo_detalle_from_db_rows(rows):
+    out = []
+    for r in rows:
+        item = {
+            'person': _tareo_norm_person(r.get('person')),
+            'person_name': str(r.get('person_name') or '').strip(),
+            'line': r.get('line'),
+        }
+        for key in _tareo_dia_keys():
+            item[f'tipo{key}'] = _tareo_norm_codigo(r.get(f'tipo{key}')) or 'X'
+            try:
+                item[f'hour{key}'] = float(r.get(f'hour{key}') or 0)
+            except (TypeError, ValueError):
+                item[f'hour{key}'] = 0.0
+        out.append(item)
+    return out
+
+
+def _tareo_validar_detalle_guardar(cursor, company, detalle, tipodia_map):
+    errores = []
+    if not detalle:
+        return [{'mensaje': 'El detalle del tareo está vacío.'}]
+
+    persons = [_tareo_norm_person(d.get('person')) for d in detalle]
+    if any(not p for p in persons):
+        errores.append({'mensaje': 'Hay filas sin DNI en el detalle.'})
+    if len(persons) != len(set(persons)):
+        errores.append({'mensaje': 'Hay DNIs duplicados en el detalle.'})
+
+    existentes = set()
+    valid_persons = [p for p in persons if p]
+    for i in range(0, len(valid_persons), 400):
+        chunk = valid_persons[i:i + 400]
+        placeholders = ','.join(['?'] * len(chunk))
+        cursor.execute(
+            f"SELECT person FROM PR_Employee (NOLOCK) "
+            f"WHERE company = ? AND person IN ({placeholders})",
+            [company] + chunk,
+        )
+        for row in cursor.fetchall():
+            existentes.add(_tareo_norm_person(row[0]))
+
+    for idx, d in enumerate(detalle, start=1):
+        person = _tareo_norm_person(d.get('person'))
+        if person and person not in existentes:
+            errores.append({
+                'person': person,
+                'line': idx,
+                'mensaje': f'El DNI {person} no existe en PR_Employee.',
+            })
+        for key in _tareo_dia_keys():
+            codigo = _tareo_norm_codigo(d.get(f'tipo{key}')) or 'X'
+            if codigo not in tipodia_map:
+                errores.append({
+                    'person': person,
+                    'line': idx,
+                    'dia': int(key),
+                    'codigo': codigo,
+                    'mensaje': f'Tipo de día "{codigo}" no existe.',
+                })
+            try:
+                float(d.get(f'hour{key}') if d.get(f'hour{key}') is not None else 0)
+            except (TypeError, ValueError):
+                errores.append({
+                    'person': person,
+                    'line': idx,
+                    'dia': int(key),
+                    'mensaje': f'Horas inválidas en día {int(key)}.',
+                })
+    return errores
+
+
+def _tareo_detalle_json_payload(detalle):
+    payload = []
+    for d in detalle:
+        item = {'person': _tareo_norm_person(d.get('person'))}
+        for key in _tareo_dia_keys():
+            codigo = _tareo_norm_codigo(d.get(f'tipo{key}')) or 'X'
+            try:
+                horas = float(d.get(f'hour{key}') if d.get(f'hour{key}') is not None else 0)
+            except (TypeError, ValueError):
+                horas = 0.0
+            item[f'tipo{key}'] = codigo
+            item[f'hour{key}'] = horas
+        payload.append(item)
+    return payload
+
+
+@app.route('/api/tareo/registro/catalogos', methods=['POST'])
+@login_required
+def api_tareo_registro_catalogos():
+    """Catálogos propios de tareo: unidades (CC nivel 1) y tipos de día.
+
+    Compañía / planilla / periodo se cargan con los selectores estándar:
+    /api/selectores/companias, planillas, periodos-asig.
+    """
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("EXEC sp_pr_listar_unidades_tareo_web @company=?", (cia,))
+        unidades = [
+            {
+                "costcenter": _jsonable_value(r.get('costcenter')),
+                "abbrev": _jsonable_value(r.get('abbrev')),
+                "name": _jsonable_value(r.get('name')),
+                "description": _jsonable_value(r.get('description')),
+            }
+            for r in _dicts_first_nonempty_resultset(cursor)
+        ]
+
+        tipodia_map = _tareo_load_tipodia_map(cursor)
+        tipodia = [
+            {
+                "codigo": v['codigo'],
+                "nombre": v['nombre'],
+                "horas": v['horas'],
+            }
+            for v in sorted(tipodia_map.values(), key=lambda x: x['codigo'])
+        ]
+
+        return jsonify({
+            "unidades": unidades,
+            "tipodia": tipodia,
+            "dias_mes": _tareo_dias_mes_desde_periodo(body.get('prperiod')),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_registro_catalogos")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/registro/listado', methods=['POST'])
+@login_required
+def api_tareo_registro_listado():
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    payrolltype = str(body.get('payrolltype') or '').strip() or None
+    prperiod = str(body.get('prperiod') or '').strip() or None
+    costcenter = str(body.get('costcenter') or '').strip() or None
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip() or None
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_tareoheader_web "
+            "@company=?, @payrolltype=?, @prperiod=?, @costcenter=?, @busqueda=?",
+            (cia, payrolltype, prperiod, costcenter, busqueda),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "tareoheader": _jsonable_value(r.get('tareoheader')),
+                    "company": _jsonable_value(r.get('company')),
+                    "payrolltype": _jsonable_value(r.get('payrolltype')),
+                    "payrolltype_name": _jsonable_value(r.get('payrolltype_name')),
+                    "prperiod": _jsonable_value(r.get('prperiod')),
+                    "costcenter": _jsonable_value(r.get('costcenter')),
+                    "costcenter_name": _jsonable_value(r.get('costcenter_name')),
+                    "registerdate": _jsonable_value(r.get('registerdate')),
+                    "lastprocessdate": _jsonable_value(r.get('lastprocessdate')),
+                    "xlastuser": _jsonable_value(r.get('xlastuser')),
+                    "xlastdate": _jsonable_value(r.get('xlastdate')),
+                    "detalle_count": int(r.get('detalle_count') or 0),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_registro_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/registro/obtener', methods=['POST'])
+@login_required
+def api_tareo_registro_obtener():
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    tareoheader = str(body.get('tareoheader') or body.get('id') or '').strip()
+    if not tareoheader:
+        return jsonify({"error": "Indique el tareo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_obtener_tareo_web @tareoheader=?", (tareoheader,))
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=5)
+        header = sets[0][0] if sets and sets[0] else None
+        detalle_rows = sets[1] if len(sets) > 1 else []
+        if not header:
+            return jsonify({"error": "El tareo no existe."}), 404
+        return jsonify({
+            "header": {
+                "tareoheader": _jsonable_value(header.get('tareoheader')),
+                "company": _jsonable_value(header.get('company')),
+                "payrolltype": _jsonable_value(header.get('payrolltype')),
+                "payrolltype_name": _jsonable_value(header.get('payrolltype_name')),
+                "prperiod": _jsonable_value(header.get('prperiod')),
+                "costcenter": _jsonable_value(header.get('costcenter')),
+                "costcenter_name": _jsonable_value(header.get('costcenter_name')),
+                "registerdate": _jsonable_value(header.get('registerdate')),
+                "lastprocessdate": _jsonable_value(header.get('lastprocessdate')),
+                "xlastuser": _jsonable_value(header.get('xlastuser')),
+                "xlastdate": _jsonable_value(header.get('xlastdate')),
+            },
+            "detalle": _tareo_detalle_from_db_rows(detalle_rows),
+            "dias_mes": _tareo_dias_mes_desde_periodo(header.get('prperiod')),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_registro_obtener")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/registro/importar', methods=['POST'])
+@login_required
+def api_tareo_registro_importar():
+    """Valida Excel (1ª hoja) y devuelve detalle listo para grilla + errores."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    cia = str(request.form.get('cia') or request.form.get('company') or session.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if 'file' not in request.files and 'archivo' not in request.files:
+        return jsonify({"error": "Seleccione un archivo Excel."}), 400
+    file_storage = request.files.get('file') or request.files.get('archivo')
+    if not file_storage or not file_storage.filename:
+        return jsonify({"error": "Seleccione un archivo Excel."}), 400
+
+    filas, meta, err = _tareo_parse_excel_primera_hoja(file_storage)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        tipodia_map = _tareo_load_tipodia_map(cursor)
+        if 'X' not in tipodia_map:
+            return jsonify({
+                "error": "Falta el tipo de día X en PR_TIPODIA (se usa para celdas vacías)."
+            }), 400
+        detalle, errores = _tareo_validar_filas_import(cursor, cia, filas, tipodia_map)
+        return jsonify({
+            "ok": len(errores) == 0,
+            "meta": meta,
+            "detalle": detalle,
+            "errores": errores,
+            "total": len(detalle),
+            "total_errores": len(errores),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_registro_importar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/registro/guardar', methods=['POST'])
+@login_required
+def api_tareo_registro_guardar():
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    prperiod = str(body.get('prperiod') or '').strip()
+    costcenter = str(body.get('costcenter') or '').strip()
+    tareoheader = str(body.get('tareoheader') or '').strip() or None
+    modo = str(body.get('modo') or ('U' if tareoheader else 'I')).strip().upper()
+    detalle = body.get('detalle') or []
+    if not isinstance(detalle, list):
+        return jsonify({"error": "Detalle inválido."}), 400
+    if not cia or not payrolltype or not prperiod or not costcenter:
+        return jsonify({"error": "Indique compañía, tipo de planilla, periodo y unidad."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        tipodia_map = _tareo_load_tipodia_map(cursor)
+        # Normalizar vacíos a X antes de validar/guardar
+        for d in detalle:
+            for key in _tareo_dia_keys():
+                if not _tareo_norm_codigo(d.get(f'tipo{key}')):
+                    d[f'tipo{key}'] = 'X'
+                    if d.get(f'hour{key}') in (None, ''):
+                        d[f'hour{key}'] = tipodia_map.get('X', {}).get('horas', 0)
+        errores = _tareo_validar_detalle_guardar(cursor, cia, detalle, tipodia_map)
+        if errores:
+            return jsonify({
+                "ok": False,
+                "error": "Hay errores de validación.",
+                "errores": errores,
+            }), 400
+
+        cursor.execute(
+            "EXEC sp_pr_guardar_tareo_web "
+            "@modo=?, @tareoheader=?, @company=?, @payrolltype=?, @prperiod=?, "
+            "@costcenter=?, @registerdate=?, @xlastuser=?",
+            (
+                modo,
+                tareoheader,
+                cia,
+                payrolltype,
+                prperiod,
+                costcenter,
+                None,
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        row = rows[0] if rows else {}
+        new_id = str(row.get('tareoheader') or tareoheader or '').strip()
+        if not new_id:
+            raise RuntimeError('No se obtuvo el ID del tareo.')
+
+        # Reemplazo completo del detalle + traslado a PR_REGISTERHOUR (opción B).
+        cursor.execute(
+            "DELETE FROM PR_TareoGeneral WHERE TareoHeader = ?",
+            (new_id,),
+        )
+
+        payload = _tareo_detalle_json_payload(detalle)
+        xuser = _xlastuser_id()
+        now = datetime.now()
+        keys = _tareo_dia_keys()
+        cols_hour = ', '.join(f'hour{k}' for k in keys)
+        cols_tipo = ', '.join(f'tipo{k}' for k in keys)
+        placeholders = ', '.join(['?'] * (4 + 31 + 2 + 2 + 31))
+        sql_ins = (
+            f"INSERT INTO PR_TareoGeneral ("
+            f"TareoHeader, line, person, company, {cols_hour}, "
+            f"xlastuser, xlastdate, Prperiod, payrolltype, {cols_tipo}"
+            f") VALUES ({placeholders})"
+        )
+        batch = []
+        for i, d in enumerate(payload, start=1):
+            vals = [new_id, i, d['person'], cia]
+            vals.extend(d.get(f'hour{k}', 0) for k in keys)
+            vals.extend([xuser, now, prperiod, payrolltype])
+            vals.extend(d.get(f'tipo{k}', 'X') for k in keys)
+            batch.append(tuple(vals))
+        cursor.fast_executemany = True
+        cursor.executemany(sql_ins, batch)
+
+        cursor.execute(
+            "EXEC sp_pr_trasladar_tareo_web @cia=?, @idtareo=?, @xlastuser=?",
+            (cia, new_id, xuser),
+        )
+        proc_rows = _dicts_first_nonempty_resultset(cursor)
+        proc = proc_rows[0] if proc_rows else {}
+        conn.commit()
+        filas_proc = int(proc.get('filas') or 0)
+        msg_base = _jsonable_value(row.get('mensaje')) or "Tareo guardado."
+        return jsonify({
+            "ok": True,
+            "tareoheader": new_id,
+            "filas_registerhour": filas_proc,
+            "mensaje": f"{msg_base} Procesado: {filas_proc} día(s) en PR_REGISTERHOUR.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_registro_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/registro/eliminar', methods=['POST'])
+@login_required
+def api_tareo_registro_eliminar():
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    tareoheader = str(body.get('tareoheader') or body.get('id') or '').strip()
+    if not tareoheader:
+        return jsonify({"error": "Indique el tareo a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_eliminar_tareo_web @tareoheader=?", (tareoheader,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "tareoheader": _jsonable_value(row.get('tareoheader')) or tareoheader,
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Tareo eliminado.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_registro_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/reporte-resumen', methods=['POST'])
+@login_required
+def api_tareo_reporte_resumen():
+    """sp_pr_reportetareoresumen_web — resumen por trabajador/periodo."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip() or None
+    prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
+    costcenter = str(body.get('costcenter') or body.get('unidad') or '').strip() or None
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reportetareoresumen_web "
+            "@company=?, @payrolltype=?, @prperiod=?, @costcenter=?",
+            (cia, payrolltype, prperiod, costcenter),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        out = []
+        for r in rows:
+            out.append({
+                "person": _jsonable_value(r.get('person')),
+                "name": _jsonable_value(r.get('name')),
+                "entrydate": _jsonable_value(r.get('entrydate')),
+                "ceasedate": _jsonable_value(r.get('ceasedate')),
+                "hourday": _float_sp_cell(r.get('hourday')),
+                "extrahour25": _float_sp_cell(r.get('extrahour25')),
+                "extrahour35": _float_sp_cell(r.get('extrahour35')),
+                "extrahour100": _float_sp_cell(r.get('extrahour100')),
+                "faltas": int(r.get('faltas') or 0),
+                "vacaciones": int(r.get('vacaciones') or 0),
+                "medicos": int(r.get('medicos') or 0),
+                "feriadotrab": int(r.get('feriadotrab') or 0),
+                "desctrab": int(r.get('desctrab') or 0),
+                "gocefer": int(r.get('gocefer') or 0),
+                "lcg": int(r.get('lcg') or 0),
+                "lsg": int(r.get('lsg') or 0),
+                "lma": int(r.get('lma') or 0),
+                "lpa": int(r.get('lpa') or 0),
+                "susp": int(r.get('susp') or 0),
+                "subsidio": int(r.get('subsidio') or 0),
+                "descansos": int(r.get('descansos') or 0),
+                "sinmarca": int(r.get('sinmarca') or 0),
+                "diastrab": int(r.get('diastrab') or 0),
+            })
+        return jsonify({"rows": out, "total": len(out)})
+    except Exception as e:
+        logging.exception("api_tareo_reporte_resumen")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/asignacion/procesar', methods=['POST'])
+@login_required
+def api_tareo_asignacion_procesar():
+    """sp_pr_asignar_tareo_periodo_web — conceptos + descansos médicos en un solo proceso."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
+    cesados = str(body.get('cesados') or 'T').strip().upper()[:1] or 'T'
+    person_all = str(body.get('person_all') or 'Y').strip().upper()[:1] or 'Y'
+    person = str(body.get('person') or '').strip() or None
+    repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
+    repunit = str(body.get('repunit') or '').strip() or None
+    xlastuser = str(session.get('username') or session.get('user') or 'WEB').strip()[:20] or 'WEB'
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione un tipo de planilla."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    if cesados not in ('T', 'Y', 'N'):
+        cesados = 'T'
+    if person_all not in ('Y', 'N'):
+        person_all = 'Y'
+    if person_all == 'N' and not person:
+        return jsonify({"error": "Indique la persona a procesar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_asignar_tareo_periodo_web "
+            "@cia=?, @period=?, @payrolltype=?, @person_all=?, @person=?, "
+            "@repunit_all=?, @repunit=?, @cesados=?, @xlastuser=?",
+            (
+                cia, prperiod, payrolltype, person_all, person,
+                repunit_all, repunit, cesados, xlastuser,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": int(row.get('ok') or 1),
+            "personas": int(row.get('personas') or 0),
+            "conceptos": int(row.get('conceptos') or 0),
+            "eventos": int(row.get('eventos') or 0),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Proceso completado.',
+        })
+    except Exception as e:
+        logging.exception("api_tareo_asignacion_procesar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

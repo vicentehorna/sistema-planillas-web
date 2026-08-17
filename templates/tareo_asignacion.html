@@ -1,0 +1,218 @@
+{% extends "layout.html" %}
+
+{% block title %}Asignación de Tareo{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="mb-2">
+            <h5 class="mb-0">Asignación de Tareo</h5>
+            <p class="text-muted small mb-0">
+                Pasa el tareo del periodo a Asignación de conceptos y a Descansos médicos (PLAME) en un solo proceso.
+            </p>
+        </div>
+        <form id="frmAsig" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Compañía</label>
+                <select id="selCia" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Tipo de planilla</label>
+                <select id="selPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Periodo</label>
+                <select id="selPeriodo" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Cesados</label>
+                <select id="selCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="N">Solo activos</option>
+                    <option value="Y">Solo cesados</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">
+                    <input type="checkbox" id="chkPersona" class="form-check-input me-1"> Persona (opcional)
+                </label>
+                <input type="text" id="txtPersona" class="form-control form-control-sm" placeholder="DNI / código" disabled>
+            </div>
+            <div class="col-12 d-flex gap-2 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm" id="btnProcesar">
+                    <i class="bi bi-play-fill"></i> Procesar
+                </button>
+            </div>
+        </form>
+        <div id="msgAsig" class="small mt-3"></div>
+        <div id="resumenAsig" class="mt-2 d-none">
+            <div class="alert alert-success py-2 mb-0 small">
+                <div><strong id="resMsg"></strong></div>
+                <ul class="mb-0 mt-1">
+                    <li>Personas: <span id="resPersonas">0</span></li>
+                    <li>Conceptos generados: <span id="resConceptos">0</span></li>
+                    <li>Eventos descansos médicos: <span id="resEventos">0</span></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const selCia = document.getElementById('selCia');
+    const selPlanilla = document.getElementById('selPlanilla');
+    const selPeriodo = document.getElementById('selPeriodo');
+    const selCesados = document.getElementById('selCesados');
+    const chkPersona = document.getElementById('chkPersona');
+    const txtPersona = document.getElementById('txtPersona');
+    const btnProcesar = document.getElementById('btnProcesar');
+    const msg = document.getElementById('msgAsig');
+    const resumen = document.getElementById('resumenAsig');
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+    const DEFAULT_CIA = 'BGT';
+    const DEFAULT_PLANILLA_TEXT = 'EMPLEADOS';
+
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+    function toastOk(t) { if (window.HmUi) HmUi.success(t); }
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));
+        return data;
+    }
+    function seleccionarPorTexto(selectEl, texto) {
+        const needle = String(texto || '').trim().toUpperCase();
+        if (!needle) return false;
+        const opt = [...selectEl.options].find(o =>
+            String(o.textContent || '').trim().toUpperCase().includes(needle)
+        );
+        if (!opt) return false;
+        selectEl.value = opt.value;
+        return true;
+    }
+    async function poblarSelect(url, selectEl, opciones) {
+        opciones = opciones || {};
+        const keep = opciones.keep != null ? String(opciones.keep) : '';
+        const placeholder = opciones.placeholder || 'Seleccione...';
+        selectEl.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectEl.innerHTML = '';
+            const o0 = document.createElement('option');
+            o0.value = '';
+            o0.textContent = placeholder;
+            selectEl.appendChild(o0);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const o = document.createElement('option');
+                o.value = item.id != null ? String(item.id) : '';
+                o.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(o);
+            });
+            if (keep && [...selectEl.options].some(o => o.value === keep)) selectEl.value = keep;
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarCompanias() {
+        const prefer = sessionCia || DEFAULT_CIA;
+        await poblarSelect('/api/selectores/companias', selCia, { keep: prefer });
+        if (!selCia.value && [...selCia.options].some(o => o.value === DEFAULT_CIA)) {
+            selCia.value = DEFAULT_CIA;
+        }
+    }
+    async function cargarPlanillas() {
+        const cia = selCia.value;
+        const keep = selPlanilla.value;
+        if (!cia) {
+            selPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        await poblarSelect('/api/selectores/planillas?cia=' + encodeURIComponent(cia), selPlanilla, { keep });
+        if (!selPlanilla.value) seleccionarPorTexto(selPlanilla, DEFAULT_PLANILLA_TEXT);
+    }
+    async function cargarPeriodos() {
+        const cia = selCia.value;
+        const pl = selPlanilla.value;
+        const keep = selPeriodo.value;
+        if (!cia || !pl) {
+            selPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        await poblarSelect(
+            '/api/selectores/periodos-asig?cia=' + encodeURIComponent(cia) + '&payrolltype=' + encodeURIComponent(pl),
+            selPeriodo,
+            { keep }
+        );
+    }
+
+    chkPersona.addEventListener('change', () => {
+        txtPersona.disabled = !chkPersona.checked;
+        if (!chkPersona.checked) txtPersona.value = '';
+    });
+
+    selCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        await cargarPeriodos();
+    });
+    selPlanilla.addEventListener('change', cargarPeriodos);
+
+    document.getElementById('frmAsig').addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        msg.textContent = '';
+        resumen.classList.add('d-none');
+        if (!selCia.value) return toastErr('Seleccione compañía');
+        if (!selPlanilla.value) return toastErr('Seleccione tipo de planilla');
+        if (!selPeriodo.value) return toastErr('Seleccione periodo');
+        if (chkPersona.checked && !String(txtPersona.value || '').trim()) {
+            return toastErr('Indique la persona o desmarque el filtro');
+        }
+        const ok = confirm(
+            '¿Procesar asignación de tareo del periodo?\n\n' +
+            'Se regenerarán conceptos (TAREO) y eventos de descansos médicos del periodo.'
+        );
+        if (!ok) return;
+
+        btnProcesar.disabled = true;
+        msg.textContent = 'Procesando…';
+        try {
+            const data = await leerJson(await fetch('/api/tareo/asignacion/procesar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: selCia.value,
+                    payrolltype: selPlanilla.value,
+                    prperiod: selPeriodo.value,
+                    cesados: selCesados.value || 'T',
+                    person_all: chkPersona.checked ? 'N' : 'Y',
+                    person: chkPersona.checked ? String(txtPersona.value || '').trim() : ''
+                })
+            }));
+            document.getElementById('resMsg').textContent = data.mensaje || 'Proceso completado';
+            document.getElementById('resPersonas').textContent = data.personas != null ? data.personas : 0;
+            document.getElementById('resConceptos').textContent = data.conceptos != null ? data.conceptos : 0;
+            document.getElementById('resEventos').textContent = data.eventos != null ? data.eventos : 0;
+            resumen.classList.remove('d-none');
+            msg.textContent = '';
+            toastOk(data.mensaje || 'Proceso completado');
+        } catch (e) {
+            msg.textContent = '';
+            toastErr(e.message || String(e));
+        } finally {
+            btnProcesar.disabled = false;
+        }
+    });
+
+    await cargarCompanias();
+    await cargarPlanillas();
+    await cargarPeriodos();
+});
+</script>
+{% endblock %}

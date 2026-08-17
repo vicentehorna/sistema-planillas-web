@@ -1194,8 +1194,8 @@
                 {% endif %}
 
                 {% set es_ultraseguros = (sql_database or '')|lower == 'hm_ultra' %}
-                {% set tareo_active = request.endpoint in ('tareo_tipo_dia_page',) %}
-                {% set show_tareo = es_ultraseguros and can_menu('tareo_tipo_dia') %}
+                {% set tareo_active = request.endpoint in ('tareo_tipo_dia_page', 'tareo_registro_page', 'tareo_registro_edit_page', 'tareo_reporte_resumen_page', 'tareo_asignacion_page') %}
+                {% set show_tareo = es_ultraseguros and (can_menu('tareo_tipo_dia') or can_menu('tareo_registro') or can_menu('tareo_reporte_resumen') or can_menu('tareo_asignacion')) %}
                 {% if show_tareo %}
                 <li class="sidebar-menu-parent {{ 'active' if tareo_active else '' }}">
                     <a href="#submenuTareo"
@@ -1212,6 +1212,27 @@
                         <li class="{{ 'active' if request.endpoint == 'tareo_tipo_dia_page' else '' }}">
                             <a href="{{ url_for('tareo_tipo_dia_page') }}" title="Tipo de Día">
                                 <i class="bi bi-tags"></i><span class="sidebar-link-text">Tipo de Día</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_registro') %}
+                        <li class="{{ 'active' if request.endpoint in ('tareo_registro_page', 'tareo_registro_edit_page') else '' }}">
+                            <a href="{{ url_for('tareo_registro_page') }}" title="Registro de Tareos">
+                                <i class="bi bi-calendar-check"></i><span class="sidebar-link-text">Registro de Tareos</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_reporte_resumen') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_reporte_resumen_page' else '' }}">
+                            <a href="{{ url_for('tareo_reporte_resumen_page') }}" title="Reporte Resumen Tareo">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte Resumen Tareo</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_asignacion') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_asignacion_page' else '' }}">
+                            <a href="{{ url_for('tareo_asignacion_page') }}" title="Asignación de Tareo">
+                                <i class="bi bi-box-arrow-in-right"></i><span class="sidebar-link-text">Asignación de Tareo</span>
                             </a>
                         </li>
                         {% endif %}

@@ -1,0 +1,387 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte Resumen Tareo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .trs-grilla {
+        max-height: calc(100vh - 270px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-trs {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-trs th, .table-trs td {
+        padding: 0.25rem 0.35rem;
+        vertical-align: middle;
+    }
+    .table-trs thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-trs .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .table-trs tr.sinmarca {
+        background: #a2d0ff33;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="mb-2">
+            <h5 class="mb-0">Reporte Resumen de Tareos</h5>
+        </div>
+        <form id="frmReporte" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Compañía</label>
+                <select id="selCia" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Tipo de planilla</label>
+                <select id="selPlanilla" class="form-select form-select-sm">
+                    <option value="">(Todas)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Periodo</label>
+                <select id="selPeriodo" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm">
+                    <option value="">(Todas)</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="btnExcel" disabled title="Exportar Excel">
+                    <i class="bi bi-file-earmark-excel"></i>
+                </button>
+            </div>
+        </form>
+        <div id="msgReporte" class="small mt-2"></div>
+    </div>
+</div>
+
+<div class="trs-grilla">
+    <table class="table table-bordered table-sm table-hover table-trs align-middle">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>F.Ingreso</th>
+                <th>F.Cese</th>
+                <th class="num">DÍAS</th>
+                <th class="num">Horas</th>
+                <th class="num">HE 25</th>
+                <th class="num">HE 35</th>
+                <th class="num">H NOC</th>
+                <th class="num">FALT</th>
+                <th class="num">VAC</th>
+                <th class="num">DM</th>
+                <th class="num">F TRAB</th>
+                <th class="num">D TRAB</th>
+                <th class="num">G FER</th>
+                <th class="num">LCG</th>
+                <th class="num">LSG</th>
+                <th class="num">L MAT</th>
+                <th class="num">L PAT</th>
+                <th class="num">SUSP</th>
+                <th class="num">SUB</th>
+                <th class="num">DESC</th>
+                <th class="num">X</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyReporte">
+            <tr><td colspan="23" class="text-center text-muted py-4">Seleccione filtros y pulse Buscar</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const selCia = document.getElementById('selCia');
+    const selPlanilla = document.getElementById('selPlanilla');
+    const selPeriodo = document.getElementById('selPeriodo');
+    const selUnidad = document.getElementById('selUnidad');
+    const tbody = document.getElementById('tbodyReporte');
+    const msg = document.getElementById('msgReporte');
+    const btnExcel = document.getElementById('btnExcel');
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+    const DEFAULT_CIA = 'BGT';
+    const DEFAULT_PLANILLA_TEXT = 'EMPLEADOS';
+    let lastRows = [];
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function seleccionarPorTexto(selectEl, texto) {
+        const needle = String(texto || '').trim().toUpperCase();
+        if (!needle) return false;
+        const opt = [...selectEl.options].find(o =>
+            String(o.textContent || '').trim().toUpperCase().includes(needle)
+        );
+        if (!opt) return false;
+        selectEl.value = opt.value;
+        return true;
+    }
+    function num(v) {
+        if (v == null || v === '') return '';
+        const n = Number(v);
+        return Number.isFinite(n) ? String(n) : esc(v);
+    }
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));
+        return data;
+    }
+
+    async function poblarSelect(url, selectEl, opciones) {
+        opciones = opciones || {};
+        const incluyeTodos = !!opciones.incluyeTodos;
+        const textoTodos = opciones.textoTodos || '(Todas)';
+        const keep = opciones.keep != null ? String(opciones.keep) : '';
+        const placeholder = opciones.placeholder || 'Seleccione...';
+        selectEl.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectEl.innerHTML = '';
+            if (incluyeTodos) {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = textoTodos;
+                selectEl.appendChild(o);
+            } else {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = placeholder;
+                selectEl.appendChild(o);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const o = document.createElement('option');
+                o.value = item.id != null ? String(item.id) : '';
+                o.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(o);
+            });
+            if (keep && [...selectEl.options].some(o => o.value === keep)) selectEl.value = keep;
+            selectEl.disabled = false;
+        } catch (e) {
+            selectEl.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarCompanias() {
+        const prefer = sessionCia || DEFAULT_CIA;
+        await poblarSelect('/api/selectores/companias', selCia, { keep: prefer });
+        if (!selCia.value) {
+            if ([...selCia.options].some(o => o.value === DEFAULT_CIA)) {
+                selCia.value = DEFAULT_CIA;
+            } else if (!seleccionarPorTexto(selCia, 'ULTRASEGUR') && selCia.options.length > 1) {
+                selCia.selectedIndex = 1;
+            }
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = selCia.value;
+        if (!cia) {
+            selPlanilla.innerHTML = '<option value="">(Todas)</option>';
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            selPlanilla,
+            { incluyeTodos: true, textoTodos: '(Todas)', keep: selPlanilla.value }
+        );
+        if (!selPlanilla.value) {
+            seleccionarPorTexto(selPlanilla, DEFAULT_PLANILLA_TEXT);
+        }
+    }
+
+    async function cargarPeriodos() {
+        const cia = selCia.value;
+        const pt = selPlanilla.value;
+        const keep = selPeriodo.value;
+        if (!cia) {
+            selPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        if (pt) {
+            await poblarSelect(
+                `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+                selPeriodo,
+                { keep, placeholder: 'Seleccione...' }
+            );
+        } else {
+            // Sin planilla: periodos de la compañía
+            await poblarSelect(
+                `/api/selectores/periodos-cia?cia=${encodeURIComponent(cia)}`,
+                selPeriodo,
+                { keep, placeholder: 'Seleccione...' }
+            );
+        }
+    }
+
+    async function cargarUnidades() {
+        const cia = selCia.value;
+        const keep = selUnidad.value;
+        if (!cia) {
+            selUnidad.innerHTML = '<option value="">(Todas)</option>';
+            return;
+        }
+        const data = await leerJson(await fetch('/api/tareo/registro/catalogos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia })
+        }));
+        selUnidad.innerHTML = '<option value="">(Todas)</option>';
+        (data.unidades || []).forEach(u => {
+            const o = document.createElement('option');
+            o.value = u.costcenter;
+            o.textContent = u.name || u.description || u.abbrev || u.costcenter;
+            selUnidad.appendChild(o);
+        });
+        if (keep && [...selUnidad.options].some(o => o.value === keep)) selUnidad.value = keep;
+    }
+
+    function renderRows(rows) {
+        lastRows = rows || [];
+        btnExcel.disabled = !lastRows.length;
+        if (!lastRows.length) {
+            tbody.innerHTML = '<tr><td colspan="23" class="text-center text-muted py-4">Sin registros</td></tr>';
+            msg.textContent = '0 registros';
+            return;
+        }
+        tbody.innerHTML = lastRows.map(r => `
+            <tr class="${Number(r.sinmarca || 0) > 0 ? 'sinmarca' : ''}">
+                <td>${esc(r.person)}</td>
+                <td>${esc(r.name)}</td>
+                <td>${esc(r.entrydate || '')}</td>
+                <td>${esc(r.ceasedate || '')}</td>
+                <td class="num">${num(r.diastrab)}</td>
+                <td class="num">${num(r.hourday)}</td>
+                <td class="num">${num(r.extrahour25)}</td>
+                <td class="num">${num(r.extrahour35)}</td>
+                <td class="num">${num(r.extrahour100)}</td>
+                <td class="num">${num(r.faltas)}</td>
+                <td class="num">${num(r.vacaciones)}</td>
+                <td class="num">${num(r.medicos)}</td>
+                <td class="num">${num(r.feriadotrab)}</td>
+                <td class="num">${num(r.desctrab)}</td>
+                <td class="num">${num(r.gocefer)}</td>
+                <td class="num">${num(r.lcg)}</td>
+                <td class="num">${num(r.lsg)}</td>
+                <td class="num">${num(r.lma)}</td>
+                <td class="num">${num(r.lpa)}</td>
+                <td class="num">${num(r.susp)}</td>
+                <td class="num">${num(r.subsidio)}</td>
+                <td class="num">${num(r.descansos)}</td>
+                <td class="num">${num(r.sinmarca)}</td>
+            </tr>
+        `).join('');
+        msg.textContent = lastRows.length + ' registro(s)';
+    }
+
+    async function buscar() {
+        msg.textContent = '';
+        if (!selCia.value) return toastErr('Seleccione compañía');
+        if (!selPeriodo.value) return toastErr('Seleccione periodo');
+        tbody.innerHTML = '<tr><td colspan="23" class="text-center text-muted py-3">Cargando…</td></tr>';
+        try {
+            const data = await leerJson(await fetch('/api/tareo/reporte-resumen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: selCia.value,
+                    payrolltype: selPlanilla.value || '',
+                    prperiod: selPeriodo.value,
+                    costcenter: selUnidad.value || ''
+                })
+            }));
+            renderRows(data.rows || []);
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="23" class="text-center text-danger py-4">Error al consultar</td></tr>';
+            btnExcel.disabled = true;
+            toastErr(e.message || String(e));
+        }
+    }
+
+    btnExcel.addEventListener('click', () => {
+        if (!lastRows.length) return;
+        const headers = [
+            'Código','Nombre','F.Ingreso','F.Cese','DÍAS','Horas','HE 25','HE 35','H NOC',
+            'FALT','VAC','DM','F TRAB','D TRAB','G FER','LCG','LSG','L MAT','L PAT','SUSP','SUB','DESC','X'
+        ];
+        const keys = [
+            'person','name','entrydate','ceasedate','diastrab','hourday','extrahour25','extrahour35','extrahour100',
+            'faltas','vacaciones','medicos','feriadotrab','desctrab','gocefer','lcg','lsg','lma','lpa','susp','subsidio','descansos','sinmarca'
+        ];
+        const lines = [headers.join(';')];
+        lastRows.forEach(r => {
+            lines.push(keys.map(k => {
+                let v = r[k] == null ? '' : String(r[k]);
+                if (v.includes(';') || v.includes('"')) v = '"' + v.replace(/"/g, '""') + '"';
+                return v;
+            }).join(';'));
+        });
+        const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `resumen_tareo_${selPeriodo.value || 'periodo'}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    });
+
+    document.getElementById('frmReporte').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        buscar();
+    });
+    selCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        await cargarPeriodos();
+        await cargarUnidades();
+    });
+    selPlanilla.addEventListener('change', async () => {
+        await cargarPeriodos();
+    });
+
+    try {
+        await cargarCompanias();
+        // Preferir Ultrasegur (BGT) al abrir
+        if ([...selCia.options].some(o => o.value === DEFAULT_CIA)) {
+            selCia.value = DEFAULT_CIA;
+        } else {
+            seleccionarPorTexto(selCia, 'ULTRASEGUR');
+        }
+        await cargarPlanillas();
+        seleccionarPorTexto(selPlanilla, DEFAULT_PLANILLA_TEXT);
+        await cargarPeriodos();
+        await cargarUnidades();
+    } catch (e) {
+        toastErr(e.message || String(e));
+    }
+});
+</script>
+{% endblock %}

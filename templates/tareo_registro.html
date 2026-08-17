@@ -1,0 +1,319 @@
+{% extends "layout.html" %}
+
+{% block title %}Registro de Tareos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tr-grilla {
+        max-height: calc(100vh - 280px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-tr {
+        font-size: 12px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-tr th, .table-tr td {
+        padding: 0.3rem 0.45rem;
+        vertical-align: middle;
+    }
+    .table-tr thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">Registro de Tareos</h5>
+                <div class="small text-muted">Importación y mantenimiento de tareos por planilla, periodo y unidad.</div>
+            </div>
+            <a class="btn btn-success btn-sm" href="{{ url_for('tareo_registro_edit_page') }}">
+                <i class="bi bi-plus-lg"></i> Nuevo tareo
+            </a>
+        </div>
+        <form id="frmFiltros" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Compañía</label>
+                <select id="selCia" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Tipo de planilla</label>
+                <select id="selPlanilla" class="form-select form-select-sm">
+                    <option value="">(Todas)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Periodo</label>
+                <select id="selPeriodo" class="form-select form-select-sm">
+                    <option value="">(Todos)</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm">
+                    <option value="">(Todas)</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+            </div>
+        </form>
+        <div id="msgListado" class="small mt-2"></div>
+    </div>
+</div>
+
+<div class="tr-grilla">
+    <table class="table table-bordered table-sm table-hover table-tr align-middle">
+        <thead>
+            <tr>
+                <th>Periodo</th>
+                <th>Planilla</th>
+                <th>Unidad</th>
+                <th class="text-end">Trab.</th>
+                <th>Usuario</th>
+                <th>Última modificación</th>
+                <th style="width:7rem" class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyListado">
+            <tr><td colspan="7" class="text-center text-muted py-4">Seleccione compañía y pulse Buscar</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const selCia = document.getElementById('selCia');
+    const selPlanilla = document.getElementById('selPlanilla');
+    const selPeriodo = document.getElementById('selPeriodo');
+    const selUnidad = document.getElementById('selUnidad');
+    const tbody = document.getElementById('tbodyListado');
+    const msg = document.getElementById('msgListado');
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function toastOk(t) { if (window.HmUi) HmUi.exito(t); else alert(t); }
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));
+        return data;
+    }
+
+    async function poblarSelect(url, selectEl, opciones) {
+        opciones = opciones || {};
+        const incluyeTodos = !!opciones.incluyeTodos;
+        const textoTodos = opciones.textoTodos || '(Todas)';
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
+        const keep = opciones.keep != null ? String(opciones.keep) : '';
+        selectEl.innerHTML = '';
+        const loading = document.createElement('option');
+        loading.value = '';
+        loading.textContent = 'Cargando...';
+        selectEl.appendChild(loading);
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectEl.innerHTML = '';
+            if (incluyeTodos) {
+                const opt = document.createElement('option');
+                opt.value = valorTodos;
+                opt.textContent = textoTodos;
+                selectEl.appendChild(opt);
+            } else {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Seleccione...';
+                selectEl.appendChild(opt);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const o = document.createElement('option');
+                o.value = item.id != null ? String(item.id) : '';
+                o.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(o);
+            });
+            if (keep && [...selectEl.options].some(o => o.value === keep)) {
+                selectEl.value = keep;
+            }
+            selectEl.disabled = false;
+        } catch (err) {
+            console.error(err);
+            selectEl.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarCompanias() {
+        await poblarSelect('/api/selectores/companias', selCia, { keep: sessionCia });
+        if (!selCia.value && selCia.options.length > 1) {
+            selCia.selectedIndex = 1;
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = selCia.value;
+        const keep = selPlanilla.value;
+        if (!cia) {
+            selPlanilla.innerHTML = '<option value="">(Todas)</option>';
+            selPeriodo.innerHTML = '<option value="">(Todos)</option>';
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            selPlanilla,
+            { incluyeTodos: true, textoTodos: '(Todas)', keep }
+        );
+    }
+
+    async function cargarPeriodos() {
+        const cia = selCia.value;
+        const pt = selPlanilla.value;
+        const keep = selPeriodo.value;
+        if (!cia || !pt) {
+            selPeriodo.innerHTML = '<option value="">(Todos)</option>';
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+            selPeriodo,
+            { incluyeTodos: true, textoTodos: '(Todos)', keep }
+        );
+    }
+
+    async function cargarUnidades() {
+        const cia = selCia.value;
+        const keep = selUnidad.value;
+        if (!cia) {
+            selUnidad.innerHTML = '<option value="">(Todas)</option>';
+            return;
+        }
+        const data = await leerJson(await fetch('/api/tareo/registro/catalogos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia })
+        }));
+        selUnidad.innerHTML = '<option value="">(Todas)</option>';
+        (data.unidades || []).forEach(u => {
+            const opt = document.createElement('option');
+            opt.value = u.costcenter;
+            opt.textContent = u.name || u.description || u.abbrev || u.costcenter;
+            selUnidad.appendChild(opt);
+        });
+        if (keep && [...selUnidad.options].some(o => o.value === keep)) {
+            selUnidad.value = keep;
+        }
+    }
+
+    async function buscar() {
+        msg.textContent = '';
+        const cia = selCia.value;
+        if (!cia) return toastErr('Seleccione compañía');
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Cargando…</td></tr>';
+        try {
+            const data = await leerJson(await fetch('/api/tareo/registro/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    payrolltype: selPlanilla.value || '',
+                    prperiod: selPeriodo.value || '',
+                    costcenter: selUnidad.value || ''
+                })
+            }));
+            const rows = data.rows || [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Sin registros</td></tr>';
+                msg.textContent = '0 registros';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td>${esc(r.prperiod)}</td>
+                    <td>${esc(r.payrolltype_name || r.payrolltype)}</td>
+                    <td>${esc(r.costcenter_name || r.costcenter)}</td>
+                    <td class="text-end">${esc(r.detalle_count)}</td>
+                    <td>${esc(r.xlastuser)}</td>
+                    <td>${esc(r.xlastdate || '')}</td>
+                    <td class="text-center">
+                        <a class="btn btn-outline-primary btn-sm py-0 px-1" title="Editar"
+                           href="{{ url_for('tareo_registro_edit_page') }}?id=${encodeURIComponent(r.tareoheader)}">
+                            <i class="bi bi-pencil"></i>
+                        </a>
+                        <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 btn-del"
+                                data-id="${esc(r.tareoheader)}" title="Eliminar">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
+                </tr>
+            `).join('');
+            msg.textContent = rows.length + ' registro(s)';
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-4">Error al cargar</td></tr>';
+            toastErr(e.message || String(e));
+        }
+    }
+
+    document.getElementById('frmFiltros').addEventListener('submit', function (ev) {
+        ev.preventDefault();
+        buscar();
+    });
+
+    selCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        await cargarPeriodos();
+        await cargarUnidades();
+    });
+    selPlanilla.addEventListener('change', async () => {
+        await cargarPeriodos();
+    });
+
+    tbody.addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('.btn-del');
+        if (!btn) return;
+        const id = btn.getAttribute('data-id');
+        if (!id) return;
+        if (!confirm('¿Eliminar el tareo ' + id + ' y todo su detalle?')) return;
+        try {
+            const data = await leerJson(await fetch('/api/tareo/registro/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ tareoheader: id })
+            }));
+            toastOk(data.mensaje || 'Eliminado');
+            buscar();
+        } catch (e) {
+            toastErr(e.message || String(e));
+        }
+    });
+
+    try {
+        await cargarCompanias();
+        await cargarPlanillas();
+        await cargarPeriodos();
+        await cargarUnidades();
+        await buscar();
+    } catch (e) {
+        toastErr(e.message || String(e));
+    }
+});
+</script>
+{% endblock %}

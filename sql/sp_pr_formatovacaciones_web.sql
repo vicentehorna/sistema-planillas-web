@@ -71,6 +71,8 @@ BEGIN
         )) AS person_name,
         LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ISNULL(sp.Ruc, '')))) AS documentnumber,
         LTRIM(RTRIM(ISNULL(NULLIF(pos.name, ''), ISNULL(pos.Description, '')))) AS cargo,
+        LTRIM(RTRIM(ISNULL(NULLIF(e.ExtensionNumber, ''), ISNULL(e.ReplicationUnit, '')))) AS sede,
+        LTRIM(RTRIM(ISNULL(ap.Description, ''))) AS area,
         d.Line AS line,
         d.DateBegin AS datebegin,
         d.DateEnd AS dateend,
@@ -119,6 +121,7 @@ BEGIN
         INNER JOIN PR_Employee e ON e.Person = d.Person AND e.Company = @cia
         INNER JOIN SY_Company sc ON sc.Company = @cia
         LEFT JOIN PR_Position pos ON e.Position = pos.Position
+        LEFT JOIN PR_AccountProfile ap ON e.AccountProfile = ap.AccountProfile
     ORDER BY d.DateBegin, d.Line;
 END
 GO

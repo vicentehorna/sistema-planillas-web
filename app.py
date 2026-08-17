@@ -11,7 +11,7 @@ import unicodedata
 import uuid
 import threading
 import xml.etree.ElementTree as ET
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import resend
@@ -1148,6 +1148,15 @@ def _es_cliente_ultraseguros():
     try:
         from database import get_active_database
         return str(get_active_database() or '').strip().lower() == 'hm_ultra'
+    except Exception:
+        return False
+
+
+def _es_cliente_elclan():
+    """True cuando la BD activa es hm_elclan (formato solicitud de vacaciones)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_elclan'
     except Exception:
         return False
 
@@ -4387,13 +4396,14 @@ def _formato_vacaciones_pdf_filename(person, fecha_raw=None, line=None):
     person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'trab').strip()) or 'trab'
     fecha_dt = _parse_report_date(fecha_raw)
     yyyymm = fecha_dt.strftime('%Y%m')
+    prefix = 'formato_solicitud_vacaciones' if _es_cliente_elclan() else 'constancia_goce_vacacional'
     if line is not None and str(line).strip() != '':
         try:
             line_safe = str(int(line))
         except Exception:
             line_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(line).strip()) or '0'
-        return f'constancia_goce_vacacional_{person_safe}_{yyyymm}_L{line_safe}.pdf'
-    return f'constancia_goce_vacacional_{person_safe}_{yyyymm}.pdf'
+        return f'{prefix}_{person_safe}_{yyyymm}_L{line_safe}.pdf'
+    return f'{prefix}_{person_safe}_{yyyymm}.pdf'
 
 
 def _fecha_texto_es(dia, mes, anio):
@@ -4403,6 +4413,38 @@ def _fecha_texto_es(dia, mes, anio):
     if not (dia_s and mes_s and anio_s):
         return ''
     return f'{dia_s} de {mes_s} del {anio_s}'
+
+
+def _fecha_texto_es_de_del(dia, mes, anio):
+    """Formato DataWindow El Clan: '19 DE Agosto DEL 2026'."""
+    dia_s = str(dia or '').strip()
+    mes_s = str(mes or '').strip()
+    anio_s = str(anio or '').strip()
+    if not (dia_s and mes_s and anio_s):
+        return ''
+    return f'{dia_s} DE {mes_s} DEL {anio_s}'
+
+
+def _fecha_retorno_es_de_del(dateend):
+    """Día siguiente al fin de goce (RETORNO del formato El Clan)."""
+    if dateend is None or dateend == '':
+        return ''
+    try:
+        if isinstance(dateend, datetime):
+            d = dateend.date()
+        elif isinstance(dateend, date):
+            d = dateend
+        else:
+            return ''
+        nxt = d + timedelta(days=1)
+        meses = {
+            1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+            5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+            9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre',
+        }
+        return f'{nxt.day} DE {meses.get(nxt.month, "")} DEL {nxt.year}'
+    except Exception:
+        return ''
 
 
 def generar_pdf_formato_vacaciones(params):
@@ -4496,17 +4538,51 @@ def generar_pdf_formato_vacaciones(params):
     }
 
     logo_src, firma_src = _boleta_logo_firma_src(cia)
+    if _es_cliente_elclan() and not logo_src:
+        logo_src = _image_data_uri(
+            os.path.join(app.root_path, 'static', 'img', 'logoelclan2.png')
+        )
 
-    html_renderizado = render_template(
-        'formato_vacaciones_pdf.html',
-        doc=doc,
-        detalles=detalles,
-        total_dias=total_dias,
-        periodo_vacacional=periodo_vacacional,
-        fecha_memo_texto=fecha_memo_texto,
-        logo_src=logo_src,
-        firma_src=firma_src,
-    )
+    if _es_cliente_elclan():
+        tramos = []
+        for r in rows:
+            tramos.append({
+                'begin_texto': _fecha_texto_es_de_del(
+                    r.get('begin_dia'), r.get('begin_mes'), r.get('begin_anio')
+                ),
+                'end_texto': _fecha_texto_es_de_del(
+                    r.get('end_dia'), r.get('end_mes'), r.get('end_anio')
+                ),
+                'retorno_texto': _fecha_retorno_es_de_del(r.get('dateend')),
+                'days': r.get('days'),
+            })
+        periodo_elclan = periodo_vacacional
+        if cy:
+            try:
+                periodo_elclan = f'{cy} - {int(cy) + 1}'
+            except Exception:
+                periodo_elclan = periodo_vacacional.replace('-', ' - ')
+        doc_elclan = dict(doc)
+        doc_elclan['sede'] = str(first.get('sede') or '').strip()
+        doc_elclan['area'] = str(first.get('area') or '').strip()
+        html_renderizado = render_template(
+            'formato_vacaciones_elclan_pdf.html',
+            doc=doc_elclan,
+            tramos=tramos,
+            periodo_vacacional=periodo_elclan,
+            logo_src=logo_src,
+        )
+    else:
+        html_renderizado = render_template(
+            'formato_vacaciones_pdf.html',
+            doc=doc,
+            detalles=detalles,
+            total_dias=total_dias,
+            periodo_vacacional=periodo_vacacional,
+            fecha_memo_texto=fecha_memo_texto,
+            logo_src=logo_src,
+            firma_src=firma_src,
+        )
 
     if WEASYPRINT_AVAILABLE:
         pdf_io = io.BytesIO()

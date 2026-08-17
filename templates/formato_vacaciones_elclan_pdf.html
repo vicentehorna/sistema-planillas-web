@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Formato Solicitud de Vacaciones</title>
+    <style>
+        @page { size: A4; margin: 12mm 14mm 16mm; }
+        body {
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 10.5px;
+            color: #111;
+            margin: 0;
+            padding: 0;
+        }
+        .logo-wrap {
+            text-align: center;
+            margin: 0 0 8px;
+        }
+        .logo-img {
+            max-height: 92px;
+            max-width: 280px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+        }
+        .titulo {
+            background: #000080;
+            color: #fff;
+            text-align: center;
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.4px;
+            text-transform: uppercase;
+            padding: 7px 8px;
+            margin: 0 0 10px;
+        }
+        .sec-title {
+            background: #F0F0F0;
+            font-weight: 700;
+            font-size: 10.5px;
+            text-transform: uppercase;
+            padding: 5px 8px;
+            margin: 0 0 0;
+        }
+        table.grid {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 0 0 10px;
+        }
+        table.grid th {
+            background: #C0C0C0;
+            font-weight: 700;
+            font-size: 10px;
+            text-align: center;
+            padding: 4px 6px;
+        }
+        table.grid td {
+            text-align: center;
+            padding: 6px 6px;
+            font-size: 11px;
+        }
+        .periodo-lbl {
+            background: #C0C0C0;
+            font-weight: 700;
+            font-size: 10px;
+            text-align: center;
+            padding: 4px 6px;
+            width: 58%;
+        }
+        .periodo-val {
+            text-align: center;
+            padding: 6px;
+            font-size: 11px;
+        }
+        .fechas-tbl {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 4px;
+        }
+        .fechas-tbl td {
+            vertical-align: top;
+            padding: 2px 0;
+        }
+        .lbl-fecha {
+            font-weight: 700;
+            width: 78px;
+            white-space: nowrap;
+            font-size: 10.5px;
+        }
+        .val-fecha {
+            font-size: 10.5px;
+        }
+        .dias-col {
+            width: 40%;
+            text-align: center;
+            vertical-align: top;
+        }
+        .dias-lbl {
+            font-weight: 700;
+            font-size: 10.5px;
+            margin: 0 0 6px;
+        }
+        .dias-box {
+            display: inline-block;
+            background: #F0F0F0;
+            min-width: 160px;
+            padding: 10px 18px;
+            font-size: 16px;
+            font-weight: 700;
+            text-align: center;
+        }
+        .tramo + .tramo {
+            margin-top: 10px;
+        }
+        .firmas {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 130px;
+        }
+        .firmas td {
+            width: 33.33%;
+            text-align: center;
+            vertical-align: top;
+            padding: 0 10px;
+            font-size: 9.5px;
+            line-height: 1.25;
+        }
+        .firma-linea {
+            border-top: 1.4px solid #000;
+            margin: 0 8px 8px;
+        }
+    </style>
+</head>
+<body>
+    {% if logo_src %}
+    <div class="logo-wrap">
+        <img src="{{ logo_src }}" alt="EL CLAN" class="logo-img">
+    </div>
+    {% endif %}
+
+    <div class="titulo">FORMATO SOLICITUD DE VACACIONES</div>
+
+    <div class="sec-title">DATOS DEL SOLICITANTE</div>
+    <table class="grid">
+        <tr>
+            <th style="width:52%;">Nombre Completo</th>
+            <th style="width:48%;">Documento de Identidad</th>
+        </tr>
+        <tr>
+            <td>{{ doc.person_name or '' }}</td>
+            <td>{{ doc.documentnumber or '' }}</td>
+        </tr>
+        <tr>
+            <th>Cargo</th>
+            <th>Área</th>
+        </tr>
+        <tr>
+            <td>{{ doc.cargo or '' }}</td>
+            <td>{{ doc.area or '' }}</td>
+        </tr>
+        <tr>
+            <th colspan="2">Sede</th>
+        </tr>
+        <tr>
+            <td colspan="2">{{ doc.sede or '' }}</td>
+        </tr>
+    </table>
+
+    <div class="sec-title">DATOS DE LA SOLICITUD DE VACACIONES</div>
+    <table class="grid" style="width:58%; margin-bottom:4px;">
+        <tr>
+            <th>PERIODO VACACIONAL</th>
+        </tr>
+        <tr>
+            <td>{{ periodo_vacacional or '' }}</td>
+        </tr>
+    </table>
+
+    {% for item in tramos %}
+    <div class="tramo">
+        <table class="fechas-tbl">
+            <tr>
+                <td>
+                    <table class="fechas-tbl">
+                        <tr>
+                            <td class="lbl-fecha">DESDE:</td>
+                            <td class="val-fecha">{{ item.begin_texto }}</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl-fecha">HASTA:</td>
+                            <td class="val-fecha">{{ item.end_texto }}</td>
+                        </tr>
+                        <tr>
+                            <td class="lbl-fecha">RETORNO:</td>
+                            <td class="val-fecha">{{ item.retorno_texto }}</td>
+                        </tr>
+                    </table>
+                </td>
+                <td class="dias-col">
+                    {% if loop.first %}
+                    <div class="dias-lbl">DÍAS SOLICITADOS</div>
+                    {% endif %}
+                    <div class="dias-box">{{ item.days if item.days is not none else '' }}</div>
+                </td>
+            </tr>
+        </table>
+    </div>
+    {% endfor %}
+
+    <table class="firmas">
+        <tr>
+            <td>
+                <div class="firma-linea"></div>
+                FIRMA DEL EMPLEADO
+            </td>
+            <td>
+                <div class="firma-linea"></div>
+                FIRMA DE AUTORIZACIÓN<br>DEL GERENTE DE ÁREA Y/O JEFE
+            </td>
+            <td>
+                <div class="firma-linea"></div>
+                V° B°<br>RECURSOS HUMANOS
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

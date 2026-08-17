@@ -938,8 +938,8 @@
                 </li>
                 {% endif %}
 
-                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page') %}
-                {% set show_pago_haberes = can_menu('pago_telecredito') or can_menu('pago_interbank') or can_menu('pago_continental') or can_menu('pago_banbif') %}
+                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page', 'pago_haberes_scotiabank_page') %}
+                {% set show_pago_haberes = can_menu('pago_telecredito') or can_menu('pago_interbank') or can_menu('pago_continental') or can_menu('pago_banbif') or can_menu('pago_scotiabank') %}
                 {% if show_pago_haberes %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"
@@ -977,6 +977,13 @@
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_banbif_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_banbif_page') }}" title="Archivo BANBIF">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo BANBIF</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('pago_scotiabank') %}
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_scotiabank_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_scotiabank_page') }}" title="Archivo Scotiabank">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Scotiabank</span>
                             </a>
                         </li>
                         {% endif %}

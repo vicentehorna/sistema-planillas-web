@@ -58,6 +58,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('pago_interbank', 'Archivo Interbank', 'pago_haberes', 720, 'pago_haberes_interbank_page', '/pago-haberes/interbank', 'A'),
 ('pago_continental', 'Archivo Continental', 'pago_haberes', 730, 'pago_haberes_bbva_page', '/pago-haberes/bbva', 'A'),
 ('pago_banbif', 'Archivo BANBIF', 'pago_haberes', 740, 'pago_haberes_banbif_page', '/pago-haberes/banbif', 'A'),
+('pago_scotiabank', 'Archivo Scotiabank', 'pago_haberes', 750, 'pago_haberes_scotiabank_page', '/pago-haberes/scotiabank', 'A'),
 
 ('configurar_conceptos_5ta', 'Configurar Conceptos 5ta', 'impuesto_renta', 800, 'configurar_conceptos_5ta_page', '/impuesto_renta/configurar_conceptos_5ta', 'A'),
 ('certificado_quinta', 'Certificado de Quinta', 'impuesto_renta', 810, 'certificado_quinta_page', '/impuesto_renta/certificado_quinta', 'A'),

@@ -3441,7 +3441,7 @@ def _telecredito_params_from_json(body):
 
 def _pago_haberes_cargar_personas_temp(cursor, persons, temp_table):
     """Carga tabla temporal #TelecreditoPersonas o #InterbankPersonas en lotes."""
-    allowed = {'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas', 'BanbifPersonas'}
+    allowed = {'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas', 'BanbifPersonas', 'ScotiabankPersonas'}
     if temp_table not in allowed:
         raise ValueError('Tabla temporal no permitida.')
     cursor.execute(
@@ -3566,6 +3566,12 @@ def _banbif_filename(period):
     periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
     stamp = datetime.now().strftime('%Y%m%d%H%M')
     return f'Banbif_{periodo}_{stamp}.txt'
+
+
+def _scotiabank_filename(period):
+    periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
+    stamp = datetime.now().strftime('%Y%m%d%H%M')
+    return f'Scotiabank_{periodo}_{stamp}.txt'
 
 
 def _report_params_from_json(req):
@@ -16867,6 +16873,12 @@ def pago_haberes_banbif_page():
     return render_template('pago_haberes_banbif.html')
 
 
+@app.route('/pago-haberes/scotiabank')
+@login_required
+def pago_haberes_scotiabank_page():
+    return render_template('pago_haberes_scotiabank.html')
+
+
 @app.route('/api/pago-haberes/continental/listado', methods=['POST'])
 @login_required
 def api_pago_haberes_continental_listado():
@@ -17233,6 +17245,196 @@ def api_pago_haberes_banbif_generar_txt():
         return resp
     except Exception as e:
         logging.exception("api_pago_haberes_banbif_generar_txt")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/scotiabank/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_scotiabank_listado():
+    """sp_pr_listascotiabank_web: trabajadores con abono Scotiabank."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
+    log_sp = (
+        '[scotiabank listado] EXEC sp_pr_listascotiabank_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@cesados={cesados!r} @todos_bancos={todos_bancos!r}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listascotiabank_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?, @todos_bancos=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], cesados, todos_bancos,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        filas_detalle = []
+        for r in rows:
+            person = str(r.get('person') or '').strip()
+            dni = str(r.get('dni') or '').strip()
+            nombre = str(r.get('nombre') or '').strip()
+            tipodoc = str(r.get('tipodoc') or '').strip()
+            importe = r.get('importe')
+            try:
+                importe_num = float(importe) if importe is not None else 0.0
+            except Exception:
+                importe_num = 0.0
+            filas_detalle.append({
+                "person": person,
+                "dni": dni,
+                "tipodoc": tipodoc,
+                "nombre": nombre,
+                "banco": str(r.get('banco') or '').strip(),
+                "importe": importe_num,
+            })
+        log_result = f'[scotiabank listado] registros devueltos={len(filas_detalle)} todos_bancos={todos_bancos}'
+        logging.info(log_result)
+        print(log_result, flush=True)
+        headers = ['DNI', 'Tipo doc.', 'Nombre']
+        if todos_bancos == 'Y':
+            headers.append('Banco')
+        headers.append('Importe')
+        data_rows = []
+        for r in filas_detalle:
+            fila = [r['dni'], r['tipodoc'], r['nombre']]
+            if todos_bancos == 'Y':
+                fila.append(r['banco'])
+            fila.append(r['importe'])
+            data_rows.append(fila)
+        return jsonify({
+            "headers": headers,
+            "data": data_rows,
+            "rows": filas_detalle,
+            "meta": {
+                "total": len(filas_detalle),
+                "paydate": p['paydate'].strftime('%d/%m/%Y'),
+                "todos_bancos": todos_bancos == 'Y',
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_scotiabank_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/scotiabank/generar-txt', methods=['POST'])
+@login_required
+def api_pago_haberes_scotiabank_generar_txt():
+    """sp_pr_generar_scotiabank_web → archivo TXT Scotiabank (140 caracteres, sin cabecera)."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_params_from_json(body)
+    err = _telecredito_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    referencia = str(
+        body.get('referencia') or body.get('par_responsible') or body.get('par_referencia') or ''
+    ).strip()
+    if len(referencia) > 20:
+        referencia = referencia[:20]
+
+    log_sp = (
+        '[scotiabank generar] EXEC sp_pr_generar_scotiabank_web '
+        f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
+        f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
+        f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
+        f'@todos_bancos={todos_bancos!r} @par_responsible={referencia!r} '
+        f'trabajadores_seleccionados={len(persons)}'
+    )
+    logging.info(log_sp)
+    print(log_sp, flush=True)
+
+    conn = None
+    t0 = time.perf_counter()
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        t_conn = time.perf_counter()
+        _pago_haberes_cargar_personas_temp(cursor, persons, 'ScotiabankPersonas')
+        t_temp = time.perf_counter()
+        cursor.execute(
+            "EXEC sp_pr_generar_scotiabank_web "
+            "@par_company=?, @par_currency=?, @par_concept=?, "
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
+            "@todos_bancos=?, @par_responsible=?",
+            (
+                p['cia'], p['currency'], p['concept'], p['payrolltype'],
+                p['period'], p['processtype'], p['paydate'], todos_bancos,
+                referencia or None,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        t_sp = time.perf_counter()
+        lineas = []
+        for r in rows:
+            txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+            if txt:
+                lineas.append(txt)
+
+        t_done = time.perf_counter()
+        log_result = (
+            f'[scotiabank generar] seleccionados={len(persons)} todos_bancos={todos_bancos} '
+            f'detalle_txt={len(lineas)} '
+            f'ms_conexion={int((t_conn - t0) * 1000)} '
+            f'ms_temp={int((t_temp - t_conn) * 1000)} '
+            f'ms_sp={int((t_sp - t_temp) * 1000)} '
+            f'ms_total={int((t_done - t0) * 1000)}'
+        )
+        logging.info(log_result)
+        print(log_result, flush=True)
+
+        if not lineas:
+            return jsonify({
+                "error": (
+                    f"No se pudo generar el archivo (sin líneas de detalle). "
+                    f"Seleccionados: {len(persons)}."
+                ),
+            }), 400
+
+        contenido = '\r\n'.join(lineas) + '\r\n'
+        filename = _scotiabank_filename(p['period'])
+
+        resp = Response(
+            contenido.encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_scotiabank_generar_txt")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

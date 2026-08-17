@@ -53,6 +53,9 @@ ENDPOINT_MENU_MAP = {
     'pago_haberes_interbank_page': 'pago_interbank',
     'pago_haberes_bbva_page': 'pago_continental',
     'pago_haberes_banbif_page': 'pago_banbif',
+    'pago_haberes_scotiabank_page': 'pago_scotiabank',
+    'api_pago_haberes_scotiabank_listado': 'pago_scotiabank',
+    'api_pago_haberes_scotiabank_generar_txt': 'pago_scotiabank',
     'configurar_conceptos_5ta_page': 'configurar_conceptos_5ta',
     'certificado_quinta_page': 'certificado_quinta',
     'calculo_quinta_trabajador_page': 'calculo_quinta_trabajador',
@@ -179,6 +182,8 @@ PATH_PREFIX_MENU_MAP = {
     '/reporte-trabajadores': 'reporte_trabajadores',
     '/api/liquidaciones/mapa-conceptos': 'mapa_conceptos_liquidacion',
     '/liquidaciones/mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
+    '/pago-haberes/scotiabank': 'pago_scotiabank',
+    '/api/pago-haberes/scotiabank': 'pago_scotiabank',
 }
 
 ALWAYS_ALLOWED_ENDPOINTS = {

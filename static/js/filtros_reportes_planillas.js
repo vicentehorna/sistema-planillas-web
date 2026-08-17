@@ -17,6 +17,7 @@
     const STORAGE_KEY_INTERBANK = 'filtros_pago_haberes_interbank';
     const STORAGE_KEY_CONTINENTAL = 'filtros_pago_haberes_continental';
     const STORAGE_KEY_BANBIF = 'filtros_pago_haberes_banbif';
+    const STORAGE_KEY_SCOTIABANK = 'filtros_pago_haberes_scotiabank';
     const STORAGE_KEY_LISTADO_PAGOS = 'filtros_listado_pagos';
     const STORAGE_KEY_ASIGNACION_CONCEPTOS = 'filtros_asignacion_conceptos';
     const STORAGE_KEY_REGISTRO_VACACIONES = 'filtros_registro_vacaciones';
@@ -2855,6 +2856,7 @@
         STORAGE_KEY_INTERBANK,
         STORAGE_KEY_CONTINENTAL,
         STORAGE_KEY_BANBIF,
+        STORAGE_KEY_SCOTIABANK,
         STORAGE_KEY_LISTADO_PAGOS,
         STORAGE_KEY_REGISTRO_VACACIONES,
         STORAGE_KEY_REGISTRO_DESCANSOS,
@@ -2912,6 +2914,9 @@
         },
         banbif: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_BANBIF, true);
+        },
+        scotiabank: function () {
+            return crearPersistenciaPagoHaberes(STORAGE_KEY_SCOTIABANK, true);
         },
         listadoPagos: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_LISTADO_PAGOS, false, true);

@@ -245,6 +245,9 @@
             white-space: nowrap;
             width: 18%;
         }
+        .oculto-ngservicios {
+            visibility: hidden;
+        }
         .fila-total td {
             font-weight: bold;
             background-color: #f4f6f9;
@@ -442,7 +445,7 @@
                 </tr>
                 <tr>
                     <td class="col-izq wrap"><span class="lbl datos-lbl">Tipo de contrato:</span><span class="datos-val">{{ liq.contract_modality or '' }}</span></td>
-                    <td class="col-der nowrap"><span class="lbl datos-lbl">Régimen laboral:</span><span class="datos-val">{{ liq.regimen_laboral or '' }}</span></td>
+                    <td class="col-der nowrap{% if es_ngservicios %} oculto-ngservicios{% endif %}"><span class="lbl datos-lbl">Régimen laboral:</span><span class="datos-val">{{ liq.regimen_laboral or '' }}</span></td>
                 </tr>
                 <tr>
                     <td class="col-izq nowrap"><span class="lbl datos-lbl">Sueldo:</span><span class="datos-val">{{ basico_fmt }}</span></td>
@@ -725,11 +728,12 @@
                 </thead>
                 <tbody>
                     {% for row in aportaciones_calc.filas %}
+                    {% set oculta_eps = es_ngservicios and row.formula_code == 'APORTE_EPS' %}
                     <tr>
-                        <td class="concepto">{{ row.label }}</td>
-                        <td class="monto">{{ row.pct_fmt }}</td>
-                        <td class="monto">{{ row.base_fmt }}</td>
-                        <td class="monto">{{ row.importe_fmt }}</td>
+                        <td class="concepto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.label }}</td>
+                        <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.pct_fmt }}</td>
+                        <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.base_fmt }}</td>
+                        <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.importe_fmt }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>

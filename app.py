@@ -5412,6 +5412,8 @@ def _contexto_formato_liquidacion(params, include_images=True):
     firma_src = ''
     if include_images:
         logo_src, firma_src = _boleta_logo_firma_src(cia)
+        if _es_cliente_ngservicios():
+            firma_src = ''
 
     cero = _formato_liquidacion_moneda(0)
     cero_pct = '0.00%'

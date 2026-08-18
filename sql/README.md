@@ -59,6 +59,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | Archivo | Procedimiento |
 |---------|---------------|
 | `sp_pr_listatrabajadores_web.sql` | Búsqueda trabajadores |
+| `sp_pr_inactivar_cesados_web.sql` | Inactivar cesados por rango de fecha de cese |
 | `sp_pr_selectorcompanias_web.sql` | Compañías activas |
 | `sp_pr_selectorplanillas_web.sql` | Tipos de planilla por compañía |
 | `sp_pr_selectorprocesos_web.sql` | Procesos por compañía y planilla |

@@ -16,6 +16,7 @@ BEGIN
         p.Position AS position,
         p.Company AS company,
         LTRIM(RTRIM(ISNULL(p.name, ''))) AS name,
+        CASE WHEN UPPER(ISNULL(p.Status, 'A')) = 'I' THEN 'I' ELSE 'A' END AS status,
         p.XLastUser AS xlastuser,
         p.XLastDate AS xlastdate
     FROM PR_Position p (NOLOCK)

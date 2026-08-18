@@ -27,6 +27,7 @@ EXCLUDE_FROM_DEPLOY = {
     "listar_formulas_faltantes_cias_provisiones.sql",
     "listar_conceptos_faltantes_cias_liquidacion.sql",
     "listar_conceptos_faltantes_cias_provisiones.sql",
+    "actualizar_position_inactivos_hm_elclan.sql",
 }
 
 

@@ -11704,10 +11704,16 @@ def api_asientos_reporte_contable():
                 pass
 
 
+def _position_status(raw):
+    v = str(raw or 'A').strip().upper()
+    return 'I' if v == 'I' else 'A'
+
+
 def _position_lista_dict(r):
     return {
         'position': _jsonable_value(r.get('position')),
         'name': _jsonable_value(r.get('name')),
+        'status': _position_status(r.get('status')),
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -11720,6 +11726,7 @@ def _position_detalle_dict(r):
         'position': _jsonable_value(r.get('position')),
         'company': _jsonable_value(r.get('company')),
         'name': _jsonable_value(r.get('name')),
+        'status': _position_status(r.get('status')),
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -11732,6 +11739,9 @@ def api_cargos_listado():
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    status = str(body.get('status') or 'A').strip().upper()[:1]
+    if status not in ('A', 'I', 'T'):
+        status = 'A'
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -11741,8 +11751,8 @@ def api_cargos_listado():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_listarposition_web @company=?, @busqueda=?",
-            (cia, busqueda or None),
+            "EXEC sp_pr_listarposition_web @company=?, @busqueda=?, @status=?",
+            (cia, busqueda or None, status),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = [_position_lista_dict(r) for r in rows]
@@ -11804,6 +11814,17 @@ def api_cargos_guardar():
     position = str(body.get('position') or '').strip()
     modo = str(body.get('modo') or ('U' if position else 'I')).strip().upper()
     name = str(body.get('name') or '').strip()
+    status_raw = body.get('status')
+    if isinstance(status_raw, bool):
+        status = 'A' if status_raw else 'I'
+    else:
+        status = str(status_raw or 'A').strip().upper()[:1]
+        if status in ('Y', 'S', '1', 'TRUE', 'ON'):
+            status = 'A'
+        elif status in ('N', '0', 'FALSE', 'OFF'):
+            status = 'I'
+        if status not in ('A', 'I'):
+            status = 'A'
     xlastuser = _xlastuser_id()
 
     if not cia:
@@ -11817,12 +11838,13 @@ def api_cargos_guardar():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_guardarposition_web "
-            "@modo=?, @company=?, @position=?, @name=?, @xlastuser=?",
+            "@modo=?, @company=?, @position=?, @name=?, @status=?, @xlastuser=?",
             (
                 modo,
                 cia,
                 position or None,
                 name,
+                status,
                 xlastuser,
             ),
         )
@@ -20912,6 +20934,74 @@ def api_trabajadores_listado():
         return jsonify({"headers": headers_es, "data": resultado, "rows": rows_meta})
     except Exception as e:
         logging.exception("api_trabajadores_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/trabajadores/inactivar-cesados', methods=['POST'])
+@login_required
+def api_trabajadores_inactivar_cesados():
+    """sp_pr_inactivar_cesados_web: Status = Y para cesados de la compañía en el rango."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    fecha_desde = _parse_optional_date(body.get('fecha_desde') or body.get('periodo_inicio'))
+    fecha_hasta = _parse_optional_date(body.get('fecha_hasta') or body.get('periodo_final'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not fecha_desde or not fecha_hasta:
+        return jsonify({"error": "Indique periodo inicio y periodo final."}), 400
+    if fecha_desde > fecha_hasta:
+        return jsonify({"error": "El periodo inicio no puede ser mayor que el periodo final."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_inactivar_cesados_web @cia=?, @fecha_desde=?, @fecha_hasta=?, @xlastuser=?",
+            (
+                cia,
+                _sql_date_str_param(fecha_desde),
+                _sql_date_str_param(fecha_hasta),
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        cantidad = 0
+        if rows:
+            try:
+                cantidad = int(rows[0].get('cantidad') or 0)
+            except (TypeError, ValueError):
+                cantidad = 0
+        if cantidad == 1:
+            mensaje = "Se inactivó 1 trabajador cesado en el rango indicado."
+        else:
+            mensaje = f"Se inactivaron {cantidad} trabajadores cesados en el rango indicado."
+        return jsonify({
+            "ok": True,
+            "cantidad": cantidad,
+            "mensaje": mensaje,
+            "cia": cia,
+            "fecha_desde": fecha_desde.strftime('%Y-%m-%d'),
+            "fecha_hasta": fecha_hasta.strftime('%Y-%m-%d'),
+        })
+    except Exception as e:
+        logging.exception("api_trabajadores_inactivar_cesados")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

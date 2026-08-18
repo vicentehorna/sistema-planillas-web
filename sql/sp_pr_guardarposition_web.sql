@@ -11,6 +11,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarposition_web]
     @company    VARCHAR(4),
     @position   VARCHAR(20) = NULL,
     @name       VARCHAR(255),
+    @status     CHAR(1) = 'A',
     @xlastuser  VARCHAR(20) = NULL
 AS
 BEGIN
@@ -24,6 +25,8 @@ BEGIN
     SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
     SET @position = NULLIF(LTRIM(RTRIM(ISNULL(@position, ''))), '');
     SET @name = LTRIM(RTRIM(ISNULL(@name, '')));
+    SET @status = UPPER(LEFT(LTRIM(RTRIM(ISNULL(@status, 'A'))), 1));
+    IF @status NOT IN ('A', 'I') SET @status = 'A';
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @modo NOT IN ('I', 'U')
@@ -83,6 +86,7 @@ BEGIN
             Description,
             Company,
             ReplicationUnit,
+            Status,
             XLastUser,
             XLastDate
         )
@@ -92,6 +96,7 @@ BEGIN
             LEFT(@name, 255),
             @company,
             @replicationunit,
+            @status,
             @xlastuser,
             GETDATE()
         );
@@ -128,6 +133,7 @@ BEGIN
     UPDATE PR_Position
     SET name = @name,
         Description = LEFT(@name, 255),
+        Status = @status,
         XLastUser = @xlastuser,
         XLastDate = GETDATE()
     WHERE Company = @company

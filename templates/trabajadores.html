@@ -204,6 +204,9 @@
                 <button type="button" class="btn btn-warning btn-sm px-4" id="btnReingresoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
                     <i class="bi bi-arrow-repeat"></i> Reingreso
                 </button>
+                <button type="button" class="btn btn-secondary btn-sm px-4" id="btnInactivarCesados" disabled title="Inactivar trabajadores cesados en un rango de periodos">
+                    <i class="bi bi-person-x"></i> Inactivar
+                </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelTrab" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
                 <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCountTrab">0</span></span>
             </div>
@@ -222,6 +225,31 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalInactivarCesados" tabindex="-1" aria-labelledby="modalInactivarCesadosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalInactivarCesadosLabel">Inactivar cesados</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-2">
+                    <label for="txtPeriodoInicioInactivar" class="form-label small fw-bold text-muted mb-1">Periodo inicio</label>
+                    <input type="date" id="txtPeriodoInicioInactivar" class="form-control form-control-sm">
+                </div>
+                <div class="mb-1">
+                    <label for="txtPeriodoFinalInactivar" class="form-label small fw-bold text-muted mb-1">Periodo final</label>
+                    <input type="date" id="txtPeriodoFinalInactivar" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="btnAceptarInactivarCesados">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -233,12 +261,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnConsultarTrab = document.getElementById('btnConsultarTrabajadores');
     const btnNuevoTrab = document.getElementById('btnNuevoTrabajador');
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
+    const btnInactivarCesados = document.getElementById('btnInactivarCesados');
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 
     function setBotonesConsultaEnabled(enabled) {
         if (btnConsultarTrab) btnConsultarTrab.disabled = !enabled;
         if (btnNuevoTrab) btnNuevoTrab.disabled = !enabled;
+        if (btnInactivarCesados) btnInactivarCesados.disabled = !enabled;
         actualizarBotonReingreso();
     }
 
@@ -281,6 +311,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const URL_LISTADO = {{ url_for('api_trabajadores_listado') | tojson }};
     const URL_ELIMINAR = {{ url_for('api_trabajadores_eliminar') | tojson }};
+    const URL_INACTIVAR = {{ url_for('api_trabajadores_inactivar_cesados') | tojson }};
     const IDX_STICKY_0 = 0;
     const IDX_STICKY_1 = 1;
     const IDX_STICKY_2 = 2;
@@ -928,6 +959,120 @@ document.addEventListener('DOMContentLoaded', async function () {
                 '/trabajadores/editar/' + encodeURIComponent(person) +
                 '?cia=' + encodeURIComponent(cia) +
                 '&seccion=laborales&modo=reingreso';
+        });
+    }
+
+    function fechaIsoLocal(fecha) {
+        const y = fecha.getFullYear();
+        const m = String(fecha.getMonth() + 1).padStart(2, '0');
+        const d = String(fecha.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + d;
+    }
+
+    function formatearFechaDmY(iso) {
+        const s = String(iso || '').trim();
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        return s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4);
+    }
+
+    function fechasPorDefectoInactivar() {
+        const hoy = new Date();
+        return {
+            inicio: hoy.getFullYear() + '-01-01',
+            fin: fechaIsoLocal(hoy),
+        };
+    }
+
+    function mostrarModalInactivarCesados() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        if (!cia) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        const def = fechasPorDefectoInactivar();
+        const txtIni = document.getElementById('txtPeriodoInicioInactivar');
+        const txtFin = document.getElementById('txtPeriodoFinalInactivar');
+        if (txtIni) txtIni.value = def.inicio;
+        if (txtFin) txtFin.value = def.fin;
+        const modalEl = document.getElementById('modalInactivarCesados');
+        if (!modalEl || !window.bootstrap) return;
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    async function aceptarInactivarCesados() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const ciaTxt = etiquetaCompaniaSeleccionada();
+        const fechaDesde = String(document.getElementById('txtPeriodoInicioInactivar').value || '').trim();
+        const fechaHasta = String(document.getElementById('txtPeriodoFinalInactivar').value || '').trim();
+        if (!cia) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        if (!fechaDesde || !fechaHasta) {
+            hmAdvertencia('Indique periodo inicio y periodo final.');
+            return;
+        }
+        if (fechaDesde > fechaHasta) {
+            hmAdvertencia('El periodo inicio no puede ser mayor que el periodo final.');
+            return;
+        }
+
+        const ok = await hmConfirmar({
+            titulo: 'Inactivar cesados',
+            mensaje:
+                '¿Está seguro de inactivar a todos los trabajadores de ' +
+                (ciaTxt || 'la empresa') +
+                ' que han cesado entre el ' +
+                formatearFechaDmY(fechaDesde) +
+                ' y el ' +
+                formatearFechaDmY(fechaHasta) +
+                '?',
+            textoOk: 'Inactivar',
+            textoCancelar: 'Cancelar',
+            variant: 'warning',
+        });
+        if (!ok) return;
+
+        const btnAceptar = document.getElementById('btnAceptarInactivarCesados');
+        if (btnAceptar) btnAceptar.disabled = true;
+        try {
+            const res = await fetch(URL_INACTIVAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cia,
+                    fecha_desde: fechaDesde,
+                    fecha_hasta: fechaHasta,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'No se pudo inactivar a los trabajadores.');
+            const modalEl = document.getElementById('modalInactivarCesados');
+            if (modalEl && window.bootstrap) {
+                const inst = bootstrap.Modal.getInstance(modalEl);
+                if (inst) inst.hide();
+            }
+            hmExito(data.mensaje || 'Trabajadores inactivados.');
+            if (consultaHabilitada) await ejecutarConsultaTrabajadores();
+        } catch (err) {
+            console.error(err);
+            hmError(err.message || String(err));
+        } finally {
+            if (btnAceptar) btnAceptar.disabled = false;
+        }
+    }
+
+    if (btnInactivarCesados) {
+        btnInactivarCesados.addEventListener('click', function () {
+            if (!consultaHabilitada) return;
+            mostrarModalInactivarCesados();
+        });
+    }
+
+    const btnAceptarInactivar = document.getElementById('btnAceptarInactivarCesados');
+    if (btnAceptarInactivar) {
+        btnAceptarInactivar.addEventListener('click', function () {
+            aceptarInactivarCesados();
         });
     }
 

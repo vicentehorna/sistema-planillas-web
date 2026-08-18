@@ -14,6 +14,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(NULLIF(p.Name, ''), p.Description))) AS text
     FROM PR_Position p (NOLOCK)
     WHERE p.Company = @cia
+      AND UPPER(ISNULL(p.Status, 'A')) <> 'I'
     ORDER BY text ASC, id ASC;
 END
 GO

@@ -151,6 +151,14 @@
                 <label for="txtBuscarCargo" class="form-label small fw-bold text-muted mb-1">Buscar cargo</label>
                 <input type="search" id="txtBuscarCargo" class="form-control form-control-sm" placeholder="Nombre del cargo..." autocomplete="off">
             </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="cboEstadoCargo" class="form-label small fw-bold text-muted mb-1">Estado</label>
+                <select id="cboEstadoCargo" class="form-select form-select-sm">
+                    <option value="A" selected>Activos</option>
+                    <option value="I">Inactivos</option>
+                    <option value="T">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-search"></i> Consultar
@@ -210,6 +218,13 @@
                     <div class="col-12">
                         <label for="txtName" class="form-label fw-semibold text-muted">Nombre Del Cargo</label>
                         <input type="text" id="txtName" class="form-control form-control-sm campo-obligatorio" maxlength="255" required>
+                    </div>
+
+                    <div class="col-12">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="chkStatusCargo" checked>
+                            <label class="form-check-label fw-semibold text-muted" for="chkStatusCargo">Activo</label>
+                        </div>
                     </div>
 
                     <div class="col-12 col-md-6" id="wrapAuditoriaUser">
@@ -339,6 +354,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidPosition').value = '';
         document.getElementById('hidModo').value = 'I';
         document.getElementById('frmCargo').reset();
+        document.getElementById('chkStatusCargo').checked = true;
         document.getElementById('txtXLastUser').value = '';
         document.getElementById('txtXLastDate').value = '';
         document.getElementById('tituloEdicionCargo').textContent = 'Nuevo cargo';
@@ -349,6 +365,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidPosition').value = data.position || '';
         document.getElementById('hidModo').value = 'U';
         document.getElementById('txtName').value = data.name || '';
+        document.getElementById('chkStatusCargo').checked = String(data.status || 'A').toUpperCase() !== 'I';
         document.getElementById('txtXLastUser').value = data.xlastuser || '';
         document.getElementById('txtXLastDate').value = formatearFecha(data.xlastdate);
         document.getElementById('tituloEdicionCargo').textContent = data.name || 'Editar cargo';
@@ -361,6 +378,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             position: document.getElementById('hidPosition').value.trim(),
             modo: document.getElementById('hidModo').value.trim() || 'I',
             name: document.getElementById('txtName').value.trim(),
+            status: document.getElementById('chkStatusCargo').checked ? 'A' : 'I',
         };
     }
 
@@ -380,8 +398,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         tbodyCargos.innerHTML = rows.map((r) => {
             const activo = cargoSeleccionado && cargoSeleccionado.position === r.position;
+            const inactivo = String(r.status || 'A').toUpperCase() === 'I';
+            const etiqueta = inactivo ? ' <span class="text-muted">(Inactivo)</span>' : '';
             return `<tr class="cg-row ${activo ? 'active' : ''}" data-position="${escHtml(r.position || '')}">
-                <td class="col-cargo" title="${escHtml(r.name || '')}">${escHtml(r.name || '')}</td>
+                <td class="col-cargo" title="${escHtml(r.name || '')}">${escHtml(r.name || '')}${etiqueta}</td>
             </tr>`;
         }).join('');
 
@@ -439,6 +459,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     cia,
                     busqueda: document.getElementById('txtBuscarCargo').value.trim(),
+                    status: document.getElementById('cboEstadoCargo').value.trim() || 'A',
                 }),
             });
             const data = await leerJson(res);
@@ -539,6 +560,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('frmFiltrosCargos').addEventListener('submit', async function (e) {
         e.preventDefault();
+        await cargarListado();
+    });
+
+    document.getElementById('cboEstadoCargo').addEventListener('change', async function () {
         await cargarListado();
     });
 

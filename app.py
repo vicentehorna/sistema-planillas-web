@@ -16291,10 +16291,17 @@ def api_plame_validar_carga():
 
 
 def _plame_validar_neto_r01_ejecutar(cursor, cia, period):
-    cursor.execute(
-        "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?",
-        (cia, period),
-    )
+    incluir_grati = 'Y' if _es_cliente_ultraseguros() else 'N'
+    if incluir_grati == 'Y':
+        cursor.execute(
+            "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?, @incluir_grati=?",
+            (cia, period, incluir_grati),
+        )
+    else:
+        cursor.execute(
+            "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?",
+            (cia, period),
+        )
     sets = _dicts_collect_nonempty_resultsets(cursor)
     resumen = sets[0][0] if len(sets) > 0 and sets[0] else {}
     filas = sets[1] if len(sets) > 1 else []
@@ -16545,7 +16552,7 @@ def api_plame_validar_r04():
 @app.route('/api/plame/validar/neto-r01', methods=['POST'])
 @login_required
 def api_plame_validar_neto_r01():
-    """Compara Neto a pagar (R01 SUNAT) vs Neto planilla (FormulaCode NETO)."""
+    """Compara Neto a pagar (R01 SUNAT) vs Neto planilla (FIN_DE_MES; en hm_ultra también GRATIFICACION)."""
     body = request.get_json(silent=True) or {}
     p = _plame_params_from_json(body)
     err = _plame_validar_params(p)

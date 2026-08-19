@@ -6,6 +6,7 @@
     La población de planilla es la misma que Archivo 18 (sp_pr_listado_plame18_web):
       - Todas las planillas (@payroll_all = Y por defecto)
       - Procesos: CTS, fin de mes, semana, vacaciones, liquidación, utilidades
+      - Si @incluir_grati = Y (hm_ultra): también NETO del proceso GRATIFICACION
       - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
       - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
       - Respeta flag PDT por planilla/proceso cuando está configurado
@@ -17,15 +18,17 @@
       @cia         — compañía
       @period      — periodo tributario YYYYMM
       @payroll_all — Y = todas las planillas (default, igual Archivo 18)
-      @payroll     — tipo de planilla (si @payroll_all = N)
-      @cesados     — T/Y/N (default T, igual Archivo 18)
+      @payroll       — tipo de planilla (si @payroll_all = N)
+      @cesados       — T/Y/N (default T, igual Archivo 18)
+      @incluir_grati — Y = sumar NETO de GRATIFICACION (solo hm_ultra)
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_neto_r01_web]
-    @cia         VARCHAR(10),
-    @period      VARCHAR(6),
-    @payroll_all CHAR(1)     = 'Y',
-    @payroll     VARCHAR(20) = NULL,
-    @cesados     CHAR(1)     = 'T'
+    @cia           VARCHAR(10),
+    @period        VARCHAR(6),
+    @payroll_all   CHAR(1)     = 'Y',
+    @payroll       VARCHAR(20) = NULL,
+    @cesados       CHAR(1)     = 'T',
+    @incluir_grati CHAR(1)     = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -35,8 +38,17 @@ BEGIN
     SET @payroll_all = UPPER(LTRIM(RTRIM(ISNULL(@payroll_all, 'Y'))));
     SET @payroll = LTRIM(RTRIM(ISNULL(@payroll, '')));
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    SET @incluir_grati = UPPER(LTRIM(RTRIM(ISNULL(@incluir_grati, 'N'))));
     IF @payroll_all NOT IN ('Y', 'N') SET @payroll_all = 'Y';
     IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
+    IF @incluir_grati NOT IN ('Y', 'N') SET @incluir_grati = 'N';
+
+    DECLARE @process_grati VARCHAR(20) = NULL;
+    IF @incluir_grati = 'Y'
+        SELECT TOP 1 @process_grati = ProcessType
+        FROM PR_ProcessType
+        WHERE Company = @cia
+          AND LTRIM(RTRIM(ShortName)) = 'GRATIFICACION';
 
     DECLARE @cargaid INT;
 
@@ -85,7 +97,8 @@ BEGIN
             pr_mapping.planillasemprocess,
             pr_mapping.VacationProcess,
             pr_mapping.liquidacionprocess,
-            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
+            @process_grati
       )
       AND LEFT(pr_employeepayrollconcept.prperiod, 6) = @period
       AND pr_employeepayrollconcept.conceptvaluelo IS NOT NULL
@@ -180,7 +193,8 @@ BEGIN
             M.PlanillaSemProcess,
             M.VacationProcess,
             M.LiquidacionProcess,
-            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
+            @process_grati
       )
       AND NOT EXISTS (
             SELECT 1
@@ -212,7 +226,8 @@ BEGIN
             M.PlanillaSemProcess,
             M.VacationProcess,
             M.LiquidacionProcess,
-            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
+            @process_grati
       )
       AND NOT EXISTS (SELECT 1 FROM #Empleados EM WHERE EM.person = EP.Person);
 
@@ -345,7 +360,8 @@ BEGIN
                         M.PlanillaSemProcess,
                         M.VacationProcess,
                         M.LiquidacionProcess,
-                        (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia)
+                        (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
+                        @process_grati
                   )
                   AND NOT EXISTS (
                         SELECT 1

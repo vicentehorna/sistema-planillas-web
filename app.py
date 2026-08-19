@@ -1842,16 +1842,40 @@ def _plame_linea_archivo14(row):
     ]) + '|'
 
 
+def _plame26_flag_01(valor, default='0'):
+    v = str(valor or '').strip().upper()
+    if v in ('1', 'Y', 'S', 'SI', 'SÍ'):
+        return '1'
+    if v in ('0', 'N', 'NO'):
+        return '0'
+    return default
+
+
+def _plame26_domiciliado(valor):
+    """Campo 6 Estructura 26: 1=Domiciliado, 2=No domiciliado. Default 1."""
+    v = str(valor or '').strip().upper()
+    if v in ('2', 'N', 'NO'):
+        return '2'
+    return '1'
+
+
+def _plame26_tipo_aporte(valor):
+    """Campo 5: vacío salvo 0/1/2 (tipo 56 artista / 98 4ta-5ta)."""
+    v = str(valor or '').strip()
+    return v if v in ('0', '1', '2') else ''
+
+
 def _plame_linea_archivo26(row):
-    """Genera línea PLAME Archivo 26 (.toc): TT|DOC|INDICADOR|"""
+    """Genera línea PLAME Archivo 26 (.toc): TT|DOC|0|VIDA|FDSA|DOMICILIADO|"""
     doc_type = str(row.get('documenttype') or '').strip()
     if doc_type.isdigit():
         doc_type = doc_type.zfill(2)
     doc_num = str(row.get('documentnumber') or '').strip()
-    indicator = str(row.get('pensionmembership') or '0').strip()
-    if indicator not in ('0', '1'):
-        indicator = '0'
-    return '|'.join([doc_type, doc_num, indicator]) + '|'
+    pension = _plame26_flag_01(row.get('pensionmembership'), default='0')
+    vida = _plame26_flag_01(row.get('accidentinsurance'), default='0')
+    tipo_aporte = _plame26_tipo_aporte(row.get('typeaporte'))
+    domiciliado = _plame26_domiciliado(row.get('isdomiciled'))
+    return '|'.join([doc_type, doc_num, pension, vida, tipo_aporte, domiciliado]) + '|'
 
 
 def _plame_rows_archivo26_from_json(body):
@@ -1871,13 +1895,13 @@ def _plame_rows_archivo26_from_json(body):
             doc_type = doc_type.zfill(2)
         if doc_type not in allowed_docs:
             continue
-        indicator = str(r.get('pensionmembership') or '0').strip()
-        if indicator not in ('0', '1'):
-            indicator = '0'
         resultado.append({
             'documenttype': doc_type,
             'documentnumber': doc_num,
-            'pensionmembership': indicator,
+            'pensionmembership': _plame26_flag_01(r.get('pensionmembership'), default='0'),
+            'accidentinsurance': _plame26_flag_01(r.get('accidentinsurance'), default='0'),
+            'typeaporte': _plame26_tipo_aporte(r.get('typeaporte')),
+            'isdomiciled': _plame26_domiciliado(r.get('isdomiciled')),
         })
     return resultado
 
@@ -17069,7 +17093,7 @@ def api_plame_tregistro_generar_txt():
 @app.route('/api/plame/archivo-26/listado', methods=['POST'])
 @login_required
 def api_plame_archivo26_listado():
-    """sp_pr_listado_plame26_web: indicador aporte Asegura tu pensión (.toc)."""
+    """sp_pr_listado_plame26_web: Estructura 26 otras condiciones (.toc)."""
     body = request.get_json(silent=True) or {}
     p = _plame_params_from_json(body)
     err = _plame_validar_params(p)

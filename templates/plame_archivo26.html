@@ -95,13 +95,13 @@
 
 {% block content %}
 <div class="alert alert-light border plame-info mb-3" role="note">
-    <strong>Archivo 26 — Indicador de aporte a «Asegura tu pensión» (SUNAT).</strong>
-    Formato de línea: <code>TT|NNNNNNNNNNNNNNN|I|</code>
-    (Tipo doc Tabla 3, N° documento, indicador de aporte).
+    <strong>Archivo 26 — Trabajador otras condiciones (.toc, SUNAT Estructura 26).</strong>
+    Formato de línea: <code>TT|NNNNNNNNNNNNNNN|0|V|F|D|</code>
+    (Tipo doc Tabla 3, N° documento, Asegura tu pensión, +Vida, FDSA/Ley 29903, Domiciliado).
     Solo aplica a tipos de documento 01, 04, 07 y 09.
     Nombre del archivo: <code>0601AAAAmmRRRRRRRRRRR.toc</code>
     (<code>0601</code> = formulario PLAME, <code>AAAA</code> = año, <code>mm</code> = mes, RUC de 11 dígitos).
-    Ejemplo de línea: <code>01|46741460|0|</code>
+    Ejemplo de línea: <code>01|00482388|0|1||1|</code>
 </div>
 
 <div class="card shadow-sm border-0 mb-4">

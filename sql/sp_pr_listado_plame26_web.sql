@@ -1,10 +1,18 @@
 /*
-    PLAME Archivo 26 (.toc) — Indicador de aporte "Asegura tu pensión".
+    PLAME Archivo 26 (.toc) — Trabajador otras condiciones (Estructura 26).
 
     Usado por: POST /api/plame/archivo-26/listado y generación TXT.
 
-    Línea TXT: TipoDoc|NroDoc|Indicador|
-    Ejemplo:   01|46741460|0|
+    Línea TXT: TipoDoc|NroDoc|AseguraPension|+Vida|FDSA-Ley29903|Domiciliado|
+    Ejemplo:   01|00482388|0|1||1|
+
+    Campos:
+      1 Tipo documento (01, 04, 07, 09)
+      2 Número documento
+      3 Asegura tu pensión — derogado; siempre 0
+      4 +Vida Seguro de Accidentes (1 aporta / 0 no; flagessaludvida)
+      5 FDSA / retención Ley 29903 (vacío salvo tipo 56 o 98)
+      6 Domiciliado (1 sí / 2 no; default 1)
 
     Solo tipos de documento Tabla 3: 01, 04, 07, 09 (carné extranjería 03 → 04).
 

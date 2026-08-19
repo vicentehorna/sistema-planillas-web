@@ -39,7 +39,8 @@ BEGIN
         ec.FlagApplyFormula AS flagapplyformula,
         ec.FlagFrecuencyType AS flagfrecuencytype,
         ec.CostCenter AS costcenter,
-        ec.CostCenterCode AS costcentercode
+        ec.CostCenterCode AS costcentercode,
+        LTRIM(RTRIM(ISNULL(ec.Comments, ''))) AS comments
     FROM PR_EmployeeConcept ec WITH (NOLOCK)
         INNER JOIN PR_Employee e WITH (NOLOCK)
             ON e.Person = ec.Person

@@ -3,7 +3,7 @@
     @modo: I = nuevo, U = actualizar.
 
     Campos no expuestos en UI (valores por defecto):
-      PercentageDistribution = 'A', Comments = NULL, Application = NULL,
+      PercentageDistribution = 'A', Application = NULL,
       Project/ProjectCode = '', FlagCopy = NULL.
 
     Reglas:
@@ -23,7 +23,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarasignacionconcepto_web]
     @par_conceptcurrency CHAR(2),
     @par_flagapplyformula CHAR(1),
     @par_flagfrecuencytype CHAR(1),
-    @xlastuser           VARCHAR(20) = NULL
+    @xlastuser           VARCHAR(20) = NULL,
+    @par_comments        VARCHAR(255) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -52,6 +53,7 @@ BEGIN
     SET @par_conceptcurrency = UPPER(LTRIM(RTRIM(ISNULL(@par_conceptcurrency, 'LO'))));
     SET @par_flagapplyformula = UPPER(LTRIM(RTRIM(ISNULL(@par_flagapplyformula, 'N'))));
     SET @par_flagfrecuencytype = UPPER(LTRIM(RTRIM(ISNULL(@par_flagfrecuencytype, 'P'))));
+    SET @par_comments = NULLIF(LTRIM(RTRIM(ISNULL(@par_comments, ''))), '');
 
     IF @par_company = '' OR @par_person = '' OR @par_concept = '' OR @par_payrolltype = '' OR @par_prperiodstart = ''
     BEGIN
@@ -191,7 +193,7 @@ BEGIN
         )
         VALUES (
             @par_person, @par_company, @par_concept, @par_payrolltype, @par_prperiodstart, @costcenter,
-            @par_prperiodend, @par_conceptvalue, NULL, @par_conceptcurrency, NULL,
+            @par_prperiodend, @par_conceptvalue, NULL, @par_conceptcurrency, @par_comments,
             @par_flagapplyformula, @par_flagfrecuencytype, @replicationunit,
             NULLIF(LTRIM(RTRIM(@xlastuser)), ''), GETDATE(), @conceptvaluelo, @conceptvalueex, @exchangerate,
             @costcentercode, '', '', 'A', NULL
@@ -236,6 +238,7 @@ BEGIN
             ConceptCurrency = @par_conceptcurrency,
             FlagApplyFormula = @par_flagapplyformula,
             FlagFrecuencyType = @par_flagfrecuencytype,
+            Comments = @par_comments,
             ConceptValueLo = @conceptvaluelo,
             ConceptValueEx = @conceptvalueex,
             ExchangeRate = @exchangerate,

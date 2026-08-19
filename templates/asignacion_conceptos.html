@@ -319,9 +319,9 @@
                                 <option value="">Seleccione...</option>
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-3">
                             <label class="form-label small fw-bold text-muted d-block">Tipo</label>
-                            <div class="d-flex gap-3 pt-1">
+                            <div class="d-flex flex-wrap gap-3 pt-1">
                                 <div class="form-check">
                                     <input class="form-check-input" type="radio" name="radModalTipo" id="radModalPermanente" value="P">
                                     <label class="form-check-label small" for="radModalPermanente">Permanente</label>
@@ -332,11 +332,23 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6">
-                            <div class="form-check mt-4 pt-1">
+                        <div class="col-md-3">
+                            <label class="form-label small fw-bold text-muted d-block">&nbsp;</label>
+                            <div class="form-check pt-1">
                                 <input class="form-check-input" type="checkbox" id="chkModalAplicaFormula">
                                 <label class="form-check-label small" for="chkModalAplicaFormula">Aplicar sobre fórmula</label>
                             </div>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="txtModalValor" class="form-label small fw-bold text-muted asig-req">Valor</label>
+                            <input type="number" id="txtModalValor" class="form-control form-control-sm text-end modal-campo-obligatorio" step="0.0001" min="0" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="cboModalMoneda" class="form-label small fw-bold text-muted">Moneda</label>
+                            <select id="cboModalMoneda" class="form-select form-select-sm" required>
+                                <option value="LO" selected>Local (LO)</option>
+                                <option value="EX">Extranjera (EX)</option>
+                            </select>
                         </div>
                         <div class="col-md-6">
                             <label for="cboModalPeriodoInicio" class="form-label small fw-bold text-muted asig-req">Vigente desde</label>
@@ -355,16 +367,9 @@
                                 Los periodos son de planilla (no fechas calendario). En temporal, “Hasta” es obligatorio.
                             </p>
                         </div>
-                        <div class="col-md-6">
-                            <label for="txtModalValor" class="form-label small fw-bold text-muted asig-req">Valor</label>
-                            <input type="number" id="txtModalValor" class="form-control form-control-sm text-end modal-campo-obligatorio" step="0.0001" min="0" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="cboModalMoneda" class="form-label small fw-bold text-muted">Moneda</label>
-                            <select id="cboModalMoneda" class="form-select form-select-sm" required>
-                                <option value="LO" selected>Local (LO)</option>
-                                <option value="EX">Extranjera (EX)</option>
-                            </select>
+                        <div class="col-12">
+                            <label for="txtModalObservacion" class="form-label small fw-bold text-muted">Observación</label>
+                            <textarea id="txtModalObservacion" class="form-control form-control-sm" rows="2" maxlength="255" placeholder="Comentarios u observaciones de la asignación"></textarea>
                         </div>
                     </div>
                 </div>
@@ -749,6 +754,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('radModalTemporal').checked = true;
         document.getElementById('chkModalAplicaFormula').checked = false;
         document.getElementById('cboModalMoneda').value = 'LO';
+        document.getElementById('txtModalObservacion').value = '';
         actualizarEstadoPeriodoFinModal();
         setModalCamposClaveDisabled(false);
     }
@@ -905,6 +911,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('txtModalValor').value = det.conceptvalue != null ? String(det.conceptvalue) : '';
         document.getElementById('cboModalMoneda').value = String(det.conceptcurrency || 'LO').trim().toUpperCase() === 'EX' ? 'EX' : 'LO';
         document.getElementById('chkModalAplicaFormula').checked = String(det.flagapplyformula || '').trim().toUpperCase() === 'Y';
+        document.getElementById('txtModalObservacion').value = det.comments != null ? String(det.comments) : '';
 
         setModalCamposClaveDisabled(true);
         modalAsignacion.show();
@@ -945,6 +952,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const conceptvalue = document.getElementById('txtModalValor').value.trim();
         const conceptcurrency = document.getElementById('cboModalMoneda').value.trim();
         const flagapplyformula = document.getElementById('chkModalAplicaFormula').checked ? 'Y' : 'N';
+        const comments = document.getElementById('txtModalObservacion').value.trim();
 
         if (!company || !payrolltype || !person || !concept || !prperiodstart || conceptvalue === '') {
             hmAdvertencia('Complete los campos obligatorios.');
@@ -966,7 +974,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     modo, company, payrolltype, person, concept, prperiodstart, costcenter,
-                    prperiodend, conceptvalue, conceptcurrency, flagapplyformula, flagfrecuencytype
+                    prperiodend, conceptvalue, conceptcurrency, flagapplyformula, flagfrecuencytype,
+                    comments
                 })
             });
             const payload = await res.json();

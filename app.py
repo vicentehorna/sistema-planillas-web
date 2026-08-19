@@ -3310,6 +3310,7 @@ def _asignacion_concepto_detalle_dict(r):
         "flagfrecuencytype": _jsonable_value(r.get('flagfrecuencytype')),
         "costcenter": _jsonable_value(r.get('costcenter')),
         "costcentercode": _jsonable_value(r.get('costcentercode')),
+        "comments": _jsonable_value(r.get('comments')),
     }
 
 
@@ -23302,6 +23303,7 @@ def api_asignacion_conceptos_guardar():
     conceptcurrency = _normalize_conceptcurrency_asig(body.get('conceptcurrency'))
     flagapplyformula = _normalize_flagapplyformula_asig(body.get('flagapplyformula'))
     xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+    comments = str(body.get('comments') or body.get('observacion') or '').strip()[:255] or None
 
     conn = None
     try:
@@ -23311,11 +23313,12 @@ def api_asignacion_conceptos_guardar():
             "EXEC sp_pr_guardarasignacionconcepto_web "
             "@modo=?, @par_company=?, @par_person=?, @par_concept=?, @par_payrolltype=?, "
             "@par_prperiodstart=?, @par_costcenter=?, @par_prperiodend=?, @par_conceptvalue=?, "
-            "@par_conceptcurrency=?, @par_flagapplyformula=?, @par_flagfrecuencytype=?, @xlastuser=?",
+            "@par_conceptcurrency=?, @par_flagapplyformula=?, @par_flagfrecuencytype=?, "
+            "@xlastuser=?, @par_comments=?",
             (
                 modo, pk['company'], pk['person'], pk['concept'], pk['payrolltype'],
                 pk['prperiodstart'], pk['costcenter'], prperiodend or None, conceptvalue,
-                conceptcurrency, flagapplyformula, flagfrecuencytype, xlastuser,
+                conceptcurrency, flagapplyformula, flagfrecuencytype, xlastuser, comments,
             ),
         )
         _drain_pyodbc_cursor(cursor)

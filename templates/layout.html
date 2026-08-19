@@ -1247,6 +1247,46 @@
                 </li>
                 {% endif %}
 
+                {% set es_ngservicios = (sql_database or '')|lower == 'hm_ngservicios' %}
+                {% set tareo_ng_active = request.endpoint in ('tareo_ng_importar_page', 'tareo_ng_reporte_page', 'tareo_ng_asignacion_page') %}
+                {% set show_tareo_ng = es_ngservicios and (can_menu('tareo_ng_importar') or can_menu('tareo_ng_reporte') or can_menu('tareo_ng_asignacion')) %}
+                {% if show_tareo_ng %}
+                <li class="sidebar-menu-parent {{ 'active' if tareo_ng_active else '' }}">
+                    <a href="#submenuTareoNg"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if tareo_ng_active else 'false' }}"
+                       aria-controls="submenuTareoNg"
+                       title="Tareo">
+                        <i class="bi bi-calendar2-week"></i><span class="sidebar-link-text">Tareo</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if tareo_ng_active else '' }}" id="submenuTareoNg">
+                        {% if can_menu('tareo_ng_importar') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_ng_importar_page' else '' }}">
+                            <a href="{{ url_for('tareo_ng_importar_page') }}" title="Importar Tareo">
+                                <i class="bi bi-file-earmark-arrow-up"></i><span class="sidebar-link-text">Importar Tareo</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_ng_reporte') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_ng_reporte_page' else '' }}">
+                            <a href="{{ url_for('tareo_ng_reporte_page') }}" title="Reporte de Tareos">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte de Tareos</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_ng_asignacion') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_ng_asignacion_page' else '' }}">
+                            <a href="{{ url_for('tareo_ng_asignacion_page') }}" title="Asignación de Tareo">
+                                <i class="bi bi-box-arrow-in-right"></i><span class="sidebar-link-text">Asignación de Tareo</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Reportes</p>
                 </li>

@@ -1,0 +1,386 @@
+{% extends "layout.html" %}
+
+{% block title %}Importar Tareo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tng-grilla {
+        max-height: calc(100vh - 300px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-tng {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-tng th, .table-tng td {
+        padding: 0.25rem 0.35rem;
+        vertical-align: middle;
+    }
+    .table-tng thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 3;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-tng th.sticky-col,
+    .table-tng td.sticky-col {
+        position: sticky;
+        background: #fff;
+        z-index: 2;
+    }
+    .table-tng thead th.sticky-col {
+        z-index: 4;
+        background: #f8f9fa;
+    }
+    .table-tng th.sticky-name,
+    .table-tng td.sticky-name {
+        left: 0;
+        min-width: 14rem;
+        max-width: 14rem;
+        box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.15);
+    }
+    .table-tng th.sticky-dni,
+    .table-tng td.sticky-dni {
+        left: 14rem;
+        min-width: 6rem;
+        box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.12);
+    }
+    .table-tng th.sticky-agencia,
+    .table-tng td.sticky-agencia {
+        left: 20rem;
+        min-width: 8rem;
+        box-shadow: 4px 0 6px -4px rgba(0, 0, 0, 0.1);
+    }
+    .table-tng tr.row-ko td {
+        color: #dc3545;
+    }
+    .day-col {
+        min-width: 2.1rem;
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="mb-2">
+            <h5 class="mb-0">Importar Tareo</h5>
+            <div class="small text-muted">Cargue la plantilla Excel, valide y procese hacia PR_REGISTERHOUR.</div>
+        </div>
+
+        <div class="row g-2 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Empresa</label>
+                <select id="selCia" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Periodo</label>
+                <select id="selPeriodo" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Localizar</label>
+                <input type="text" id="txtLocalizar" class="form-control form-control-sm" placeholder="Nombre o DNI">
+            </div>
+            <div class="col-md-4 d-flex flex-wrap gap-2 align-items-end">
+                <button type="button" class="btn btn-primary btn-sm" id="btnBuscar">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <label class="btn btn-outline-secondary btn-sm mb-0">
+                    <i class="bi bi-file-earmark-excel"></i> Seleccionar archivo
+                    <input type="file" id="fileExcel" class="d-none" accept=".xls,.xlsx">
+                </label>
+                <button type="button" class="btn btn-outline-primary btn-sm" id="btnValidar">
+                    <i class="bi bi-check2-circle"></i> Validar
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="btnProcesar" disabled>
+                    <i class="bi bi-box-arrow-in-down"></i> Procesar
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btnBorrar">
+                    <i class="bi bi-trash"></i> Borrar
+                </button>
+            </div>
+        </div>
+
+        <div class="form-check form-check-inline mt-2">
+            <input class="form-check-input" type="checkbox" id="chkSoloErrores">
+            <label class="form-check-label small" for="chkSoloErrores">Solo errores (KO)</label>
+        </div>
+
+        <div id="msgPanel" class="small mt-2"></div>
+    </div>
+</div>
+
+<div class="tng-grilla">
+    <table class="table table-bordered table-sm table-hover table-tng align-middle" id="tblTareo">
+        <thead id="theadTareo"></thead>
+        <tbody id="tbodyTareo">
+            <tr><td class="text-center text-muted py-4">Seleccione empresa, periodo y cargue un archivo Excel</td></tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const selCia = document.getElementById('selCia');
+    const selPeriodo = document.getElementById('selPeriodo');
+    const txtLocalizar = document.getElementById('txtLocalizar');
+    const fileExcel = document.getElementById('fileExcel');
+    const btnBuscar = document.getElementById('btnBuscar');
+    const btnValidar = document.getElementById('btnValidar');
+    const btnProcesar = document.getElementById('btnProcesar');
+    const btnBorrar = document.getElementById('btnBorrar');
+    const chkSoloErrores = document.getElementById('chkSoloErrores');
+    const thead = document.getElementById('theadTareo');
+    const tbody = document.getElementById('tbodyTareo');
+    const msg = document.getElementById('msgPanel');
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+
+    let dias = [];
+    let puedeProcesar = false;
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function toastOk(t) { if (window.HmUi) HmUi.exito(t); else alert(t); }
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));
+        return data;
+    }
+    function diaKeys() {
+        return Array.from({ length: 31 }, (_, i) => String(i + 1).padStart(2, '0'));
+    }
+    function periodoId() {
+        return String(selPeriodo.value || '').trim();
+    }
+    function ciaId() {
+        return String(selCia.value || '').trim();
+    }
+    function setMsg(text, isErr) {
+        msg.className = 'small mt-2 ' + (isErr ? 'text-danger' : 'text-muted');
+        msg.textContent = text || '';
+    }
+    function actualizarProcesar(flag) {
+        puedeProcesar = !!flag;
+        btnProcesar.disabled = !puedeProcesar;
+    }
+
+    function renderHead() {
+        const dayHeaders = diaKeys().map((k) => {
+            const meta = dias.find(d => String(d.dia) === k);
+            const label = meta && meta.label ? meta.label : k;
+            return `<th class="day-col" title="Día ${k}">${esc(label)}</th>`;
+        }).join('');
+        thead.innerHTML = `<tr>
+            <th class="sticky-col sticky-name">Nombre</th>
+            <th class="sticky-col sticky-dni">DNI</th>
+            <th class="sticky-col sticky-agencia">Agencia</th>
+            ${dayHeaders}
+            <th>Extras</th><th>Faltas</th><th>Vac.</th><th>DM</th><th>Susp.</th>
+            <th>LCG</th><th>LSG</th><th>LPP</th><th>Feriado</th><th>Desc.</th><th>Adic.</th>
+            <th>Observaciones</th><th>Resultado</th><th>Mensaje</th>
+        </tr>`;
+    }
+
+    function renderBody(rows) {
+        if (!rows || !rows.length) {
+            tbody.innerHTML = '<tr><td colspan="50" class="text-center text-muted py-4">Sin registros</td></tr>';
+            return;
+        }
+        const keys = diaKeys();
+        tbody.innerHTML = rows.map((r) => {
+            const ko = String(r.result || '').toUpperCase() === 'KO';
+            const days = keys.map(k => `<td class="day-col">${esc(r['hour' + k] || '')}</td>`).join('');
+            return `<tr class="${ko ? 'row-ko' : ''}">
+                <td class="sticky-col sticky-name">${esc(r.name)}</td>
+                <td class="sticky-col sticky-dni">${esc(r.person)}</td>
+                <td class="sticky-col sticky-agencia">${esc(r.destacamento)}</td>
+                ${days}
+                <td>${esc(r.extras)}</td><td>${esc(r.faltas)}</td><td>${esc(r.vacaciones)}</td>
+                <td>${esc(r.descmedico)}</td><td>${esc(r.suspension)}</td>
+                <td>${esc(r.lcg)}</td><td>${esc(r.lsg)}</td><td>${esc(r.lpp)}</td>
+                <td>${esc(r.feriado)}</td><td>${esc(r.descansos)}</td><td>${esc(r.adicionales)}</td>
+                <td>${esc(r.observaciones)}</td>
+                <td>${esc(r.result)}</td><td>${esc(r.message)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function poblarSelect(url, selectEl, keep) {
+        selectEl.innerHTML = '<option value="">Cargando...</option>';
+        const res = await fetch(url);
+        const data = await res.json();
+        selectEl.innerHTML = '<option value="">Seleccione...</option>';
+        (Array.isArray(data) ? data : []).forEach((item) => {
+            const o = document.createElement('option');
+            o.value = item.id || item.company || item.value || '';
+            o.textContent = item.text || item.description || item.name || o.value;
+            selectEl.appendChild(o);
+        });
+        if (keep && [...selectEl.options].some(o => o.value === keep)) {
+            selectEl.value = keep;
+        }
+    }
+
+    async function cargarListado() {
+        if (!ciaId()) {
+            setMsg('Seleccione una empresa.', true);
+            return;
+        }
+        setMsg('Cargando listado...');
+        try {
+            const res = await fetch('/api/tareo-ng/importar/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    busqueda: txtLocalizar.value.trim(),
+                    solo_errores: chkSoloErrores.checked ? 'Y' : 'N',
+                }),
+            });
+            const data = await leerJson(res);
+            dias = data.dias || [];
+            renderHead();
+            renderBody(data.rows || []);
+            actualizarProcesar(data.puede_procesar);
+            const ko = data.total_ko || 0;
+            setMsg(`${data.total || 0} registro(s)${ko ? ' — ' + ko + ' con error (KO)' : ''}.`);
+        } catch (e) {
+            setMsg(e.message, true);
+            toastErr(e.message);
+        }
+    }
+
+    selCia.addEventListener('change', async function () {
+        const cia = ciaId();
+        selPeriodo.innerHTML = '<option value="">Cargando...</option>';
+        if (!cia) {
+            selPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            return;
+        }
+        await poblarSelect('/api/selectores/periodos-plame?cia=' + encodeURIComponent(cia), selPeriodo);
+    });
+
+    btnBuscar.addEventListener('click', cargarListado);
+    chkSoloErrores.addEventListener('change', cargarListado);
+    txtLocalizar.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Enter') {
+            ev.preventDefault();
+            cargarListado();
+        }
+    });
+
+    fileExcel.addEventListener('change', async function () {
+        if (!fileExcel.files || !fileExcel.files[0]) return;
+        if (!ciaId()) { toastErr('Seleccione una empresa.'); fileExcel.value = ''; return; }
+        if (!periodoId()) { toastErr('Seleccione un periodo.'); fileExcel.value = ''; return; }
+        const fd = new FormData();
+        fd.append('cia', ciaId());
+        fd.append('period', periodoId());
+        fd.append('file', fileExcel.files[0]);
+        setMsg('Importando Excel...');
+        actualizarProcesar(false);
+        try {
+            const res = await fetch('/api/tareo-ng/importar/cargar-excel', { method: 'POST', body: fd });
+            const data = await leerJson(res);
+            dias = data.dias || [];
+            renderHead();
+            renderBody(data.rows || []);
+            actualizarProcesar(false);
+            setMsg(data.mensaje || ('Importados ' + (data.total || 0) + ' registro(s).'));
+            toastOk(data.mensaje || 'Archivo cargado.');
+        } catch (e) {
+            setMsg(e.message, true);
+            toastErr(e.message);
+        } finally {
+            fileExcel.value = '';
+        }
+    });
+
+    btnValidar.addEventListener('click', async function () {
+        if (!periodoId()) { toastErr('Seleccione un periodo.'); return; }
+        setMsg('Validando...');
+        try {
+            const res = await fetch('/api/tareo-ng/importar/validar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ period: periodoId(), cia: ciaId() }),
+            });
+            const data = await leerJson(res);
+            dias = data.dias || dias;
+            renderHead();
+            renderBody(data.rows || []);
+            actualizarProcesar(data.puede_procesar);
+            setMsg(data.mensaje || 'Validación completada.');
+            if (data.ok) toastOk(data.mensaje);
+            else toastErr(data.mensaje);
+        } catch (e) {
+            setMsg(e.message, true);
+            toastErr(e.message);
+        }
+    });
+
+    btnProcesar.addEventListener('click', async function () {
+        if (!puedeProcesar) {
+            toastErr('Debe validar sin errores (KO) antes de procesar.');
+            return;
+        }
+        if (!ciaId() || !periodoId()) {
+            toastErr('Seleccione empresa y periodo.');
+            return;
+        }
+        if (!confirm('¿Procesar el tareo e importar a PR_REGISTERHOUR?')) return;
+        setMsg('Procesando...');
+        btnProcesar.disabled = true;
+        try {
+            const res = await fetch('/api/tareo-ng/importar/procesar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ period: periodoId(), cia: ciaId() }),
+            });
+            const data = await leerJson(res);
+            actualizarProcesar(false);
+            setMsg(data.mensaje || 'Proceso concluido.');
+            toastOk(data.mensaje || 'Proceso concluido.');
+        } catch (e) {
+            setMsg(e.message, true);
+            toastErr(e.message);
+            actualizarProcesar(puedeProcesar);
+        }
+    });
+
+    btnBorrar.addEventListener('click', async function () {
+        if (!confirm('¿Eliminar todos los datos temporales de PR_TAREONG?')) return;
+        try {
+            const res = await fetch('/api/tareo-ng/importar/borrar', { method: 'POST' });
+            const data = await leerJson(res);
+            dias = [];
+            thead.innerHTML = '';
+            tbody.innerHTML = '<tr><td colspan="50" class="text-center text-muted py-4">Datos temporales eliminados</td></tr>';
+            actualizarProcesar(false);
+            setMsg(data.mensaje || 'Datos eliminados.');
+            toastOk(data.mensaje || 'Datos eliminados.');
+        } catch (e) {
+            setMsg(e.message, true);
+            toastErr(e.message);
+        }
+    });
+
+    await poblarSelect('/api/selectores/companias', selCia, sessionCia);
+    if (sessionCia) {
+        await poblarSelect('/api/selectores/periodos-plame?cia=' + encodeURIComponent(sessionCia), selPeriodo);
+    }
+    renderHead();
+});
+</script>
+{% endblock %}

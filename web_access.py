@@ -70,6 +70,9 @@ ENDPOINT_MENU_MAP = {
     'tareo_registro_edit_page': 'tareo_registro',
     'tareo_reporte_resumen_page': 'tareo_reporte_resumen',
     'tareo_asignacion_page': 'tareo_asignacion',
+    'tareo_ng_importar_page': 'tareo_ng_importar',
+    'tareo_ng_reporte_page': 'tareo_ng_reporte',
+    'tareo_ng_asignacion_page': 'tareo_ng_asignacion',
     'asientos_distribucion_porcentual_page': 'asientos_distribucion_porcentual',
 
     'asientos_configurar_conceptos_page': 'asientos_configurar_conceptos',
@@ -141,6 +144,12 @@ PATH_PREFIX_MENU_MAP = {
     '/tareo/reporte-resumen': 'tareo_reporte_resumen',
     '/api/tareo/asignacion': 'tareo_asignacion',
     '/tareo/asignacion': 'tareo_asignacion',
+    '/api/tareo-ng/importar': 'tareo_ng_importar',
+    '/tareo-ng/importar': 'tareo_ng_importar',
+    '/api/tareo-ng/reporte': 'tareo_ng_reporte',
+    '/tareo-ng/reporte': 'tareo_ng_reporte',
+    '/api/tareo-ng/asignacion': 'tareo_ng_asignacion',
+    '/tareo-ng/asignacion': 'tareo_ng_asignacion',
     '/api/asientos/distribucion-porcentual': 'asientos_distribucion_porcentual',
 
     '/asientos/distribucion-porcentual': 'asientos_distribucion_porcentual',

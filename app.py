@@ -7589,6 +7589,33 @@ def tareo_asignacion_page():
     return render_template('tareo_asignacion.html')
 
 
+@app.route('/tareo-ng/importar')
+@login_required
+def tareo_ng_importar_page():
+    """Importar Tareo desde Excel — hm_ngservicios."""
+    if not _es_cliente_ngservicios():
+        abort(404)
+    return render_template('tareo_ng_importar.html')
+
+
+@app.route('/tareo-ng/reporte')
+@login_required
+def tareo_ng_reporte_page():
+    """Reporte detallado de tareos — hm_ngservicios."""
+    if not _es_cliente_ngservicios():
+        abort(404)
+    return render_template('tareo_ng_reporte.html')
+
+
+@app.route('/tareo-ng/asignacion')
+@login_required
+def tareo_ng_asignacion_page():
+    """Asignación de tareo NG hacia conceptos de planilla."""
+    if not _es_cliente_ngservicios():
+        abort(404)
+    return render_template('tareo_ng_asignacion.html')
+
+
 @app.route('/asientos/distribucion-porcentual')
 @login_required
 def asientos_distribucion_porcentual_page():
@@ -10112,6 +10139,796 @@ def api_tareo_registro_eliminar():
                 pass
 
 
+def _tareong_dia_keys():
+    return [f'{i:02d}' for i in range(1, 32)]
+
+
+def _tareong_period_yyyymm(period):
+    s = re.sub(r'[^0-9]', '', str(period or '').strip())
+    return s[:6] if len(s) >= 6 else ''
+
+
+def _tareong_norm_cell(value):
+    if value is None:
+        return ''
+    if isinstance(value, float):
+        if value == int(value):
+            return str(int(value))[:4]
+        s = str(value).strip()
+        return s[:4]
+    s = str(value).strip()
+    if not s:
+        return ''
+    if re.fullmatch(r'\d+\.0+', s):
+        return s.split('.')[0][:4]
+    return s[:4]
+
+
+def _tareong_norm_text(value, max_len=255):
+    return str(value or '').strip()[:max_len]
+
+
+def _tareong_read_sheet_rows(file_storage):
+    """Lee la primera hoja (.xls vía xlrd, .xlsx vía openpyxl)."""
+    data = file_storage.read()
+    filename = str(file_storage.filename or '').lower()
+    if filename.endswith('.xls') and not filename.endswith('.xlsx'):
+        try:
+            import xlrd
+        except ImportError:
+            return None, 'Falta xlrd para leer archivos .xls.'
+        try:
+            book = xlrd.open_workbook(file_contents=data)
+            sheet = book.sheet_by_index(0)
+            rows = []
+            for i in range(sheet.nrows):
+                rows.append([sheet.cell_value(i, j) for j in range(sheet.ncols)])
+            return rows, None
+        except Exception as exc:
+            return None, f'No se pudo leer el Excel (.xls): {exc}'
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return None, 'Falta openpyxl para leer Excel.'
+    try:
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+        if not wb.sheetnames:
+            return None, 'El archivo no tiene hojas.'
+        ws = wb[wb.sheetnames[0]]
+        rows = [list(r) for r in ws.iter_rows(values_only=True)]
+        wb.close()
+        return rows, None
+    except Exception as exc:
+        return None, f'No se pudo leer el Excel: {exc}'
+
+
+def _tareong_find_header_row(rows_raw):
+    for i, row in enumerate(rows_raw[:80]):
+        cells = [str(c).strip().upper() if c is not None else '' for c in row]
+        if 'DNI' in cells and any('AGENCIA' in c or 'NOMBRE' in c for c in cells):
+            return i
+    return None
+
+
+def _tareong_map_day_columns(rows_raw, header_idx):
+    """Mapea día 1..31 -> índice de columna usando fila numérica bajo el encabezado."""
+    day_cols = {}
+    for offset in (1, 2):
+        idx = header_idx + offset
+        if idx >= len(rows_raw):
+            continue
+        row = rows_raw[idx]
+        found = 0
+        tmp = {}
+        for j, cell in enumerate(row):
+            val = _tareong_norm_cell(cell)
+            if val.isdigit():
+                d = int(val)
+                if 1 <= d <= 31 and d not in tmp:
+                    tmp[d] = j
+                    found += 1
+        if found >= 28:
+            day_cols = tmp
+            break
+    if day_cols:
+        return day_cols
+    header = rows_raw[header_idx]
+    agencia_col = None
+    for j, cell in enumerate(header):
+        txt = str(cell or '').strip().upper()
+        if 'AGENCIA' in txt:
+            agencia_col = j
+            break
+    start = (agencia_col + 1) if agencia_col is not None else 5
+    for d in range(1, 32):
+        day_cols[d] = start + d - 1
+    return day_cols
+
+
+def _tareong_col_index(header_row, labels):
+    cells = [str(c).strip().upper() if c is not None else '' for c in header_row]
+    for label in labels:
+        label_u = label.upper()
+        for j, cell in enumerate(cells):
+            if label_u in cell:
+                return j
+    return None
+
+
+def _tareong_parse_excel(file_storage):
+    rows_raw, err = _tareong_read_sheet_rows(file_storage)
+    if err:
+        return None, None, err
+    header_idx = _tareong_find_header_row(rows_raw)
+    if header_idx is None:
+        return None, None, (
+            'No se encontró la fila de encabezado con DNI y AGENCIA/NOMBRE en la primera hoja.'
+        )
+    header = rows_raw[header_idx]
+    name_col = _tareong_col_index(header, ['APELLIDOS Y NOMBRE', 'NOMBRE'])
+    person_col = _tareong_col_index(header, ['DNI'])
+    agencia_col = _tareong_col_index(header, ['AGENCIA'])
+    if person_col is None:
+        return None, None, 'No se encontró la columna DNI en el encabezado.'
+    if name_col is None:
+        name_col = max(person_col - 1, 0)
+    if agencia_col is None:
+        agencia_col = person_col + 1
+
+    day_cols = _tareong_map_day_columns(rows_raw, header_idx)
+    summary_map = {
+        'extras': _tareong_col_index(header, ['HORAS EXTRAS', 'EXTRAS']),
+        'faltas': _tareong_col_index(header, ['FALTAS']),
+        'vacaciones': _tareong_col_index(header, ['VACACIONES']),
+        'descmedico': _tareong_col_index(header, ['DESCANSO MEDICO', 'DESC.MEDICO', 'DESC MEDICO']),
+        'suspension': _tareong_col_index(header, ['SUSPENSION']),
+        'lcg': _tareong_col_index(header, ['LICENCIAS CON GOCE', 'LIC.GOCE', 'LCG']),
+        'lsg': _tareong_col_index(header, ['LICENCIAS SIN GOCE', 'LIC.SIN GOCE', 'LSG']),
+        'lpp': _tareong_col_index(header, ['LIC.PATERNIDAD', 'LPP', 'PATERNIDAD']),
+        'feriado': _tareong_col_index(header, ['FERIADO']),
+        'descansos': _tareong_col_index(header, ['DESCANSOS']),
+        'adicionales': _tareong_col_index(header, ['HORAS HOMBRE', 'ADICIONALES', 'MOVILIDAD']),
+        'observaciones': _tareong_col_index(header, ['OBSERVACIONES']),
+    }
+
+    data_start = header_idx + 1
+    for offset in (1, 2):
+        idx = header_idx + offset
+        if idx < len(rows_raw):
+            row = rows_raw[idx]
+            nums = sum(
+                1 for c in row
+                if _tareong_norm_cell(c).isdigit() and 1 <= int(_tareong_norm_cell(c)) <= 31
+            )
+            if nums >= 28:
+                data_start = idx + 1
+                break
+
+    filas = []
+    for excel_row_num, row in enumerate(rows_raw[data_start:], start=data_start + 1):
+        if not row or person_col >= len(row):
+            continue
+        person = re.sub(r'\D', '', _tareong_norm_text(row[person_col], 20))
+        name = _tareong_norm_text(row[name_col] if name_col < len(row) else '', 255)
+        if not person and not name:
+            continue
+        if not person or not re.search(r'\d', person):
+            continue
+        destacamento = _tareong_norm_text(row[agencia_col] if agencia_col < len(row) else '', 255)
+        item = {
+            'excel_row': excel_row_num,
+            'name': name,
+            'person': person,
+            'destacamento': destacamento,
+        }
+        for d in range(1, 32):
+            key = f'{d:02d}'
+            j = day_cols.get(d)
+            val = row[j] if j is not None and j < len(row) else ''
+            item[f'hour{key}'] = _tareong_norm_cell(val)
+        for field, col in summary_map.items():
+            if col is not None and col < len(row):
+                if field == 'observaciones':
+                    item[field] = _tareong_norm_text(row[col], 255)
+                else:
+                    item[field] = _tareong_norm_cell(row[col])
+            else:
+                item[field] = '' if field == 'observaciones' else ''
+        filas.append(item)
+
+    if not filas:
+        return None, None, 'La primera hoja no tiene filas de trabajadores con DNI.'
+
+    meta = {
+        'header_row': header_idx + 1,
+        'total_filas': len(filas),
+        'dias_detectados': sorted(day_cols.keys()),
+    }
+    return filas, meta, None
+
+
+def _tareong_row_from_db(r):
+    item = {
+        'fila': _jsonable_value(r.get('fila')),
+        'name': _jsonable_value(r.get('name')),
+        'person': _jsonable_value(r.get('person')),
+        'destacamento': _jsonable_value(r.get('destacamento')),
+        'result': _jsonable_value(r.get('result')),
+        'message': _jsonable_value(r.get('message')),
+    }
+    for key in _tareong_dia_keys():
+        item[f'hour{key}'] = _jsonable_value(r.get(f'hour{key}'))
+    for field in (
+        'extras', 'faltas', 'vacaciones', 'descmedico', 'suspension',
+        'lcg', 'lsg', 'lpp', 'feriado', 'descansos', 'adicionales', 'observaciones',
+    ):
+        db_key = 'feriado' if field == 'feriado' else field
+        if field == 'feriado':
+            item[field] = _jsonable_value(r.get('feriado') if r.get('feriado') is not None else r.get('Feriado'))
+        elif field in ('lcg', 'lsg', 'lpp'):
+            item[field] = _jsonable_value(r.get(field) if r.get(field) is not None else r.get(field.upper()))
+        else:
+            item[field] = _jsonable_value(r.get(field))
+    return item
+
+
+def _tareong_fetch_listado(cursor, busqueda=None, solo_errores=False):
+    sql = """
+        SELECT Fila AS fila, name, person, destacamento,
+               hour01, hour02, hour03, hour04, hour05, hour06, hour07, hour08,
+               hour09, hour10, hour11, hour12, hour13, hour14, hour15, hour16,
+               hour17, hour18, hour19, hour20, hour21, hour22, hour23, hour24,
+               hour25, hour26, hour27, hour28, hour29, hour30, hour31,
+               extras, faltas, vacaciones, descmedico, suspension,
+               LCG AS lcg, LSG AS lsg, LPP AS lpp, Feriado AS feriado,
+               descansos, adicionales, observaciones,
+               Result AS result, Message AS message
+        FROM PR_TAREONG (NOLOCK)
+    """
+    params = []
+    wheres = []
+    if solo_errores:
+        wheres.append("UPPER(ISNULL(Result, '')) = 'KO'")
+    if busqueda:
+        wheres.append("(name LIKE ? OR person LIKE ? OR destacamento LIKE ?)")
+        like = f'%{busqueda.strip()}%'
+        params.extend([like, like, like])
+    if wheres:
+        sql += ' WHERE ' + ' AND '.join(wheres)
+    sql += ' ORDER BY Fila'
+    cursor.execute(sql, params)
+    return [_tareong_row_from_db(r) for r in _dicts_first_nonempty_resultset(cursor)]
+
+
+def _tareong_fetch_dias(cursor):
+    cursor.execute("SELECT dia, fecha FROM xx_fechas (NOLOCK) ORDER BY dia")
+    rows = _dicts_first_nonempty_resultset(cursor)
+    out = []
+    for r in rows:
+        dia = str(r.get('dia') or '').strip()
+        fecha = str(r.get('fecha') or '').strip()
+        label = dia
+        if len(fecha) >= 8 and fecha.isdigit():
+            label = fecha[-2:]
+        out.append({'dia': dia, 'fecha': fecha, 'label': label})
+    return out
+
+
+def _tareong_count_ko(cursor):
+    cursor.execute(
+        "SELECT COUNT(*) FROM PR_TAREONG (NOLOCK) WHERE UPPER(ISNULL(Result, '')) = 'KO'"
+    )
+    row = cursor.fetchone()
+    return int(row[0] if row else 0)
+
+
+@app.route('/api/tareo-ng/importar/listado', methods=['POST'])
+@login_required
+def api_tareo_ng_importar_listado():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip() or None
+    solo_errores = str(body.get('solo_errores') or body.get('par_error') or 'N').upper() == 'Y'
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _tareong_fetch_listado(cursor, busqueda=busqueda, solo_errores=solo_errores)
+        ko = _tareong_count_ko(cursor)
+        dias = _tareong_fetch_dias(cursor)
+        return jsonify({
+            "rows": rows,
+            "total": len(rows),
+            "total_ko": ko,
+            "dias": dias,
+            "puede_procesar": len(rows) > 0 and ko == 0,
+        })
+    except Exception as e:
+        logging.exception("api_tareo_ng_importar_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/importar/cargar-excel', methods=['POST'])
+@login_required
+def api_tareo_ng_importar_cargar_excel():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    cia = str(request.form.get('cia') or request.form.get('company') or session.get('company') or '').strip()
+    period = _tareong_period_yyyymm(request.form.get('period') or request.form.get('prperiod'))
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not period:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    if 'file' not in request.files and 'archivo' not in request.files:
+        return jsonify({"error": "Seleccione un archivo Excel."}), 400
+    file_storage = request.files.get('file') or request.files.get('archivo')
+    if not file_storage or not file_storage.filename:
+        return jsonify({"error": "Seleccione un archivo Excel."}), 400
+
+    filas, meta, err = _tareong_parse_excel(file_storage)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM xx_fechas")
+        cursor.execute("DELETE FROM PR_TAREONG")
+
+        keys = _tareong_dia_keys()
+        hour_cols = ', '.join(f'hour{k}' for k in keys)
+        placeholders = ', '.join(['?'] * (3 + 31 + 12))
+        sql_ins = (
+            f"INSERT INTO PR_TAREONG (name, person, destacamento, {hour_cols}, "
+            f"extras, faltas, vacaciones, descmedico, suspension, LCG, LSG, LPP, "
+            f"Feriado, descansos, adicionales, observaciones) "
+            f"VALUES ({placeholders})"
+        )
+        batch = []
+        for f in filas:
+            vals = [f['name'], f['person'], f['destacamento']]
+            vals.extend(f.get(f'hour{k}', '') or '' for k in keys)
+            vals.extend([
+                f.get('extras') or '',
+                f.get('faltas') or '',
+                f.get('vacaciones') or '',
+                f.get('descmedico') or '',
+                f.get('suspension') or '',
+                f.get('lcg') or '',
+                f.get('lsg') or '',
+                f.get('lpp') or '',
+                f.get('feriado') or '',
+                f.get('descansos') or '',
+                f.get('adicionales') or '',
+                f.get('observaciones') or '',
+            ])
+            batch.append(tuple(vals))
+        cursor.fast_executemany = True
+        cursor.executemany(sql_ins, batch)
+
+        cursor.execute("EXEC sp_pr_cargafechas @period=?", (period,))
+        conn.commit()
+
+        rows = _tareong_fetch_listado(cursor)
+        dias = _tareong_fetch_dias(cursor)
+        return jsonify({
+            "ok": True,
+            "meta": meta,
+            "total": len(rows),
+            "total_ko": 0,
+            "rows": rows,
+            "dias": dias,
+            "puede_procesar": False,
+            "mensaje": f"Se importaron {len(filas)} fila(s) desde Excel. Valide antes de procesar.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_ng_importar_cargar_excel")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/importar/validar', methods=['POST'])
+@login_required
+def api_tareo_ng_importar_validar():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    period = _tareong_period_yyyymm(body.get('period') or body.get('prperiod'))
+    if not period:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM PR_TAREONG (NOLOCK)")
+        if int((cursor.fetchone() or [0])[0]) == 0:
+            return jsonify({"error": "No hay datos importados. Cargue un archivo Excel primero."}), 400
+        cursor.execute("EXEC SP_PR_CargaTareoMasivoNG_validate @period=?", (period,))
+        conn.commit()
+        rows = _tareong_fetch_listado(cursor)
+        ko = _tareong_count_ko(cursor)
+        dias = _tareong_fetch_dias(cursor)
+        return jsonify({
+            "ok": ko == 0,
+            "total": len(rows),
+            "total_ko": ko,
+            "rows": rows,
+            "dias": dias,
+            "puede_procesar": len(rows) > 0 and ko == 0,
+            "mensaje": (
+                "Validación completada sin errores."
+                if ko == 0
+                else f"Validación completada con {ko} fila(s) con error."
+            ),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_ng_importar_validar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/importar/procesar', methods=['POST'])
+@login_required
+def api_tareo_ng_importar_procesar():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    period = _tareong_period_yyyymm(body.get('period') or body.get('prperiod'))
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not period:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM PR_TAREONG (NOLOCK)")
+        total = int((cursor.fetchone() or [0])[0])
+        if total == 0:
+            return jsonify({"error": "No hay datos importados."}), 400
+        ko = _tareong_count_ko(cursor)
+        if ko > 0:
+            return jsonify({
+                "error": f"No se puede procesar: hay {ko} fila(s) con Result = KO. Corrija y valide de nuevo.",
+                "total_ko": ko,
+            }), 400
+        cursor.execute(
+            "EXEC SP_PR_CargaTareoMasivoNG @period=?, @cia=?",
+            (period, cia),
+        )
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "mensaje": "Proceso concluido. Tareo registrado en PR_REGISTERHOUR.",
+            "total_filas": total,
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_ng_importar_procesar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/importar/borrar', methods=['POST'])
+@login_required
+def api_tareo_ng_importar_borrar():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM PR_TAREONG")
+        cursor.execute("DELETE FROM xx_fechas")
+        conn.commit()
+        return jsonify({"ok": True, "mensaje": "Datos temporales eliminados."})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_tareo_ng_importar_borrar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _tareong_reporte_row_dict(r):
+    return {
+        "dni": _jsonable_value(r.get('dni')),
+        "nombre": _jsonable_value(r.get('nombre')),
+        "horas": _float_sp_cell(r.get('horas')),
+        "h25": _float_sp_cell(r.get('h25')),
+        "h35": _float_sp_cell(r.get('h35')),
+        "hnoc": _float_sp_cell(r.get('hnoc')),
+        "faltas": int(r.get('faltas') or 0),
+        "vacas": int(r.get('vacas') or 0),
+        "dm": int(r.get('dm') or 0),
+        "suspen": int(r.get('suspen') or 0),
+        "lcg": int(r.get('lcg') or 0),
+        "lsg": int(r.get('lsg') or 0),
+        "lpat": int(r.get('lpat') or 0),
+        "fer": int(r.get('fer') or 0),
+        "descanso": int(r.get('descanso') or 0),
+        "diastrab": int(r.get('diastrab') or 0),
+    }
+
+
+def _tareong_reporte_totales(rows):
+    dec_keys = ('horas', 'h25', 'h35', 'hnoc')
+    int_keys = (
+        'faltas', 'vacas', 'dm', 'suspen', 'lcg', 'lsg', 'lpat', 'fer', 'descanso', 'diastrab',
+    )
+    out = {}
+    for k in dec_keys:
+        total = 0.0
+        for r in rows:
+            try:
+                total += float(r.get(k) or 0)
+            except (TypeError, ValueError):
+                pass
+        out[k] = round(total, 2)
+    for k in int_keys:
+        total = 0
+        for r in rows:
+            try:
+                total += int(r.get(k) or 0)
+            except (TypeError, ValueError):
+                pass
+        out[k] = total
+    return out
+
+
+def _tareong_reporte_fetch_rows(cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql):
+    payrolltype_all = 'Y' if not payrolltype else 'N'
+    person_all = 'Y' if not person else 'N'
+    cursor.execute(
+        "EXEC sp_pr_reportetareo_consolidado "
+        "@company=?, @payrolltype_all=?, @payrolltype=?, @fecha_all=?, @fecha_ini=?, @fecha_fin=?, "
+        "@person_all=?, @person=?, @costcenter_all=?, @costcenter=?, @repunit_all=?, @repunit=?, "
+        "@tipodia_all=?, @tipodia=?",
+        (
+            cia,
+            payrolltype_all,
+            payrolltype or '',
+            'N',
+            fecha_ini_sql,
+            fecha_fin_sql,
+            person_all,
+            person or '',
+            'Y',
+            '',
+            'Y',
+            '',
+            'Y',
+            '',
+        ),
+    )
+    rows_raw = _dicts_first_nonempty_resultset(cursor)
+    return [_tareong_reporte_row_dict(r) for r in rows_raw]
+
+
+@app.route('/api/tareo-ng/reporte', methods=['POST'])
+@login_required
+def api_tareo_ng_reporte():
+    """sp_pr_reportetareo_consolidado — reporte consolidado NG."""
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    person = str(body.get('person') or body.get('trabajador') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    now = datetime.now()
+    default_ini = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    default_fin = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    fecha_ini = _parse_optional_date(body.get('fecha_ini') or body.get('fecha_inicio')) or default_ini
+    fecha_fin = _parse_optional_date(body.get('fecha_fin') or body.get('fecha_fin')) or default_fin
+    if fecha_ini > fecha_fin:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final."}), 400
+
+    # Evita problemas de binding datetime con driver ODBC {SQL Server}.
+    fecha_ini_sql = fecha_ini.strftime('%Y-%m-%d')
+    fecha_fin_sql = fecha_fin.strftime('%Y-%m-%d')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _tareong_reporte_fetch_rows(
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql
+        )
+        return jsonify({
+            "rows": rows,
+            "total": len(rows),
+            "totales": _tareong_reporte_totales(rows),
+            "fecha_ini": fecha_ini.strftime('%Y-%m-%d'),
+            "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_ng_reporte")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/reporte/excel')
+@login_required
+def api_tareo_ng_reporte_excel():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    cia = str(request.args.get('cia') or request.args.get('company') or session.get('company') or '').strip()
+    payrolltype = str(request.args.get('payrolltype') or '').strip()
+    person = str(request.args.get('person') or request.args.get('trabajador') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    now = datetime.now()
+    default_ini = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    default_fin = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    fecha_ini = _parse_optional_date(request.args.get('fecha_ini') or request.args.get('fecha_inicio')) or default_ini
+    fecha_fin = _parse_optional_date(request.args.get('fecha_fin')) or default_fin
+    if fecha_ini > fecha_fin:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final."}), 400
+
+    fecha_ini_sql = fecha_ini.strftime('%Y-%m-%d')
+    fecha_fin_sql = fecha_fin.strftime('%Y-%m-%d')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _tareong_reporte_fetch_rows(
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql
+        )
+        totales = _tareong_reporte_totales(rows)
+
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Consolidado"
+        headers = [
+            'Código', 'Nombre', 'Horas', 'H25', 'H35', 'NOCT', 'FALTAS', 'VAC',
+            'DM', 'SUSP', 'LCG', 'LSG', 'LPAT', 'FER', 'DESC', 'D.TRAB'
+        ]
+        ws.append(headers)
+        keys = ['dni', 'nombre', 'horas', 'h25', 'h35', 'hnoc', 'faltas', 'vacas', 'dm', 'suspen', 'lcg', 'lsg', 'lpat', 'fer', 'descanso', 'diastrab']
+        for r in rows:
+            ws.append([r.get(k) for k in keys])
+        ws.append([
+            '', 'TOTALES', totales.get('horas', 0), totales.get('h25', 0), totales.get('h35', 0), totales.get('hnoc', 0),
+            totales.get('faltas', 0), totales.get('vacas', 0), totales.get('dm', 0), totales.get('suspen', 0),
+            totales.get('lcg', 0), totales.get('lsg', 0), totales.get('lpat', 0), totales.get('fer', 0),
+            totales.get('descanso', 0), totales.get('diastrab', 0),
+        ])
+
+        # Estilo similar a reportes de planilla
+        total_row = ws.max_row
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = f"A1:P{max(1, total_row)}"
+
+        border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9'),
+        )
+        header_fill = PatternFill('solid', fgColor='1F4E78')
+        header_font = Font(color='FFFFFF', bold=True)
+        total_fill = PatternFill('solid', fgColor='E2EFDA')
+        total_font = Font(bold=True)
+        zebra_fill = PatternFill('solid', fgColor='F7FBFF')
+
+        for row in ws.iter_rows(min_row=1, max_row=total_row, min_col=1, max_col=16):
+            for c in row:
+                c.border = border
+                c.alignment = Alignment(vertical='center')
+
+        for c in ws[1]:
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal='center', vertical='center')
+
+        # Cebra para detalle (sin tocar total)
+        for r in range(2, total_row):
+            if r % 2 == 0:
+                for c in ws[r]:
+                    c.fill = zebra_fill
+
+        for c in ws[total_row]:
+            c.fill = total_fill
+            c.font = total_font
+
+        # Alinear/formatos numéricos
+        ws.column_dimensions['A'].width = 14
+        ws.column_dimensions['B'].width = 42
+        for col in ('C', 'D', 'E', 'F'):
+            ws.column_dimensions[col].width = 12
+        for col in ('G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P'):
+            ws.column_dimensions[col].width = 10
+
+        for r in range(2, total_row + 1):
+            ws.cell(r, 1).alignment = Alignment(horizontal='center', vertical='center')
+            ws.cell(r, 2).alignment = Alignment(horizontal='left', vertical='center')
+            for cidx in range(3, 17):
+                cell = ws.cell(r, cidx)
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+                if cidx <= 6:
+                    cell.number_format = '#,##0.00'
+                else:
+                    cell.number_format = '#,##0'
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"reporte_consolidado_tareo_{fecha_ini_sql}_{fecha_fin_sql}.xlsx"
+        return send_file(
+            bio,
+            as_attachment=True,
+            download_name=fname,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+    except Exception as e:
+        logging.exception("api_tareo_ng_reporte_excel")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/tareo/reporte-resumen', methods=['POST'])
 @login_required
 def api_tareo_reporte_resumen():
@@ -10168,6 +10985,77 @@ def api_tareo_reporte_resumen():
         return jsonify({"rows": out, "total": len(out)})
     except Exception as e:
         logging.exception("api_tareo_reporte_resumen")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/asignacion/procesar', methods=['POST'])
+@login_required
+def api_tareo_ng_asignacion_procesar():
+    """sp_pr_interfazplanillas (hm_ngservicios)."""
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
+    person_all = str(body.get('person_all') or 'Y').strip().upper()[:1] or 'Y'
+    person = str(body.get('person') or '').strip() or ''
+    repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
+    repunit = str(body.get('repunit') or '').strip() or ''
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione un tipo de planilla."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+    if person_all not in ('Y', 'N'):
+        person_all = 'Y'
+    if repunit_all not in ('Y', 'N'):
+        repunit_all = 'Y'
+    if person_all == 'N' and not person:
+        return jsonify({"error": "Indique la persona a procesar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Fallback: usa wrapper optimizado si existe; si no, SP legado.
+        try:
+            cursor.execute(
+                "EXEC sp_pr_interfazplanillas_ng_web "
+                "@cia=?, @period=?, @payrolltype=?, @person_all=?, @person=?, @repunit_all=?, @repunit=?",
+                (cia, prperiod, payrolltype, person_all, person or '', repunit_all, repunit or ''),
+            )
+        except Exception:
+            cursor.execute(
+                "EXEC sp_pr_interfazplanillas "
+                "@cia=?, @period=?, @payrolltype=?, @person_all=?, @person=?, @repunit_all=?, @repunit=?",
+                (cia, prperiod, payrolltype, person_all, person or '', repunit_all, repunit or ''),
+            )
+
+        rows = _dicts_first_nonempty_resultset(cursor)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": int(row.get('ok') or 1),
+            "personas": int(row.get('personas') or 0),
+            "conceptos": int(row.get('conceptos') or 0),
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Proceso completado.",
+        })
+    except Exception as e:
+        logging.exception("api_tareo_ng_asignacion_procesar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

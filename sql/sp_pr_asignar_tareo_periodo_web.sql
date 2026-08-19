@@ -387,7 +387,7 @@ BEGIN
             @personas AS personas,
             @conceptos AS conceptos,
             @eventos AS eventos,
-            'Asignación de tareo procesada (conceptos + descansos médicos).' AS mensaje;
+            N'Asignación de tareo procesada (conceptos + descansos médicos).' AS mensaje;
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0 ROLLBACK TRAN;

@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const sessionCia = {{ (session.get('company') or '')|tojson }};
 
     function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
-    function toastOk(t) { if (window.HmUi) HmUi.success(t); }
+    function toastOk(t) { if (window.HmUi) HmUi.exito(t); else alert(t); }
     async function leerJson(res) {
         const data = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));

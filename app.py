@@ -11119,7 +11119,7 @@ def api_tareo_asignacion_procesar():
             "personas": int(row.get('personas') or 0),
             "conceptos": int(row.get('conceptos') or 0),
             "eventos": int(row.get('eventos') or 0),
-            "mensaje": _jsonable_value(row.get('mensaje')) or 'Proceso completado.',
+            "mensaje": 'Asignación de tareo procesada (conceptos + descansos médicos).',
         })
     except Exception as e:
         logging.exception("api_tareo_asignacion_procesar")

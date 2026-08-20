@@ -351,7 +351,14 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        const voucher = checks[0].getAttribute('data-voucher') || '';
+        const idxRaw = checks[0].getAttribute('data-idx');
+        const idx = idxRaw != null ? parseInt(idxRaw, 10) : -1;
+        const fila = (idx >= 0 && filas[idx]) ? filas[idx] : null;
+        const voucher = String(
+            (fila && (fila.voucher || fila.voucherno))
+            || checks[0].getAttribute('data-voucher')
+            || ''
+        ).trim();
         if (!voucher) {
             toastErr('Asiento inválido.');
             return;
@@ -375,9 +382,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!res.ok) {
                 let msg = 'No se pudo generar el archivo.';
                 try {
-                    const err = await res.json();
-                    if (err && err.error) msg = err.error;
-                } catch (e) { /* blob/texto */ }
+                    const raw = await res.text();
+                    try {
+                        const err = JSON.parse(raw);
+                        if (err && err.error) msg = err.error;
+                    } catch (e) {
+                        if (raw && raw.trim()) msg = raw.trim().slice(0, 300);
+                        else msg = `No se pudo generar el archivo (HTTP ${res.status}).`;
+                    }
+                } catch (e) { /* ignore */ }
                 throw new Error(msg);
             }
 

@@ -12242,14 +12242,19 @@ def api_asientos_interfaz_generar_archivo():
 
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
-    voucher = str(body.get('voucher') or '').strip()
+    voucher = str(body.get('voucher') or body.get('voucherno') or '').strip()
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
     if not voucher:
         return jsonify({"error": "Seleccione un asiento."}), 400
 
-    active_db = str(get_active_database() or '').strip().lower()
+    try:
+        active_db = str(get_active_database() or '').strip().lower()
+    except Exception as e:
+        logging.exception("api_asientos_interfaz_generar_archivo get_active_database")
+        return jsonify({"error": _sp_error_message(e)}), 500
+
     es_divisa = active_db == 'hm_divisa'
     es_elclan = active_db == 'hm_elclan'
 

@@ -316,20 +316,33 @@ def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
     if not company or not voucher:
         raise ValueError('Compañía y voucher son obligatorios.')
 
+    # Acepta clave interna (AC_Voucher.Voucher) o número visible (VoucherNo, p.ej. PR0000000001).
     cursor.execute(
         """
-        SELECT Voucher, VoucherNo, Title, Period, Company, Comments,
+        SELECT TOP 1
+               LTRIM(RTRIM(Voucher)) AS Voucher,
+               LTRIM(RTRIM(ISNULL(VoucherNo, ''))) AS VoucherNo,
+               Title, Period, Company, Comments,
                CONVERT(varchar(8), VoucherDate, 112) AS fechavac
         FROM AC_Voucher WITH (NOLOCK)
-        WHERE Voucher = ? AND Company = ?
+        WHERE Company = ?
+          AND (
+                LTRIM(RTRIM(Voucher)) = ?
+             OR LTRIM(RTRIM(ISNULL(VoucherNo, ''))) = ?
+              )
+        ORDER BY
+            CASE WHEN LTRIM(RTRIM(Voucher)) = ? THEN 0 ELSE 1 END,
+            EntryDate DESC
         """,
-        (voucher, company),
+        (company, voucher, voucher, voucher),
     )
     meta = cursor.fetchone()
     if not meta:
-        raise ValueError('No se encontró el asiento seleccionado.')
+        raise ValueError(
+            f'No se encontró el asiento {voucher!r} en la compañía {company!r}.'
+        )
 
-    # columns by index
+    voucher_key = _s(meta[0]).strip()
     title = _s(meta[2])
     fechavac = _s(meta[6])
     stamp = datetime.now().strftime('%Y%m%d_%H%M')
@@ -349,7 +362,7 @@ def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
             @company=?, @payrolltype=?, @processtype=?, @period=?,
             @person_all=?, @personid=?, @voucher=?
         """,
-        (company, '', '', '', 'Y', '', voucher),
+        (company, '', '', '', 'Y', '', voucher_key),
     )
     while cursor.nextset():
         pass
@@ -358,23 +371,23 @@ def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
     except Exception:
         pass
 
-    line_map = _load_xx_line_map(cursor, voucher)
+    line_map = _load_xx_line_map(cursor, voucher_key)
 
-    p1 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE1 @Voucher=?', (voucher,))
-    p2 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE2 @Voucher=?', (voucher,))
+    p1 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE1 @Voucher=?', (voucher_key,))
+    p2 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE2 @Voucher=?', (voucher_key,))
     p6 = _sort_detail_rows(
-        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE6 @Voucher=?', (voucher,)),
+        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE6 @Voucher=?', (voucher_key,)),
         line_map,
     )
     p7 = _sort_detail_rows(
-        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE7 @Voucher=?', (voucher,)),
+        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE7 @Voucher=?', (voucher_key,)),
         line_map,
     )
     p5 = _sort_detail_rows(
-        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE5 @Voucher=?', (voucher,)),
+        _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE5 @Voucher=?', (voucher_key,)),
         line_map,
     )
-    p4 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE4 @Voucher=?', (voucher,))
+    p4 = _fetch_sp(cursor, 'EXEC SP_AC_ALVISOFT_PARTE4 @Voucher=?', (voucher_key,))
 
     lines: List[str] = []
     for r in p1:
@@ -389,6 +402,12 @@ def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
         lines.append(_line_parte5(r, tipo_ov))
     for r in p4:
         lines.append(_line_parte4(r))
+
+    if not lines:
+        raise ValueError(
+            'No se generaron líneas del TXT Alvisoft. Verifique el detalle del asiento '
+            f'({voucher_key}).'
+        )
 
     lines = _renumber_lines(lines)
 

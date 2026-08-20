@@ -7,6 +7,7 @@
       - Todas las planillas (@payroll_all = Y por defecto)
       - Procesos: CTS, fin de mes, semana, vacaciones, liquidación, utilidades
       - Si @incluir_grati = Y (hm_ultra): también NETO del proceso GRATIFICACION
+      - Si @incluir_vacaciones = N (hm_ultra): no suma NETO de VACACIONES
       - Categoría empleado PDT = 1 (+ rama descanso médico legacy)
       - Excluye QUINCENA y procesos LIMABGT 10/11 en el neto
       - Respeta flag PDT por planilla/proceso cuando está configurado
@@ -21,14 +22,16 @@
       @payroll       — tipo de planilla (si @payroll_all = N)
       @cesados       — T/Y/N (default T, igual Archivo 18)
       @incluir_grati — Y = sumar NETO de GRATIFICACION (solo hm_ultra)
+      @incluir_vacaciones — N = excluir NETO de VACACIONES (hm_ultra); default Y
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_plame_validar_neto_r01_web]
-    @cia           VARCHAR(10),
-    @period        VARCHAR(6),
-    @payroll_all   CHAR(1)     = 'Y',
-    @payroll       VARCHAR(20) = NULL,
-    @cesados       CHAR(1)     = 'T',
-    @incluir_grati CHAR(1)     = 'N'
+    @cia                VARCHAR(10),
+    @period             VARCHAR(6),
+    @payroll_all        CHAR(1)     = 'Y',
+    @payroll            VARCHAR(20) = NULL,
+    @cesados            CHAR(1)     = 'T',
+    @incluir_grati      CHAR(1)     = 'N',
+    @incluir_vacaciones CHAR(1)     = 'Y'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -39,9 +42,11 @@ BEGIN
     SET @payroll = LTRIM(RTRIM(ISNULL(@payroll, '')));
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
     SET @incluir_grati = UPPER(LTRIM(RTRIM(ISNULL(@incluir_grati, 'N'))));
+    SET @incluir_vacaciones = UPPER(LTRIM(RTRIM(ISNULL(@incluir_vacaciones, 'Y'))));
     IF @payroll_all NOT IN ('Y', 'N') SET @payroll_all = 'Y';
     IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
     IF @incluir_grati NOT IN ('Y', 'N') SET @incluir_grati = 'N';
+    IF @incluir_vacaciones NOT IN ('Y', 'N') SET @incluir_vacaciones = 'Y';
 
     DECLARE @process_grati VARCHAR(20) = NULL;
     IF @incluir_grati = 'Y'
@@ -49,6 +54,13 @@ BEGIN
         FROM PR_ProcessType
         WHERE Company = @cia
           AND LTRIM(RTRIM(ShortName)) = 'GRATIFICACION';
+
+    /* NULL cuando @incluir_vacaciones = N → no entra en los IN de procesos */
+    DECLARE @process_vac VARCHAR(20) = NULL;
+    IF @incluir_vacaciones = 'Y'
+        SELECT TOP 1 @process_vac = VacationProcess
+        FROM PR_Mapping
+        WHERE Company = @cia;
 
     DECLARE @cargaid INT;
 
@@ -95,7 +107,7 @@ BEGIN
             pr_mapping.CTSProcessType,
             pr_mapping.planillaprocess,
             pr_mapping.planillasemprocess,
-            pr_mapping.VacationProcess,
+            @process_vac,
             pr_mapping.liquidacionprocess,
             (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
             @process_grati
@@ -191,7 +203,7 @@ BEGIN
             M.CTSProcessType,
             M.PlanillaProcess,
             M.PlanillaSemProcess,
-            M.VacationProcess,
+            @process_vac,
             M.LiquidacionProcess,
             (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
             @process_grati
@@ -224,7 +236,7 @@ BEGIN
             M.CTSProcessType,
             M.PlanillaProcess,
             M.PlanillaSemProcess,
-            M.VacationProcess,
+            @process_vac,
             M.LiquidacionProcess,
             (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
             @process_grati
@@ -358,7 +370,7 @@ BEGIN
                         M.CTSProcessType,
                         M.PlanillaProcess,
                         M.PlanillaSemProcess,
-                        M.VacationProcess,
+                        @process_vac,
                         M.LiquidacionProcess,
                         (SELECT TOP 1 ProcessType FROM PR_ProcessType WHERE ShortName = 'UTILIDADES' AND Company = @cia),
                         @process_grati

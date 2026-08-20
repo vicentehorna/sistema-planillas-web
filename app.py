@@ -16443,17 +16443,15 @@ def api_plame_validar_carga():
 
 
 def _plame_validar_neto_r01_ejecutar(cursor, cia, period):
-    incluir_grati = 'Y' if _es_cliente_ultraseguros() else 'N'
-    if incluir_grati == 'Y':
-        cursor.execute(
-            "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?, @incluir_grati=?",
-            (cia, period, incluir_grati),
-        )
-    else:
-        cursor.execute(
-            "EXEC sp_pr_plame_validar_neto_r01_web @cia=?, @period=?",
-            (cia, period),
-        )
+    # hm_ultra: incluye GRATIFICACION y excluye VACACIONES del neto R01.
+    es_ultra = _es_cliente_ultraseguros()
+    incluir_grati = 'Y' if es_ultra else 'N'
+    incluir_vacaciones = 'N' if es_ultra else 'Y'
+    cursor.execute(
+        "EXEC sp_pr_plame_validar_neto_r01_web "
+        "@cia=?, @period=?, @incluir_grati=?, @incluir_vacaciones=?",
+        (cia, period, incluir_grati, incluir_vacaciones),
+    )
     sets = _dicts_collect_nonempty_resultsets(cursor)
     resumen = sets[0][0] if len(sets) > 0 and sets[0] else {}
     filas = sets[1] if len(sets) > 1 else []

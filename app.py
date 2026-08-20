@@ -14528,6 +14528,152 @@ def api_formulas_eliminar():
                 pass
 
 
+@app.route('/api/formulas/copiar-planilla', methods=['POST'])
+@login_required
+def api_formulas_copiar_planilla():
+    """Copia fórmulas marcadas a otro tipo de planilla dentro de la misma compañía.
+
+    Body:
+      cia, payrolltype (origen), processtype, payrolltype_dest,
+      formulas[{formulaheader, formulacode}] (opcional si vacío: listado del filtro).
+    """
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype_orig = str(body.get('payrolltype') or '').strip()
+    payrolltype_dest = str(
+        body.get('payrolltype_dest') or body.get('payrolltype_destino') or ''
+    ).strip()
+    processtype = str(
+        body.get('processtype') or body.get('proccestype') or ''
+    ).strip()
+    formulas = body.get('formulas') or []
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payrolltype_dest:
+        return jsonify({"error": "Seleccione la planilla destino."}), 400
+    if payrolltype_orig and payrolltype_orig == payrolltype_dest:
+        return jsonify({
+            "error": "La planilla destino debe ser distinta a la planilla origen.",
+        }), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        if not formulas:
+            if not payrolltype_orig or not processtype:
+                return jsonify({
+                    "error": (
+                        "Indique fórmulas a copiar, o compañía + planilla origen "
+                        "+ proceso para copiar el listado completo."
+                    ),
+                }), 400
+            cursor.execute(
+                """
+                SELECT fh.FormulaHeader,
+                       LTRIM(RTRIM(ISNULL(c.FormulaCode, fh.formulacode)))
+                FROM PR_FormulaHeader fh (NOLOCK)
+                LEFT JOIN PR_Concept c (NOLOCK)
+                    ON fh.Concept = c.Concept AND fh.Company = c.Company
+                WHERE fh.Company = ?
+                  AND fh.Payrolltype = ?
+                  AND fh.Proccestype = ?
+                ORDER BY fh.orden ASC, fh.FormulaHeader ASC
+                """,
+                (cia, payrolltype_orig, processtype),
+            )
+            formulas = [
+                {"formulaheader": str(r[0]).strip(), "formulacode": str(r[1] or '').strip()}
+                for r in cursor.fetchall()
+                if r and r[0]
+            ]
+
+        if not formulas:
+            return jsonify({"error": "No hay fórmulas para copiar con el filtro indicado."}), 400
+
+        ok = 0
+        insertadas = 0
+        actualizadas = 0
+        errores = []
+        userid = _xlastuser_id() or 'WEB'
+
+        for item in formulas:
+            fh = str((item or {}).get('formulaheader') or '').strip()
+            if not fh:
+                continue
+            fc = str((item or {}).get('formulacode') or '').strip()
+            concepto_desc = str((item or {}).get('concepto') or fh).strip()
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_copiar_formula_planilla_web "
+                    "@cia=?, @formulaheader=?, @payrolltype_dest=?, @xlastuser=?",
+                    (cia, fh, payrolltype_dest, userid),
+                )
+                row = None
+                if cursor.description:
+                    rows = cursor.fetchall()
+                    if rows:
+                        row = rows[0]
+                while cursor.nextset():
+                    if cursor.description:
+                        rows = cursor.fetchall()
+                        if rows:
+                            row = rows[0]
+                accion = ''
+                if row and len(row) >= 2:
+                    accion = str(row[1] or '').strip().upper()
+                if accion == 'UPDATE':
+                    actualizadas += 1
+                else:
+                    insertadas += 1
+                ok += 1
+            except Exception as ex:
+                logging.exception(
+                    "api_formulas_copiar_planilla fh=%s dest=%s", fh, payrolltype_dest
+                )
+                errores.append({
+                    "formulaheader": fh,
+                    "formulacode": fc,
+                    "concepto": concepto_desc,
+                    "error": str(ex),
+                })
+
+        conn.commit()
+        n = len([i for i in formulas if str((i or {}).get('formulaheader') or '').strip()])
+        partes = [f"Se copiaron {ok} fórmula(s) a la planilla destino."]
+        if insertadas:
+            partes.append(f"{insertadas} nueva(s).")
+        if actualizadas:
+            partes.append(f"{actualizadas} actualizada(s).")
+        if errores:
+            partes.append(f"{len(errores)} con error.")
+        return jsonify({
+            "ok": True,
+            "copiadas": ok,
+            "insertadas": insertadas,
+            "actualizadas": actualizadas,
+            "procesadas": n,
+            "errores": errores,
+            "mensaje": " ".join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_formulas_copiar_planilla")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/formulas/replicar', methods=['POST'])
 @login_required
 def api_formulas_replicar():

@@ -12237,8 +12237,6 @@ def api_asientos_interfaz_generar_archivo():
     """Genera archivo del asiento: Alvisoft TXT, Excel SAP Divisa o Excel El Clan."""
     from database import get_active_database
     from alvisoft_export import generar_txt_alvisoft
-    from sap_divisa_export import generar_xls_sap_divisa
-    from elclan_asiento_export import generar_xls_asiento_elclan
 
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
@@ -12263,6 +12261,12 @@ def api_asientos_interfaz_generar_archivo():
         conn = get_db_connection()
         cursor = conn.cursor()
         if es_elclan:
+            try:
+                from elclan_asiento_export import generar_xls_asiento_elclan
+            except ImportError:
+                return jsonify({
+                    "error": "Export Excel El Clan no está disponible en este servidor."
+                }), 500
             filename, contenido = generar_xls_asiento_elclan(cursor, cia, voucher)
             try:
                 conn.commit()
@@ -12276,6 +12280,7 @@ def api_asientos_interfaz_generar_archivo():
             return resp
 
         if es_divisa:
+            from sap_divisa_export import generar_xls_sap_divisa
             filename, contenido = generar_xls_sap_divisa(cursor, cia, voucher)
             try:
                 conn.commit()
@@ -12293,11 +12298,11 @@ def api_asientos_interfaz_generar_archivo():
             conn.commit()
         except Exception:
             pass
-        resp = Response(
-            contenido.encode('latin-1', errors='replace'),
-            mimetype='text/plain; charset=iso-8859-1',
-        )
+        # No poner charset en mimetype: Werkzeug agrega otro y queda duplicado.
+        resp = Response(contenido.encode('latin-1', errors='replace'))
+        resp.headers['Content-Type'] = 'text/plain; charset=iso-8859-1'
         resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        resp.headers['X-Asiento-Export'] = 'alvisoft-v3'
         return resp
     except ValueError as e:
         return jsonify({"error": str(e)}), 400

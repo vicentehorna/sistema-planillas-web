@@ -10636,6 +10636,7 @@ def api_tareo_ng_importar_procesar():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        _set_cursor_timeout_payroll(cursor)
         cursor.execute("SELECT COUNT(*) FROM PR_TAREONG (NOLOCK)")
         total = int((cursor.fetchone() or [0])[0])
         if total == 0:
@@ -10650,11 +10651,33 @@ def api_tareo_ng_importar_procesar():
             "EXEC SP_PR_CargaTareoMasivoNG @period=?, @cia=?",
             (period, cia),
         )
+        _drain_pyodbc_cursor(cursor)
         conn.commit()
+
+        # Cuántos trabajadores quedaron en PR_REGISTERHOUR para el periodo.
+        personas_reg = 0
+        try:
+            cursor.execute(
+                """
+                SELECT COUNT(DISTINCT Person)
+                FROM PR_REGISTERHOUR WITH (NOLOCK)
+                WHERE LTRIM(RTRIM(Company)) = ?
+                  AND CONVERT(varchar(6), RegisterDate, 112) = ?
+                """,
+                (cia, period),
+            )
+            personas_reg = int((cursor.fetchone() or [0])[0] or 0)
+        except Exception:
+            logging.exception("tareo_ng conteo registerhour post-proceso")
+
         return jsonify({
             "ok": True,
-            "mensaje": "Proceso concluido. Tareo registrado en PR_REGISTERHOUR.",
+            "mensaje": (
+                f"Proceso concluido. {total} fila(s) de importación → "
+                f"{personas_reg} trabajador(es) en PR_REGISTERHOUR para {period}."
+            ),
             "total_filas": total,
+            "personas_registradas": personas_reg,
         })
     except Exception as e:
         if conn:

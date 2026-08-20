@@ -11103,8 +11103,14 @@ def api_tareo_asignacion_procesar():
     cesados = str(body.get('cesados') or 'T').strip().upper()[:1] or 'T'
     person_all = str(body.get('person_all') or 'Y').strip().upper()[:1] or 'Y'
     person = str(body.get('person') or '').strip() or None
-    repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
-    repunit = str(body.get('repunit') or '').strip() or None
+    raw_repunit = str(body.get('repunit') or body.get('unidad') or '').strip()
+    if raw_repunit in ('', '0'):
+        raw_repunit = ''
+    if 'repunit_all' in body:
+        repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
+    else:
+        repunit_all = 'N' if raw_repunit else 'Y'
+    repunit = raw_repunit or None
     xlastuser = str(session.get('username') or session.get('user') or 'WEB').strip()[:20] or 'WEB'
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400

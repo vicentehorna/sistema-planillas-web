@@ -29,6 +29,12 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Cesados</label>
                 <select id="selCesados" class="form-select form-select-sm">
                     <option value="T" selected>Todos</option>
@@ -69,6 +75,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const selCia = document.getElementById('selCia');
     const selPlanilla = document.getElementById('selPlanilla');
     const selPeriodo = document.getElementById('selPeriodo');
+    const selUnidad = document.getElementById('selUnidad');
     const selCesados = document.getElementById('selCesados');
     const chkPersona = document.getElementById('chkPersona');
     const txtPersona = document.getElementById('txtPersona');
@@ -152,6 +159,31 @@ document.addEventListener('DOMContentLoaded', async function () {
             { keep }
         );
     }
+    async function cargarUnidades() {
+        if (!selUnidad) return;
+        const prev = String(selUnidad.value || '0').trim() || '0';
+        selUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        selUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const o = document.createElement('option');
+                o.value = id;
+                o.textContent = item.text != null ? String(item.text) : id;
+                selUnidad.appendChild(o);
+            });
+            const ok = [...selUnidad.options].some((o) => String(o.value).trim() === prev);
+            selUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            selUnidad.value = '0';
+        }
+    }
 
     chkPersona.addEventListener('change', () => {
         txtPersona.disabled = !chkPersona.checked;
@@ -174,8 +206,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (chkPersona.checked && !String(txtPersona.value || '').trim()) {
             return toastErr('Indique la persona o desmarque el filtro');
         }
+        const unidadVal = String(selUnidad.value || '0').trim() || '0';
+        const unidadTxt = selUnidad.options[selUnidad.selectedIndex]
+            ? String(selUnidad.options[selUnidad.selectedIndex].textContent || '').trim()
+            : 'Todas';
         const ok = confirm(
             '¿Procesar asignación de tareo del periodo?\n\n' +
+            'Unidad: ' + (unidadVal === '0' ? 'Todas' : unidadTxt) + '\n' +
             'Se regenerarán conceptos (TAREO) y eventos de descansos médicos del periodo.'
         );
         if (!ok) return;
@@ -192,7 +229,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                     prperiod: selPeriodo.value,
                     cesados: selCesados.value || 'T',
                     person_all: chkPersona.checked ? 'N' : 'Y',
-                    person: chkPersona.checked ? String(txtPersona.value || '').trim() : ''
+                    person: chkPersona.checked ? String(txtPersona.value || '').trim() : '',
+                    repunit_all: unidadVal === '0' ? 'Y' : 'N',
+                    repunit: unidadVal === '0' ? '' : unidadVal
                 })
             }));
             document.getElementById('resMsg').textContent = data.mensaje || 'Proceso completado';
@@ -213,6 +252,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     await cargarCompanias();
     await cargarPlanillas();
     await cargarPeriodos();
+    await cargarUnidades();
 });
 </script>
 {% endblock %}

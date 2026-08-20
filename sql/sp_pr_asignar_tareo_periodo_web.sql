@@ -120,7 +120,16 @@ BEGIN
               AND RH0.Payrolltype = @payrolltype
               AND CONVERT(VARCHAR(8), RH0.RegisterDate, 112) BETWEEN @inicio AND @fin
               AND (@person_all = 'Y' OR RH0.Person = @person)
-              AND (@repunit_all = 'Y' OR RH0.ReplicationUnit = @repunit)
+              AND (
+                    @repunit_all = 'Y'
+                 OR EXISTS (
+                        SELECT 1
+                        FROM SY_Person P0 (NOLOCK)
+                        WHERE P0.Person = RH0.Person
+                          AND P0.ReplicationUnit = @repunit
+                    )
+                 OR RH0.ReplicationUnit = @repunit
+              )
               AND (
                     @cesados = 'T'
                  OR (@cesados = 'Y' AND E0.CeaseDate IS NOT NULL)

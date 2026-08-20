@@ -2,13 +2,18 @@
     Trabajadores elegibles para cálculo masivo multi-empresa.
     Resuelve PayRollType y ProcessType por Description en cada empresa.
     @companies: códigos separados por coma.
+    @nombre: filtro opcional por DNI o nombre (SY_Person.Name / apellidos y nombres).
+
+    Si el proceso es VACACIONES, solo lista quienes tienen PR_VacationDetail
+    en ese periodo con VacationType D (tomadas) o V (vendidas).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcularplanillas_masivo_web]
     @payroll_desc VARCHAR(200),
     @proceso_desc  VARCHAR(200),
     @period        VARCHAR(10),
     @cesados       CHAR(1),
-    @companies     VARCHAR(500)
+    @companies     VARCHAR(500),
+    @nombre        VARCHAR(80) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -17,6 +22,7 @@ BEGIN
     SET @proceso_desc = LTRIM(RTRIM(ISNULL(@proceso_desc, '')));
     SET @period = LEFT(LTRIM(RTRIM(ISNULL(@period, ''))), 10);
     SET @companies = LTRIM(RTRIM(ISNULL(@companies, '')));
+    SET @nombre = LTRIM(RTRIM(ISNULL(@nombre, '')));
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
 
     DECLARE @fecha_inicio_mes DATE;
@@ -153,6 +159,36 @@ BEGIN
       AND (
             @fecha_fin_mes IS NULL
             OR CONVERT(DATE, ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE)) <= @fecha_fin_mes
+      )
+      AND (
+            NOT EXISTS (
+                SELECT 1
+                FROM PR_ProcessType pt
+                WHERE pt.ProcessType = e.processtype
+                  AND (
+                        LTRIM(RTRIM(pt.ShortName)) = 'VACACIONES'
+                     OR LTRIM(RTRIM(pt.Description)) = 'VACACIONES'
+                  )
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM PR_VacationDetail vd
+                WHERE vd.Company = PR_EMPLOYEE.COMPANY
+                  AND vd.Person = PR_EMPLOYEE.PERSON
+                  AND LTRIM(RTRIM(vd.PRPeriod)) = @period
+                  AND UPPER(LTRIM(RTRIM(ISNULL(vd.VacationType, '')))) IN ('D', 'V')
+            )
+      )
+      AND (
+            @nombre = ''
+            OR PR_EMPLOYEE.PERSON LIKE '%' + @nombre + '%'
+            OR LTRIM(RTRIM(
+                ISNULL(SY_PERSON.LASTNAME1, '') + ' ' +
+                ISNULL(SY_PERSON.LASTNAME2, '') + ' ' +
+                ISNULL(SY_PERSON.NAME1, '') + ' ' +
+                ISNULL(SY_PERSON.NAME2, '')
+            )) LIKE '%' + @nombre + '%'
+            OR ISNULL(SY_PERSON.[Name], '') LIKE '%' + @nombre + '%'
       )
     ORDER BY e.company ASC, [name] ASC, person ASC;
 END

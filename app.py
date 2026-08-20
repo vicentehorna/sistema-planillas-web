@@ -26790,6 +26790,9 @@ def api_procesar_planilla_masivo_trabajadores():
     cesados = str(body.get('cesados') or 'T').strip().upper()
     if cesados not in ('T', 'Y', 'N'):
         cesados = 'T'
+    nombre = str(body.get('nombre') or body.get('name') or body.get('busqueda') or '').strip()
+    if len(nombre) > 80:
+        nombre = nombre[:80]
     companies = _companies_csv_from_list(body.get('companies') or [])
     if not payroll_desc or not proceso_desc or not period:
         return jsonify({'error': 'Faltan tipo de planilla, proceso o periodo.'}), 400
@@ -26835,8 +26838,8 @@ def api_procesar_planilla_masivo_trabajadores():
         if companies_ok:
             cursor.execute(
                 'EXEC sp_pr_calcularplanillas_masivo_web '
-                '@payroll_desc=?, @proceso_desc=?, @period=?, @cesados=?, @companies=?',
-                (payroll_desc, proceso_desc, period, cesados, companies_ok),
+                '@payroll_desc=?, @proceso_desc=?, @period=?, @cesados=?, @companies=?, @nombre=?',
+                (payroll_desc, proceso_desc, period, cesados, companies_ok, nombre or None),
             )
             rows = _dicts_first_nonempty_resultset(cursor)
             for r in rows:

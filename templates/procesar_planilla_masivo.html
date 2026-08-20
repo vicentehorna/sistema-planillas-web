@@ -43,6 +43,15 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
+    .table-planilla-masivo .col-check {
+        width: 2.25rem;
+        text-align: center;
+    }
+
+    .table-planilla-masivo .col-check input[type="checkbox"] {
+        cursor: pointer;
+    }
+
     #cardEmpresasExcluidas ul,
     #cardValidacionesCalculo ul {
         margin-bottom: 0;
@@ -56,13 +65,13 @@
 <div class="card shadow-sm border-0 mb-3">
     <div class="card-body pt-3">
         <form id="frmProcesarMasivo" class="row g-3">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
                 <select id="cboProceso" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
@@ -81,6 +90,11 @@
                     <option value="Y">Sí</option>
                     <option value="N">No</option>
                 </select>
+            </div>
+            <div class="col-md-4">
+                <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre</label>
+                <input type="text" id="txtNombre" class="form-control form-control-sm"
+                       placeholder="Buscar por nombre o DNI" maxlength="80" autocomplete="off">
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
@@ -152,6 +166,9 @@
                     <table class="table table-bordered table-sm table-hover table-planilla-masivo align-middle mb-0">
                         <thead>
                             <tr>
+                                <th class="col-check">
+                                    <input type="checkbox" id="chkSelTodosTrab" title="Seleccionar todos" aria-label="Seleccionar todos" checked>
+                                </th>
                                 <th style="width: 4.5rem;">Empresa</th>
                                 <th style="width: 7rem;">Código</th>
                                 <th>Nombre del trabajador</th>
@@ -161,7 +178,7 @@
                             </tr>
                         </thead>
                         <tbody id="tbodyTrabajadores">
-                            <tr><td colspan="6" class="text-center text-muted py-3">Seleccione filtros y consulte.</td></tr>
+                            <tr><td colspan="7" class="text-center text-muted py-3">Seleccione filtros y consulte.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -188,11 +205,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
     const cboCesados = document.getElementById('cboCesados');
+    const txtNombre = document.getElementById('txtNombre');
     const panelEmpresas = document.getElementById('panelEmpresas');
     const chkTodas = document.getElementById('chkTodasEmpresas');
     const tbody = document.getElementById('tbodyTrabajadores');
     const btnCalcular = document.getElementById('btnCalcular');
+    const chkSelTodosTrab = document.getElementById('chkSelTodosTrab');
     let listaTrabajadores = [];
+    let trabajadoresMarcados = new Set();
     let empresasData = [];
 
     function esc(s) {
@@ -203,6 +223,14 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/"/g, '&quot;');
     }
 
+    function claveTrabajador(t) {
+        return `${String(t.company || '').trim()}|${String(t.person || '').trim()}`;
+    }
+
+    function trabajadoresSeleccionados() {
+        return listaTrabajadores.filter((t) => trabajadoresMarcados.has(claveTrabajador(t)));
+    }
+
     function empresasSeleccionadas() {
         return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
             .map((el) => String(el.value || '').trim())
@@ -210,9 +238,25 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function actualizarContadores() {
+        const nSel = trabajadoresSeleccionados().length;
+        const nTot = listaTrabajadores.length;
         document.getElementById('lblEmpresasSel').textContent = String(empresasSeleccionadas().length);
-        document.getElementById('lblTrabajadores').textContent = String(listaTrabajadores.length);
-        btnCalcular.disabled = listaTrabajadores.length === 0;
+        document.getElementById('lblTrabajadores').textContent = nTot
+            ? `${nSel} / ${nTot}`
+            : '0';
+        btnCalcular.disabled = nSel === 0;
+    }
+
+    function sincronizarChkTodosTrab() {
+        if (!chkSelTodosTrab) return;
+        if (!listaTrabajadores.length) {
+            chkSelTodosTrab.checked = false;
+            chkSelTodosTrab.indeterminate = false;
+            return;
+        }
+        const n = trabajadoresSeleccionados().length;
+        chkSelTodosTrab.checked = n === listaTrabajadores.length;
+        chkSelTodosTrab.indeterminate = n > 0 && n < listaTrabajadores.length;
     }
 
     function sincronizarChkTodas() {
@@ -373,19 +417,37 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function renderTrabajadores(rows) {
         listaTrabajadores = Array.isArray(rows) ? rows.slice() : [];
+        trabajadoresMarcados = new Set(listaTrabajadores.map((t) => claveTrabajador(t)));
         if (!listaTrabajadores.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin trabajadores para las empresas seleccionadas.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin trabajadores para las empresas seleccionadas.</td></tr>';
+            sincronizarChkTodosTrab();
             actualizarContadores();
             return;
         }
-        tbody.innerHTML = listaTrabajadores.map((t) => `<tr>
+        tbody.innerHTML = listaTrabajadores.map((t) => {
+            const key = claveTrabajador(t);
+            return `<tr>
+            <td class="col-check">
+                <input type="checkbox" class="chk-trabajador" data-key="${esc(key)}" checked aria-label="Seleccionar trabajador">
+            </td>
             <td>${esc(t.company_desc || t.company)}</td>
             <td class="font-monospace">${esc(t.person)}</td>
             <td>${esc(t.name)}</td>
             <td>${esc(t.entrydate)}</td>
             <td>${esc(t.ceasedate)}</td>
             <td>${esc(t.calculationdate)}</td>
-        </tr>`).join('');
+        </tr>`;
+        }).join('');
+        tbody.querySelectorAll('.chk-trabajador').forEach((chk) => {
+            chk.addEventListener('change', function () {
+                const key = this.getAttribute('data-key');
+                if (this.checked) trabajadoresMarcados.add(key);
+                else trabajadoresMarcados.delete(key);
+                sincronizarChkTodosTrab();
+                actualizarContadores();
+            });
+        });
+        sincronizarChkTodosTrab();
         actualizarContadores();
     }
 
@@ -395,6 +457,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const period = cboPer.value.trim();
         const companies = empresasSeleccionadas();
         const cesados = String(cboCesados.value || 'T').trim().toUpperCase();
+        const nombre = String(txtNombre.value || '').trim();
 
         if (!payroll_desc || !proceso_desc || !period) {
             alert('Seleccione tipo de planilla, proceso y periodo.');
@@ -408,7 +471,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ocultarValidaciones();
         ocultarAdvertenciaEmpresas();
         listaTrabajadores = [];
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Consultando...</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Consultando...</td></tr>';
         btnCalcular.disabled = true;
 
         try {
@@ -420,13 +483,14 @@ document.addEventListener('DOMContentLoaded', function () {
                     proceso_desc,
                     period,
                     cesados,
+                    nombre,
                     companies,
                 }),
             });
             const data = await res.json();
             if (!res.ok) {
                 alert(data.error || 'No se pudo consultar.');
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin datos.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin datos.</td></tr>';
                 actualizarContadores();
                 return;
             }
@@ -434,7 +498,7 @@ document.addEventListener('DOMContentLoaded', function () {
             const trabajadores = data.trabajadores || [];
             if (!trabajadores.length && (data.invalidas || []).length && !(data.validas || []).length) {
                 listaTrabajadores = [];
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Ninguna empresa seleccionada tiene el proceso y periodo abierto.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Ninguna empresa seleccionada tiene el proceso y periodo abierto.</td></tr>';
                 actualizarContadores();
             } else {
                 renderTrabajadores(trabajadores);
@@ -442,7 +506,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (e) {
             console.error(e);
             alert('Error de red o del servidor.');
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3">Error al consultar.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-danger py-3">Error al consultar.</td></tr>';
             actualizarContadores();
         }
     }
@@ -523,8 +587,9 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     async function calcularMasivo() {
-        if (!listaTrabajadores.length) {
-            alert('Consulte primero para cargar trabajadores.');
+        const seleccionados = trabajadoresSeleccionados();
+        if (!seleccionados.length) {
+            alert('Marque al menos un trabajador para calcular.');
             return;
         }
         const period = cboPer.value.trim();
@@ -532,7 +597,7 @@ document.addEventListener('DOMContentLoaded', function () {
             alert('Seleccione un periodo.');
             return;
         }
-        if (!confirm(`¿Procesar ${listaTrabajadores.length} trabajador(es) de ${empresasSeleccionadas().length} empresa(s)?`)) {
+        if (!confirm(`¿Procesar ${seleccionados.length} trabajador(es) seleccionado(s)?`)) {
             return;
         }
 
@@ -550,7 +615,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     period,
-                    trabajadores: listaTrabajadores.map((t) => ({
+                    trabajadores: seleccionados.map((t) => ({
                         company: t.company,
                         person: t.person,
                         payrolltype: t.payrolltype,
@@ -592,6 +657,19 @@ document.addEventListener('DOMContentLoaded', function () {
             actualizarContadores();
         }
     }
+
+    chkSelTodosTrab.addEventListener('change', function () {
+        const marcar = chkSelTodosTrab.checked;
+        trabajadoresMarcados = new Set();
+        if (marcar) {
+            listaTrabajadores.forEach((t) => trabajadoresMarcados.add(claveTrabajador(t)));
+        }
+        tbody.querySelectorAll('.chk-trabajador').forEach((el) => {
+            el.checked = marcar;
+        });
+        sincronizarChkTodosTrab();
+        actualizarContadores();
+    });
 
     chkTodas.addEventListener('change', function () {
         const marcar = chkTodas.checked;

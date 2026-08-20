@@ -47,14 +47,14 @@
     <div class="card-body py-3">
         <div class="mb-2">
             <h5 class="mb-0">Reporte Consolidado de Tareos</h5>
-            <div class="small text-muted">Totales por trabajador según filtros de compañía, planilla, fechas y trabajador.</div>
+            <div class="small text-muted">Totales por trabajador según filtros de compañía, planilla, fechas, unidad y trabajador.</div>
         </div>
         <form id="frmReporte" class="row g-2 align-items-end">
             <div class="col-md-2">
                 <label class="form-label small mb-0">Compañía</label>
                 <select id="selCia" class="form-select form-select-sm" required></select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Tipo de planilla</label>
                 <select id="selPlanilla" class="form-select form-select-sm">
                     <option value="">(Todas)</option>
@@ -68,7 +68,13 @@
                 <label class="form-label small mb-0">Fecha hasta</label>
                 <input type="date" id="txtFechaFin" class="form-control form-control-sm" required>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Trabajador</label>
                 <select id="selTrabajador" class="form-select form-select-sm">
                     <option value="">(Todos)</option>
@@ -140,6 +146,7 @@
 document.addEventListener('DOMContentLoaded', async function () {
     const selCia = document.getElementById('selCia');
     const selPlanilla = document.getElementById('selPlanilla');
+    const selUnidad = document.getElementById('selUnidad');
     const selTrabajador = document.getElementById('selTrabajador');
     const txtFechaIni = document.getElementById('txtFechaIni');
     const txtFechaFin = document.getElementById('txtFechaFin');
@@ -245,6 +252,32 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
     }
 
+    async function cargarUnidades() {
+        if (!selUnidad) return;
+        const prev = String(selUnidad.value || '0').trim() || '0';
+        selUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        selUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const o = document.createElement('option');
+                o.value = id;
+                o.textContent = item.text != null ? String(item.text) : id;
+                selUnidad.appendChild(o);
+            });
+            const ok = [...selUnidad.options].some((o) => String(o.value).trim() === prev);
+            selUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            selUnidad.value = '0';
+        }
+    }
+
     async function cargarTrabajadores() {
         const cia = selCia.value;
         const pt = selPlanilla.value || '0';
@@ -311,7 +344,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     payrolltype: selPlanilla.value || '',
                     fecha_ini: txtFechaIni.value,
                     fecha_fin: txtFechaFin.value,
-                    person: selTrabajador.value || ''
+                    person: selTrabajador.value || '',
+                    repunit: String(selUnidad.value || '0').trim() || '0'
                 })
             }));
             renderRows(data.rows || [], data.totales || {});
@@ -330,6 +364,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             fecha_ini: txtFechaIni.value || '',
             fecha_fin: txtFechaFin.value || '',
             person: selTrabajador.value || '',
+            repunit: String(selUnidad.value || '0').trim() || '0',
         });
         window.location.href = '/api/tareo-ng/reporte/excel?' + params.toString();
     });
@@ -345,6 +380,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     selPlanilla.addEventListener('change', cargarTrabajadores);
 
     setDefaultFechas();
+    await cargarUnidades();
     await poblarSelect('/api/selectores/companias', selCia, { keep: sessionCia });
     if (sessionCia) {
         await cargarPlanillas();

@@ -10769,9 +10769,19 @@ def _tareong_reporte_totales(rows):
     return out
 
 
-def _tareong_reporte_fetch_rows(cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql):
+def _tareong_reporte_fetch_rows(
+    cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit='0'
+):
     payrolltype_all = 'Y' if not payrolltype else 'N'
     person_all = 'Y' if not person else 'N'
+    repunit_val = str(repunit or '0').strip() or '0'
+    if repunit_val in ('0', '*', ''):
+        repunit_all = 'Y'
+        repunit_val = ''
+    else:
+        repunit_all = 'N'
+        if len(repunit_val) > 20:
+            repunit_val = repunit_val[:20]
     cursor.execute(
         "EXEC sp_pr_reportetareo_consolidado "
         "@company=?, @payrolltype_all=?, @payrolltype=?, @fecha_all=?, @fecha_ini=?, @fecha_fin=?, "
@@ -10788,8 +10798,8 @@ def _tareong_reporte_fetch_rows(cursor, cia, payrolltype, person, fecha_ini_sql,
             person or '',
             'Y',
             '',
-            'Y',
-            '',
+            repunit_all,
+            repunit_val,
             'Y',
             '',
         ),
@@ -10808,6 +10818,7 @@ def api_tareo_ng_reporte():
     cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or '').strip()
     person = str(body.get('person') or body.get('trabajador') or '').strip()
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
 
@@ -10828,7 +10839,7 @@ def api_tareo_ng_reporte():
         conn = get_db_connection()
         cursor = conn.cursor()
         rows = _tareong_reporte_fetch_rows(
-            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit=repunit
         )
         return jsonify({
             "rows": rows,
@@ -10856,6 +10867,9 @@ def api_tareo_ng_reporte_excel():
     cia = str(request.args.get('cia') or request.args.get('company') or session.get('company') or '').strip()
     payrolltype = str(request.args.get('payrolltype') or '').strip()
     person = str(request.args.get('person') or request.args.get('trabajador') or '').strip()
+    repunit = _normalize_replicationunit_asig(
+        request.args.get('repunit') or request.args.get('unidad')
+    )
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
 
@@ -10875,7 +10889,7 @@ def api_tareo_ng_reporte_excel():
         conn = get_db_connection()
         cursor = conn.cursor()
         rows = _tareong_reporte_fetch_rows(
-            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit=repunit
         )
         totales = _tareong_reporte_totales(rows)
 

@@ -1595,6 +1595,10 @@
                 if (cboCentroCosto) {
                     estado.costcenter = val('cboCentroCosto') || '0';
                 }
+                const cboAccountProfile = document.getElementById('cboAccountProfile');
+                if (cboAccountProfile) {
+                    estado.accountprofile = val('cboAccountProfile') || '';
+                }
                 const txtRef = document.getElementById('txtReferencia');
                 if (txtRef) {
                     estado.referencia = String(txtRef.value || '').trim().slice(0, 25);
@@ -1620,7 +1624,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, poblarBancosHaberes, poblarUnidades, poblarCentrosCosto } = opts;
+            const { poblarSelect, poblarBancosHaberes, poblarUnidades, poblarCentrosCosto, poblarPerfilesContables } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -1654,8 +1658,25 @@
                 }
             }
 
-            // Cargar centros apenas hay compañía (hay returns tempranos más abajo).
+            async function restaurarPerfilesContables() {
+                const cboAccountProfile = document.getElementById('cboAccountProfile');
+                if (!cboAccountProfile) return;
+                if (typeof poblarPerfilesContables === 'function') {
+                    await poblarPerfilesContables();
+                }
+                const accountprofile = filtros.accountprofile != null
+                    ? String(filtros.accountprofile).trim()
+                    : '';
+                if (accountprofile && optionExists(cboAccountProfile, accountprofile)) {
+                    cboAccountProfile.value = accountprofile;
+                } else if (optionExists(cboAccountProfile, '')) {
+                    cboAccountProfile.value = '';
+                }
+            }
+
+            // Cargar centros/perfiles apenas hay compañía (hay returns tempranos más abajo).
             await restaurarCentrosCosto();
+            await restaurarPerfilesContables();
 
             if (incluyeBancoHaberes && typeof poblarBancosHaberes === 'function') {
                 await poblarBancosHaberes(cia);
@@ -1742,7 +1763,8 @@
         function registrarGuardadoEnCambio() {
             [
                 'cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo',
-                'cboMoneda', 'cboConcepto', 'cboCesados', 'cboUnidad', 'cboCentroCosto'
+                'cboMoneda', 'cboConcepto', 'cboCesados', 'cboUnidad', 'cboCentroCosto',
+                'cboAccountProfile'
             ].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);

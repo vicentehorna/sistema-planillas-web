@@ -7,6 +7,7 @@
     @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
     @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
     @costcenter: '0' = todos; otro valor filtra PR_Employee.CostCenter.
+    @accountprofile: '' o '0' = todos; otro valor filtra PR_Employee.AccountProfile.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecredito_web]
     @par_company     VARCHAR(10),
@@ -19,7 +20,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecredito_web]
     @cesados         CHAR(1),
     @repunit         VARCHAR(20) = '0',
     @costcenter      VARCHAR(20) = '0',
-    @todos_bancos    CHAR(1) = 'N'
+    @todos_bancos    CHAR(1) = 'N',
+    @accountprofile  VARCHAR(20) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -32,6 +34,8 @@ BEGIN
     IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
     SET @todos_bancos = UPPER(@todos_bancos);
     IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
+    SET @accountprofile = LTRIM(RTRIM(ISNULL(@accountprofile, '')));
+    IF @accountprofile = '0' SET @accountprofile = '';
 
     DECLARE @flag_set_period CHAR(1);
     SELECT @flag_set_period = ISNULL(FlagSetPeriod, 'N')
@@ -99,6 +103,10 @@ BEGIN
       AND e.payrolltype = @par_payrolltype
       AND (@repunit = '0' OR sp.ReplicationUnit = @repunit)
       AND (@costcenter = '0' OR LTRIM(RTRIM(ISNULL(e.CostCenter, ''))) = @costcenter)
+      AND (
+            @accountprofile = ''
+            OR LTRIM(RTRIM(ISNULL(e.AccountProfile, ''))) = @accountprofile
+          )
       AND (
             @cesados = 'T'
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

@@ -105,6 +105,12 @@
                     <option value="N">No</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
+                <select id="cboAccountProfile" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -308,6 +314,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const accountprofile = String(document.getElementById('cboAccountProfile')?.value || '').trim();
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -319,7 +326,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados
+                    cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
+                    accountprofile
                 })
             });
             const payload = await res.json();
@@ -380,7 +388,45 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboAccountProfile = document.getElementById('cboAccountProfile');
     const txtFechaPago = document.getElementById('txtFechaPago');
+
+    async function cargarPerfilesContables(preferido) {
+        if (!cboAccountProfile) return;
+        const prev = preferido != null
+            ? String(preferido).trim()
+            : String(cboAccountProfile.value || '').trim();
+        const cia = String(cboCia?.value || '').trim();
+        cboAccountProfile.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = 'Todos';
+        cboAccountProfile.appendChild(optAll);
+        if (!cia) {
+            cboAccountProfile.value = '';
+            return;
+        }
+        try {
+            const res = await fetch(`/api/selectores/accountprofile?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboAccountProfile.appendChild(opt);
+            });
+            if (optionExists(cboAccountProfile, prev)) {
+                cboAccountProfile.value = prev;
+            } else {
+                cboAccountProfile.value = '';
+            }
+        } catch (e) {
+            console.error(e);
+            cboAccountProfile.value = '';
+        }
+    }
 
     if (!txtFechaPago.value) {
         txtFechaPago.value = hoyIsoLocal();
@@ -393,7 +439,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
 
     if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        await filtrosPersist.aplicarRestauracionCascada({
+            poblarSelect,
+            poblarPerfilesContables: cargarPerfilesContables
+        });
     } else if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             const ciaNorm = cboCia.value.trim();
@@ -401,6 +450,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
                 ciaNorm, document.getElementById('cboConcepto'), poblarSelect
             );
+            await cargarPerfilesContables();
         }
     } else {
         const ciaInicial = cboCia.value.trim();
@@ -408,7 +458,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(
                 ciaInicial, document.getElementById('cboConcepto'), poblarSelect
             );
+            await cargarPerfilesContables();
         }
+    }
+
+    if (String(cboCia.value || '').trim() && cboAccountProfile && cboAccountProfile.options.length <= 1) {
+        await cargarPerfilesContables();
     }
 
     if (filtrosPersist) {
@@ -443,10 +498,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (cia) {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanillaEl);
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(cia, cboConceptoEl, poblarSelect);
+            await cargarPerfilesContables();
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPlanillaEl.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanillaEl.disabled = true;
+            await cargarPerfilesContables();
         }
     });
 

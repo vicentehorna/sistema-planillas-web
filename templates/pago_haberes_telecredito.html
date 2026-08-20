@@ -130,6 +130,12 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
+                <select id="cboAccountProfile" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -387,6 +393,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const todosBancos = !!document.getElementById('chkTodosBancos')?.checked;
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
         const costcenter = String(document.getElementById('cboCentroCosto')?.value || '0').trim() || '0';
+        const accountprofile = String(document.getElementById('cboAccountProfile')?.value || '').trim();
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
             alert('Complete compañía, tipo planilla, proceso, periodo y concepto.');
@@ -400,7 +407,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
                     todos_bancos: todosBancos,
-                    repunit, costcenter
+                    repunit, costcenter, accountprofile
                 })
             });
             const payload = await res.json();
@@ -464,6 +471,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPeriodo = document.getElementById('cboPeriodo');
     const cboUnidad = document.getElementById('cboUnidad');
     const cboCentroCosto = document.getElementById('cboCentroCosto');
+    const cboAccountProfile = document.getElementById('cboAccountProfile');
     const txtFechaPago = document.getElementById('txtFechaPago');
 
     async function cargarUnidades() {
@@ -531,6 +539,43 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function cargarPerfilesContables(preferido) {
+        if (!cboAccountProfile) return;
+        const prev = preferido != null
+            ? String(preferido).trim()
+            : String(cboAccountProfile.value || '').trim();
+        const cia = String(cboCia?.value || '').trim();
+        cboAccountProfile.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = 'Todos';
+        cboAccountProfile.appendChild(optAll);
+        if (!cia) {
+            cboAccountProfile.value = '';
+            return;
+        }
+        try {
+            const res = await fetch(`/api/selectores/accountprofile?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboAccountProfile.appendChild(opt);
+            });
+            if (optionExists(cboAccountProfile, prev)) {
+                cboAccountProfile.value = prev;
+            } else {
+                cboAccountProfile.value = '';
+            }
+        } catch (e) {
+            console.error(e);
+            cboAccountProfile.value = '';
+        }
+    }
+
     if (!txtFechaPago.value) {
         txtFechaPago.value = hoyIsoLocal();
     }
@@ -546,7 +591,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const okRestore = await filtrosPersist.aplicarRestauracionCascada({
             poblarSelect,
             poblarUnidades: cargarUnidades,
-            poblarCentrosCosto: cargarCentrosCosto
+            poblarCentrosCosto: cargarCentrosCosto,
+            poblarPerfilesContables: cargarPerfilesContables
         });
         if (!okRestore) {
             if (!String(cboCia.value || '').trim()) {
@@ -559,6 +605,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     ciaFallback, document.getElementById('cboConcepto'), poblarSelect
                 );
                 await cargarCentrosCosto();
+                await cargarPerfilesContables();
             }
         }
     } else if (!String(cboCia.value || '').trim()) {
@@ -569,6 +616,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 ciaNorm, document.getElementById('cboConcepto'), poblarSelect
             );
             await cargarCentrosCosto();
+            await cargarPerfilesContables();
         }
     } else {
         const ciaInicial = cboCia.value.trim();
@@ -577,12 +625,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                 ciaInicial, document.getElementById('cboConcepto'), poblarSelect
             );
             await cargarCentrosCosto();
+            await cargarPerfilesContables();
         }
     }
 
     // Seguridad: si hay compañía y el combo quedó solo en "Todos", reintentar carga.
     if (String(cboCia.value || '').trim() && cboCentroCosto && cboCentroCosto.options.length <= 1) {
         await cargarCentrosCosto();
+    }
+    if (String(cboCia.value || '').trim() && cboAccountProfile && cboAccountProfile.options.length <= 1) {
+        await cargarPerfilesContables();
     }
 
     if (filtrosPersist) {
@@ -618,11 +670,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanillaEl);
             await window.FiltrosPlanillasReportes.poblarConceptosConNeto(cia, cboConceptoEl, poblarSelect);
             await cargarCentrosCosto();
+            await cargarPerfilesContables();
             if (filtrosPersist) filtrosPersist.guardar();
         } else {
             cboPlanillaEl.innerHTML = '<option value="">Seleccione...</option>';
             cboPlanillaEl.disabled = true;
             await cargarCentrosCosto();
+            await cargarPerfilesContables();
         }
     });
 

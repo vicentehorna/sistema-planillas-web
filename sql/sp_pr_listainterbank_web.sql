@@ -3,6 +3,7 @@
     Usa pr_mapping.interbankbank (no creditobank).
 
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @accountprofile: '' o '0' = todos; otro valor filtra PR_Employee.AccountProfile.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listainterbank_web]
     @par_company     VARCHAR(10),
@@ -12,7 +13,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listainterbank_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
-    @cesados         CHAR(1)
+    @cesados         CHAR(1),
+    @accountprofile  VARCHAR(20) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -20,6 +22,8 @@ BEGIN
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
+    SET @accountprofile = LTRIM(RTRIM(ISNULL(@accountprofile, '')));
+    IF @accountprofile = '0' SET @accountprofile = '';
 
     ;WITH Pagos AS (
         SELECT
@@ -71,6 +75,10 @@ BEGIN
             ON sp.EmployeeDocumentType = t.PersonDocumentType
     WHERE e.company = @par_company
       AND e.payrolltype = @par_payrolltype
+      AND (
+            @accountprofile = ''
+            OR LTRIM(RTRIM(ISNULL(e.AccountProfile, ''))) = @accountprofile
+          )
       AND (
             @cesados = 'T'
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

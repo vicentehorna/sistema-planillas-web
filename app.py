@@ -10694,7 +10694,6 @@ def api_tareo_ng_importar_procesar():
             except Exception:
                 pass
 
-
 @app.route('/api/tareo-ng/importar/borrar', methods=['POST'])
 @login_required
 def api_tareo_ng_importar_borrar():
@@ -11054,8 +11053,14 @@ def api_tareo_ng_asignacion_procesar():
     prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
     person_all = str(body.get('person_all') or 'Y').strip().upper()[:1] or 'Y'
     person = str(body.get('person') or '').strip() or ''
-    repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
-    repunit = str(body.get('repunit') or '').strip() or ''
+    raw_repunit = str(body.get('repunit') or body.get('unidad') or '').strip()
+    if raw_repunit in ('', '0', '*'):
+        raw_repunit = ''
+    if 'repunit_all' in body:
+        repunit_all = str(body.get('repunit_all') or 'Y').strip().upper()[:1] or 'Y'
+    else:
+        repunit_all = 'N' if raw_repunit else 'Y'
+    repunit = raw_repunit
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -11069,6 +11074,10 @@ def api_tareo_ng_asignacion_procesar():
         repunit_all = 'Y'
     if person_all == 'N' and not person:
         return jsonify({"error": "Indique la persona a procesar."}), 400
+    if repunit_all == 'N' and not repunit:
+        return jsonify({"error": "Indique la unidad a procesar."}), 400
+    if not repunit:
+        repunit_all = 'Y'
 
     conn = None
     try:
@@ -12211,10 +12220,11 @@ def api_asientos_interfaz_periodos():
 @app.route('/api/asientos/interfaz/generar-archivo', methods=['POST'])
 @login_required
 def api_asientos_interfaz_generar_archivo():
-    """Genera archivo del asiento: Alvisoft TXT (ACI) o Excel SAP Divisa (hm_divisa)."""
+    """Genera archivo del asiento: Alvisoft TXT, Excel SAP Divisa o Excel El Clan."""
     from database import get_active_database
     from alvisoft_export import generar_txt_alvisoft
     from sap_divisa_export import generar_xls_sap_divisa
+    from elclan_asiento_export import generar_xls_asiento_elclan
 
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
@@ -12227,11 +12237,25 @@ def api_asientos_interfaz_generar_archivo():
 
     active_db = str(get_active_database() or '').strip().lower()
     es_divisa = active_db == 'hm_divisa'
+    es_elclan = active_db == 'hm_elclan'
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        if es_elclan:
+            filename, contenido = generar_xls_asiento_elclan(cursor, cia, voucher)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            resp = Response(
+                contenido,
+                mimetype='application/vnd.ms-excel',
+            )
+            resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+            return resp
+
         if es_divisa:
             filename, contenido = generar_xls_sap_divisa(cursor, cia, voucher)
             try:
@@ -17621,6 +17645,13 @@ def api_pago_haberes_telecredito_listado():
     costcenter = _normalize_replicationunit_asig(
         body.get('costcenter') or body.get('centrocosto')
     )
+    accountprofile = str(
+        body.get('accountprofile') or body.get('perfil_contable') or ''
+    ).strip()
+    if accountprofile in ('0', '*'):
+        accountprofile = ''
+    if len(accountprofile) > 20:
+        accountprofile = accountprofile[:20]
 
     log_sp = (
         '[telecredito listado] EXEC sp_pr_listatelecredito_web '
@@ -17628,7 +17659,7 @@ def api_pago_haberes_telecredito_listado():
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
         f'@cesados={cesados!r} @repunit={repunit!r} @costcenter={costcenter!r} '
-        f'@todos_bancos={todos_bancos!r}'
+        f'@todos_bancos={todos_bancos!r} @accountprofile={accountprofile!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -17641,11 +17672,11 @@ def api_pago_haberes_telecredito_listado():
             "EXEC sp_pr_listatelecredito_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
             "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
-            "@cesados=?, @repunit=?, @costcenter=?, @todos_bancos=?",
+            "@cesados=?, @repunit=?, @costcenter=?, @todos_bancos=?, @accountprofile=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
                 p['period'], p['processtype'], p['paydate'], cesados, repunit,
-                costcenter, todos_bancos,
+                costcenter, todos_bancos, accountprofile or None,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -17815,13 +17846,20 @@ def api_pago_haberes_interbank_listado():
         return jsonify({"error": err}), 400
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    accountprofile = str(
+        body.get('accountprofile') or body.get('perfil_contable') or ''
+    ).strip()
+    if accountprofile in ('0', '*'):
+        accountprofile = ''
+    if len(accountprofile) > 20:
+        accountprofile = accountprofile[:20]
 
     log_sp = (
         '[interbank listado] EXEC sp_pr_listainterbank_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@cesados={cesados!r}'
+        f'@cesados={cesados!r} @accountprofile={accountprofile!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -17833,10 +17871,12 @@ def api_pago_haberes_interbank_listado():
         cursor.execute(
             "EXEC sp_pr_listainterbank_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
-            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, @cesados=?",
+            "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
+            "@cesados=?, @accountprofile=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
                 p['period'], p['processtype'], p['paydate'], cesados,
+                accountprofile or None,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -20295,18 +20335,29 @@ def preview_boleta():
     period = _normalize_pr_period(params.get('period'))
     nombre = str(params.get('nombre') or '').strip()
     try:
-        pdf_buffer = generar_pdf_en_memoria(params)
+        pdf_buffer = generar_pdf_en_memoria({
+            'cia': str(params.get('cia') or '').strip(),
+            'payroll_type': str(params.get('payroll_type') or '').strip(),
+            'process': str(params.get('process') or params.get('processtype') or '').strip(),
+            'period': period,
+            'person': person,
+            'sin_firma': params.get('sin_firma') if params.get('sin_firma') is not None else params.get('sinfirma'),
+        })
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         logging.exception('preview_boleta')
         return jsonify({'error': str(e)}), 500
-    return send_file(
+    resp = send_file(
         pdf_buffer,
         mimetype='application/pdf',
         as_attachment=False,
         download_name=_boleta_pdf_filename(person, period, nombre=nombre),
     )
+    # Evitar que el navegador reutilice un PDF viejo (p.ej. GRATIFICACION) al cambiar de proceso.
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma'] = 'no-cache'
+    return resp
 
 
 @app.route('/procesar_boletas_masivo', methods=['POST'])

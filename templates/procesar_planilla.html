@@ -184,6 +184,12 @@
                 <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted">Localizar trabajador</label>
                 <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
+                <select id="cboAccountProfile" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarPlanilla">
                     <i class="bi bi-search"></i> Consultar
@@ -326,6 +332,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_PROCESOS = {{ url_for('api_procesar_planilla_procesos') | tojson }};
     const URL_PERIODOS = {{ url_for('api_procesar_planilla_periodos_list') | tojson }};
     const URL_UNIDADES = {{ url_for('api_unidades') | tojson }};
+    const URL_ACCOUNTPROFILE = {{ url_for('api_selector_accountprofile') | tojson }};
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_trabajadores') | tojson }};
     const URL_EJECUTAR_STREAMING = {{ url_for('ejecutar_calculo_streaming') | tojson }};
     const URL_VALIDAR_CALCULO = {{ url_for('api_procesar_planilla_validar_calculo') | tojson }};
@@ -339,6 +346,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProc = document.getElementById('cboProcesoCalculo');
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
+    const cboAccountProfile = document.getElementById('cboAccountProfile');
     const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
     const btnResumenCalculo = document.getElementById('btnResumenCalculo');
     const modalResumenCalculoEl = document.getElementById('modalResumenCalculo');
@@ -717,6 +725,40 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function cargarPerfilesContables(preferido) {
+        if (!cboAccountProfile) return;
+        const prev = preferido != null
+            ? String(preferido).trim()
+            : String(cboAccountProfile.value || '').trim();
+        const cia = cboCia ? String(cboCia.value || '').trim() : '';
+        cboAccountProfile.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '';
+        optAll.textContent = 'Todos';
+        cboAccountProfile.appendChild(optAll);
+        if (!cia) {
+            cboAccountProfile.value = '';
+            return;
+        }
+        try {
+            const res = await fetch(`${URL_ACCOUNTPROFILE}?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboAccountProfile.appendChild(opt);
+            });
+            const ok = Array.from(cboAccountProfile.options).some((o) => String(o.value).trim() === prev);
+            cboAccountProfile.value = ok ? prev : '';
+        } catch (e) {
+            console.error(e);
+            cboAccountProfile.value = '';
+        }
+    }
+
     async function cargarProcesos(seq) {
         const mySeq = seq == null ? filtrosLoadSeq : seq;
         const cia = cboCia.value.trim();
@@ -834,6 +876,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const period = document.getElementById('hidPeriodoCalculo').value.trim();
         const cesados = String(cboCesados.value || 'T').trim().toUpperCase();
         const repunit = String(cboUnidad.value || '0').trim() || '0';
+        const accountprofile = String(cboAccountProfile?.value || '').trim();
         if (!cia || !payrolltype || !processtype || !period) {
             alert('Seleccione compañía, tipo de planilla, proceso y periodo (válido) antes de listar.');
             return;
@@ -846,7 +889,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_TRABAJADORES, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payrolltype, processtype, period, cesados, repunit })
+                body: JSON.stringify({ cia, payrolltype, processtype, period, cesados, repunit, accountprofile })
             });
             const data = await res.json();
             if (!res.ok) {
@@ -911,6 +954,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             'cboProcesoCalculo',
             'cboCesados',
             'cboUnidad',
+            'cboAccountProfile',
             'txtPeriodoDesc',
             'btnConsultarPlanilla',
             'btnEliminarCalculo',
@@ -1370,6 +1414,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
     await cargarUnidades();
+    await cargarPerfilesContables();
 
     const guardado = filtrosPersist ? filtrosPersist.leer() : null;
     const optEx = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.optionExistsTrim;
@@ -1377,6 +1422,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     let restaurado = false;
     if (guardado && guardado.cia && optEx && optEx(cboCia, guardado.cia)) {
         cboCia.value = String(guardado.cia).trim();
+        await cargarPerfilesContables(guardado.accountprofile || '');
         await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
         const payroll = guardado.payroll != null ? String(guardado.payroll).trim() : '';
         if (payroll && optEx(cboPt, payroll)) {
@@ -1394,6 +1440,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (ru !== '' && cboUnidad && optEx && optEx(cboUnidad, ru)) {
                     cboUnidad.value = ru;
                 }
+                const ap = guardado.accountprofile != null ? String(guardado.accountprofile).trim() : '';
+                if (ap && cboAccountProfile && optEx && optEx(cboAccountProfile, ap)) {
+                    cboAccountProfile.value = ap;
+                }
                 const perSaved = guardado.periodo != null ? String(guardado.periodo).trim() : '';
                 await cargarPeriodo(perSaved || undefined);
                 const hid = document.getElementById('hidPeriodoCalculo').value.trim();
@@ -1407,6 +1457,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (!restaurado && !String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
+            await cargarPerfilesContables();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
         }
     }
@@ -1431,10 +1482,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         limpiarTablaTrabajadores();
         const cia = this.value.trim();
         if (cia) {
+            await cargarPerfilesContables();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt, seq);
             if (seq !== filtrosLoadSeq) return;
             await cascadaTrasCambioCia(prefs, seq);
         } else {
+            await cargarPerfilesContables();
             cboPt.innerHTML = '<option value="">Seleccione...</option>';
             cboPt.disabled = true;
         }
@@ -1490,6 +1543,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         limpiarTablaTrabajadores();
         if (filtrosPersist) filtrosPersist.guardar();
     });
+
+    if (cboAccountProfile) {
+        cboAccountProfile.addEventListener('change', function () {
+            limpiarTablaTrabajadores();
+            if (filtrosPersist) filtrosPersist.guardar();
+        });
+    }
 
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();

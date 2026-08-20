@@ -25525,7 +25525,7 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
 @app.route('/api/procesar-planilla/trabajadores-calculo', methods=['POST'])
 @login_required
 def api_procesar_planilla_trabajadores():
-    """sp_pr_calcularplanillas_web @cia, @payrolltype, @processtype, @period, @cesados, @repunit."""
+    """sp_pr_calcularplanillas_web @cia, @payrolltype, @processtype, @period, @cesados, @repunit, @accountprofile."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or '').strip()
     payrolltype = str(body.get('payrolltype') or '').strip()
@@ -25539,6 +25539,13 @@ def api_procesar_planilla_trabajadores():
         repunit = '0'
     if len(repunit) > 20:
         repunit = repunit[:20]
+    accountprofile = str(
+        body.get('accountprofile') or body.get('perfil_contable') or ''
+    ).strip()
+    if accountprofile in ('0', '*'):
+        accountprofile = ''
+    if len(accountprofile) > 20:
+        accountprofile = accountprofile[:20]
     if not cia or not payrolltype or not processtype or not period:
         return jsonify({"error": "Faltan compañía, tipo de planilla, proceso o periodo."}), 400
     conn = None
@@ -25547,8 +25554,8 @@ def api_procesar_planilla_trabajadores():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_calcularplanillas_web "
-            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @cesados=?, @repunit=?",
-            (cia, payrolltype, processtype, period, cesados, repunit),
+            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @cesados=?, @repunit=?, @accountprofile=?",
+            (cia, payrolltype, processtype, period, cesados, repunit, accountprofile or None),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = [

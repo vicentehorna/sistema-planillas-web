@@ -539,7 +539,14 @@ BEGIN
 
         (SELECT Description FROM PR_SpecialStatus WHERE SpecialStatus = pr_employee.SpecialStatus) AS clasificacion,
 
-        CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(PR_ProcessType.ShortName, '')))) = 'GRATIFICACION' THEN
+        /* Título según el @process solicitado (no depende del join ambiguo). */
+        CASE WHEN UPPER(LTRIM(RTRIM(ISNULL((
+                SELECT TOP 1 pt.ShortName
+                FROM PR_ProcessType pt (NOLOCK)
+                WHERE pt.ProcessType = @process
+                  AND (pt.Company = @cia OR pt.Company IS NULL)
+                ORDER BY CASE WHEN pt.Company = @cia THEN 0 ELSE 1 END
+            ), '')))) = 'GRATIFICACION' THEN
             'BOLETA DE GRATIFICACION - '
         ELSE
             'BOLETA DE PAGO ' + UPPER(LTRIM(RTRIM(ISNULL(pr_periodtype.description, '')))) + ' - '
@@ -562,13 +569,8 @@ BEGIN
             END
         ) + ' ' + LEFT(@period, 4) AS titulo_boleta,
 
-        'Del ' +
-        CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(PR_ProcessType.ShortName, '')))) = 'GRATIFICACION' THEN
-            '01-07-2020'
-        ELSE
-            CONVERT(VARCHAR(10), pr_period.cadatebegin, 103)
-        END +
-        ' al ' + CONVERT(VARCHAR(10), pr_period.cadateend, 103) AS RangoFechas
+        'Del ' + CONVERT(VARCHAR(10), pr_period.cadatebegin, 103)
+            + ' al ' + CONVERT(VARCHAR(10), pr_period.cadateend, 103) AS RangoFechas
 
     FROM pr_employee
         LEFT JOIN pr_employeecategory ON pr_employee.EmployeeCategory = pr_employeecategory.EmployeeCategory,
@@ -592,11 +594,13 @@ BEGIN
       AND pr_employeepayroll.Company = pr_employee.Company
       AND pr_employeepayroll.Person = pr_employee.Person
       AND pr_employeepayroll.ProcessType = PR_ProcessType.ProcessType
+      AND PR_ProcessType.Company = @cia
       AND pr_employeepayroll.processtype = @process
       AND pr_employeepayroll.payrolltype = @payrolltype
       AND pr_payrolltype.periodtype = pr_periodtype.periodtype
       AND pr_employeepayroll.prperiod = @period
       AND pr_employeepayroll.person = @person
+      AND pr_period.company = @cia
       AND pr_period.payrolltype = @payrolltype
       AND pr_period.prperiod = @period;
 END

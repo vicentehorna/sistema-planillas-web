@@ -204,6 +204,18 @@
     .badge-estado-A { background: #d1e7dd; color: #0f5132; }
     .badge-estado-N { background: #f8d7da; color: #842029; }
 
+    .table-prestamos .col-accion {
+        width: 3.2rem;
+        text-align: center;
+    }
+    .table-prestamos .btn-eliminar-prestamo {
+        padding: 0.1rem 0.35rem;
+        line-height: 1;
+    }
+    .table-prestamos .btn-eliminar-prestamo:disabled {
+        opacity: 0.35;
+    }
+
     @media (max-width: 991.98px) {
         .prest-layout { flex-direction: column; }
         .prest-panel-izq { flex: none; max-width: none; min-width: 0; }
@@ -237,12 +249,89 @@
                     <label class="form-check-label small" for="chkIncluirCeros">Pendiente con ceros</label>
                 </div>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2">
                 <button type="submit" class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-search"></i> Consultar
                 </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoPrestamo" disabled>
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Nuevo Préstamo -->
+<div class="modal fade" id="modalNuevoPrestamo" tabindex="-1" aria-labelledby="modalNuevoPrestamoLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="modalNuevoPrestamoLabel">
+                    <i class="bi bi-cash-coin text-success"></i> Nuevo préstamo
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="frmNuevoPrestamo" class="row g-2">
+                    <div class="col-12">
+                        <label for="npTrabajador" class="form-label small fw-bold text-muted mb-1">Trabajador</label>
+                        <select id="npTrabajador" class="form-select form-select-sm" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="npMotivo" class="form-label small fw-bold text-muted mb-1">Motivo</label>
+                        <select id="npMotivo" class="form-select form-select-sm" required>
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npMonto" class="form-label small fw-bold text-muted mb-1">Monto</label>
+                        <input type="number" step="0.01" min="0.01" id="npMonto" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npMoneda" class="form-label small fw-bold text-muted mb-1">Moneda</label>
+                        <input type="text" id="npMoneda" class="form-control form-control-sm" value="Soles" readonly>
+                        <input type="hidden" id="npMonedaCod" value="LO">
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npTC" class="form-label small fw-bold text-muted mb-1">Tipo de cambio</label>
+                        <input type="number" step="0.001" min="0.001" id="npTC" class="form-control form-control-sm" value="1" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npFecha" class="form-label small fw-bold text-muted mb-1">Fecha</label>
+                        <input type="date" id="npFecha" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npCuotas" class="form-label small fw-bold text-muted mb-1">Nro. cuotas</label>
+                        <input type="number" step="1" min="1" max="120" id="npCuotas" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <label for="npMontoCuota" class="form-label small fw-bold text-muted mb-1">Monto cuota</label>
+                        <input type="text" id="npMontoCuota" class="form-control form-control-sm" readonly tabindex="-1">
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="npPeriodo" class="form-label small fw-bold text-muted mb-1">Periodo inicial</label>
+                        <select id="npPeriodo" class="form-select form-select-sm" required>
+                            <option value="">Seleccione trabajador…</option>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <label for="npReferencia" class="form-label small fw-bold text-muted mb-1">Referencia / comentario</label>
+                        <input type="text" id="npReferencia" class="form-control form-control-sm" maxlength="50">
+                    </div>
+                    <div class="col-12">
+                        <div id="npMensaje" class="small text-danger d-none"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success btn-sm" id="btnGrabarPrestamo">
+                    <i class="bi bi-check2"></i> Grabar préstamo
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -316,6 +405,7 @@
                                     <th class="text-end">Monto cuota</th>
                                     <th>Estado</th>
                                     <th>Referencia</th>
+                                    <th class="text-center col-accion">Acción</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -393,6 +483,18 @@
             return `${d}/${m}/${y}`;
         }
         return s;
+    }
+
+    /** PRPeriod BD yyyymmdd → YYYY-MM-DD en pantalla */
+    function fmtPeriodo(v) {
+        if (v == null || v === '') return '';
+        const raw = String(v).trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+        const s = raw.replace(/[-/]/g, '');
+        if (s.length >= 8 && /^\d{8}/.test(s)) {
+            return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+        }
+        return raw;
     }
 
     async function leerJson(res) {
@@ -532,20 +634,35 @@
     function renderPrestamos(rows) {
         const tbody = document.querySelector('#tblPrestamos tbody');
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin préstamos</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted py-3">Sin préstamos</td></tr>';
             document.getElementById('badgePrestamoSeleccionado').textContent = 'Sin préstamo';
+            prestamoSel = null;
             return;
         }
         tbody.innerHTML = rows.map((r) => {
             const activo = prestamoSel && Number(prestamoSel.secuence) === Number(r.secuence);
+            const puedeEliminar = prestamoPuedeEliminar(r);
+            const tituloEliminar = puedeEliminar
+                ? 'Eliminar préstamo'
+                : 'Solo se puede eliminar si todas las cuotas están pendientes';
             return `<tr class="prestamo-row ${activo ? 'active' : ''}" data-sec="${escHtml(r.secuence)}">
                 <td>${escHtml(fmtFecha(r.loandate))}</td>
                 <td class="text-end">${fmtNum(r.loadamount)}</td>
-                <td>${escHtml(r.prperiod || '')}</td>
+                <td>${escHtml(fmtPeriodo(r.prperiod))}</td>
                 <td class="text-end">${escHtml(r.numberquotes)}</td>
                 <td class="text-end">${fmtNum(r.amountquote)}</td>
                 <td>${badgeEstado(r.status, r.status_texto)}</td>
                 <td title="${escHtml(r.reference || '')}">${escHtml(r.reference || '')}</td>
+                <td class="text-center col-accion">
+                    <button type="button"
+                        class="btn btn-link text-danger btn-eliminar-prestamo p-0"
+                        data-sec="${escHtml(r.secuence)}"
+                        ${puedeEliminar ? '' : 'disabled'}
+                        title="${escHtml(tituloEliminar)}"
+                        aria-label="Eliminar préstamo">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
             </tr>`;
         }).join('');
 
@@ -554,6 +671,13 @@
                 const sec = Number(this.getAttribute('data-sec'));
                 const row = prestamosCache.find((x) => Number(x.secuence) === sec);
                 if (row) seleccionarPrestamo(row);
+            });
+        });
+        tbody.querySelectorAll('.btn-eliminar-prestamo').forEach((btn) => {
+            btn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                const sec = Number(this.getAttribute('data-sec'));
+                eliminarPrestamoPorSecuencia(sec);
             });
         });
     }
@@ -574,12 +698,20 @@
         }
         tbody.innerHTML = rows.map((r) => `
             <tr>
-                <td>${escHtml(r.prperiod || '')}</td>
+                <td>${escHtml(fmtPeriodo(r.prperiod))}</td>
                 <td class="text-end">${fmtNum(r.amount)}</td>
                 <td>${badgeEstado(r.status, r.status_texto)}</td>
                 <td>${escHtml(r.proceso_texto || '—')}</td>
             </tr>
         `).join('');
+    }
+
+    function prestamoPuedeEliminar(prestamo) {
+        if (!prestamo) return false;
+        const sec = Number(prestamo.secuence);
+        const cuotas = cuotasCache.filter((c) => Number(c.loansecuence) === sec);
+        if (!cuotas.length) return false;
+        return cuotas.every((c) => String(c.status || '').toUpperCase() === 'P');
     }
 
     function seleccionarPrestamo(row) {
@@ -589,6 +721,41 @@
         renderPrestamos(prestamosCache);
         const cuotas = cuotasCache.filter((c) => Number(c.loansecuence) === Number(row.secuence));
         renderCuotas(cuotas);
+    }
+
+    async function eliminarPrestamoPorSecuencia(sec) {
+        if (!trabajadorSel) return;
+        const personId = trabajadorSel.person;
+        const prestamo = prestamosCache.find((p) => Number(p.secuence) === Number(sec));
+        if (!prestamoPuedeEliminar(prestamo)) {
+            alert('Solo se puede eliminar si todas las cuotas están pendientes.');
+            return;
+        }
+        const ok = window.confirm(
+            `¿Eliminar el préstamo #${sec} por ${fmtNum(prestamo.loadamount)}?\nSolo procede si todas las cuotas siguen pendientes.`
+        );
+        if (!ok) return;
+
+        try {
+            const res = await fetch('/api/prestamos/eliminar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: personId,
+                    secuence: Number(sec),
+                }),
+            });
+            await leerJson(res);
+            // Recarga la lista; si ya no hay saldo, el trabajador sale del panel izquierdo.
+            await cargarTrabajadores();
+            const row = trabajadoresCache.find((x) => x.person === personId);
+            if (row && (!trabajadorSel || trabajadorSel.person !== personId)) {
+                await seleccionarTrabajador(row);
+            }
+        } catch (err) {
+            alert(err.message || 'No se pudo eliminar el préstamo.');
+        }
     }
 
     async function seleccionarTrabajador(row) {
@@ -613,7 +780,7 @@
         document.getElementById('lblTotalPrestamo').textContent = fmtNum(row.totalloan);
 
         document.querySelector('#tblPrestamos tbody').innerHTML =
-            '<tr><td colspan="7" class="text-center text-muted py-3">Cargando…</td></tr>';
+            '<tr><td colspan="8" class="text-center text-muted py-3">Cargando…</td></tr>';
         document.querySelector('#tblCuotas tbody').innerHTML =
             '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
 
@@ -645,7 +812,7 @@
             }
         } catch (err) {
             document.querySelector('#tblPrestamos tbody').innerHTML =
-                `<tr><td colspan="7" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+                `<tr><td colspan="8" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
         }
     }
 
@@ -664,6 +831,7 @@
         mostrarPlaceholder();
         trabajadoresCache = [];
         renderTrabajadores([]);
+        document.getElementById('btnNuevoPrestamo').disabled = !cia;
         if (cia) {
             await poblarSelect(
                 `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
@@ -676,6 +844,195 @@
         }
     });
 
+    /* ---- Nuevo préstamo ---- */
+    const modalNuevoEl = document.getElementById('modalNuevoPrestamo');
+    const modalNuevo = modalNuevoEl ? new bootstrap.Modal(modalNuevoEl) : null;
+    const npTrabajador = document.getElementById('npTrabajador');
+    const npMotivo = document.getElementById('npMotivo');
+    const npMonto = document.getElementById('npMonto');
+    const npCuotas = document.getElementById('npCuotas');
+    const npMontoCuota = document.getElementById('npMontoCuota');
+    const npPeriodo = document.getElementById('npPeriodo');
+    const npTC = document.getElementById('npTC');
+    const npFecha = document.getElementById('npFecha');
+    const npMensaje = document.getElementById('npMensaje');
+    let npSecuenciaEsperada = null;
+
+    function hoyISO() {
+        const d = new Date();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return `${d.getFullYear()}-${m}-${day}`;
+    }
+
+    function recalcMontoCuota() {
+        const monto = Number(npMonto.value) || 0;
+        const n = Number(npCuotas.value) || 0;
+        if (monto > 0 && n > 0) {
+            npMontoCuota.value = (Math.round((monto / n) * 100) / 100).toFixed(2);
+        } else {
+            npMontoCuota.value = '';
+        }
+    }
+
+    function mostrarErrorNp(msg) {
+        if (!msg) {
+            npMensaje.classList.add('d-none');
+            npMensaje.textContent = '';
+            return;
+        }
+        npMensaje.textContent = msg;
+        npMensaje.classList.remove('d-none');
+    }
+
+    async function cargarContextoTrabajador() {
+        const cia = cboCia.value.trim();
+        const person = npTrabajador.value.trim();
+        npPeriodo.innerHTML = '<option value="">Cargando…</option>';
+        if (!cia || !person) {
+            npPeriodo.innerHTML = '<option value="">Seleccione trabajador…</option>';
+            return;
+        }
+        try {
+            const res = await fetch('/api/prestamos/contexto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    person,
+                    fecha: npFecha.value || hoyISO(),
+                }),
+            });
+            const data = await leerJson(res);
+            const meta = data.meta || {};
+            document.getElementById('npMoneda').value = meta.moneda_texto || 'Soles';
+            document.getElementById('npMonedaCod').value = meta.moneda || 'LO';
+            if (meta.exchangerate != null && Number(meta.exchangerate) > 0) {
+                npTC.value = Number(meta.exchangerate).toFixed(3);
+            }
+            const periodos = data.periodos || [];
+            npPeriodo.innerHTML = '';
+            if (!periodos.length) {
+                npPeriodo.innerHTML = '<option value="">Sin periodos</option>';
+                return;
+            }
+            const def = String(meta.periodo_default || '');
+            periodos.forEach((p) => {
+                const opt = document.createElement('option');
+                opt.value = p.id;
+                opt.textContent = p.text;
+                if (def && String(p.id) === def) opt.selected = true;
+                npPeriodo.appendChild(opt);
+            });
+            if (!npPeriodo.value && periodos.length) {
+                npPeriodo.value = periodos[0].id;
+            }
+        } catch (err) {
+            npPeriodo.innerHTML = '<option value="">Error</option>';
+            mostrarErrorNp(err.message);
+        }
+    }
+
+    async function abrirNuevoPrestamo() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+        mostrarErrorNp('');
+        document.getElementById('frmNuevoPrestamo').reset();
+        document.getElementById('npMoneda').value = 'Soles';
+        document.getElementById('npMonedaCod').value = 'LO';
+        npFecha.value = hoyISO();
+        npTC.value = '1.000';
+        npMontoCuota.value = '';
+        npPeriodo.innerHTML = '<option value="">Seleccione trabajador…</option>';
+        npSecuenciaEsperada = null;
+
+        await Promise.all([
+            poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, npTrabajador),
+            poblarSelect(`/api/prestamos/motivos?cia=${encodeURIComponent(cia)}`, npMotivo),
+        ]);
+
+        if (trabajadorSel && trabajadorSel.person) {
+            const opt = Array.from(npTrabajador.options).find((o) => o.value === trabajadorSel.person);
+            if (opt) {
+                npTrabajador.value = trabajadorSel.person;
+                await cargarContextoTrabajador();
+            }
+        }
+        if (modalNuevo) modalNuevo.show();
+    }
+
+    async function grabarPrestamo() {
+        mostrarErrorNp('');
+        const cia = cboCia.value.trim();
+        const person = npTrabajador.value.trim();
+        const loanreason = npMotivo.value.trim();
+        const loadamount = Number(npMonto.value);
+        const numberquotes = Number(npCuotas.value);
+        const exchangerate = Number(npTC.value);
+        const loandate = npFecha.value;
+        const prperiod = npPeriodo.value.trim();
+        const reference = document.getElementById('npReferencia').value.trim();
+
+        if (!person) return mostrarErrorNp('Seleccione un trabajador.');
+        if (!loanreason) return mostrarErrorNp('Seleccione el motivo.');
+        if (!(loadamount > 0)) return mostrarErrorNp('Indique el monto del préstamo.');
+        if (!(numberquotes > 0)) return mostrarErrorNp('Indique el número de cuotas.');
+        if (!loandate) return mostrarErrorNp('Indique la fecha.');
+        if (!prperiod) return mostrarErrorNp('Seleccione el periodo inicial.');
+        if (!(exchangerate > 0)) return mostrarErrorNp('Indique el tipo de cambio.');
+
+        const btn = document.getElementById('btnGrabarPrestamo');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Grabando…';
+        try {
+            const res = await fetch('/api/prestamos/registrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    person,
+                    loanreason,
+                    loadamount,
+                    loadcurrency: document.getElementById('npMonedaCod').value || 'LO',
+                    exchangerate,
+                    loandate,
+                    numberquotes,
+                    prperiod,
+                    reference,
+                }),
+            });
+            const data = await leerJson(res);
+            npSecuenciaEsperada = data.secuence;
+            if (modalNuevo) modalNuevo.hide();
+            await cargarTrabajadores();
+            const row = trabajadoresCache.find((x) => x.person === person);
+            if (row) {
+                await seleccionarTrabajador(row);
+                if (npSecuenciaEsperada != null) {
+                    const prest = prestamosCache.find((p) => Number(p.secuence) === Number(npSecuenciaEsperada));
+                    if (prest) seleccionarPrestamo(prest);
+                }
+            }
+        } catch (err) {
+            mostrarErrorNp(err.message);
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2"></i> Grabar préstamo';
+        }
+    }
+
+    document.getElementById('btnNuevoPrestamo').addEventListener('click', abrirNuevoPrestamo);
+    document.getElementById('btnGrabarPrestamo').addEventListener('click', grabarPrestamo);
+    npTrabajador.addEventListener('change', cargarContextoTrabajador);
+    npFecha.addEventListener('change', () => {
+        if (npTrabajador.value.trim()) cargarContextoTrabajador();
+    });
+    npMonto.addEventListener('input', recalcMontoCuota);
+    npCuotas.addEventListener('input', recalcMontoCuota);
+
     (async function init() {
         try {
             await poblarSelect('/api/selectores/companias', cboCia);
@@ -685,6 +1042,7 @@
                 if (opt) cboCia.value = DEFAULT_CIA;
             }
             if (cboCia.value.trim()) {
+                document.getElementById('btnNuevoPrestamo').disabled = false;
                 await poblarSelect(
                     `/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`,
                     cboPlanilla,

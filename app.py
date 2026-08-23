@@ -24504,6 +24504,263 @@ def api_prestamos_obtener():
                 pass
 
 
+@app.route('/api/prestamos/motivos')
+@login_required
+def api_prestamos_motivos():
+    """sp_pr_prestamos_motivos_web: catálogo PR_LoanReason."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_prestamos_motivos_web @company=?", (cia,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        data = []
+        for r in rows:
+            data.append({
+                "id": _jsonable_value(r.get('id')),
+                "text": _jsonable_value(r.get('text')),
+            })
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_prestamos_motivos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/contexto', methods=['POST'])
+@login_required
+def api_prestamos_contexto():
+    """sp_pr_prestamos_contexto_trabajador_web: meta + periodos de la planilla."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    fecha_raw = body.get('fecha') or body.get('loandate') or ''
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+
+    fecha = _normalize_date_yyyymmdd(fecha_raw) if fecha_raw else None
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        # VARCHAR fecha (YYYYMMDD): evita HYC00 del driver ODBC con date/datetime
+        cursor.execute(
+            "EXEC sp_pr_prestamos_contexto_trabajador_web @company=?, @person=?, @fecha=?",
+            (cia, person, fecha or ''),
+        )
+        sets = _dicts_collect_nonempty_resultsets(cursor, max_sets=3)
+        meta_row = sets[0][0] if sets and sets[0] else None
+        periodos_rows = sets[1] if len(sets) > 1 else []
+
+        meta = None
+        if meta_row:
+            meta = {
+                'company': _jsonable_value(meta_row.get('company')),
+                'person': _jsonable_value(meta_row.get('person')),
+                'codigo': _jsonable_value(meta_row.get('codigo')),
+                'nombre': _jsonable_value(meta_row.get('nombre')),
+                'documento': _jsonable_value(meta_row.get('documento')),
+                'payrolltype': _jsonable_value(meta_row.get('payrolltype')),
+                'moneda': _jsonable_value(meta_row.get('moneda')),
+                'moneda_texto': _jsonable_value(meta_row.get('moneda_texto')),
+                'costcenter': _jsonable_value(meta_row.get('costcenter')),
+                'costcentercode': _jsonable_value(meta_row.get('costcentercode')),
+                'exchangerate': _jsonable_value(meta_row.get('exchangerate')),
+                'periodo_default': _jsonable_value(meta_row.get('periodo_default')),
+                'periodo_default_fmt': _jsonable_value(meta_row.get('periodo_default_fmt')),
+            }
+
+        periodos = []
+        for r in periodos_rows:
+            periodos.append({
+                'id': _jsonable_value(r.get('id')),
+                'text': _jsonable_value(r.get('text')),
+                'periodorder': _jsonable_value(r.get('periodorder')),
+            })
+
+        return jsonify({"meta": meta, "periodos": periodos})
+    except Exception as e:
+        logging.exception("api_prestamos_contexto")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/registrar', methods=['POST'])
+@login_required
+def api_prestamos_registrar():
+    """sp_pr_prestamos_registrar_web: alta de préstamo + cuotas Fin de Mes."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    loanreason = str(body.get('loanreason') or body.get('motivo') or '').strip()
+    reference = str(body.get('reference') or body.get('referencia') or '').strip()
+    loadcurrency = str(body.get('loadcurrency') or body.get('moneda') or 'LO').strip().upper()[:2] or 'LO'
+    prperiod_ini = _normalize_pr_period(body.get('prperiod') or body.get('periodo') or body.get('prperiod_ini'))
+    loandate = _normalize_date_yyyymmdd(body.get('loandate') or body.get('fecha'))
+
+    try:
+        loadamount = float(body.get('loadamount') or body.get('monto') or 0)
+    except (TypeError, ValueError):
+        loadamount = 0
+    try:
+        exchangerate = float(body.get('exchangerate') or body.get('tc') or 1)
+    except (TypeError, ValueError):
+        exchangerate = 1
+    try:
+        numberquotes = int(body.get('numberquotes') or body.get('cuotas') or 0)
+    except (TypeError, ValueError):
+        numberquotes = 0
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if not loanreason:
+        return jsonify({"error": "Seleccione el motivo del préstamo."}), 400
+    if not loandate:
+        return jsonify({"error": "Indique la fecha del préstamo."}), 400
+    if loadamount <= 0:
+        return jsonify({"error": "El monto debe ser mayor a cero."}), 400
+    if numberquotes <= 0:
+        return jsonify({"error": "Indique el número de cuotas."}), 400
+    if not prperiod_ini or len(str(prperiod_ini).replace('-', '')) < 8:
+        return jsonify({"error": "Seleccione el periodo inicial."}), 400
+    if exchangerate <= 0:
+        exchangerate = 1.0
+    if loadcurrency not in ('LO', 'EX'):
+        loadcurrency = 'LO'
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_registrar_web "
+            "@company=?, @person=?, @loanreason=?, @loadamount=?, @loadcurrency=?, "
+            "@exchangerate=?, @loandate=?, @numberquotes=?, @prperiod_ini=?, "
+            "@reference=?, @xlastuser=?",
+            (
+                cia,
+                person,
+                loanreason,
+                loadamount,
+                loadcurrency,
+                exchangerate,
+                loandate,  # YYYYMMDD string — evita HYC00 ODBC
+                numberquotes,
+                prperiod_ini,
+                reference or None,
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "secuence": _jsonable_value(result.get('secuence')),
+            "numberquotes": _jsonable_value(result.get('numberquotes')),
+            "amountquote": _jsonable_value(result.get('amountquote')),
+            "loadamount": _jsonable_value(result.get('loadamount')),
+            "totalpending": _jsonable_value(result.get('totalpending')),
+            "totalloan": _jsonable_value(result.get('totalloan')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_registrar")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            # Extraer mensaje útil del ODBC si viene embebido
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/eliminar', methods=['POST'])
+@login_required
+def api_prestamos_eliminar():
+    """sp_pr_prestamos_eliminar_web: borra préstamo si todas las cuotas están Pendientes."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    try:
+        secuence = int(body.get('secuence') or body.get('loansecuence') or 0)
+    except (TypeError, ValueError):
+        secuence = 0
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if secuence <= 0:
+        return jsonify({"error": "Seleccione el préstamo a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_eliminar_web @company=?, @person=?, @secuence=?, @xlastuser=?",
+            (cia, person, secuence, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "secuence": _jsonable_value(result.get('secuence') or secuence),
+            "cuotas_eliminadas": _jsonable_value(result.get('cuotas_eliminadas')),
+            "totalpending": _jsonable_value(result.get('totalpending')),
+            "totalloan": _jsonable_value(result.get('totalloan')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_eliminar")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/vacaciones/obtener', methods=['POST'])
 @login_required
 def api_vacaciones_obtener():
@@ -24539,6 +24796,60 @@ def api_vacaciones_obtener():
     except Exception as e:
         logging.exception("api_vacaciones_obtener")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/vacaciones/generar-periodos', methods=['POST'])
+@login_required
+def api_vacaciones_generar_periodos():
+    """sp_pr_generar_periodos_vacacionales_web: crea periodos faltantes en PR_Vacation."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    solo_activos = str(body.get('solo_activos') or 'Y').strip().upper()[:1] or 'Y'
+    if solo_activos not in ('Y', 'N'):
+        solo_activos = 'Y'
+    xlastuser = _xlastuser_id()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_generar_periodos_vacacionales_web "
+            "@company=?, @payrolltype=?, @personlist=?, @solo_activos=?, @xlastuser=?",
+            (cia, payrolltype, person, solo_activos, xlastuser),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "personas_procesadas": int(row.get('personas_procesadas') or 0),
+            "periodos_creados": int(row.get('periodos_creados') or 0),
+            "periodos_actualizados": int(row.get('periodos_actualizados') or 0),
+            "mensaje": _jsonable_value(row.get('mensaje') or 'Proceso concluido.'),
+        })
+    except Exception as e:
+        logging.exception("api_vacaciones_generar_periodos")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
     finally:
         if conn:
             try:

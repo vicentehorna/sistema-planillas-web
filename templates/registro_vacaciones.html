@@ -362,6 +362,22 @@
         border: 1px solid rgba(255, 255, 255, 0.2);
     }
 
+    .vac-btn-generar-periodos {
+        white-space: nowrap;
+        font-size: 0.75rem;
+        padding: 0.15rem 0.55rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        color: #1a4b84;
+        font-weight: 600;
+    }
+
+    .vac-btn-generar-periodos:disabled {
+        opacity: 0.65;
+    }
+
     .vac-grilla-scroll:focus {
         outline: 2px solid #86b7fe;
         outline-offset: -2px;
@@ -409,7 +425,15 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
-            <div class="col-12 col-md-4 col-lg-2">
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted mb-1">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
                 <button type="submit" class="btn btn-primary btn-sm px-4">
                     <i class="bi bi-search"></i> Consultar
                 </button>
@@ -472,7 +496,14 @@
             <div class="vac-dw-panel">
                 <div class="vac-dw-titlebar">
                     <span class="vac-dw-title-text">Periodos vacacionales</span>
-                    <span class="badge text-bg-primary" id="badgePeriodoSeleccionado">Sin periodo</span>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge text-bg-primary" id="badgePeriodoSeleccionado">Sin periodo</span>
+                        <button type="button" id="btnGenerarPeriodos"
+                                class="btn btn-light btn-sm vac-btn-generar-periodos"
+                                title="Crea los periodos faltantes según fecha de ingreso">
+                            <i class="bi bi-calendar-plus"></i> Generar periodos
+                        </button>
+                    </div>
                 </div>
                 <div class="vac-dw-body">
                     <div class="table-scroll-sm">
@@ -648,6 +679,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboCesados = document.getElementById('cboCesados');
     const txtBuscar = document.getElementById('txtBuscarTrabajador');
     const tbodyTrabajadores = document.getElementById('tbodyTrabajadoresVac');
     const lblConteo = document.getElementById('lblConteoTrabajadores');
@@ -921,6 +953,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     cia,
                     payrolltype: cboPlanilla.value || '0',
                     busqueda: txtBuscar.value.trim(),
+                    cesados: (cboCesados && cboCesados.value) ? cboCesados.value : 'T',
                 }),
             });
             const data = await leerJson(res);
@@ -1186,6 +1219,68 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function generarPeriodosVacacionales() {
+        if (!trabajadorActivo) {
+            mostrarError('Seleccione un trabajador.');
+            return;
+        }
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            mostrarError('Seleccione una compañía.');
+            return;
+        }
+
+        const nombre = (trabajadorActivo.nombre || trabajadorActivo.person || '').trim();
+        let ok = false;
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            ok = await HmUi.confirmar({
+                titulo: 'Generar periodos vacacionales',
+                mensaje:
+                    'Se crearán los periodos faltantes para:\n' +
+                    nombre +
+                    '\n\nNo modifica periodos ya existentes ni registros de utilización.',
+                textoOk: 'Generar',
+                textoCancelar: 'Cancelar',
+            });
+        } else {
+            ok = window.confirm('¿Generar periodos vacacionales faltantes para ' + nombre + '?');
+        }
+        if (!ok) return;
+
+        const btn = document.getElementById('btnGenerarPeriodos');
+        if (btn) btn.disabled = true;
+        try {
+            const res = await fetch('/api/vacaciones/generar-periodos', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    person: trabajadorActivo.person,
+                    payrolltype: '0',
+                    solo_activos: 'Y',
+                }),
+            });
+            const data = await leerJson(res);
+            const creados = Number(data.periodos_creados || 0);
+            const actualizados = Number(data.periodos_actualizados || 0);
+            const msg = data.mensaje || 'Proceso concluido.';
+            if (window.HmUi && typeof HmUi.exito === 'function') {
+                HmUi.exito(
+                    msg +
+                    (creados || actualizados
+                        ? ` (creados: ${creados}, actualizados: ${actualizados})`
+                        : '')
+                );
+            }
+            await seleccionarTrabajador(trabajadorActivo);
+        } catch (err) {
+            console.error(err);
+            mostrarError(err.message);
+        } finally {
+            if (btn) btn.disabled = false;
+        }
+    }
+
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
@@ -1199,6 +1294,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
         if (guardado.payrolltype && optionExists(cboPlanilla, guardado.payrolltype)) {
             cboPlanilla.value = guardado.payrolltype;
+        }
+        if (cboCesados) {
+            const cesados = String(guardado.cesados || 'T').trim().toUpperCase();
+            if (['T', 'Y', 'N'].includes(cesados) && optionExists(cboCesados, cesados)) {
+                cboCesados.value = cesados;
+            }
         }
     } else if (!cboCia.value && seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
         await poblarSelect(
@@ -1237,6 +1338,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         await cargarTrabajadores();
         if (filtrosPersist) filtrosPersist.guardar();
     });
+
+    if (cboCesados) {
+        cboCesados.addEventListener('change', async function () {
+            await cargarTrabajadores();
+            if (filtrosPersist) filtrosPersist.guardar();
+        });
+    }
 
     txtBuscar.addEventListener('input', function () {
         clearTimeout(buscarTimer);
@@ -1296,6 +1404,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
         });
     }
+
+    document.getElementById('btnGenerarPeriodos').addEventListener('click', generarPeriodosVacacionales);
 
     document.addEventListener('keydown', function (e) {
         if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;

@@ -24311,8 +24311,8 @@ def api_vacaciones_trabajadores():
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
     busqueda = str(body.get('busqueda') or body.get('nombre') or body.get('q') or '').strip()
-    # Vacaciones no envía cesados → N (solo vigentes). Descansos envía T/Y/N.
-    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='N')
+    # T = Todos, Y = solo cesados, N = no cesados (default T, igual que Descansos Médicos).
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400

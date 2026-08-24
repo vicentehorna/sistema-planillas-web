@@ -1,0 +1,426 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte Detallado de Tareos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tng-rpt-grilla {
+        max-height: calc(100vh - 300px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-tng-rpt {
+        font-size: 11px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    .table-tng-rpt th, .table-tng-rpt td {
+        padding: 0.25rem 0.35rem;
+        vertical-align: middle;
+    }
+    .table-tng-rpt thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-tng-rpt .num {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .table-tng-rpt tbody tr:nth-child(even) {
+        background: #c6ffff55;
+    }
+    .table-tng-rpt tfoot td {
+        background: #f8f9fa;
+        font-weight: 600;
+        border-top: 2px solid #dee2e6;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="mb-2">
+            <h5 class="mb-0">Reporte Detallado de Tareos</h5>
+            <div class="small text-muted">Detalle día a día por trabajador (mismos filtros que el consolidado).</div>
+        </div>
+        <form id="frmReporte" class="row g-2 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Compañía</label>
+                <select id="selCia" class="form-select form-select-sm" required></select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Tipo de planilla</label>
+                <select id="selPlanilla" class="form-select form-select-sm">
+                    <option value="">(Todas)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Fecha desde</label>
+                <input type="date" id="txtFechaIni" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Fecha hasta</label>
+                <input type="date" id="txtFechaFin" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Unidad</label>
+                <select id="selUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Trabajador</label>
+                <select id="selTrabajador" class="form-select form-select-sm">
+                    <option value="">(Todos)</option>
+                </select>
+            </div>
+            <div class="col-md-12 d-flex gap-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm" id="btnExcel" disabled title="Exportar Excel">
+                    <i class="bi bi-file-earmark-excel"></i> Exportar
+                </button>
+                <button type="button" class="btn btn-outline-danger btn-sm" id="btnBorrar" disabled
+                        title="Elimina de PR_REGISTERHOUR los tareos filtrados en pantalla">
+                    <i class="bi bi-trash"></i> Borrar Tareo
+                </button>
+            </div>
+        </form>
+        <div id="msgReporte" class="small mt-2"></div>
+    </div>
+</div>
+
+<div class="tng-rpt-grilla">
+    <table class="table table-bordered table-sm table-hover table-tng-rpt align-middle">
+        <thead>
+            <tr>
+                <th>Código</th>
+                <th>Nombre</th>
+                <th>Fecha</th>
+                <th>Tipo Día</th>
+                <th>Agencia</th>
+                <th>Cliente</th>
+                <th>Tipo Planilla</th>
+                <th class="num">Horas</th>
+                <th class="num">HE 25</th>
+                <th class="num">HE 35</th>
+                <th class="num">H NOC</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyReporte">
+            <tr><td colspan="11" class="text-center text-muted py-4">Seleccione filtros y pulse Buscar</td></tr>
+        </tbody>
+        <tfoot id="tfootReporte" class="d-none">
+            <tr>
+                <td colspan="7" class="text-end">Totales</td>
+                <td class="num" id="totHoras">0.00</td>
+                <td class="num" id="totH25">0.00</td>
+                <td class="num" id="totH35">0.00</td>
+                <td class="num" id="totHnoc">0.00</td>
+            </tr>
+        </tfoot>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const selCia = document.getElementById('selCia');
+    const selPlanilla = document.getElementById('selPlanilla');
+    const selUnidad = document.getElementById('selUnidad');
+    const selTrabajador = document.getElementById('selTrabajador');
+    const txtFechaIni = document.getElementById('txtFechaIni');
+    const txtFechaFin = document.getElementById('txtFechaFin');
+    const tbody = document.getElementById('tbodyReporte');
+    const tfoot = document.getElementById('tfootReporte');
+    const msg = document.getElementById('msgReporte');
+    const btnExcel = document.getElementById('btnExcel');
+    const btnBorrar = document.getElementById('btnBorrar');
+    const sessionCia = {{ (session.get('company') or '')|tojson }};
+    let lastRows = [];
+    let lastTotales = {};
+
+    function esc(v) {
+        return String(v == null ? '' : v)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+    function numDec(v) {
+        if (v == null || v === '') return '0.00';
+        const n = Number(v);
+        return Number.isFinite(n)
+            ? n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : esc(v);
+    }
+    function fmtFecha(v) {
+        if (!v) return '';
+        const s = String(v).trim();
+        // YYYY-MM-DD o ISO
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return m[3] + '-' + m[2] + '-' + m[1];
+        return esc(s);
+    }
+    function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
+    function toastOk(t) { if (window.HmUi) HmUi.exito(t); else alert(t); }
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Error HTTP ' + res.status));
+        return data;
+    }
+    function filtrosPayload() {
+        return {
+            cia: selCia.value,
+            payrolltype: selPlanilla.value || '',
+            fecha_ini: txtFechaIni.value,
+            fecha_fin: txtFechaFin.value,
+            person: selTrabajador.value || '',
+            repunit: String(selUnidad.value || '0').trim() || '0'
+        };
+    }
+    function setAccionesEnabled(enabled) {
+        btnExcel.disabled = !enabled;
+        if (btnBorrar) btnBorrar.disabled = !enabled;
+    }
+    function ymd(d) {
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, '0');
+        const day = String(d.getDate()).padStart(2, '0');
+        return y + '-' + m + '-' + day;
+    }
+    function setDefaultFechas() {
+        const hoy = new Date();
+        const ini = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        txtFechaIni.value = ymd(ini);
+        txtFechaFin.value = ymd(hoy);
+    }
+
+    async function poblarSelect(url, selectEl, opciones) {
+        opciones = opciones || {};
+        const incluyeTodos = !!opciones.incluyeTodos;
+        const textoTodos = opciones.textoTodos || '(Todos)';
+        const keep = opciones.keep != null ? String(opciones.keep) : '';
+        const placeholder = opciones.placeholder || 'Seleccione...';
+        selectEl.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectEl.innerHTML = '';
+            if (incluyeTodos) {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = textoTodos;
+                selectEl.appendChild(o);
+            } else {
+                const o = document.createElement('option');
+                o.value = '';
+                o.textContent = placeholder;
+                selectEl.appendChild(o);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const o = document.createElement('option');
+                o.value = item.id != null ? String(item.id) : '';
+                o.textContent = item.text != null ? String(item.text) : '';
+                selectEl.appendChild(o);
+            });
+            if (keep && [...selectEl.options].some(o => o.value === keep)) selectEl.value = keep;
+        } catch (e) {
+            selectEl.innerHTML = incluyeTodos
+                ? '<option value="">' + textoTodos + '</option>'
+                : '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = selCia.value;
+        if (!cia) {
+            selPlanilla.innerHTML = '<option value="">(Todas)</option>';
+            return;
+        }
+        await poblarSelect(
+            '/api/selectores/planillas?cia=' + encodeURIComponent(cia),
+            selPlanilla,
+            { incluyeTodos: true, textoTodos: '(Todas)', keep: selPlanilla.value }
+        );
+    }
+
+    async function cargarUnidades() {
+        if (!selUnidad) return;
+        const prev = String(selUnidad.value || '0').trim() || '0';
+        selUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        selUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const o = document.createElement('option');
+                o.value = id;
+                o.textContent = item.text != null ? String(item.text) : id;
+                selUnidad.appendChild(o);
+            });
+            const ok = [...selUnidad.options].some((o) => String(o.value).trim() === prev);
+            selUnidad.value = ok ? prev : '0';
+        } catch (e) {
+            selUnidad.value = '0';
+        }
+    }
+
+    async function cargarTrabajadores() {
+        const cia = selCia.value;
+        const pt = selPlanilla.value || '0';
+        const keep = selTrabajador.value;
+        if (!cia) {
+            selTrabajador.innerHTML = '<option value="">(Todos)</option>';
+            return;
+        }
+        await poblarSelect(
+            '/api/selectores/trabajadores?cia=' + encodeURIComponent(cia) + '&payrolltype=' + encodeURIComponent(pt),
+            selTrabajador,
+            { incluyeTodos: true, textoTodos: '(Todos)', keep }
+        );
+    }
+
+    function renderTotales(t) {
+        t = t || {};
+        document.getElementById('totHoras').textContent = numDec(t.horas || 0);
+        document.getElementById('totH25').textContent = numDec(t.h25 || 0);
+        document.getElementById('totH35').textContent = numDec(t.h35 || 0);
+        document.getElementById('totHnoc').textContent = numDec(t.hnoc || 0);
+        tfoot.classList.toggle('d-none', !lastRows.length);
+    }
+
+    function renderRows(rows, totales) {
+        lastRows = rows || [];
+        lastTotales = totales || {};
+        setAccionesEnabled(!!lastRows.length);
+        if (!lastRows.length) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-4">Sin registros</td></tr>';
+            renderTotales({});
+            msg.textContent = '0 registros';
+            return;
+        }
+        tbody.innerHTML = lastRows.map(r => `<tr>
+            <td>${esc(r.codigo)}</td>
+            <td>${esc(r.nombre)}</td>
+            <td>${fmtFecha(r.fecha)}</td>
+            <td>${esc(r.tipo_dia)}</td>
+            <td>${esc(r.agencia)}</td>
+            <td>${esc(r.cliente)}</td>
+            <td>${esc(r.tipo_planilla)}</td>
+            <td class="num">${numDec(r.horas)}</td>
+            <td class="num">${numDec(r.h25)}</td>
+            <td class="num">${numDec(r.h35)}</td>
+            <td class="num">${numDec(r.hnoc)}</td>
+        </tr>`).join('');
+        renderTotales(lastTotales);
+        msg.textContent = lastRows.length + ' registro(s)';
+    }
+
+    async function buscar() {
+        if (!selCia.value) return toastErr('Seleccione compañía');
+        if (!txtFechaIni.value || !txtFechaFin.value) return toastErr('Indique rango de fechas');
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted py-3">Cargando…</td></tr>';
+        tfoot.classList.add('d-none');
+        try {
+            const data = await leerJson(await fetch('/api/tareo-ng/reporte-detalle', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtrosPayload())
+            }));
+            renderRows(data.rows || [], data.totales || {});
+        } catch (e) {
+            tbody.innerHTML = '<tr><td colspan="11" class="text-center text-danger py-4">Error al consultar</td></tr>';
+            setAccionesEnabled(false);
+            toastErr(e.message || String(e));
+        }
+    }
+
+    async function borrarTareos() {
+        if (!lastRows.length) return toastErr('No hay registros filtrados para borrar.');
+        if (!selCia.value) return toastErr('Seleccione compañía');
+        if (!txtFechaIni.value || !txtFechaFin.value) return toastErr('Indique rango de fechas');
+
+        const n = lastRows.length;
+        const trabajadorTxt = selTrabajador.options[selTrabajador.selectedIndex]
+            ? selTrabajador.options[selTrabajador.selectedIndex].text
+            : '(Todos)';
+        const planillaTxt = selPlanilla.options[selPlanilla.selectedIndex]
+            ? selPlanilla.options[selPlanilla.selectedIndex].text
+            : '(Todas)';
+        const mensaje =
+            'Se eliminarán ' + n + ' registro(s) de PR_REGISTERHOUR con estos filtros:\n\n' +
+            'Planilla: ' + planillaTxt + '\n' +
+            'Fechas: ' + txtFechaIni.value + ' a ' + txtFechaFin.value + '\n' +
+            'Trabajador: ' + trabajadorTxt + '\n\n' +
+            'Esta acción no se puede deshacer.';
+
+        let ok = false;
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            ok = await HmUi.confirmar({
+                titulo: 'Borrar Tareo',
+                mensaje: mensaje,
+                textoOk: 'Borrar',
+                textoCancelar: 'Cancelar',
+            });
+        } else {
+            ok = window.confirm(mensaje);
+        }
+        if (!ok) return;
+
+        if (btnBorrar) btnBorrar.disabled = true;
+        try {
+            const data = await leerJson(await fetch('/api/tareo-ng/reporte-detalle/borrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtrosPayload())
+            }));
+            toastOk(data.mensaje || ('Eliminados: ' + (data.eliminados || 0)));
+            await buscar();
+        } catch (e) {
+            toastErr(e.message || String(e));
+            setAccionesEnabled(!!lastRows.length);
+        }
+    }
+
+    btnExcel.addEventListener('click', () => {
+        if (!lastRows.length) return;
+        const params = new URLSearchParams(filtrosPayload());
+        window.location.href = '/api/tareo-ng/reporte-detalle/excel?' + params.toString();
+    });
+
+    if (btnBorrar) {
+        btnBorrar.addEventListener('click', borrarTareos);
+    }
+
+    document.getElementById('frmReporte').addEventListener('submit', (ev) => {
+        ev.preventDefault();
+        buscar();
+    });
+    selCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        await cargarTrabajadores();
+    });
+    selPlanilla.addEventListener('change', cargarTrabajadores);
+
+    setDefaultFechas();
+    await cargarUnidades();
+    await poblarSelect('/api/selectores/companias', selCia, { keep: sessionCia });
+    if (sessionCia) {
+        await cargarPlanillas();
+        await cargarTrabajadores();
+    }
+});
+</script>
+{% endblock %}

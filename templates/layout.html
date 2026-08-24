@@ -1248,8 +1248,8 @@
                 {% endif %}
 
                 {% set es_ngservicios = (sql_database or '')|lower == 'hm_ngservicios' %}
-                {% set tareo_ng_active = request.endpoint in ('tareo_ng_importar_page', 'tareo_ng_reporte_page', 'tareo_ng_asignacion_page') %}
-                {% set show_tareo_ng = es_ngservicios and (can_menu('tareo_ng_importar') or can_menu('tareo_ng_reporte') or can_menu('tareo_ng_asignacion')) %}
+                {% set tareo_ng_active = request.endpoint in ('tareo_ng_importar_page', 'tareo_ng_reporte_page', 'tareo_ng_reporte_detalle_page', 'tareo_ng_asignacion_page') %}
+                {% set show_tareo_ng = es_ngservicios and (can_menu('tareo_ng_importar') or can_menu('tareo_ng_reporte') or can_menu('tareo_ng_reporte_detalle') or can_menu('tareo_ng_asignacion')) %}
                 {% if show_tareo_ng %}
                 <li class="sidebar-menu-parent {{ 'active' if tareo_ng_active else '' }}">
                     <a href="#submenuTareoNg"
@@ -1271,8 +1271,15 @@
                         {% endif %}
                         {% if can_menu('tareo_ng_reporte') %}
                         <li class="{{ 'active' if request.endpoint == 'tareo_ng_reporte_page' else '' }}">
-                            <a href="{{ url_for('tareo_ng_reporte_page') }}" title="Reporte de Tareos">
-                                <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte de Tareos</span>
+                            <a href="{{ url_for('tareo_ng_reporte_page') }}" title="Reporte Consolidado de Tareos">
+                                <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte Consolidado</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_ng_reporte_detalle') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_ng_reporte_detalle_page' else '' }}">
+                            <a href="{{ url_for('tareo_ng_reporte_detalle_page') }}" title="Reporte Detallado de Tareos">
+                                <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Reporte Detallado</span>
                             </a>
                         </li>
                         {% endif %}

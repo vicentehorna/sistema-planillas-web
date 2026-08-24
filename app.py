@@ -7626,10 +7626,19 @@ def tareo_ng_importar_page():
 @app.route('/tareo-ng/reporte')
 @login_required
 def tareo_ng_reporte_page():
-    """Reporte detallado de tareos — hm_ngservicios."""
+    """Reporte consolidado de tareos — hm_ngservicios."""
     if not _es_cliente_ngservicios():
         abort(404)
     return render_template('tareo_ng_reporte.html')
+
+
+@app.route('/tareo-ng/reporte-detalle')
+@login_required
+def tareo_ng_reporte_detalle_page():
+    """Reporte detallado de tareos (día a día) — hm_ngservicios."""
+    if not _es_cliente_ngservicios():
+        abort(404)
+    return render_template('tareo_ng_reporte_detalle.html')
 
 
 @app.route('/tareo-ng/asignacion')
@@ -10981,6 +10990,350 @@ def api_tareo_ng_reporte_excel():
         )
     except Exception as e:
         logging.exception("api_tareo_ng_reporte_excel")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _tareong_reporte_detalle_row_dict(r):
+    return {
+        "codigo": _jsonable_value(r.get('codigo') or r.get('person') or r.get('Person')),
+        "nombre": _jsonable_value(r.get('nombre') or r.get('name') or r.get('Name')),
+        "fecha": _jsonable_value(r.get('fecha') or r.get('registerdate') or r.get('RegisterDate')),
+        "tipo_dia": _jsonable_value(r.get('tipo_dia') or r.get('tipo')),
+        "agencia": _jsonable_value(r.get('agencia') or r.get('costcenter')),
+        "cliente": _jsonable_value(r.get('cliente') or r.get('replicationunit')),
+        "tipo_planilla": _jsonable_value(r.get('tipo_planilla') or r.get('payrolltype')),
+        "horas": _float_sp_cell(r.get('horas') if r.get('horas') is not None else r.get('hourday')),
+        "h25": _float_sp_cell(r.get('h25') if r.get('h25') is not None else r.get('extrahour25')),
+        "h35": _float_sp_cell(r.get('h35') if r.get('h35') is not None else r.get('extrahour35')),
+        "hnoc": _float_sp_cell(r.get('hnoc') if r.get('hnoc') is not None else r.get('extrahour100')),
+        "cccode": _jsonable_value(r.get('cccode')),
+    }
+
+
+def _tareong_reporte_detalle_totales(rows):
+    out = {'horas': 0.0, 'h25': 0.0, 'h35': 0.0, 'hnoc': 0.0}
+    for r in rows or []:
+        for k in out:
+            try:
+                out[k] += float(r.get(k) or 0)
+            except (TypeError, ValueError):
+                pass
+    for k in out:
+        out[k] = round(out[k], 2)
+    return out
+
+
+def _tareong_reporte_detalle_fetch_rows(
+    cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit='0'
+):
+    payrolltype_all = 'Y' if not payrolltype else 'N'
+    person_all = 'Y' if not person else 'N'
+    repunit_val = str(repunit or '0').strip() or '0'
+    if repunit_val in ('0', '*', ''):
+        repunit_all = 'Y'
+        repunit_val = ''
+    else:
+        repunit_all = 'N'
+        if len(repunit_val) > 20:
+            repunit_val = repunit_val[:20]
+    cursor.execute(
+        "EXEC sp_pr_reportetareos_detalle_web "
+        "@company=?, @payrolltype_all=?, @payrolltype=?, @fecha_all=?, @fecha_ini=?, @fecha_fin=?, "
+        "@person_all=?, @person=?, @costcenter_all=?, @costcenter=?, @repunit_all=?, @repunit=?, "
+        "@tipodia_all=?, @tipodia=?",
+        (
+            cia,
+            payrolltype_all,
+            payrolltype or '',
+            'N',
+            fecha_ini_sql,
+            fecha_fin_sql,
+            person_all,
+            person or '',
+            'Y',
+            '',
+            repunit_all,
+            repunit_val,
+            'Y',
+            '',
+        ),
+    )
+    rows_raw = _dicts_first_nonempty_resultset(cursor)
+    return [_tareong_reporte_detalle_row_dict(r) for r in rows_raw]
+
+
+def _tareong_reporte_detalle_filter_params(payrolltype, person, repunit):
+    payrolltype_all = 'Y' if not payrolltype else 'N'
+    person_all = 'Y' if not person else 'N'
+    repunit_val = str(repunit or '0').strip() or '0'
+    if repunit_val in ('0', '*', ''):
+        repunit_all = 'Y'
+        repunit_val = ''
+    else:
+        repunit_all = 'N'
+        if len(repunit_val) > 20:
+            repunit_val = repunit_val[:20]
+    return (
+        payrolltype_all,
+        payrolltype or '',
+        person_all,
+        person or '',
+        repunit_all,
+        repunit_val,
+    )
+
+
+@app.route('/api/tareo-ng/reporte-detalle', methods=['POST'])
+@login_required
+def api_tareo_ng_reporte_detalle():
+    """sp_pr_reportetareos_detalle_web — detalle día a día (PB9 sp_pr_reportetareos)."""
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    person = str(body.get('person') or body.get('trabajador') or '').strip()
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    now = datetime.now()
+    default_ini = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    default_fin = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    fecha_ini = _parse_optional_date(body.get('fecha_ini') or body.get('fecha_inicio')) or default_ini
+    fecha_fin = _parse_optional_date(body.get('fecha_fin')) or default_fin
+    if fecha_ini > fecha_fin:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final."}), 400
+
+    fecha_ini_sql = fecha_ini.strftime('%Y-%m-%d')
+    fecha_fin_sql = fecha_fin.strftime('%Y-%m-%d')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _tareong_reporte_detalle_fetch_rows(
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit=repunit
+        )
+        return jsonify({
+            "rows": rows,
+            "total": len(rows),
+            "totales": _tareong_reporte_detalle_totales(rows),
+            "fecha_ini": fecha_ini.strftime('%Y-%m-%d'),
+            "fecha_fin": fecha_fin.strftime('%Y-%m-%d'),
+        })
+    except Exception as e:
+        logging.exception("api_tareo_ng_reporte_detalle")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/reporte-detalle/excel')
+@login_required
+def api_tareo_ng_reporte_detalle_excel():
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    cia = str(request.args.get('cia') or request.args.get('company') or session.get('company') or '').strip()
+    payrolltype = str(request.args.get('payrolltype') or '').strip()
+    person = str(request.args.get('person') or request.args.get('trabajador') or '').strip()
+    repunit = _normalize_replicationunit_asig(
+        request.args.get('repunit') or request.args.get('unidad')
+    )
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    now = datetime.now()
+    default_ini = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    default_fin = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    fecha_ini = _parse_optional_date(request.args.get('fecha_ini') or request.args.get('fecha_inicio')) or default_ini
+    fecha_fin = _parse_optional_date(request.args.get('fecha_fin')) or default_fin
+    if fecha_ini > fecha_fin:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final."}), 400
+
+    fecha_ini_sql = fecha_ini.strftime('%Y-%m-%d')
+    fecha_fin_sql = fecha_fin.strftime('%Y-%m-%d')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _tareong_reporte_detalle_fetch_rows(
+            cursor, cia, payrolltype, person, fecha_ini_sql, fecha_fin_sql, repunit=repunit
+        )
+        totales = _tareong_reporte_detalle_totales(rows)
+
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Detalle"
+        headers = [
+            'Código', 'Nombre', 'Fecha', 'Tipo Día', 'Agencia', 'Cliente',
+            'Tipo Planilla', 'Horas', 'HE 25', 'HE 35', 'H NOC',
+        ]
+        ws.append(headers)
+        keys = [
+            'codigo', 'nombre', 'fecha', 'tipo_dia', 'agencia', 'cliente',
+            'tipo_planilla', 'horas', 'h25', 'h35', 'hnoc',
+        ]
+        for r in rows:
+            ws.append([r.get(k) for k in keys])
+        ws.append([
+            '', '', '', '', '', '', 'TOTALES',
+            totales.get('horas', 0), totales.get('h25', 0),
+            totales.get('h35', 0), totales.get('hnoc', 0),
+        ])
+
+        total_row = ws.max_row
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = f"A1:K{max(1, total_row)}"
+
+        border = Border(
+            left=Side(style='thin', color='D9D9D9'),
+            right=Side(style='thin', color='D9D9D9'),
+            top=Side(style='thin', color='D9D9D9'),
+            bottom=Side(style='thin', color='D9D9D9'),
+        )
+        header_fill = PatternFill('solid', fgColor='1F4E78')
+        header_font = Font(color='FFFFFF', bold=True)
+        total_fill = PatternFill('solid', fgColor='E2EFDA')
+        total_font = Font(bold=True)
+        zebra_fill = PatternFill('solid', fgColor='F7FBFF')
+
+        for row in ws.iter_rows(min_row=1, max_row=total_row, min_col=1, max_col=11):
+            for c in row:
+                c.border = border
+                c.alignment = Alignment(vertical='center')
+
+        for c in ws[1]:
+            c.fill = header_fill
+            c.font = header_font
+            c.alignment = Alignment(horizontal='center', vertical='center')
+
+        for r in range(2, total_row):
+            if r % 2 == 0:
+                for c in ws[r]:
+                    c.fill = zebra_fill
+
+        for c in ws[total_row]:
+            c.fill = total_fill
+            c.font = total_font
+
+        widths = {
+            'A': 12, 'B': 36, 'C': 12, 'D': 16, 'E': 18, 'F': 18,
+            'G': 20, 'H': 10, 'I': 10, 'J': 10, 'K': 10,
+        }
+        for col, w in widths.items():
+            ws.column_dimensions[col].width = w
+
+        for r in range(2, total_row + 1):
+            for cidx in range(8, 12):
+                cell = ws.cell(r, cidx)
+                cell.alignment = Alignment(horizontal='right', vertical='center')
+                cell.number_format = '#,##0.00'
+
+        bio = io.BytesIO()
+        wb.save(bio)
+        bio.seek(0)
+        fname = f"reporte_detallado_tareo_{fecha_ini_sql}_{fecha_fin_sql}.xlsx"
+        return send_file(
+            bio,
+            as_attachment=True,
+            download_name=fname,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        )
+    except Exception as e:
+        logging.exception("api_tareo_ng_reporte_detalle_excel")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo-ng/reporte-detalle/borrar', methods=['POST'])
+@login_required
+def api_tareo_ng_reporte_detalle_borrar():
+    """Borra de PR_REGISTERHOUR los tareos que coinciden con el filtro del reporte."""
+    if not _es_cliente_ngservicios():
+        return jsonify({"error": "Módulo Tareo NG no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    person = str(body.get('person') or body.get('trabajador') or '').strip()
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    fecha_ini = _parse_optional_date(body.get('fecha_ini') or body.get('fecha_inicio'))
+    fecha_fin = _parse_optional_date(body.get('fecha_fin'))
+    if not fecha_ini or not fecha_fin:
+        return jsonify({"error": "Indique un rango de fechas para borrar."}), 400
+    if fecha_ini > fecha_fin:
+        return jsonify({"error": "La fecha inicial no puede ser mayor que la final."}), 400
+
+    fecha_ini_sql = fecha_ini.strftime('%Y-%m-%d')
+    fecha_fin_sql = fecha_fin.strftime('%Y-%m-%d')
+    payrolltype_all, payrolltype_v, person_all, person_v, repunit_all, repunit_v = (
+        _tareong_reporte_detalle_filter_params(payrolltype, person, repunit)
+    )
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_borrar_tareos_filtrados_web "
+            "@company=?, @payrolltype_all=?, @payrolltype=?, @fecha_all=?, @fecha_ini=?, @fecha_fin=?, "
+            "@person_all=?, @person=?, @costcenter_all=?, @costcenter=?, @repunit_all=?, @repunit=?, "
+            "@tipodia_all=?, @tipodia=?",
+            (
+                cia,
+                payrolltype_all,
+                payrolltype_v,
+                'N',
+                fecha_ini_sql,
+                fecha_fin_sql,
+                person_all,
+                person_v,
+                'Y',
+                '',
+                repunit_all,
+                repunit_v,
+                'Y',
+                '',
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        row = rows[0] if rows else {}
+        eliminados = int(row.get('eliminados') or 0)
+        mensaje = str(row.get('mensaje') or '').strip() or (
+            f"Se eliminaron {eliminados} registro(s)." if eliminados else "No hay tareos para borrar."
+        )
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "eliminados": eliminados,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_tareo_ng_reporte_detalle_borrar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

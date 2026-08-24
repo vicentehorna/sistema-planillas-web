@@ -2,8 +2,11 @@
     Saldo de vacaciones por trabajador y año de control.
     Usado por: POST /reporte_saldo_vacaciones (reporte_saldo_vacaciones.html).
 
-    Requiere: f_getDias360.
+    Requiere: f_getDias360, PR_PayRollType.DiasVacaciones.
     Solo tablas temporales (#): no usa xx_saldovacaciones ni actualiza PR_Vacation.
+
+    Proporcional y descuentos: dias360 * DiasVacaciones / 360
+    (30 anuales -> /12; 15 anuales -> /24). No usar mes/anual porque se cancela.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_saldovacaciones_web]
     @company      CHAR(4),
@@ -16,12 +19,21 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @year NUMERIC(9, 0);
+    DECLARE @dias_vacaciones DECIMAL(10, 2);
 
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
 
     SET @date = CAST(@date AS DATE);
     SET @year = YEAR(@date) + 1;
+
+    SELECT @dias_vacaciones = CAST(ISNULL(pt.DiasVacaciones, 30) AS DECIMAL(10, 2))
+    FROM PR_PayRollType pt (NOLOCK)
+    WHERE pt.Company = @company
+      AND pt.PayRollType = @payrolltype;
+
+    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
+        SET @dias_vacaciones = 30;
 
     IF OBJECT_ID('tempdb..#FutureVac') IS NOT NULL DROP TABLE #FutureVac;
     IF OBJECT_ID('tempdb..#VacSaldo') IS NOT NULL DROP TABLE #VacSaldo;
@@ -57,7 +69,7 @@ BEGIN
                             (v.consumeddays - ISNULL(fv.future_days, 0)) - v.acquireddays
                         )
                     ELSE
-                        ROUND((dbo.f_getDias360(v.DateBeginProvision, @date) * 2.5) / 30, 2)
+                        ROUND(dbo.f_getDias360(v.DateBeginProvision, @date) * @dias_vacaciones / 360.0, 2)
                         - (v.consumeddays - ISNULL(fv.future_days, 0))
                 END
             ELSE 0
@@ -237,11 +249,11 @@ BEGIN
         r.descansos,
         ROUND(
             r.saldo1 + r.saldo2 + r.saldo3 + r.saldo4 + r.saldo5
-            - ROUND(r.faltas * 2.5 / 30.0, 2)
-            - ROUND(r.licencias * 2.5 / 30.0, 2)
+            - ROUND(r.faltas * @dias_vacaciones / 360.0, 2)
+            - ROUND(r.licencias * @dias_vacaciones / 360.0, 2)
             - CASE
                 WHEN r.descansos >= 60
-                THEN ROUND(r.descansos * 2.5 / 30.0, 2)
+                THEN ROUND(r.descansos * @dias_vacaciones / 360.0, 2)
                 ELSE 0
               END,
             2

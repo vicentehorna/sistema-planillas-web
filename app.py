@@ -25176,6 +25176,79 @@ def api_prestamos_eliminar():
                 pass
 
 
+@app.route('/api/prestamos/editar-cuota', methods=['POST'])
+@login_required
+def api_prestamos_editar_cuota():
+    """sp_pr_prestamos_editar_cuota_web: edita monto de cuota pendiente y recalcula totales."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    try:
+        amort_secuence = int(
+            body.get('amort_secuence')
+            or body.get('secuence')
+            or body.get('cuota_secuence')
+            or 0
+        )
+    except (TypeError, ValueError):
+        amort_secuence = 0
+    try:
+        nuevo_monto = float(body.get('amount') or body.get('monto') or body.get('nuevo_monto') or 0)
+    except (TypeError, ValueError):
+        nuevo_monto = 0
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if amort_secuence <= 0:
+        return jsonify({"error": "Seleccione la cuota a editar."}), 400
+    if nuevo_monto <= 0:
+        return jsonify({"error": "El monto de la cuota debe ser mayor a cero."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_editar_cuota_web "
+            "@company=?, @person=?, @amort_secuence=?, @nuevo_monto=?, @xlastuser=?",
+            (cia, person, amort_secuence, nuevo_monto, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "amort_secuence": _jsonable_value(result.get('amort_secuence') or amort_secuence),
+            "loansecuence": _jsonable_value(result.get('loansecuence')),
+            "amount": _jsonable_value(result.get('amount') or nuevo_monto),
+            "loadamount": _jsonable_value(result.get('loadamount')),
+            "amountquote": _jsonable_value(result.get('amountquote')),
+            "totalpending": _jsonable_value(result.get('totalpending')),
+            "totalloan": _jsonable_value(result.get('totalloan')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_editar_cuota")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/vacaciones/obtener', methods=['POST'])
 @login_required
 def api_vacaciones_obtener():

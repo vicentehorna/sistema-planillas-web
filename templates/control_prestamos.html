@@ -212,8 +212,13 @@
         padding: 0.1rem 0.35rem;
         line-height: 1;
     }
-    .table-prestamos .btn-eliminar-prestamo:disabled {
+    .table-prestamos .btn-eliminar-prestamo:disabled,
+    .table-prestamos .btn-editar-cuota:disabled {
         opacity: 0.35;
+    }
+    .table-prestamos .btn-editar-cuota {
+        padding: 0.1rem 0.35rem;
+        line-height: 1;
     }
 
     @media (max-width: 991.98px) {
@@ -258,6 +263,42 @@
                 </button>
             </div>
         </form>
+    </div>
+</div>
+
+<!-- Modal Editar cuota -->
+<div class="modal fade" id="modalEditarCuota" tabindex="-1" aria-labelledby="modalEditarCuotaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title" id="modalEditarCuotaLabel">
+                    <i class="bi bi-pencil-square text-primary"></i> Editar monto de cuota
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="frmEditarCuota" class="row g-2">
+                    <input type="hidden" id="ecAmortSecuence" value="">
+                    <div class="col-12">
+                        <label class="form-label small fw-bold text-muted mb-1">Periodo</label>
+                        <input type="text" id="ecPeriodo" class="form-control form-control-sm" readonly tabindex="-1">
+                    </div>
+                    <div class="col-12">
+                        <label for="ecMonto" class="form-label small fw-bold text-muted mb-1">Monto cuota</label>
+                        <input type="number" step="0.01" min="0.01" id="ecMonto" class="form-control form-control-sm" required>
+                    </div>
+                    <div class="col-12">
+                        <div id="ecMensaje" class="small text-danger d-none"></div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnGrabarCuota">
+                    <i class="bi bi-check2"></i> Guardar
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -432,6 +473,7 @@
                                     <th class="text-end">Monto</th>
                                     <th>Estado</th>
                                     <th>Proceso</th>
+                                    <th class="text-center col-accion">Acción</th>
                                 </tr>
                             </thead>
                             <tbody></tbody>
@@ -693,17 +735,39 @@
         document.getElementById('lblSumaPendiente').textContent = `Suma pendiente: ${fmtNum(sumaPend)}`;
 
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-3">Sin cuotas para el préstamo seleccionado</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin cuotas para el préstamo seleccionado</td></tr>';
             return;
         }
-        tbody.innerHTML = rows.map((r) => `
-            <tr>
+        tbody.innerHTML = rows.map((r) => {
+            const puedeEditar = String(r.status || '').toUpperCase() === 'P';
+            const tituloEditar = puedeEditar
+                ? 'Editar monto de cuota'
+                : 'Solo se puede editar cuotas pendientes';
+            return `<tr>
                 <td>${escHtml(fmtPeriodo(r.prperiod))}</td>
                 <td class="text-end">${fmtNum(r.amount)}</td>
                 <td>${badgeEstado(r.status, r.status_texto)}</td>
                 <td>${escHtml(r.proceso_texto || '—')}</td>
-            </tr>
-        `).join('');
+                <td class="text-center col-accion">
+                    <button type="button"
+                        class="btn btn-link text-primary btn-editar-cuota p-0"
+                        data-sec="${escHtml(r.secuence)}"
+                        ${puedeEditar ? '' : 'disabled'}
+                        title="${escHtml(tituloEditar)}"
+                        aria-label="Editar cuota">
+                        <i class="bi bi-pencil-square"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+
+        tbody.querySelectorAll('.btn-editar-cuota').forEach((btn) => {
+            btn.addEventListener('click', function (ev) {
+                ev.stopPropagation();
+                const sec = Number(this.getAttribute('data-sec'));
+                abrirEditarCuota(sec);
+            });
+        });
     }
 
     function prestamoPuedeEliminar(prestamo) {
@@ -782,7 +846,7 @@
         document.querySelector('#tblPrestamos tbody').innerHTML =
             '<tr><td colspan="8" class="text-center text-muted py-3">Cargando…</td></tr>';
         document.querySelector('#tblCuotas tbody').innerHTML =
-            '<tr><td colspan="4" class="text-center text-muted py-3">—</td></tr>';
+            '<tr><td colspan="5" class="text-center text-muted py-3">—</td></tr>';
 
         try {
             const res = await fetch('/api/prestamos/obtener', {
@@ -1032,6 +1096,95 @@
     });
     npMonto.addEventListener('input', recalcMontoCuota);
     npCuotas.addEventListener('input', recalcMontoCuota);
+
+    /* ---- Editar cuota ---- */
+    const modalEditarCuotaEl = document.getElementById('modalEditarCuota');
+    const modalEditarCuota = modalEditarCuotaEl ? new bootstrap.Modal(modalEditarCuotaEl) : null;
+    const ecAmortSecuence = document.getElementById('ecAmortSecuence');
+    const ecPeriodo = document.getElementById('ecPeriodo');
+    const ecMonto = document.getElementById('ecMonto');
+    const ecMensaje = document.getElementById('ecMensaje');
+
+    function mostrarErrorEc(msg) {
+        if (!msg) {
+            ecMensaje.classList.add('d-none');
+            ecMensaje.textContent = '';
+            return;
+        }
+        ecMensaje.textContent = msg;
+        ecMensaje.classList.remove('d-none');
+    }
+
+    function abrirEditarCuota(sec) {
+        if (!trabajadorSel) return;
+        const cuota = cuotasCache.find((c) => Number(c.secuence) === Number(sec));
+        if (!cuota) {
+            alert('No se encontró la cuota seleccionada.');
+            return;
+        }
+        if (String(cuota.status || '').toUpperCase() !== 'P') {
+            alert('Solo se puede editar el monto de cuotas pendientes.');
+            return;
+        }
+        mostrarErrorEc('');
+        ecAmortSecuence.value = String(cuota.secuence);
+        ecPeriodo.value = fmtPeriodo(cuota.prperiod);
+        ecMonto.value = Number(cuota.amount || 0).toFixed(2);
+        if (modalEditarCuota) modalEditarCuota.show();
+        setTimeout(() => {
+            ecMonto.focus();
+            ecMonto.select();
+        }, 200);
+    }
+
+    async function grabarCuotaEditada() {
+        mostrarErrorEc('');
+        if (!trabajadorSel) return mostrarErrorEc('Seleccione un trabajador.');
+        const amortSec = Number(ecAmortSecuence.value || 0);
+        const monto = Number(ecMonto.value);
+        if (!(amortSec > 0)) return mostrarErrorEc('Cuota no válida.');
+        if (!(monto > 0)) return mostrarErrorEc('Indique un monto mayor a cero.');
+
+        const btn = document.getElementById('btnGrabarCuota');
+        const personId = trabajadorSel.person;
+        const loanSecGuardado = prestamoSel ? Number(prestamoSel.secuence) : null;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Guardando…';
+        try {
+            const res = await fetch('/api/prestamos/editar-cuota', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: personId,
+                    amort_secuence: amortSec,
+                    amount: monto,
+                }),
+            });
+            await leerJson(res);
+            if (modalEditarCuota) modalEditarCuota.hide();
+            await cargarTrabajadores();
+            const row = trabajadoresCache.find((x) => x.person === personId);
+            if (row) {
+                await seleccionarTrabajador(row);
+                if (loanSecGuardado != null) {
+                    const prest = prestamosCache.find((p) => Number(p.secuence) === loanSecGuardado);
+                    if (prest) seleccionarPrestamo(prest);
+                }
+            }
+        } catch (err) {
+            mostrarErrorEc(err.message || 'No se pudo guardar el monto.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-check2"></i> Guardar';
+        }
+    }
+
+    document.getElementById('btnGrabarCuota').addEventListener('click', grabarCuotaEditada);
+    document.getElementById('frmEditarCuota').addEventListener('submit', (e) => {
+        e.preventDefault();
+        grabarCuotaEditada();
+    });
 
     (async function init() {
         try {

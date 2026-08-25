@@ -1,7 +1,7 @@
 /*
     Alta / edición de SY_ReplicationUnit — maestro web Unidad.
 
-    @modo: I = nuevo (ReplicationUnit lo ingresa el usuario, máx. 3 caracteres en mayúsculas),
+    @modo: I = nuevo (ReplicationUnit lo ingresa el usuario, máx. 4 caracteres en mayúsculas),
            U = actualizar registro existente (no modifica ReplicationUnit).
 
     Description se guarda como los primeros 40 caracteres de name.
@@ -34,9 +34,9 @@ BEGIN
         RETURN;
     END;
 
-    IF LEN(@replicationunit) > 3
+    IF LEN(@replicationunit) > 4
     BEGIN
-        RAISERROR('El código de unidad debe tener como máximo 3 caracteres.', 16, 1);
+        RAISERROR('El código de unidad debe tener como máximo 4 caracteres.', 16, 1);
         RETURN;
     END;
 

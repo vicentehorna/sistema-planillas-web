@@ -14265,8 +14265,8 @@ def api_unidades_guardar():
 
     if not replicationunit:
         return jsonify({"error": "Indique el código de unidad."}), 400
-    if len(replicationunit) > 3:
-        return jsonify({"error": "El código de unidad debe tener como máximo 3 caracteres."}), 400
+    if len(replicationunit) > 4:
+        return jsonify({"error": "El código de unidad debe tener como máximo 4 caracteres."}), 400
     if not name:
         return jsonify({"error": "Indique el nombre de la unidad."}), 400
 

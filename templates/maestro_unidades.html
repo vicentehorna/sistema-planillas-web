@@ -216,8 +216,8 @@
 
                     <div class="col-12 col-md-4" id="wrapReplicationUnit">
                         <label for="txtReplicationUnit" class="form-label fw-semibold text-muted">Unidad</label>
-                        <input type="text" id="txtReplicationUnit" class="form-control form-control-sm campo-obligatorio text-uppercase" maxlength="3" required autocomplete="off" placeholder="Ej. LIMA">
-                        <div class="form-text">Máximo 3 caracteres en mayúsculas. No se puede modificar después de guardar.</div>
+                        <input type="text" id="txtReplicationUnit" class="form-control form-control-sm campo-obligatorio text-uppercase" maxlength="4" required autocomplete="off" placeholder="Ej. 0001">
+                        <div class="form-text">Máximo 4 caracteres en mayúsculas. No se puede modificar después de guardar.</div>
                     </div>
 
                     <div class="col-12 col-md-8">
@@ -254,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function normalizarCodigoUnidad(valor) {
-        return String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+        return String(valor || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
     }
 
     async function leerJson(res) {
@@ -464,7 +464,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function guardarUnidad() {
         const payload = payloadFormulario();
         if (!payload.replicationunit) {
-            alert('Indique el código de unidad (máximo 3 caracteres).');
+            alert('Indique el código de unidad (máximo 4 caracteres).');
             return;
         }
         if (!payload.name) {

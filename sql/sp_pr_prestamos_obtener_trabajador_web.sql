@@ -49,7 +49,10 @@ BEGIN
     WHERE emp.Company = @company
       AND emp.Person = @person;
 
-    /* 2) Préstamos */
+    /* 2) Préstamos
+       Status de cabecera: si está Anulado se respeta;
+       si no, se deriva de cuotas (P si queda alguna pendiente; A si todas amortizadas).
+       Motivo: el cálculo de planilla solo pone Status='A' en amortización, no en el préstamo. */
     SELECT
         el.Person AS person,
         el.Company AS company,
@@ -60,12 +63,49 @@ BEGIN
         ISNULL(el.LoadAmount, 0) AS loadamount,
         ISNULL(el.NumberQuotes, 0) AS numberquotes,
         ISNULL(el.AMOUNTQUOTE, 0) AS amountquote,
-        el.Status AS status,
-        CASE UPPER(LTRIM(RTRIM(ISNULL(el.Status, ''))))
-            WHEN 'P' THEN 'Pendiente'
-            WHEN 'A' THEN 'Amortizado'
-            WHEN 'N' THEN 'Anulado'
-            ELSE LTRIM(RTRIM(ISNULL(el.Status, '')))
+        CASE
+            WHEN UPPER(LTRIM(RTRIM(ISNULL(el.Status, '')))) = 'N' THEN 'N'
+            WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeLoanAmortization ea (NOLOCK)
+                WHERE ea.Company = el.Company
+                  AND ea.Person = el.Person
+                  AND ea.LOANSECUENCE = el.Secuence
+                  AND UPPER(LTRIM(RTRIM(ISNULL(ea.Status, '')))) = 'P'
+            ) THEN 'P'
+            WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeLoanAmortization ea (NOLOCK)
+                WHERE ea.Company = el.Company
+                  AND ea.Person = el.Person
+                  AND ea.LOANSECUENCE = el.Secuence
+            ) THEN 'A'
+            ELSE UPPER(LTRIM(RTRIM(ISNULL(el.Status, ''))))
+        END AS status,
+        CASE
+            WHEN UPPER(LTRIM(RTRIM(ISNULL(el.Status, '')))) = 'N' THEN 'Anulado'
+            WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeLoanAmortization ea (NOLOCK)
+                WHERE ea.Company = el.Company
+                  AND ea.Person = el.Person
+                  AND ea.LOANSECUENCE = el.Secuence
+                  AND UPPER(LTRIM(RTRIM(ISNULL(ea.Status, '')))) = 'P'
+            ) THEN 'Pendiente'
+            WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeLoanAmortization ea (NOLOCK)
+                WHERE ea.Company = el.Company
+                  AND ea.Person = el.Person
+                  AND ea.LOANSECUENCE = el.Secuence
+            ) THEN 'Amortizado'
+            ELSE
+                CASE UPPER(LTRIM(RTRIM(ISNULL(el.Status, ''))))
+                    WHEN 'P' THEN 'Pendiente'
+                    WHEN 'A' THEN 'Amortizado'
+                    WHEN 'N' THEN 'Anulado'
+                    ELSE LTRIM(RTRIM(ISNULL(el.Status, '')))
+                END
         END AS status_texto,
         el.LOANCLASS AS loanclass,
         el.LoanType AS loantype,

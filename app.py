@@ -25204,41 +25204,64 @@ def api_prestamos_eliminar():
 @app.route('/api/prestamos/editar-cuota', methods=['POST'])
 @login_required
 def api_prestamos_editar_cuota():
-    """sp_pr_prestamos_editar_cuota_web: edita monto de cuota pendiente y recalcula totales."""
+    """Deprecated: usar /api/prestamos/guardar-cuotas (valida suma = préstamo)."""
+    return jsonify({
+        "error": "Use Guardar cuotas en el cuadro de amortizaciones para editar montos pendientes."
+    }), 410
+
+
+@app.route('/api/prestamos/guardar-cuotas', methods=['POST'])
+@login_required
+def api_prestamos_guardar_cuotas():
+    """sp_pr_prestamos_guardar_cuotas_web: guarda montos pendientes validando suma = préstamo."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     person = str(body.get('person') or '').strip()
     try:
-        amort_secuence = int(
-            body.get('amort_secuence')
-            or body.get('secuence')
-            or body.get('cuota_secuence')
-            or 0
-        )
+        loan_secuence = int(body.get('loan_secuence') or body.get('loansecuence') or body.get('secuence') or 0)
     except (TypeError, ValueError):
-        amort_secuence = 0
-    try:
-        nuevo_monto = float(body.get('amount') or body.get('monto') or body.get('nuevo_monto') or 0)
-    except (TypeError, ValueError):
-        nuevo_monto = 0
+        loan_secuence = 0
+    raw_cuotas = body.get('cuotas') or body.get('amortizaciones') or []
+    if not isinstance(raw_cuotas, list):
+        return jsonify({"error": "Indique la lista de cuotas."}), 400
+
+    cuotas = []
+    for item in raw_cuotas:
+        if not isinstance(item, dict):
+            continue
+        try:
+            sec = int(item.get('secuence') or item.get('amort_secuence') or 0)
+            amt = float(item.get('amount') or item.get('monto') or 0)
+        except (TypeError, ValueError):
+            continue
+        if sec > 0:
+            cuotas.append({"secuence": sec, "amount": round(amt, 2)})
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
     if not person:
         return jsonify({"error": "Seleccione un trabajador."}), 400
-    if amort_secuence <= 0:
-        return jsonify({"error": "Seleccione la cuota a editar."}), 400
-    if nuevo_monto <= 0:
-        return jsonify({"error": "El monto de la cuota debe ser mayor a cero."}), 400
+    if loan_secuence <= 0:
+        return jsonify({"error": "Seleccione un préstamo."}), 400
+    if not cuotas:
+        return jsonify({"error": "Indique los montos de las cuotas pendientes."}), 400
+    if any(c['amount'] <= 0 for c in cuotas):
+        return jsonify({"error": "Cada cuota pendiente debe tener monto mayor a cero."}), 400
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_prestamos_editar_cuota_web "
-            "@company=?, @person=?, @amort_secuence=?, @nuevo_monto=?, @xlastuser=?",
-            (cia, person, amort_secuence, nuevo_monto, _xlastuser_id()),
+            "EXEC sp_pr_prestamos_guardar_cuotas_web "
+            "@company=?, @person=?, @loan_secuence=?, @cuotas_text=?, @xlastuser=?",
+            (
+                cia,
+                person,
+                loan_secuence,
+                '|'.join(f"{c['secuence']}:{c['amount']:.2f}" for c in cuotas),
+                _xlastuser_id(),
+            ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         result = rows[0] if rows else {}
@@ -25250,16 +25273,155 @@ def api_prestamos_editar_cuota():
             "ok": True,
             "company": _jsonable_value(result.get('company') or cia),
             "person": _jsonable_value(result.get('person') or person),
-            "amort_secuence": _jsonable_value(result.get('amort_secuence') or amort_secuence),
-            "loansecuence": _jsonable_value(result.get('loansecuence')),
-            "amount": _jsonable_value(result.get('amount') or nuevo_monto),
+            "loan_secuence": _jsonable_value(result.get('loan_secuence') or loan_secuence),
             "loadamount": _jsonable_value(result.get('loadamount')),
             "amountquote": _jsonable_value(result.get('amountquote')),
-            "totalpending": _jsonable_value(result.get('totalpending')),
-            "totalloan": _jsonable_value(result.get('totalloan')),
+            "suma_cuotas": _jsonable_value(result.get('suma_cuotas')),
+            "cuotas_actualizadas": _jsonable_value(result.get('cuotas_actualizadas')),
         })
     except Exception as e:
-        logging.exception("api_prestamos_editar_cuota")
+        logging.exception("api_prestamos_guardar_cuotas")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/agregar-cuota', methods=['POST'])
+@login_required
+def api_prestamos_agregar_cuota():
+    """sp_pr_prestamos_agregar_cuota_web: inserta cuota pendiente en préstamo activo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    try:
+        loan_secuence = int(body.get('loan_secuence') or body.get('loansecuence') or body.get('secuence') or 0)
+    except (TypeError, ValueError):
+        loan_secuence = 0
+    prperiod = str(body.get('prperiod') or body.get('periodo') or '').strip()
+    try:
+        amount = round(float(body.get('amount') or body.get('monto') or 0), 2)
+    except (TypeError, ValueError):
+        amount = 0
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if loan_secuence <= 0:
+        return jsonify({"error": "Seleccione un préstamo."}), 400
+    if not prperiod:
+        return jsonify({"error": "Indique el periodo de la cuota."}), 400
+    if amount <= 0:
+        return jsonify({"error": "El monto de la cuota debe ser mayor a cero."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_agregar_cuota_web "
+            "@company=?, @person=?, @loan_secuence=?, @prperiod=?, @amount=?, @xlastuser=?",
+            (cia, person, loan_secuence, prperiod, amount, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "loan_secuence": _jsonable_value(result.get('loan_secuence') or loan_secuence),
+            "amort_secuence": _jsonable_value(result.get('amort_secuence')),
+            "prperiod": _jsonable_value(result.get('prperiod')),
+            "amount": _jsonable_value(result.get('amount')),
+            "loadamount": _jsonable_value(result.get('loadamount')),
+            "suma_cuotas": _jsonable_value(result.get('suma_cuotas')),
+            "numberquotes": _jsonable_value(result.get('numberquotes')),
+            "amountquote": _jsonable_value(result.get('amountquote')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_agregar_cuota")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/prestamos/eliminar-cuota', methods=['POST'])
+@login_required
+def api_prestamos_eliminar_cuota():
+    """sp_pr_prestamos_eliminar_cuota_web: elimina cuota pendiente del préstamo."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    try:
+        loan_secuence = int(body.get('loan_secuence') or body.get('loansecuence') or body.get('secuence') or 0)
+    except (TypeError, ValueError):
+        loan_secuence = 0
+    try:
+        amort_secuence = int(
+            body.get('amort_secuence') or body.get('amortsecuence') or body.get('cuota_secuence') or 0
+        )
+    except (TypeError, ValueError):
+        amort_secuence = 0
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if loan_secuence <= 0:
+        return jsonify({"error": "Seleccione un préstamo."}), 400
+    if amort_secuence <= 0:
+        return jsonify({"error": "Indique la cuota a eliminar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_eliminar_cuota_web "
+            "@company=?, @person=?, @loan_secuence=?, @amort_secuence=?, @xlastuser=?",
+            (cia, person, loan_secuence, amort_secuence, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "loan_secuence": _jsonable_value(result.get('loan_secuence') or loan_secuence),
+            "amort_secuence_eliminada": _jsonable_value(result.get('amort_secuence_eliminada')),
+            "loadamount": _jsonable_value(result.get('loadamount')),
+            "suma_cuotas": _jsonable_value(result.get('suma_cuotas')),
+            "numberquotes": _jsonable_value(result.get('numberquotes')),
+            "amountquote": _jsonable_value(result.get('amountquote')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_eliminar_cuota")
         err = str(e)
         if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
             m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)

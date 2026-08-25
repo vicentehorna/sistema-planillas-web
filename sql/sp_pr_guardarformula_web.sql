@@ -92,8 +92,9 @@ BEGIN
             WHEN 'V' THEN 'Vacaciones'
             ELSE @flag_insertar
         END;
+        /* Mensaje sin acentos: el ODBC/latin1 corrompe UTF-8 en RAISERROR. */
         RAISERROR(
-            'El concepto de la cabecera ("%s") debe tener Insertar en = Ninguno en el maestro de conceptos. Actualmente está en: %s. Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.',
+            'El concepto de la cabecera ("%s") debe tener Insertar en = Ninguno en el maestro de conceptos. Actualmente esta en: %s. Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la formula.',
             16, 1, @concept_desc, @insertar_txt);
         RETURN;
     END;

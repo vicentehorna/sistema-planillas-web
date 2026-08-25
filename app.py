@@ -13439,12 +13439,29 @@ def _afp_detalle_dict(r):
 
 def _sql_error_message(exc):
     err = str(exc)
-    if 'RAISERROR' in err or '50000' in err:
-        parts = err.split(']')
-        if len(parts) > 1:
-            return parts[-1].strip(" ()'\"")
+    # pyodbc: ('42000', '[...][SQL Server]mensaje (50000) (SQLExecDirectW)')
+    if 'RAISERROR' in err or '50000' in err or '[SQL Server]' in err:
+        if '[SQL Server]' in err:
+            err = err.split('[SQL Server]', 1)[-1]
+        else:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1]
+        err = err.strip(" ()'\"")
+        for suf in ('(SQLExecDirectW)', '(50000)'):
+            if err.endswith(suf):
+                err = err[: -len(suf)].rstrip(" ()'\"")
+            idx = err.rfind(suf)
+            if idx > 0:
+                err = err[:idx].rstrip(" ()'\"")
+        # Mojibake típico UTF-8 leído como Latin-1
+        if 'Ã' in err or 'Â' in err:
+            try:
+                err = err.encode('latin-1').decode('utf-8')
+            except Exception:
+                pass
+        return err.strip() or str(exc)
     return err
-
 
 @app.route('/api/afps/listado', methods=['POST'])
 @login_required
@@ -14824,10 +14841,49 @@ def api_formulas_guardar():
 
     detalle_xml = _formulas_detalle_to_xml(detalle_lineas)
 
+    _insertar_labels = {
+        'M': 'Mensual',
+        'Q': 'Quincena',
+        'L': 'Liquidación',
+        'G': 'Gratificación',
+        'S': 'Semanal',
+        'V': 'Vacaciones',
+    }
+
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Validación previa (alta y edición): Insertar en = Ninguno. Mensaje UTF-8 limpio.
+        cursor.execute(
+            """
+            SELECT
+                UPPER(LTRIM(RTRIM(ISNULL(flaginsertar, 'N')))),
+                LTRIM(RTRIM(ISNULL(Description, FormulaCode)))
+            FROM PR_Concept (NOLOCK)
+            WHERE Company = ?
+              AND Concept = ?
+            """,
+            (cia, concept),
+        )
+        conc_row = cursor.fetchone()
+        if not conc_row:
+            return jsonify({
+                "error": "El concepto de la cabecera no existe en el maestro de conceptos.",
+            }), 400
+        flag_ins = str(conc_row[0] or 'N').strip().upper()[:1] or 'N'
+        if flag_ins != 'N':
+            desc = str(conc_row[1] or concept).strip() or concept
+            destino = _insertar_labels.get(flag_ins, flag_ins)
+            return jsonify({
+                "error": (
+                    f'El concepto de la cabecera ("{desc}") debe tener Insertar en = Ninguno '
+                    f'en el maestro de conceptos. Actualmente está en: {destino}. '
+                    f'Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.'
+                ),
+            }), 400
+
         cursor.execute(
             "EXEC sp_pr_guardarformula_web "
             "@modo=?, @company=?, @formulaheader=?, @payrolltype=?, @proccestype=?, "
@@ -14872,7 +14928,7 @@ def api_formulas_guardar():
                 conn.rollback()
             except Exception:
                 pass
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": _sql_error_message(e)}), 500
     finally:
         if conn:
             try:

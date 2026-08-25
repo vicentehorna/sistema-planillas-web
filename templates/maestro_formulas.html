@@ -726,6 +726,9 @@
             const opt = document.createElement('option');
             opt.value = item.id != null ? item.id : item.value;
             opt.textContent = item.text != null ? item.text : item.label;
+            if (item.flaginsertar != null && item.flaginsertar !== '') {
+                opt.dataset.flaginsertar = String(item.flaginsertar).toUpperCase().slice(0, 1);
+            }
             selectEl.appendChild(opt);
         });
         if (valPrev && Array.from(selectEl.options).some((o) => o.value === valPrev)) {
@@ -1814,14 +1817,29 @@
         return map[f] || f;
     }
 
+    function flagInsertarConcepto(conceptId) {
+        const id = String(conceptId || '').trim();
+        if (!id) return null;
+        const item = (cacheConceptos || []).find((c) => String(c.id) === id);
+        if (item && item.flaginsertar != null && String(item.flaginsertar).trim() !== '') {
+            return String(item.flaginsertar).toUpperCase().slice(0, 1) || 'N';
+        }
+        const sel = document.getElementById('cboConcepto');
+        const opt = sel && sel.selectedOptions && sel.selectedOptions[0];
+        if (opt && String(opt.value) === id && opt.dataset.flaginsertar) {
+            return String(opt.dataset.flaginsertar).toUpperCase().slice(0, 1) || 'N';
+        }
+        return null;
+    }
+
     function validarConceptoInsertarNinguno(conceptId) {
         const id = String(conceptId || '').trim();
         if (!id) return 'Seleccione el concepto de la fórmula.';
-        const item = (cacheConceptos || []).find((c) => String(c.id) === id);
-        if (!item) return null; // el SP valida en servidor
-        const flag = String(item.flaginsertar || 'N').toUpperCase().slice(0, 1) || 'N';
+        const flag = flagInsertarConcepto(id);
+        if (flag == null) return null; // sin dato local: API/SP validan
         if (flag === 'N') return null;
-        const nombre = item.text || id;
+        const item = (cacheConceptos || []).find((c) => String(c.id) === id);
+        const nombre = (item && item.text) || id;
         return (
             `El concepto de la cabecera ("${nombre}") debe tener Insertar en = Ninguno en el maestro de conceptos. ` +
             `Actualmente está en: ${labelInsertarEn(flag)}. Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.`
@@ -1852,25 +1870,25 @@
     async function guardarFormula() {
         const payload = payloadGuardar();
         if (!payload.cia || !payload.payrolltype || !payload.proccestype) {
-            alert('Seleccione compañía, planilla y proceso en los filtros.');
+            hmAdvertencia('Seleccione compañía, planilla y proceso en los filtros.');
             return;
         }
         if (!payload.concept) {
-            alert('Seleccione el concepto de la fórmula.');
+            hmAdvertencia('Seleccione el concepto de la fórmula.');
             return;
         }
         const errInsertar = validarConceptoInsertarNinguno(payload.concept);
         if (errInsertar) {
-            alert(errInsertar);
+            hmAdvertencia(errInsertar);
             return;
         }
         if (!Array.isArray(payload.detalle) || payload.detalle.length === 0) {
-            alert('La fórmula debe tener al menos una línea de detalle. Use Agregar antes de guardar.');
+            hmAdvertencia('La fórmula debe tener al menos una línea de detalle. Use Agregar antes de guardar.');
             return;
         }
         const errConstruccion = validarConstruccionFormula(payload);
         if (errConstruccion) {
-            alert(errConstruccion);
+            hmAdvertencia(errConstruccion);
             return;
         }
         const btn = document.getElementById('btnGuardarFormula');
@@ -1894,7 +1912,7 @@
             const row = formulasCache.find((x) => x.formulaheader === data.formulaheader);
             if (row) await seleccionarFormula(row);
         } catch (err) {
-            alert(err.message || 'No se pudo guardar.');
+            hmAdvertencia(err.message || 'No se pudo guardar.');
         } finally {
             btn.disabled = false;
             btn.innerHTML = txt;
@@ -1907,6 +1925,10 @@
     });
 
     document.getElementById('btnNuevaFormula').addEventListener('click', nuevaFormula);
+    document.getElementById('cboConcepto').addEventListener('change', function () {
+        const err = validarConceptoInsertarNinguno(this.value);
+        if (err) hmAdvertencia(err);
+    });
     document.getElementById('btnCopiarFormulasPlanilla').addEventListener('click', abrirModalCopiarPlanilla);
     document.getElementById('btnConfirmarCopiarPlanilla').addEventListener('click', confirmarCopiarPlanilla);
     document.getElementById('btnGuardarFormula').addEventListener('click', guardarFormula);

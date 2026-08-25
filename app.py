@@ -10202,6 +10202,31 @@ def _tareong_norm_text(value, max_len=255):
     return str(value or '').strip()[:max_len]
 
 
+def _tareong_norm_dni(value, max_len=20):
+    """Normaliza DNI desde Excel sin pegar el '0' de floats (p.ej. 41192534.0 → 411925340)."""
+    if value is None:
+        return ''
+    if isinstance(value, bool):
+        return ''
+    if isinstance(value, int):
+        s = str(value)
+    elif isinstance(value, float):
+        if value != value:  # NaN
+            return ''
+        if value == int(value):
+            s = str(int(value))
+        else:
+            s = str(value).strip()
+            if re.fullmatch(r'\d+\.0+', s):
+                s = s.split('.', 1)[0]
+    else:
+        s = str(value).strip()
+        if re.fullmatch(r'\d+\.0+', s):
+            s = s.split('.', 1)[0]
+    s = re.sub(r'\D', '', s)
+    return s[:max_len]
+
+
 def _tareong_read_sheet_rows(file_storage):
     """Lee la primera hoja (.xls vía xlrd, .xlsx vía openpyxl)."""
     data = file_storage.read()
@@ -10342,7 +10367,7 @@ def _tareong_parse_excel(file_storage):
     for excel_row_num, row in enumerate(rows_raw[data_start:], start=data_start + 1):
         if not row or person_col >= len(row):
             continue
-        person = re.sub(r'\D', '', _tareong_norm_text(row[person_col], 20))
+        person = _tareong_norm_dni(row[person_col], 20)
         name = _tareong_norm_text(row[name_col] if name_col < len(row) else '', 255)
         if not person and not name:
             continue

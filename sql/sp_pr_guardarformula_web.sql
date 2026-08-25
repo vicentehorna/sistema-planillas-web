@@ -60,6 +60,44 @@ BEGIN
         RETURN;
     END;
 
+    /* Cabecera: el concepto debe tener Insertar en = Ninguno (flaginsertar = N). */
+    DECLARE @flag_insertar CHAR(1);
+    DECLARE @concept_desc  VARCHAR(255);
+    DECLARE @insertar_txt  VARCHAR(40);
+
+    SELECT
+        @flag_insertar = UPPER(LTRIM(RTRIM(ISNULL(flaginsertar, 'N')))),
+        @concept_desc = LTRIM(RTRIM(ISNULL(Description, FormulaCode)))
+    FROM PR_Concept (NOLOCK)
+    WHERE Company = @company
+      AND Concept = @concept;
+
+    IF @flag_insertar IS NULL
+    BEGIN
+        RAISERROR('El concepto de la cabecera no existe en el maestro de conceptos.', 16, 1);
+        RETURN;
+    END;
+
+    IF @flag_insertar = ''
+        SET @flag_insertar = 'N';
+
+    IF @flag_insertar <> 'N'
+    BEGIN
+        SET @insertar_txt = CASE @flag_insertar
+            WHEN 'M' THEN 'Mensual'
+            WHEN 'Q' THEN 'Quincena'
+            WHEN 'L' THEN 'Liquidación'
+            WHEN 'G' THEN 'Gratificación'
+            WHEN 'S' THEN 'Semanal'
+            WHEN 'V' THEN 'Vacaciones'
+            ELSE @flag_insertar
+        END;
+        RAISERROR(
+            'El concepto de la cabecera ("%s") debe tener Insertar en = Ninguno en el maestro de conceptos. Actualmente está en: %s. Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.',
+            16, 1, @concept_desc, @insertar_txt);
+        RETURN;
+    END;
+
     IF @tipo = 'N'
         SET @conceptcond = NULL;
     IF @tipo <> 'V'

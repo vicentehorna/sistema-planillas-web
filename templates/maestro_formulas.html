@@ -1800,6 +1800,34 @@
         return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z'].includes(t);
     }
 
+    function labelInsertarEn(flag) {
+        const f = String(flag || 'N').toUpperCase().slice(0, 1) || 'N';
+        const map = {
+            N: 'Ninguno',
+            M: 'Mensual',
+            Q: 'Quincena',
+            L: 'Liquidación',
+            G: 'Gratificación',
+            S: 'Semanal',
+            V: 'Vacaciones',
+        };
+        return map[f] || f;
+    }
+
+    function validarConceptoInsertarNinguno(conceptId) {
+        const id = String(conceptId || '').trim();
+        if (!id) return 'Seleccione el concepto de la fórmula.';
+        const item = (cacheConceptos || []).find((c) => String(c.id) === id);
+        if (!item) return null; // el SP valida en servidor
+        const flag = String(item.flaginsertar || 'N').toUpperCase().slice(0, 1) || 'N';
+        if (flag === 'N') return null;
+        const nombre = item.text || id;
+        return (
+            `El concepto de la cabecera ("${nombre}") debe tener Insertar en = Ninguno en el maestro de conceptos. ` +
+            `Actualmente está en: ${labelInsertarEn(flag)}. Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.`
+        );
+    }
+
     function validarConstruccionFormula(payload) {
         const tipoH = String(payload.tipo || 'N').toUpperCase().slice(0, 1) || 'N';
         const cond = String(payload.conceptcond || '').trim();
@@ -1829,6 +1857,11 @@
         }
         if (!payload.concept) {
             alert('Seleccione el concepto de la fórmula.');
+            return;
+        }
+        const errInsertar = validarConceptoInsertarNinguno(payload.concept);
+        if (errInsertar) {
+            alert(errInsertar);
             return;
         }
         if (!Array.isArray(payload.detalle) || payload.detalle.length === 0) {

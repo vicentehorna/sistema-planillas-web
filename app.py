@@ -14733,10 +14733,16 @@ def api_formulas_selectores_edicion():
         cursor = conn.cursor()
 
         cursor.execute("EXEC sp_pr_selectorconceptos_web @cia=?", (cia,))
-        conceptos = [
-            {"id": r.concept, "text": r.description}
-            for r in cursor.fetchall()
-        ]
+        conceptos = []
+        for r in cursor.fetchall():
+            item = {"id": r.concept, "text": r.description}
+            try:
+                item["flaginsertar"] = (
+                    str(getattr(r, "flaginsertar", None) or "N").strip().upper()[:1] or "N"
+                )
+            except Exception:
+                item["flaginsertar"] = "N"
+            conceptos.append(item)
 
         cursor.execute(
             "EXEC sp_pr_selectorprocesos_web @cia=?, @payrolltype=?",

@@ -10,7 +10,8 @@ BEGIN
 
     SELECT
         PR_CONCEPT.CONCEPT AS concept,
-        PR_CONCEPT.DESCRIPTION AS description
+        PR_CONCEPT.DESCRIPTION AS description,
+        ISNULL(UPPER(LTRIM(RTRIM(PR_CONCEPT.flaginsertar))), 'N') AS flaginsertar
     FROM PR_CONCEPT
     WHERE PR_CONCEPT.STATUS = 'A'
       AND PR_CONCEPT.COMPANY = @cia

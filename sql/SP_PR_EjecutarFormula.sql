@@ -38,10 +38,11 @@ Begin
 	declare @tipo varchar(20), @opera varchar(20), @conceptid varchar(20), @grupo varchar(20), @parameter varchar(20), @flagtruncate char(1), @TipoLiq char(1)
 	declare @num numeric(19,4), @num2 numeric(19,4), @importe numeric(19,4), @importecond numeric(19,4), @pos int, @cuenta_total int
 	declare @valor numeric(19,4), @numero numeric(19,4),@numberini numeric(9,0), @numberfin numeric(9,0), @suma_total numeric(19,4)
-	declare @query varchar(1024), @query1 varchar(1024), @query2 varchar(1024), @process varchar(20), @period_ini varchar(20), @period_begin varchar(20), @period_end varchar(20)
+	declare @query varchar(max), @query1 varchar(max), @query2 varchar(max), @process varchar(20), @period_ini varchar(20), @period_begin varchar(20), @period_end varchar(20)
 	declare @concept varchar(20), @conceptcond varchar(20), @tipocond char(1), @periodoini varchar(20), @periodofin varchar(20), @formulaid varchar(20)
 	declare @ceasedate datetime, @fechaingreso datetime
 	declare @conceptcode varchar(50), @flag_cts char(1), @conceptlist varchar(500), @divisor numeric(19,4)
+	declare @compiledexpr nvarchar(max), @expr_k nvarchar(max), @ph nvarchar(200), @code_k varchar(80), @p1 int, @p2 int
 
 	set @flag_cts = case when isnull((select ShortName from pr_processtype where ProcessType = @processtype),'') = 'CTS' then 'Y' else 'N' end 
 	
@@ -118,18 +119,79 @@ Begin
 
 
 	Declare formula Cursor For
-		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor
+		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor, PR_FormulaDetail.CompiledExpr
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype
 		and ((@pos > 0 and PR_FormulaDetail.line <= @pos) or (@pos = 0))
 		order by line
 
 		OPEN formula 
-		FETCH NEXT FROM formula INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist, @divisor
+		FETCH NEXT FROM formula INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist, @divisor, @compiledexpr
 		WHILE @@FETCH_STATUS = 0 
 		BEGIN 
 			
 			set @op = case when @opera = 'M' then ' - ' else case when @opera = 'P' then ' + ' else case when @opera = 'X' then ' * ' else case when @opera = 'D' then ' / ' else case when @opera = 'T' then '' else '' end end end end end
+			IF @tipo = 'K' /* Código condicional compilado al guardar */
+			BEGIN
+				SET @expr_k = ISNULL(@compiledexpr, N'')
+				WHILE CHARINDEX(N'#C:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#C:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 ISNULL(EC.ConceptValueLo, EC.ConceptValue)
+						FROM PR_EmployeePayRollConcept EC
+						INNER JOIN PR_Concept C ON C.Concept = EC.Concept AND C.Company = @cia
+						WHERE EC.Company = @cia AND EC.PRPeriod = @period AND EC.Person = @person
+						  AND EC.PayRollType = @payrolltype AND EC.ProcessType = @processtype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = @code_k
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), @importe))
+				END
+				WHILE CHARINDEX(N'#P:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#P:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 CASE
+							WHEN ParameterTypeValue = 'N' THEN ParameterNumberValue
+							WHEN ISNUMERIC(ParameterTextValue) = 1 THEN CONVERT(NUMERIC(19,4), ParameterTextValue)
+							ELSE 0
+						END
+						FROM PR_Parameter
+						WHERE Company = @cia AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				WHILE CHARINDEX(N'#A:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#A:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 P.ConceptValue
+						FROM PR_EmployeeConcept P
+						INNER JOIN PR_Concept C ON C.Concept = P.Concept AND C.Company = @cia
+						WHERE P.Company = @cia AND P.PayRollType = @payrolltype AND P.Person = @person
+						  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = @code_k
+						  AND ((FlagFrecuencyType = 'P' AND PRPeriodStart <= @period) OR (FlagFrecuencyType = 'T' AND @period BETWEEN PRPeriodStart AND PRPeriodEnd))
+						  AND (P.FlagFrecuencyType = 'T' OR (P.FlagFrecuencyType = 'P' AND P.PRPeriodStart = (
+								SELECT MAX(T.PRPeriodStart) FROM PR_EmployeeConcept T
+								WHERE T.Company = P.Company AND T.Person = P.Person AND T.Concept = P.Concept
+								  AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				SET @query = @query + CONVERT(VARCHAR(MAX), @expr_k) + @op
+			END
 			IF @tipo = 'A'
 			BEGIN
 				--print @conceptid
@@ -441,7 +503,7 @@ Begin
 			
 		FETCH NEXT FROM formula
 	
-		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist, @divisor
+		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @TipoLiq, @conceptlist, @divisor, @compiledexpr
 		END 
 		
 		CLOSE formula
@@ -453,7 +515,7 @@ Begin
 		set @query2 = ''
 
 		Declare formula2 Cursor For
-		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor
+		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor, PR_FormulaDetail.CompiledExpr
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype
 		and (@pos > 0 and PR_FormulaDetail.line > @pos)
@@ -461,11 +523,72 @@ Begin
 	
 	
 		OPEN formula2 
-		FETCH NEXT FROM formula2 INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist, @divisor
+		FETCH NEXT FROM formula2 INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist, @divisor, @compiledexpr
 		WHILE @@FETCH_STATUS = 0 
 		BEGIN 
 			
 			set @op = case when @opera = 'M' then ' - ' else case when @opera = 'P' then ' + ' else case when @opera = 'X' then ' * ' else case when @opera = 'D' then ' / ' else '' end end end end
+			IF @tipo = 'K'
+			BEGIN
+				SET @expr_k = ISNULL(@compiledexpr, N'')
+				WHILE CHARINDEX(N'#C:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#C:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 ISNULL(EC.ConceptValueLo, EC.ConceptValue)
+						FROM PR_EmployeePayRollConcept EC
+						INNER JOIN PR_Concept C ON C.Concept = EC.Concept AND C.Company = @cia
+						WHERE EC.Company = @cia AND EC.PRPeriod = @period AND EC.Person = @person
+						  AND EC.PayRollType = @payrolltype AND EC.ProcessType = @processtype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = @code_k
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), @importe))
+				END
+				WHILE CHARINDEX(N'#P:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#P:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(ISNULL(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3), ''))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 CASE
+							WHEN ParameterTypeValue = 'N' THEN ParameterNumberValue
+							WHEN ISNUMERIC(ParameterTextValue) = 1 THEN CONVERT(NUMERIC(19,4), ParameterTextValue)
+							ELSE 0
+						END
+						FROM PR_Parameter
+						WHERE Company = @cia AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				WHILE CHARINDEX(N'#A:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#A:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 P.ConceptValue
+						FROM PR_EmployeeConcept P
+						INNER JOIN PR_Concept C ON C.Concept = P.Concept AND C.Company = @cia
+						WHERE P.Company = @cia AND P.PayRollType = @payrolltype AND P.Person = @person
+						  AND UPPER(LTRIM(RTRIM(ISNULL(C.FormulaCode, '')))) = @code_k
+						  AND ((FlagFrecuencyType = 'P' AND PRPeriodStart <= @period) OR (FlagFrecuencyType = 'T' AND @period BETWEEN PRPeriodStart AND PRPeriodEnd))
+						  AND (P.FlagFrecuencyType = 'T' OR (P.FlagFrecuencyType = 'P' AND P.PRPeriodStart = (
+								SELECT MAX(T.PRPeriodStart) FROM PR_EmployeeConcept T
+								WHERE T.Company = P.Company AND T.Person = P.Person AND T.Concept = P.Concept
+								  AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				SET @query2 = @query2 + CONVERT(VARCHAR(MAX), @expr_k) + @op
+			END
 			IF @tipo = 'A'
 			BEGIN
 				--set @importe = ISNULL((select P.ConceptValue from
@@ -605,7 +728,7 @@ Begin
 			
 		FETCH NEXT FROM formula2
 	
-		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist, @divisor
+		INTO  @tipo, @opera, @conceptid, @grupo, @numero, @parameter, @process, @periodoini, @periodofin,@numberini, @numberfin, @conceptlist, @divisor, @compiledexpr
 		END 
 		
 		CLOSE formula2

@@ -78,7 +78,9 @@ BEGIN
         fd.NumberFIN AS numberfin,
         fd.TipoLiq AS tipoliq,
         fd.ConceptList AS conceptlist,
-        fd.Divisor AS divisor
+        fd.Divisor AS divisor,
+        fd.ScriptSource AS scriptsource,
+        fd.CompiledExpr AS compiledexpr
     FROM PR_FormulaDetail fd (NOLOCK)
         LEFT JOIN PR_Concept c (NOLOCK)
             ON fd.Concept = c.Concept

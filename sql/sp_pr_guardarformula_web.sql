@@ -196,8 +196,8 @@ BEGIN
             CONTINUE;
         END;
 
-        IF ISNULL(@t1, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z')
-           AND ISNULL(@t2, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z')
+        IF ISNULL(@t1, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K')
+           AND ISNULL(@t2, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K')
            AND ISNULL(@o1, '') NOT IN ('M', 'P', 'X', 'D')
         BEGIN
             RAISERROR(
@@ -207,6 +207,20 @@ BEGIN
         END;
 
         SET @i = @i + 1;
+    END;
+
+    /* Tipo K (Código): debe traer expresión compilada; se recomienda una sola línea K. */
+    IF EXISTS (
+        SELECT 1
+        FROM @xml.nodes('/root/l') AS T(x)
+        WHERE UPPER(LTRIM(RTRIM(ISNULL(x.value('(tipo)[1]', 'varchar(5)'), '')))) = 'K'
+          AND (
+                NULLIF(LTRIM(RTRIM(x.value('(compiledexpr)[1]', 'nvarchar(max)'))), '') IS NULL
+            )
+    )
+    BEGIN
+        RAISERROR('Línea Código (K): falta la expresión compilada. Valide el código antes de guardar.', 16, 1);
+        RETURN;
     END;
 
     BEGIN TRY
@@ -286,7 +300,8 @@ BEGIN
         INSERT INTO PR_FormulaDetail (
             FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
             XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-            NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
+            NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor,
+            ScriptSource, CompiledExpr
         )
         SELECT
             @formulaheader,
@@ -307,7 +322,9 @@ BEGIN
             NULLIF(x.value('(numberfin)[1]', 'decimal(18,0)'), 0),
             NULLIF(LTRIM(RTRIM(x.value('(tipoliq)[1]', 'char(1)'))), ''),
             NULLIF(LTRIM(RTRIM(x.value('(conceptlist)[1]', 'varchar(500)'))), ''),
-            NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0)
+            NULLIF(x.value('(divisor)[1]', 'decimal(18,4)'), 0),
+            NULLIF(x.value('(scriptsource)[1]', 'nvarchar(max)'), ''),
+            NULLIF(x.value('(compiledexpr)[1]', 'nvarchar(max)'), '')
         FROM @xml.nodes('/root/l') AS T(x);
 
         COMMIT TRANSACTION;

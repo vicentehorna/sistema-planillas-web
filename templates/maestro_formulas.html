@@ -661,6 +661,37 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalCodigoFormula" tabindex="-1" aria-labelledby="modalCodigoFormulaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalCodigoFormulaLabel">Código de fórmula (condicional)</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div id="codigoFormulaMsg" class="alert py-2 small d-none mb-2"></div>
+                <label class="form-label small fw-bold text-muted mb-1" for="txtCodigoFormula">DSL</label>
+                <textarea id="txtCodigoFormula" class="form-control form-control-sm font-monospace" rows="14" spellcheck="false"
+                    placeholder='LET XTOTAL = CONCEPT("TOTAL_REM_AFP") - CONCEPT("SUBSIDIO_MATERNIDAD")&#10;RESULT =&#10;  IF XTOTAL > PARAM("RMV") THEN&#10;    XTOTAL * PARAM("PORC_SEG_SOCIAL") / 100&#10;  ELSE&#10;    PARAM("RMV") * PARAM("PORC_SEG_SOCIAL") / 100&#10;  END'></textarea>
+                <p class="small text-muted mb-0 mt-2">
+                    Funciones: <code>CONCEPT("CODIGO")</code>, <code>PARAM("SHORTNAME")</code>, <code>ASSIGN("CODIGO")</code>.
+                    Condicionales: <code>IF … THEN … ELSE … END</code> o <code>SI … ENTONCES … CASOCONTRARIO … FINSI</code>.
+                    Porcentajes: <code>9%</code>. Se compila al validar/guardar.
+                </p>
+                <details class="mt-2">
+                    <summary class="small text-muted">Expresión compilada (solo lectura)</summary>
+                    <pre id="txtCodigoCompilado" class="small bg-light border rounded p-2 mt-1 mb-0" style="white-space: pre-wrap;"></pre>
+                </details>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="btnValidarCodigo">Validar</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-sm btn-primary" id="btnAceptarCodigo">Aceptar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -683,8 +714,11 @@
     let lineaSeleccionada = -1;
     let cacheConceptos = [];
     let multiPickerIdx = -1;
+    let codigoPickerIdx = -1;
     let modalConceptosMulti = null;
+    let modalCodigoFormula = null;
     let modalCopiarPlanilla = null;
+    let codigoCompiladoTemp = '';
     let multiPickerSeleccion = new Set();
     let cacheProcesos = [];
     let cacheParameters = [];
@@ -846,6 +880,11 @@
             v: 'T', t: 'Tipo',
             desc: 'Provisión del ciclo según T.Liq (CTS, GRATI o VACA): calcula la provisión acumulada del concepto según reglas de inicio de ciclo y mes en proceso.',
             params: 'Elemento: concepto. T.Liq (CTS, GRATI o VACA), Operador.',
+        },
+        {
+            v: 'K', t: 'Código',
+            desc: 'Expresión condicional (IF/SI) con CONCEPT, PARAM y ASSIGN. Se valida y compila al guardar; en el cálculo solo se evalúa el resultado.',
+            params: 'Elemento: editor de código. Una sola línea K por fórmula (sin mezclar con otras).',
         },
     ];
 
@@ -1094,6 +1133,74 @@
         setTimeout(() => filtro.focus(), 200);
     }
 
+    function mostrarMsgCodigo(msg, ok) {
+        const box = document.getElementById('codigoFormulaMsg');
+        if (!msg) {
+            box.classList.add('d-none');
+            box.textContent = '';
+            return;
+        }
+        box.textContent = msg;
+        box.classList.remove('d-none', 'alert-danger', 'alert-success', 'alert-warning');
+        box.classList.add(ok ? 'alert-success' : 'alert-danger');
+    }
+
+    function abrirModalCodigoFormula(idx) {
+        codigoPickerIdx = idx;
+        const ln = lineasDetalle[idx] || {};
+        document.getElementById('txtCodigoFormula').value = ln.scriptsource || '';
+        document.getElementById('txtCodigoCompilado').textContent = ln.compiledexpr || '';
+        codigoCompiladoTemp = ln.compiledexpr || '';
+        mostrarMsgCodigo('');
+        if (!modalCodigoFormula) {
+            modalCodigoFormula = new bootstrap.Modal(document.getElementById('modalCodigoFormula'));
+        }
+        modalCodigoFormula.show();
+        setTimeout(() => document.getElementById('txtCodigoFormula').focus(), 200);
+    }
+
+    async function validarCodigoFormulaModal() {
+        const cia = cboCia.value.trim();
+        const source = document.getElementById('txtCodigoFormula').value;
+        mostrarMsgCodigo('');
+        if (!cia) {
+            mostrarMsgCodigo('Seleccione una compañía.');
+            return false;
+        }
+        try {
+            const res = await fetch('/api/formulas/validar-codigo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, scriptsource: source }),
+            });
+            const data = await leerJson(res);
+            codigoCompiladoTemp = data.compiledexpr || '';
+            document.getElementById('txtCodigoCompilado').textContent = codigoCompiladoTemp;
+            if (data.scriptsource) {
+                document.getElementById('txtCodigoFormula').value = data.scriptsource;
+            }
+            mostrarMsgCodigo(data.mensaje || 'Código válido.', true);
+            return true;
+        } catch (err) {
+            codigoCompiladoTemp = '';
+            document.getElementById('txtCodigoCompilado').textContent = '';
+            mostrarMsgCodigo(err.message || 'Código inválido.');
+            return false;
+        }
+    }
+
+    async function aceptarCodigoFormulaModal() {
+        const ok = await validarCodigoFormulaModal();
+        if (!ok) return;
+        if (codigoPickerIdx < 0 || !lineasDetalle[codigoPickerIdx]) return;
+        lineasDetalle[codigoPickerIdx].tipo = 'K';
+        lineasDetalle[codigoPickerIdx].scriptsource = document.getElementById('txtCodigoFormula').value;
+        lineasDetalle[codigoPickerIdx].compiledexpr = codigoCompiladoTemp;
+        lineasDetalle[codigoPickerIdx].operador = null;
+        if (modalCodigoFormula) modalCodigoFormula.hide();
+        renderDetalle();
+    }
+
     function tipoDetalleMuestraConcepto(tipo) {
         return ['C', 'A', 'B', 'I', 'R', 'M', 'H', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
@@ -1136,6 +1243,12 @@
         if (tipo === 'S') {
             const label = etiquetaConceptList(ln);
             return `<button type="button" class="btn btn-sm btn-outline-secondary w-100 text-start celda-conceptlist-btn" data-idx="${idx}" title="${escHtml(label)}">${escHtml(label)}</button>`;
+        }
+        if (tipo === 'K') {
+            const hasCode = !!(ln.scriptsource && String(ln.scriptsource).trim());
+            const label = hasCode ? 'Editar código…' : 'Escribir código…';
+            const cls = hasCode ? 'btn-outline-success' : 'btn-outline-primary';
+            return `<button type="button" class="btn btn-sm ${cls} w-100 text-start celda-codigo-btn" data-idx="${idx}">${label}</button>`;
         }
         if (tipoDetalleMuestraConcepto(tipo)) {
             return `<select class="form-select form-select-sm celda-concept" data-idx="${idx}">${opcionesSelectApi(cacheConceptos, ln.concept)}</select>`;
@@ -1203,6 +1316,14 @@
                                 lineasDetalle[i].operador = null;
                             }
                         }
+                        if (v === 'K') {
+                            lineasDetalle[i].operador = null;
+                            lineasDetalle[i].concept = null;
+                            lineasDetalle[i].parameter = null;
+                            if (lineasDetalle.length > 1) {
+                                alert('El tipo Código (K) debe ser la única línea de la fórmula. Se mantendrán las demás líneas; elimínelas antes de guardar.');
+                            }
+                        }
                         renderDetalle();
                     }
                 });
@@ -1253,6 +1374,14 @@
             btn.addEventListener('click', function (e) {
                 e.stopPropagation();
                 abrirModalConceptosMulti(parseInt(this.getAttribute('data-idx'), 10));
+            });
+        });
+
+        tbodyDetalle.querySelectorAll('.celda-codigo-btn').forEach((btn) => {
+            btn.addEventListener('mousedown', (e) => e.stopPropagation());
+            btn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                abrirModalCodigoFormula(parseInt(this.getAttribute('data-idx'), 10));
             });
         });
     }
@@ -1793,6 +1922,8 @@
                 numberini: ln.numberini != null && ln.numberini !== '' ? ln.numberini : null,
                 numberfin: ln.numberfin != null && ln.numberfin !== '' ? ln.numberfin : null,
                 tipoliq: ln.tipoliq || null,
+                scriptsource: ln.scriptsource || null,
+                compiledexpr: ln.compiledexpr || null,
             })),
         };
     }
@@ -1800,7 +1931,7 @@
     function lineaEmiteImporte(ln) {
         const t = String(ln && ln.tipo || '').toUpperCase();
         if (t === 'G') return false;
-        return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z'].includes(t);
+        return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K'].includes(t);
     }
 
     function labelInsertarEn(flag) {
@@ -1947,6 +2078,12 @@
         lineaSeleccionada = lineasDetalle.length - 1;
         renderDetalle();
     });
+    document.getElementById('btnEjemploCodigo').addEventListener('click', function () {
+        document.getElementById('txtCodigoFormula').value = EJEMPLO_ESSALUD;
+        mostrarMsgCodigo('');
+    });
+    document.getElementById('btnValidarCodigo').addEventListener('click', () => { validarCodigoFormulaModal(); });
+    document.getElementById('btnAceptarCodigo').addEventListener('click', () => { aceptarCodigoFormulaModal(); });
     document.getElementById('btnBorrarLinea').addEventListener('click', function () {
         if (lineaSeleccionada < 0 || lineaSeleccionada >= lineasDetalle.length) {
             alert('Marque la línea a borrar (columna Sel) y vuelva a intentar.');

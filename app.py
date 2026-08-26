@@ -14649,6 +14649,8 @@ def _formula_detalle_dict(r):
         'tipoliq': _jsonable_value(r.get('tipoliq')),
         'conceptlist': _jsonable_value(r.get('conceptlist')),
         'divisor': _jsonable_value(r.get('divisor')),
+        'scriptsource': _jsonable_value(r.get('scriptsource')),
+        'compiledexpr': _jsonable_value(r.get('compiledexpr')),
     }
 
 
@@ -14674,16 +14676,53 @@ def _formulas_detalle_to_xml(lineas):
             ('tipoliq', ln.get('tipoliq')),
             ('conceptlist', ln.get('conceptlist')),
             ('divisor', ln.get('divisor')),
+            ('scriptsource', ln.get('scriptsource')),
+            ('compiledexpr', ln.get('compiledexpr')),
         ]
         for tag, val in fields:
             if val is None:
                 continue
-            sval = str(val).strip()
-            if sval == '':
+            sval = str(val).strip() if tag not in ('scriptsource', 'compiledexpr') else str(val)
+            if tag not in ('scriptsource', 'compiledexpr') and sval == '':
+                continue
+            if tag in ('scriptsource', 'compiledexpr') and not str(val or '').strip():
                 continue
             child = ET.SubElement(el, tag)
-            child.text = sval
+            child.text = str(val)
     return ET.tostring(root, encoding='unicode')
+
+
+def _formulas_compile_codigo_lines(detalle_lineas, cursor, cia):
+    """Compila líneas tipo K al guardar. Mutates detalle_lineas. Raises ValueError."""
+    from formula_dsl import FormulaDslError, compile_formula_dsl, validate_refs_against_db
+
+    k_count = 0
+    for ln in detalle_lineas:
+        if not isinstance(ln, dict):
+            continue
+        tipo = str(ln.get('tipo') or '').strip().upper()[:1]
+        if tipo != 'K':
+            continue
+        k_count += 1
+        source = str(ln.get('scriptsource') or ln.get('codigo') or '').strip()
+        if not source:
+            raise ValueError('Línea Código (K): ingrese el código de la fórmula.')
+        try:
+            compiled = compile_formula_dsl(source)
+        except FormulaDslError as ex:
+            raise ValueError(f'Código inválido: {ex}') from ex
+        errs = validate_refs_against_db(cursor, cia, compiled)
+        if errs:
+            raise ValueError('Código inválido: ' + ' '.join(errs))
+        ln['scriptsource'] = compiled.source
+        ln['compiledexpr'] = compiled.compiled_expr
+        ln['operador'] = ln.get('operador') or None
+    if k_count > 1:
+        raise ValueError('Solo se permite una línea de tipo Código (K) por fórmula.')
+    if k_count == 1 and len([x for x in detalle_lineas if isinstance(x, dict)]) > 1:
+        raise ValueError(
+            'Una fórmula con línea Código (K) no debe mezclarse con otras líneas de detalle.'
+        )
 
 
 @app.route('/api/formulas/listado', methods=['POST'])
@@ -14834,6 +14873,60 @@ def api_formulas_selectores_edicion():
                 pass
 
 
+@app.route('/api/formulas/validar-codigo', methods=['POST'])
+@login_required
+def api_formulas_validar_codigo():
+    """Compila y valida DSL de fórmula tipo Código (K) sin guardar."""
+    from formula_dsl import FormulaDslError, compile_formula_dsl, example_essalud_source, validate_refs_against_db
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    source = str(body.get('scriptsource') or body.get('codigo') or body.get('source') or '')
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not source.strip():
+        return jsonify({
+            "error": "Ingrese el código de la fórmula.",
+            "ejemplo": example_essalud_source(),
+        }), 400
+
+    conn = None
+    try:
+        compiled = compile_formula_dsl(source)
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        errs = validate_refs_against_db(cursor, cia, compiled)
+        if errs:
+            return jsonify({
+                "ok": False,
+                "error": " ".join(errs),
+                "compiledexpr": compiled.compiled_expr,
+                "concepts": compiled.concepts,
+                "parameters": compiled.parameters,
+                "assigns": compiled.assigns,
+            }), 400
+        return jsonify({
+            "ok": True,
+            "scriptsource": compiled.source,
+            "compiledexpr": compiled.compiled_expr,
+            "concepts": compiled.concepts,
+            "parameters": compiled.parameters,
+            "assigns": compiled.assigns,
+            "mensaje": "Código válido y compilado correctamente.",
+        })
+    except FormulaDslError as ex:
+        return jsonify({"ok": False, "error": str(ex)}), 400
+    except Exception as e:
+        logging.exception("api_formulas_validar_codigo")
+        return jsonify({"error": _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/formulas/guardar', methods=['POST'])
 @login_required
 def api_formulas_guardar():
@@ -14864,8 +14957,6 @@ def api_formulas_guardar():
     except Exception:
         orden = None
 
-    detalle_xml = _formulas_detalle_to_xml(detalle_lineas)
-
     _insertar_labels = {
         'M': 'Mensual',
         'Q': 'Quincena',
@@ -14879,6 +14970,13 @@ def api_formulas_guardar():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        try:
+            _formulas_compile_codigo_lines(detalle_lineas, cursor, cia)
+        except ValueError as ve:
+            return jsonify({"error": str(ve)}), 400
+
+        detalle_xml = _formulas_detalle_to_xml(detalle_lineas)
 
         # Validación previa (alta y edición): Insertar en = Ninguno. Mensaje UTF-8 limpio.
         cursor.execute(

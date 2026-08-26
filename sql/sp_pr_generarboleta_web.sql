@@ -40,24 +40,28 @@ BEGIN
          WHERE sy_persondocumenttype.PersonDocumentType = sy_person.employeedocumenttype) + ':' AS DocumentType,
         sy_person.documentnumber AS dni,
 
-        CASE (SELECT MAX(Y.description)
-              FROM PR_EmployeePayRoll E2
-                  LEFT JOIN pr_afp Y ON E2.afp = Y.afp
-              WHERE E2.COMPANY = @cia
-                AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                AND E2.processtype = @process
-                AND E2.PRPERIOD = @period
-                AND E2.PERSON = SY_Person.Person)
-            WHEN NULL THEN 'SNP'
-            WHEN '' THEN 'SNP'
-            ELSE (SELECT MAX(Y.description)
-                  FROM PR_EmployeePayRoll E2
-                      LEFT JOIN pr_afp Y ON E2.afp = Y.afp
-                  WHERE E2.COMPANY = @cia
-                    AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                    AND E2.processtype = @process
-                    AND E2.PRPERIOD = @period
-                    AND E2.PERSON = SY_Person.Person)
+        /* ONP no tiene AFP: CASE expr WHEN NULL no funciona en SQL Server (NULL nunca iguala). */
+        CASE
+            WHEN ISNULL((
+                SELECT MAX(Y.description)
+                FROM PR_EmployeePayRoll E2
+                    LEFT JOIN pr_afp Y ON E2.afp = Y.afp
+                WHERE E2.COMPANY = @cia
+                  AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
+                  AND E2.processtype = @process
+                  AND E2.PRPERIOD = @period
+                  AND E2.PERSON = SY_Person.Person
+            ), '') = '' THEN 'SNP'
+            ELSE (
+                SELECT MAX(Y.description)
+                FROM PR_EmployeePayRoll E2
+                    LEFT JOIN pr_afp Y ON E2.afp = Y.afp
+                WHERE E2.COMPANY = @cia
+                  AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
+                  AND E2.processtype = @process
+                  AND E2.PRPERIOD = @period
+                  AND E2.PERSON = SY_Person.Person
+            )
         END AS afp_description,
 
         CASE WHEN (
@@ -72,24 +76,27 @@ BEGIN
                AND E2.PERSON = SY_Person.Person)) = '99'
         THEN 'NINGUNO'
         ELSE
-            CASE (SELECT MAX(Y.description)
-                  FROM PR_EmployeePayRoll E2
-                      LEFT JOIN pr_afp Y ON E2.afp = Y.afp
-                  WHERE E2.COMPANY = @cia
-                    AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                    AND E2.processtype = @process
-                    AND E2.PRPERIOD = @period
-                    AND E2.PERSON = SY_Person.Person)
-                WHEN NULL THEN 'SNP'
-                WHEN '' THEN 'SNP'
-                ELSE (SELECT MAX(Y.description)
-                      FROM PR_EmployeePayRoll E2
-                          LEFT JOIN pr_afp Y ON E2.afp = Y.afp
-                      WHERE E2.COMPANY = @cia
-                        AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                        AND E2.processtype = @process
-                        AND E2.PRPERIOD = @period
-                        AND E2.PERSON = SY_Person.Person)
+            CASE
+                WHEN ISNULL((
+                    SELECT MAX(Y.description)
+                    FROM PR_EmployeePayRoll E2
+                        LEFT JOIN pr_afp Y ON E2.afp = Y.afp
+                    WHERE E2.COMPANY = @cia
+                      AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
+                      AND E2.processtype = @process
+                      AND E2.PRPERIOD = @period
+                      AND E2.PERSON = SY_Person.Person
+                ), '') = '' THEN 'SNP'
+                ELSE (
+                    SELECT MAX(Y.description)
+                    FROM PR_EmployeePayRoll E2
+                        LEFT JOIN pr_afp Y ON E2.afp = Y.afp
+                    WHERE E2.COMPANY = @cia
+                      AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
+                      AND E2.processtype = @process
+                      AND E2.PRPERIOD = @period
+                      AND E2.PERSON = SY_Person.Person
+                )
             END
         END AS regimenpension,
 
@@ -207,22 +214,19 @@ BEGIN
                   AND E2.PRPERIOD = @period
                   AND E2.PERSON = SY_Person.Person), 0) AS maternidad,
 
-        ISNULL((SELECT SUM(ISNULL(E2.conceptvalue, 0))
-                FROM pr_employeepayrollconcept AS E2
-                WHERE E2.COMPANY = @cia
-                  AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                  AND E2.processtype = @process
-                  AND E2.Concept IN (SELECT mrallowancedaysnotaxconcept FROM PR_Mapping2 WHERE PR_Mapping2.company = @cia)
-                  AND E2.PRPERIOD = @period
-                  AND E2.PERSON = SY_Person.Person), 0) +
-        ISNULL((SELECT SUM(ISNULL(E2.conceptvalue, 0))
-                FROM pr_employeepayrollconcept AS E2
-                WHERE E2.COMPANY = @cia
-                  AND E2.PAYROLLTYPE = pr_employeepayroll.PayRollType
-                  AND E2.processtype = @process
-                  AND E2.Concept IN (SELECT mrallowancedaystaxconcept FROM PR_Mapping2 WHERE PR_Mapping2.company = @cia)
-                  AND E2.PRPERIOD = @period
-                  AND E2.PERSON = SY_Person.Person), 0) AS dias_subsidio,
+        (SELECT ISNULL(SUM(ISNULL(CONCEPTVALUE, 0.00)), 0.00)
+         FROM PR_EMPLOYEEPAYROLLCONCEPT, pr_concept
+         WHERE PR_EMPLOYEEPAYROLLCONCEPT.concept = pr_concept.concept
+           AND PR_EMPLOYEEPAYROLLCONCEPT.COMPANY = @cia
+           AND PROCESSTYPE = @process
+           AND PAYROLLTYPE = pr_employeepayroll.PayRollType
+           AND PRPERIOD = @period
+           AND pr_concept.formulacode IN (
+               'DIAS_DESC_SUBSI_AFEC',
+               'DIAS_DESC_SUBSI_INAF',
+               'DIAS_SUBSIDIO'
+           )
+           AND PERSON = pr_employee.Person) AS dias_subsidio,
 
         CASE WHEN @currency = 'LO' THEN
             (SELECT SUM(ISNULL(E2.netlo, 0))

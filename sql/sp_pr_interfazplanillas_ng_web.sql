@@ -74,10 +74,23 @@ BEGIN
             @repunit_all = @repunit_all,
             @repunit = @repunit;
 
+        DECLARE @personas INT = 0;
+        DECLARE @conceptos INT = 0;
+
+        SELECT
+            @personas = COUNT(DISTINCT EC.Person),
+            @conceptos = COUNT(*)
+        FROM PR_EmployeeConcept EC (NOLOCK)
+        WHERE EC.Company = @cia
+          AND EC.PRPeriodStart = @period
+          AND EC.PayRollType = @payrolltype
+          AND EC.XLastUser = 'TAREO'
+          AND (@person_all = 'Y' OR EC.Person = @person);
+
         SELECT
             CAST(1 AS INT) AS ok,
-            CAST(0 AS INT) AS personas,
-            CAST(0 AS INT) AS conceptos,
+            @personas AS personas,
+            @conceptos AS conceptos,
             CAST(
                 CASE
                     WHEN @repunit_all = 'N' THEN

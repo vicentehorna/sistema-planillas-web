@@ -134,7 +134,7 @@
                     {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
                         NINGUNO
                     {% else %}
-                        {{ cabecera.afp_description or cabecera.regimenpension or '' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                        {{ cabecera.afp_description or cabecera.regimenpension or 'SNP' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
                     {% endif %}
                 </td>
                 <td class="label">CUSPP:</td>

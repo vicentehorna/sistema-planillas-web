@@ -400,11 +400,29 @@ document.addEventListener('DOMContentLoaded', async function () {
             fila.valor = valorNum;
         }
 
+        const clavesPendientes = new Set();
+        for (const fila of pendientes) {
+            const clave = `${fila.dni}|${fila.codigo}`;
+            if (clavesPendientes.has(clave)) {
+                toastErr('Hay filas con el mismo DNI y código en los cambios pendientes.');
+                return;
+            }
+            clavesPendientes.add(clave);
+        }
+
+        /* Actualizar primero: un INSERT previo puede chocar si aún existe el código en BD. */
+        const ordenGuardado = pendientes.slice().sort((a, b) => {
+            const aUpd = !(a.nueva || !a.fila);
+            const bUpd = !(b.nueva || !b.fila);
+            if (aUpd === bUpd) return 0;
+            return aUpd ? -1 : 1;
+        });
+
         btnGuardar.disabled = true;
-        msg.textContent = `Guardando ${pendientes.length} registro${pendientes.length === 1 ? '' : 's'}...`;
+        msg.textContent = `Guardando ${ordenGuardado.length} registro${ordenGuardado.length === 1 ? '' : 's'}...`;
         try {
             const mensajes = [];
-            for (const fila of pendientes) {
+            for (const fila of ordenGuardado) {
                 const data = await postJson('/api/asientos/distribucion-porcentual/guardar', {
                     cia: cboCia.value.trim(),
                     period: cboPeriodo.value.trim(),
@@ -423,7 +441,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderizar();
             msg.textContent = '';
             toastOk(
-                pendientes.length === 1 && mensajes[0]
+                ordenGuardado.length === 1 && mensajes[0]
                     ? mensajes[0]
                     : 'Cambios guardados correctamente.'
             );

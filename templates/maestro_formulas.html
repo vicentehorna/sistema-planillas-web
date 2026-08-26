@@ -673,7 +673,7 @@
                 <div id="codigoFormulaMsg" class="alert py-2 small d-none mb-2"></div>
                 <label class="form-label small fw-bold text-muted mb-1" for="txtCodigoFormula">DSL</label>
                 <textarea id="txtCodigoFormula" class="form-control form-control-sm font-monospace" rows="14" spellcheck="false"
-                    placeholder='LET XTOTAL = CONCEPT("TOTAL_REM_AFP") - CONCEPT("SUBSIDIO_MATERNIDAD")&#10;RESULT =&#10;  IF XTOTAL > PARAM("RMV") THEN&#10;    XTOTAL * PARAM("PORC_SEG_SOCIAL") / 100&#10;  ELSE&#10;    PARAM("RMV") * PARAM("PORC_SEG_SOCIAL") / 100&#10;  END'></textarea>
+                    placeholder="LET XTOTAL = CONCEPT(&quot;TOTAL_REM_AFP&quot;) ..."></textarea>
                 <p class="small text-muted mb-0 mt-2">
                     Funciones: <code>CONCEPT("CODIGO")</code>, <code>PARAM("SHORTNAME")</code>, <code>ASSIGN("CODIGO")</code>.
                     Condicionales: <code>IF … THEN … ELSE … END</code> o <code>SI … ENTONCES … CASOCONTRARIO … FINSI</code>.
@@ -2055,6 +2055,33 @@
         cargarListado();
     });
 
+    // Cargar compañías de inmediato (antes de otros bindings que podrían fallar).
+    (async function initCompanias() {
+        try {
+            await poblarSelect('/api/selectores/companias', cboCia);
+            const saved = cargarFiltros();
+            if (saved.cia && Array.from(cboCia.options).some((o) => o.value === saved.cia)) {
+                cboCia.value = saved.cia;
+                await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(saved.cia)}`, cboPlanilla);
+                cboPlanilla.disabled = false;
+                if (saved.payrolltype && Array.from(cboPlanilla.options).some((o) => o.value === saved.payrolltype)) {
+                    cboPlanilla.value = saved.payrolltype;
+                    await poblarSelect(
+                        `/api/selectores/procesos?cia=${encodeURIComponent(saved.cia)}&payrolltype=${encodeURIComponent(saved.payrolltype)}`,
+                        cboProceso
+                    );
+                    cboProceso.disabled = false;
+                    if (saved.processtype && Array.from(cboProceso.options).some((o) => o.value === saved.processtype)) {
+                        cboProceso.value = saved.processtype;
+                        await cargarListado();
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Error iniciando Fórmulas:', err);
+        }
+    })();
+
     document.getElementById('btnNuevaFormula').addEventListener('click', nuevaFormula);
     document.getElementById('cboConcepto').addEventListener('change', function () {
         const err = validarConceptoInsertarNinguno(this.value);
@@ -2078,12 +2105,10 @@
         lineaSeleccionada = lineasDetalle.length - 1;
         renderDetalle();
     });
-    document.getElementById('btnEjemploCodigo').addEventListener('click', function () {
-        document.getElementById('txtCodigoFormula').value = EJEMPLO_ESSALUD;
-        mostrarMsgCodigo('');
-    });
-    document.getElementById('btnValidarCodigo').addEventListener('click', () => { validarCodigoFormulaModal(); });
-    document.getElementById('btnAceptarCodigo').addEventListener('click', () => { aceptarCodigoFormulaModal(); });
+    const btnValidarCodigo = document.getElementById('btnValidarCodigo');
+    const btnAceptarCodigo = document.getElementById('btnAceptarCodigo');
+    if (btnValidarCodigo) btnValidarCodigo.addEventListener('click', () => { validarCodigoFormulaModal(); });
+    if (btnAceptarCodigo) btnAceptarCodigo.addEventListener('click', () => { aceptarCodigoFormulaModal(); });
     document.getElementById('btnBorrarLinea').addEventListener('click', function () {
         if (lineaSeleccionada < 0 || lineaSeleccionada >= lineasDetalle.length) {
             alert('Marque la línea a borrar (columna Sel) y vuelva a intentar.');
@@ -2144,28 +2169,6 @@
     });
 
     cboProceso.addEventListener('change', guardarFiltros);
-
-    (async function init() {
-        await poblarSelect('/api/selectores/companias', cboCia);
-        const saved = cargarFiltros();
-        if (saved.cia && Array.from(cboCia.options).some((o) => o.value === saved.cia)) {
-            cboCia.value = saved.cia;
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(saved.cia)}`, cboPlanilla);
-            cboPlanilla.disabled = false;
-            if (saved.payrolltype && Array.from(cboPlanilla.options).some((o) => o.value === saved.payrolltype)) {
-                cboPlanilla.value = saved.payrolltype;
-                await poblarSelect(
-                    `/api/selectores/procesos?cia=${encodeURIComponent(saved.cia)}&payrolltype=${encodeURIComponent(saved.payrolltype)}`,
-                    cboProceso
-                );
-                cboProceso.disabled = false;
-                if (saved.processtype && Array.from(cboProceso.options).some((o) => o.value === saved.processtype)) {
-                    cboProceso.value = saved.processtype;
-                    await cargarListado();
-                }
-            }
-        }
-    })();
 })();
 </script>
 {% endblock %}

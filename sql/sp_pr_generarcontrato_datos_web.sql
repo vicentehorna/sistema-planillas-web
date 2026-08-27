@@ -28,6 +28,25 @@ BEGIN
           AND LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
           AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
         ORDER BY pc.startdate DESC, pc.Contractno DESC
+    ),
+    contrato_anterior AS (
+        SELECT TOP 1
+            pc.Person,
+            pc.Company,
+            pc.startdate,
+            pc.enddate,
+            pc.Contractno
+        FROM PR_PersonContract pc (NOLOCK)
+        INNER JOIN contrato_activo ca
+            ON ca.Person = pc.Person
+           AND ca.Company = pc.Company
+        WHERE pc.Company = @cia
+          AND pc.Person = @person
+          AND (
+              pc.startdate < ca.startdate
+              OR (pc.startdate = ca.startdate AND pc.Contractno < ca.Contractno)
+          )
+        ORDER BY pc.startdate DESC, pc.Contractno DESC
     )
     SELECT
         e.Person AS person,
@@ -93,6 +112,8 @@ BEGIN
         CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS fecha_ingreso,
         CONVERT(varchar(10), ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate)), 23) AS inicio_contrato,
         CONVERT(varchar(10), ca.enddate, 23) AS fin_contrato,
+        CONVERT(varchar(10), cp.startdate, 23) AS inicio_contrato_anterior,
+        CONVERT(varchar(10), cp.enddate, 23) AS fin_contrato_anterior,
         DAY(ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate))) AS inicio_dia,
         CASE MONTH(ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate)))
             WHEN 1 THEN 'Enero' WHEN 2 THEN 'Febrero' WHEN 3 THEN 'Marzo'
@@ -148,6 +169,9 @@ BEGIN
     LEFT JOIN contrato_activo ca
         ON ca.Person = e.Person
        AND ca.Company = e.Company
+    LEFT JOIN contrato_anterior cp
+        ON cp.Person = e.Person
+       AND cp.Company = e.Company
     WHERE e.Company = @cia
       AND e.Person = @person;
 END

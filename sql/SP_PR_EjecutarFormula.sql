@@ -51,18 +51,58 @@ Begin
 	set @pos = 0
 	SET @tipocond = 'N'
 
-	select @tipocond = ISNULL(Tipo, 'N'), @conceptcond = ISNULL(Conceptcond,''), @flagtruncate = isnull(flagtruncate, 'N'), @formulaid = FormulaHeader  from PR_FormulaHeader 
-	where PR_FormulaHeader.Concept = @concept and Payrolltype = @payrolltype and Proccestype = @processtype
+	/* Una sola cabecera: si hay duplicados por Concept/planilla/proceso, usa la más reciente. */
+	select TOP 1
+		@tipocond = ISNULL(Tipo, 'N'),
+		@conceptcond = ISNULL(Conceptcond,''),
+		@flagtruncate = isnull(flagtruncate, 'N'),
+		@formulaid = FormulaHeader
+	from PR_FormulaHeader
+	where PR_FormulaHeader.Concept = @concept
+	  and Payrolltype = @payrolltype
+	  and Proccestype = @processtype
+	order by ISNULL(XLastDate, '19000101') DESC, FormulaHeader DESC
 
-	select isnull(reentrydate,entrydate) as fechaingreso, PR_PensionType.PDT as pension, PR_AFP.PensionPercentage as porc_aporte, variablepercentage as porc_comision_flu, 
-	topafp, insuredpercentage as porc_seguro, PR_Employee.CeaseDate as CeaseDate
-	into #empleado 
-	from PR_Employee inner join PR_PensionType on (PR_Employee.PensionType = PR_PensionType.PensionType and PR_PensionType.Company = @cia) 
-	left join PR_AFP on (PR_Employee.AFP = PR_AFP.afp and PR_AFP.Company = @cia)
-	where Person = @person and PR_Employee.company = @cia
-	
-	set @ceasedate = (select CeaseDate from #empleado)
-	set @fechaingreso = (select fechaingreso from #empleado)
+	if @formulaid is null
+	begin
+		/* Sin fórmula: xx_valor queda vacío (comportamiento previo al no encontrar cabecera). */
+		return
+	end
+
+	/*
+	  #empleado suele existir ya en sp_pr_calcular_*_persona (mismos campos AFP).
+	  Si se recrea aquí con SELECT INTO, falla al anidar o choca con columnas
+	  distintas (p.ej. CeaseDate). Reutilizar si existe; crear solo si falta.
+	*/
+	IF OBJECT_ID('tempdb..#empleado') IS NULL
+	BEGIN
+		SELECT
+			ISNULL(reentrydate, entrydate) AS fechaingreso,
+			PR_PensionType.PDT AS pension,
+			PR_AFP.PensionPercentage AS porc_aporte,
+			variablepercentage AS porc_comision_flu,
+			topafp,
+			insuredpercentage AS porc_seguro,
+			PR_Employee.CeaseDate AS CeaseDate
+		INTO #empleado
+		FROM PR_Employee
+		INNER JOIN PR_PensionType
+			ON PR_Employee.PensionType = PR_PensionType.PensionType
+			AND PR_PensionType.Company = @cia
+		LEFT JOIN PR_AFP
+			ON PR_Employee.AFP = PR_AFP.afp
+			AND PR_AFP.Company = @cia
+		WHERE Person = @person
+		  AND PR_Employee.company = @cia
+	END
+
+	/* CeaseDate no siempre está en #empleado del SP de cálculo */
+	SET @ceasedate = (
+		SELECT CeaseDate
+		FROM PR_Employee
+		WHERE Person = @person AND Company = @cia
+	)
+	SET @fechaingreso = (SELECT fechaingreso FROM #empleado)
 	
 
 	if ISNULL(@tipocond, 'N') = 'N' set @importecond = 0
@@ -121,7 +161,7 @@ Begin
 	Declare formula Cursor For
 		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor, PR_FormulaDetail.CompiledExpr
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
-		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype
+		where PR_FormulaHeader.FormulaHeader = @formulaid
 		and ((@pos > 0 and PR_FormulaDetail.line <= @pos) or (@pos = 0))
 		order by line
 
@@ -186,6 +226,30 @@ Begin
 								SELECT MAX(T.PRPeriodStart) FROM PR_EmployeeConcept T
 								WHERE T.Company = P.Company AND T.Person = P.Person AND T.Concept = P.Concept
 								  AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* Datos del trabajador (#empleado): EMPLOYEE("PENSION"|"TOPAFP"|"PORC_SEGURO"|...) */
+				WHILE CHARINDEX(N'#E:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#E:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 CASE @code_k
+							WHEN 'TOPAFP' THEN CONVERT(NUMERIC(19,4), ISNULL(topafp, 0))
+							WHEN 'PORC_SEGURO' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_seguro, 0))
+							WHEN 'PORC_APORTE' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_aporte, 0))
+							WHEN 'PORC_COMISION_FLU' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_comision_flu, 0))
+							WHEN 'PENSION' THEN CASE
+								WHEN ISNUMERIC(LTRIM(RTRIM(ISNULL(pension, '')))) = 1
+								THEN CONVERT(NUMERIC(19,4), LTRIM(RTRIM(pension)))
+								ELSE 0 END
+							ELSE 0
+						END
+						FROM #empleado
 					), 0)
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
@@ -583,6 +647,30 @@ Begin
 								SELECT MAX(T.PRPeriodStart) FROM PR_EmployeeConcept T
 								WHERE T.Company = P.Company AND T.Person = P.Person AND T.Concept = P.Concept
 								  AND T.PayRollType = P.PayRollType AND T.FlagFrecuencyType = 'P')))
+					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* Datos del trabajador (#empleado): EMPLOYEE("PENSION"|"TOPAFP"|"PORC_SEGURO"|...) */
+				WHILE CHARINDEX(N'#E:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#E:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = ISNULL((
+						SELECT TOP 1 CASE @code_k
+							WHEN 'TOPAFP' THEN CONVERT(NUMERIC(19,4), ISNULL(topafp, 0))
+							WHEN 'PORC_SEGURO' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_seguro, 0))
+							WHEN 'PORC_APORTE' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_aporte, 0))
+							WHEN 'PORC_COMISION_FLU' THEN CONVERT(NUMERIC(19,4), ISNULL(porc_comision_flu, 0))
+							WHEN 'PENSION' THEN CASE
+								WHEN ISNUMERIC(LTRIM(RTRIM(ISNULL(pension, '')))) = 1
+								THEN CONVERT(NUMERIC(19,4), LTRIM(RTRIM(pension)))
+								ELSE 0 END
+							ELSE 0
+						END
+						FROM #empleado
 					), 0)
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))

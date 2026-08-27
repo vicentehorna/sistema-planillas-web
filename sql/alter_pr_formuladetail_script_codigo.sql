@@ -1,7 +1,7 @@
 /*
     Soporte tipo K (Código condicional) en el formulador.
     ScriptSource  = texto DSL editable
-    CompiledExpr  = expresión SQL compilada al guardar (placeholders #C:# #P:# #A:#)
+    CompiledExpr  = expresión SQL compilada al guardar (placeholders #C:# #P:# #A:# #E:#)
 */
 IF OBJECT_ID(N'dbo.PR_FormulaDetail', N'U') IS NOT NULL
 BEGIN

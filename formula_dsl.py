@@ -2,7 +2,8 @@
 DSL de fórmulas condicionales (tipo K / Código) para el formulador web.
 
 Se valida y compila al GUARDAR. En cálculo solo se evalúa la expresión SQL
-ya compilada (placeholders #C:FORMULACODE#, #P:SHORTNAME#, #A:FORMULACODE#).
+ya compilada (placeholders #C:FORMULACODE#, #P:SHORTNAME#, #A:FORMULACODE#,
+#E:CAMPO#).
 
 Sintaxis soportada:
   LET nombre = expr
@@ -12,6 +13,7 @@ Sintaxis soportada:
   SI ... ENTONCES ... CASOCONTRARIO ... FINSI
 
   CONCEPT("FORMULACODE")  PARAM("SHORTNAME")  ASSIGN("FORMULACODE")
+  EMPLOYEE("CAMPO")   -- datos del trabajador (#empleado): PENSION, TOPAFP, PORC_SEGURO, ...
   números, 6.75%, +, -, *, /, paréntesis, comparaciones >, <, >=, <=, =, <>
 """
 from __future__ import annotations
@@ -29,6 +31,7 @@ _KEYWORDS = {
     "LET", "RESULT", "IF", "THEN", "ELSE", "END",
     "SI", "ENTONCES", "CASOCONTRARIO", "FINSI", "FIN",
     "CONCEPT", "PARAM", "ASSIGN", "ASIGNACION",
+    "EMPLOYEE", "EMPLEADO",
 }
 
 _ALIASES = {
@@ -38,7 +41,29 @@ _ALIASES = {
     "FINSI": "END",
     "FIN": "END",
     "ASIGNACION": "ASSIGN",
+    "EMPLEADO": "EMPLOYEE",
     "VAR": "LET",
+}
+
+# Campos numéricos/códigos expuestos desde #empleado en SP_PR_EjecutarFormula.
+# Clave = nombre canónico en el placeholder #E:...#
+EMPLOYEE_FIELDS: dict[str, str] = {
+    "PENSION": "Código PDT del régimen pensionario (21 Integra, 23 Profuturo, 24 Prima, 25 Horizonte)",
+    "TOPAFP": "Tope AFP (topafp)",
+    "PORC_SEGURO": "Porcentaje de seguro AFP (insuredpercentage)",
+    "PORC_APORTE": "Porcentaje de aporte AFP (PensionPercentage)",
+    "PORC_COMISION_FLU": "Porcentaje comisión sobre flujo (variablepercentage)",
+}
+
+# Alias aceptados en el DSL → nombre canónico
+_EMPLOYEE_ALIASES: dict[str, str] = {
+    "INSUREDPERCENTAGE": "PORC_SEGURO",
+    "INSURED_PERCENTAGE": "PORC_SEGURO",
+    "PENSIONPERCENTAGE": "PORC_APORTE",
+    "PENSION_PERCENTAGE": "PORC_APORTE",
+    "VARIABLEPERCENTAGE": "PORC_COMISION_FLU",
+    "VARIABLE_PERCENTAGE": "PORC_COMISION_FLU",
+    "PDT": "PENSION",
 }
 
 
@@ -49,6 +74,20 @@ class CompileResult:
     concepts: list[str] = field(default_factory=list)
     parameters: list[str] = field(default_factory=list)
     assigns: list[str] = field(default_factory=list)
+    employees: list[str] = field(default_factory=list)
+
+
+def _normalize_employee_field(raw: str) -> str:
+    code = str(raw or "").strip().upper()
+    if not code:
+        raise FormulaDslError('EMPLOYEE("") vacío.')
+    code = _EMPLOYEE_ALIASES.get(code, code)
+    if code not in EMPLOYEE_FIELDS:
+        allowed = ", ".join(sorted(EMPLOYEE_FIELDS))
+        raise FormulaDslError(
+            f'EMPLOYEE("{raw}") no es un campo válido. Use: {allowed}.'
+        )
+    return code
 
 
 def _tokenize(src: str) -> list[tuple[str, Any]]:
@@ -59,10 +98,9 @@ def _tokenize(src: str) -> list[tuple[str, Any]]:
         if "//" in line:
             line = line[: line.index("//")]
         stripped = line.lstrip()
-        if stripped.startswith("#") and not stripped.upper().startswith("#C:") and not stripped.upper().startswith("#P:"):
+        if stripped.startswith("#") and not re.match(r"^#[CPAE]:", stripped, re.I):
             # comentario de línea estilo # texto (no placeholder)
-            if not re.match(r"^#[CPA]:", stripped, re.I):
-                continue
+            continue
         lines.append(line)
     s = "\n".join(lines)
 
@@ -135,6 +173,7 @@ class _Parser:
         self.concepts: set[str] = set()
         self.parameters: set[str] = set()
         self.assigns: set[str] = set()
+        self.employees: set[str] = set()
 
     def peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else (None, None)
@@ -274,6 +313,14 @@ class _Parser:
                 raise FormulaDslError("ASSIGN(\"\") vacío.")
             self.assigns.add(code)
             return ("ASSIGN", code)
+        if k == "EMPLOYEE":
+            self.pop()
+            self.expect("(")
+            raw = str(self.expect("STR"))
+            self.expect(")")
+            code = _normalize_employee_field(raw)
+            self.employees.add(code)
+            return ("EMPLOYEE", code)
         if k == "ID":
             self.pop()
             name = str(v).upper()
@@ -281,7 +328,7 @@ class _Parser:
                 return ("VAR", name)
             raise FormulaDslError(
                 f"Identificador '{v}' no definido. Use LET {v} = ... "
-                f"o CONCEPT(\"{v}\") / PARAM(\"{v}\")."
+                f"o CONCEPT(\"{v}\") / PARAM(\"{v}\") / EMPLOYEE(\"{v}\")."
             )
         if k == "(":
             self.pop()
@@ -306,6 +353,8 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return f"#P:{node[1]}#"
     if kind == "ASSIGN":
         return f"#A:{node[1]}#"
+    if kind == "EMPLOYEE":
+        return f"#E:{node[1]}#"
     if kind == "VAR":
         return _emit_sql(lets[node[1]], lets)
     if kind == "NEG":
@@ -354,6 +403,7 @@ def compile_formula_dsl(source: str) -> CompileResult:
         concepts=sorted(parser.concepts),
         parameters=sorted(parser.parameters),
         assigns=sorted(parser.assigns),
+        employees=sorted(parser.employees),
     )
 
 
@@ -375,6 +425,33 @@ def example_essalud_source() -> str:
         "      PARAM(\"RMV\") * PARAM(\"PORC_SEG_SOCIAL\") / 100\n"
         "    END\n"
         "  END\n"
+    )
+
+
+def example_afp_seguro_source() -> str:
+    """Ejemplo AFP_*_SEGUROS (Prima=24, Horizonte=25, etc.)."""
+    return (
+        'LET XREM1 = EMPLOYEE("TOPAFP") * EMPLOYEE("PORC_SEGURO")\n'
+        'LET XREM2 = CONCEPT("TOTAL_REM_AFP") * EMPLOYEE("PORC_SEGURO")\n'
+        "\n"
+        "RESULT =\n"
+        'IF CONCEPT("FLAG_JUBILADO") = 1 THEN\n'
+        "0\n"
+        "ELSE\n"
+        '	IF CONCEPT("NO_AFECTO_PRIMA") = 1 THEN\n'
+        "		0\n"
+        "	ELSE\n"
+        '		IF EMPLOYEE("PENSION") = 25 THEN\n'
+        '			IF CONCEPT("TOTAL_REM_AFP") > EMPLOYEE("TOPAFP") THEN\n'
+        "				XREM1/100\n"
+        "			ELSE\n"
+        "				XREM2/100\n"
+        "			END\n"
+        "		ELSE\n"
+        "			0\n"
+        "		END\n"
+        "	END\n"
+        "END\n"
     )
 
 
@@ -407,5 +484,10 @@ def validate_refs_against_db(cursor, company: str, compiled: CompileResult) -> l
         )
         if not cursor.fetchone():
             errors.append(f'PARAM("{sn}") no existe en PR_Parameter (ShortName).')
+
+    for emp in compiled.employees:
+        if emp not in EMPLOYEE_FIELDS:
+            allowed = ", ".join(sorted(EMPLOYEE_FIELDS))
+            errors.append(f'EMPLOYEE("{emp}") no es un campo válido. Use: {allowed}.')
 
     return errors

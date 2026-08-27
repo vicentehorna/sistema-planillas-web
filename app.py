@@ -8113,11 +8113,11 @@ def _importacion_conceptos_normalize_dni(raw):
 
 
 def _importacion_conceptos_trabajador_activo(record):
+    """Activo = Status 'N'. Los cesados (con CeaseDate) se aceptan si siguen Status N."""
     if not isinstance(record, dict):
         return False
     status = str(record.get('status') or '').strip().upper()
-    ceasedate = record.get('ceasedate')
-    return status == 'N' and ceasedate is None
+    return status == 'N'
 
 
 def _importacion_conceptos_concept_por_formulacode(cursor, cia, formulacode, concept_fallback, cache):
@@ -8262,7 +8262,7 @@ def _importacion_conceptos_resolver_mapa_trabajadores(records, company_names=Non
                 'dni': dni,
                 'ok': False,
                 'error': 'inactivo',
-                'mensaje': 'Trabajador inactivo o cesado.',
+                'mensaje': 'Trabajador inactivo.',
             }
         else:
             mapa[dni] = {
@@ -8277,7 +8277,7 @@ def _importacion_conceptos_resolver_mapa_trabajadores(records, company_names=Non
 @app.route('/api/importacion-conceptos/mapa-trabajadores', methods=['POST'])
 @login_required
 def api_importacion_conceptos_mapa_trabajadores():
-    """Mapa DNI → trabajador activo/no cesado para importación masiva."""
+    """Mapa DNI → trabajador con Status activo (N); acepta cesados si no están inactivos."""
     body = request.get_json(silent=True) or {}
     todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
     if err:

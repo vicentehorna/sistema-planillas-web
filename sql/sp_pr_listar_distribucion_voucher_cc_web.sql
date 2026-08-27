@@ -20,7 +20,7 @@ BEGIN
         LTRIM(RTRIM(ISNULL(d.dni, ''))) AS dni,
         LTRIM(RTRIM(ISNULL(d.nombre, ''))) AS nombre,
         LTRIM(RTRIM(ISNULL(d.codigo, ''))) AS codigo,
-        CAST(ROUND(ISNULL(d.valor, 0), 0) AS INT) AS valor,
+        CAST(ROUND(ISNULL(d.valor, 0), 2) AS DECIMAL(18, 2)) AS valor,
         LTRIM(RTRIM(ISNULL(d.period, ''))) AS period,
         LTRIM(RTRIM(ISNULL(d.tipo, 'CC'))) AS tipo,
         LTRIM(RTRIM(ISNULL(d.company, ''))) AS company

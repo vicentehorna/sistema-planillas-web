@@ -11,7 +11,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardar_distribucion_voucher_cc_web]
     @dni       VARCHAR(255),
     @nombre    VARCHAR(255),
     @codigo    VARCHAR(50),
-    @valor     INT,
+    @valor     DECIMAL(18, 2),
     @xlastuser VARCHAR(20) = NULL
 AS
 BEGIN
@@ -28,7 +28,7 @@ BEGIN
     SET @nombre = LTRIM(RTRIM(ISNULL(@nombre, '')));
     SET @codigo = LTRIM(RTRIM(ISNULL(@codigo, '')));
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
-    SET @valor = ISNULL(@valor, 0);
+    SET @valor = ROUND(ISNULL(@valor, 0), 2);
 
     IF @modo NOT IN ('I', 'U')
     BEGIN
@@ -48,9 +48,9 @@ BEGIN
         RETURN;
     END;
 
-    IF @valor < 1 OR @valor > 100
+    IF @valor < 0.01 OR @valor > 100
     BEGIN
-        RAISERROR('El valor debe ser un entero entre 1 y 100.', 16, 1);
+        RAISERROR('El valor debe estar entre 0.01 y 100 (hasta 2 decimales).', 16, 1);
         RETURN;
     END;
 

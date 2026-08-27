@@ -12132,14 +12132,14 @@ def api_distribucion_porcentual_guardar():
     nombre = str(body.get('nombre') or '').strip()
     codigo = str(body.get('codigo') or '').strip()
     try:
-        valor = int(body.get('valor'))
+        valor = round(float(body.get('valor')), 2)
     except (TypeError, ValueError):
-        return jsonify({"error": "El valor debe ser un entero entre 1 y 100."}), 400
+        return jsonify({"error": "El valor debe ser un número entre 0.01 y 100 (hasta 2 decimales)."}), 400
 
     if not cia or not period or not dni or not nombre or not codigo:
         return jsonify({"error": "Indique compañía, periodo, DNI, nombres y código."}), 400
-    if valor < 1 or valor > 100:
-        return jsonify({"error": "El valor debe ser un entero entre 1 y 100."}), 400
+    if valor < 0.01 or valor > 100:
+        return jsonify({"error": "El valor debe estar entre 0.01 y 100 (hasta 2 decimales)."}), 400
 
     es_divisa = str(get_active_database() or '').strip().lower() == 'hm_divisa'
     sp_guardar = (

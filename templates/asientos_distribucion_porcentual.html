@@ -237,7 +237,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td>
                     <input type="number" class="form-control form-control-sm cc-valor text-end"
                            value="${escHtml(fila.valor === '' || fila.valor == null ? '' : fila.valor)}"
-                           min="1" max="100" step="1" autocomplete="off">
+                           min="0.01" max="100" step="0.01" autocomplete="off">
                 </td>
                 <td class="text-center">
                     <button type="button" class="btn btn-outline-danger btn-sm cc-eliminar"
@@ -388,16 +388,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             fila.dni = String(fila.dni || '').trim();
             fila.nombre = String(fila.nombre || '').trim();
             fila.codigo = String(fila.codigo || '').trim();
-            const valorNum = parseInt(String(fila.valor), 10);
+            const valorRaw = String(fila.valor == null ? '' : fila.valor).trim().replace(',', '.');
+            const valorNum = Number(valorRaw);
             if (!fila.dni || !fila.nombre || !fila.codigo) {
                 toastErr('Complete DNI, nombres y código en todas las filas modificadas.');
                 return;
             }
-            if (!Number.isInteger(valorNum) || valorNum < 1 || valorNum > 100) {
-                toastErr('El valor debe ser un entero entre 1 y 100.');
+            if (!Number.isFinite(valorNum) || valorNum < 0.01 || valorNum > 100) {
+                toastErr('El valor debe estar entre 0.01 y 100 (hasta 2 decimales).');
                 return;
             }
-            fila.valor = valorNum;
+            fila.valor = Math.round(valorNum * 100) / 100;
         }
 
         const clavesPendientes = new Set();

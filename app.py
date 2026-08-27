@@ -3827,10 +3827,17 @@ def _set_cursor_timeout(cursor):
 
 def _set_cursor_timeout_payroll(cursor):
     """Timeout ampliado para procesar planilla trabajador por trabajador."""
+    seconds = _sql_call_timeout_payroll_seconds()
     try:
-        cursor.timeout = _sql_call_timeout_payroll_seconds()
+        cursor.timeout = seconds
     except Exception:
         logging.debug("No se pudo fijar timeout payroll en cursor", exc_info=True)
+    try:
+        conn = getattr(cursor, "connection", None)
+        if conn is not None:
+            conn.timeout = seconds
+    except Exception:
+        logging.debug("No se pudo fijar timeout payroll en connection", exc_info=True)
 
 
 def _set_cursor_timeout_report(cursor):
@@ -12633,6 +12640,10 @@ def api_asientos_interfaz_generar_archivo():
 
     es_divisa = active_db == 'hm_divisa'
     es_elclan = active_db == 'hm_elclan'
+    es_aci = active_db == 'hm_aci'
+    forzar = str(body.get('forzar') or body.get('force') or '').strip().lower() in (
+        '1', 'true', 'y', 'yes', 's', 'si',
+    )
 
     conn = None
     try:
@@ -12670,6 +12681,21 @@ def api_asientos_interfaz_generar_archivo():
             )
             resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
             return resp
+
+        # hm_aci: validar distribución % = 100 antes del TXT (evita descuadre Softland)
+        if es_aci and not forzar:
+            from alvisoft_export import validar_distribuciones_voucher_aci
+            invalidas = validar_distribuciones_voucher_aci(cursor, cia, voucher)
+            if invalidas:
+                return jsonify({
+                    "error": (
+                        "Hay distribuciones porcentuales distintas de 100%. "
+                        "Corrija en Distribución Porcentual antes de generar el TXT."
+                    ),
+                    "codigo": "DISTRIBUCION_INVALIDA",
+                    "distribuciones_invalidas": invalidas,
+                    "total": len(invalidas),
+                }), 409
 
         filename, contenido = generar_txt_alvisoft(cursor, cia, voucher)
         try:

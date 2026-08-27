@@ -126,6 +126,45 @@
         </tbody>
     </table>
 </div>
+
+<!-- Modal: distribuciones inválidas (solo hm_aci) -->
+<div class="modal fade" id="modalDistInvalida" tabindex="-1" aria-labelledby="modalDistInvalidaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header bg-warning-subtle">
+                <h5 class="modal-title" id="modalDistInvalidaLabel">
+                    <i class="bi bi-exclamation-triangle-fill text-warning me-1"></i>
+                    Distribución porcentual incorrecta
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p id="modalDistMsg" class="mb-2"></p>
+                <p id="modalDistMeta" class="small text-muted mb-2"></p>
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>DNI</th>
+                                <th>Nombre</th>
+                                <th class="text-end">Total %</th>
+                                <th>Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modalDistBody"></tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mt-3 mb-0">
+                    Corrija en <strong>Asientos → Distribución Porcentual</strong>
+                    (la suma por persona debe ser 100) y vuelva a generar el TXT.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Entendido</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -381,16 +420,26 @@ document.addEventListener('DOMContentLoaded', async function () {
             const cd = res.headers.get('Content-Disposition') || '';
             if (!res.ok) {
                 let msg = 'No se pudo generar el archivo.';
+                let dataErr = null;
                 try {
                     const raw = await res.text();
                     try {
-                        const err = JSON.parse(raw);
-                        if (err && err.error) msg = err.error;
+                        dataErr = JSON.parse(raw);
+                        if (dataErr && dataErr.error) msg = dataErr.error;
                     } catch (e) {
                         if (raw && raw.trim()) msg = raw.trim().slice(0, 300);
                         else msg = `No se pudo generar el archivo (HTTP ${res.status}).`;
                     }
                 } catch (e) { /* ignore */ }
+
+                if (
+                    dataErr
+                    && dataErr.codigo === 'DISTRIBUCION_INVALIDA'
+                    && Array.isArray(dataErr.distribuciones_invalidas)
+                ) {
+                    mostrarDistribucionesInvalidas(dataErr);
+                    return;
+                }
                 throw new Error(msg);
             }
 
@@ -416,6 +465,46 @@ document.addEventListener('DOMContentLoaded', async function () {
         } finally {
             btn.disabled = false;
             btn.innerHTML = textoOriginal;
+        }
+    }
+
+    function mostrarDistribucionesInvalidas(data) {
+        const rows = data.distribuciones_invalidas || [];
+        const period = rows[0] && rows[0].period ? rows[0].period : '';
+        const periodFmt = period.length === 8
+            ? `${period.slice(0, 4)}-${period.slice(4, 6)}-${period.slice(6, 8)}`
+            : period;
+
+        document.getElementById('modalDistMsg').textContent =
+            data.error || 'Hay distribuciones porcentuales distintas de 100%.';
+        document.getElementById('modalDistMeta').innerHTML =
+            `Periodo distribución: <strong>${escHtml(periodFmt || '—')}</strong>`
+            + ` · Registros: <strong>${rows.length}</strong>`;
+
+        document.getElementById('modalDistBody').innerHTML = rows.map((r) => {
+            const total = Number(r.total);
+            const totalTxt = Number.isFinite(total) ? total.toFixed(2) : String(r.total || '');
+            return (
+                `<tr>`
+                + `<td>${escHtml(r.dni)}</td>`
+                + `<td>${escHtml(r.nombre)}</td>`
+                + `<td class="text-end fw-semibold">${escHtml(totalTxt)}</td>`
+                + `<td>${escHtml(r.detalle || '')}</td>`
+                + `</tr>`
+            );
+        }).join('');
+
+        const el = document.getElementById('modalDistInvalida');
+        if (window.bootstrap && bootstrap.Modal) {
+            bootstrap.Modal.getOrCreateInstance(el).show();
+        } else {
+            const resumen = rows
+                .map((r) => `${r.dni} ${r.nombre}: ${r.total}% (${r.detalle || ''})`)
+                .join('\n');
+            alert(`${data.error || 'Distribuciones inválidas.'}\n\n${resumen}`);
+        }
+        if (window.HmUi) {
+            HmUi.advertencia('No se generó el TXT: revise la distribución porcentual.');
         }
     }
 

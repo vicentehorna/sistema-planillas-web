@@ -2,6 +2,7 @@
 """Generador TXT Alvisoft (asiento de planillas) — equivalente a wf_generar_alvisoft."""
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -304,19 +305,13 @@ def _renumber_lines(lines: List[str]) -> List[str]:
     return [_nro7(i) + ln[7:] for i, ln in enumerate(lines, 1)]
 
 
-def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
-    """
-    Genera el contenido TXT Alvisoft para un voucher.
-
-    Returns:
-        (filename, contenido_txt)
-    """
+def _voucher_meta(cursor, company: str, voucher: str) -> Dict[str, Any]:
+    """Resuelve AC_Voucher por clave interna o VoucherNo."""
     company = (company or '').strip()
     voucher = (voucher or '').strip()
     if not company or not voucher:
         raise ValueError('Compañía y voucher son obligatorios.')
 
-    # Acepta clave interna (AC_Voucher.Voucher) o número visible (VoucherNo, p.ej. PR0000000001).
     cursor.execute(
         """
         SELECT TOP 1
@@ -341,10 +336,115 @@ def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
         raise ValueError(
             f'No se encontró el asiento {voucher!r} en la compañía {company!r}.'
         )
+    return {
+        'voucher': _s(meta[0]).strip(),
+        'voucherno': _s(meta[1]).strip(),
+        'title': _s(meta[2]),
+        'period': _s(meta[3]).strip(),
+        'company': _s(meta[4]).strip(),
+        'fechavac': _s(meta[6]),
+    }
 
-    voucher_key = _s(meta[0]).strip()
-    title = _s(meta[2])
-    fechavac = _s(meta[6])
+
+def validar_distribuciones_voucher_aci(
+    cursor, company: str, voucher: str
+) -> List[Dict[str, Any]]:
+    """
+    hm_aci: detecta personas del voucher cuya distribución OT del mes
+    no suma 100% (causa descuadre Debe/Haber en TXT Alvisoft).
+
+    Returns:
+        Lista de dicts {dni, nombre, period, total, detalle}. Vacía si OK.
+    """
+    meta = _voucher_meta(cursor, company, voucher)
+    voucher_key = meta['voucher']
+    period_ym = meta['period']  # YYYYMM
+    title = meta['title']
+
+    if not period_ym or len(period_ym) < 6:
+        return []
+
+    yyyymm = period_ym[:6]
+
+    # Preferir periodo de planilla embebido en el título (…-20260808)
+    dist_period = None
+    m = re.search(r'(20\d{6})', title or '')
+    if m and m.group(1).startswith(yyyymm):
+        dist_period = m.group(1)
+    if not dist_period:
+        cursor.execute(
+            """
+            SELECT MAX(LTRIM(RTRIM(period)))
+            FROM PR_DistribucionVoucher WITH (NOLOCK)
+            WHERE company = ?
+              AND LTRIM(RTRIM(period)) LIKE ?
+              AND ISNULL(NULLIF(LTRIM(RTRIM(tipo)), ''), 'OT') = 'OT'
+            """,
+            (company, yyyymm + '%'),
+        )
+        row = cursor.fetchone()
+        dist_period = _s(row[0]).strip() if row and row[0] else ''
+
+    if not dist_period:
+        return []
+
+    cursor.execute(
+        """
+        SELECT
+            LTRIM(RTRIM(d.dni)) AS dni,
+            MAX(LTRIM(RTRIM(ISNULL(d.nombre, '')))) AS nombre,
+            CAST(ROUND(SUM(ISNULL(d.valor, 0)), 2) AS DECIMAL(18, 2)) AS total,
+            STRING_AGG(
+                LTRIM(RTRIM(ISNULL(d.codigo, ''))) + '='
+                + CAST(CAST(ROUND(ISNULL(d.valor, 0), 2) AS DECIMAL(18, 2)) AS VARCHAR(20)),
+                ', '
+            ) WITHIN GROUP (ORDER BY d.codigo, d.Fila) AS detalle
+        FROM PR_DistribucionVoucher d WITH (NOLOCK)
+        WHERE d.company = ?
+          AND LTRIM(RTRIM(d.period)) = ?
+          AND ISNULL(NULLIF(LTRIM(RTRIM(d.tipo)), ''), 'OT') = 'OT'
+          AND EXISTS (
+                SELECT 1
+                FROM AC_VoucherDetail vd WITH (NOLOCK)
+                WHERE vd.Voucher = ?
+                  AND (
+                        LTRIM(RTRIM(vd.Person)) = LTRIM(RTRIM(d.dni))
+                     OR RIGHT('000000000' + LTRIM(RTRIM(vd.Person)), 9)
+                        = RIGHT('000000000' + LTRIM(RTRIM(d.dni)), 9)
+                  )
+          )
+        GROUP BY LTRIM(RTRIM(d.dni))
+        HAVING ABS(SUM(ISNULL(d.valor, 0)) - 100) > 0.01
+        ORDER BY LTRIM(RTRIM(d.dni))
+        """,
+        (company, dist_period, voucher_key),
+    )
+    cols = [c[0].lower() for c in (cursor.description or [])]
+    out: List[Dict[str, Any]] = []
+    for row in cursor.fetchall() or []:
+        rd = dict(zip(cols, row))
+        total = float(rd.get('total') or 0)
+        out.append({
+            'dni': _s(rd.get('dni')).strip(),
+            'nombre': _s(rd.get('nombre')).strip(),
+            'period': dist_period,
+            'total': round(total, 2),
+            'detalle': _s(rd.get('detalle')).strip(),
+        })
+    return out
+
+
+def generar_txt_alvisoft(cursor, company: str, voucher: str) -> Tuple[str, str]:
+    """
+    Genera el contenido TXT Alvisoft para un voucher.
+
+    Returns:
+        (filename, contenido_txt)
+    """
+    meta = _voucher_meta(cursor, company, voucher)
+    voucher_key = meta['voucher']
+    title = meta['title']
+    fechavac = meta['fechavac']
     stamp = datetime.now().strftime('%Y%m%d_%H%M')
     filename = f"{(title or 'asiento').strip()}_{stamp}.txt"
     # sanitize filename

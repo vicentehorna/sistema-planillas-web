@@ -3658,6 +3658,13 @@ def _normalize_todos_bancos_banbif(raw, default='N'):
     return 'N'
 
 
+def _normalize_telecredito_referencia(raw, max_len=40):
+    s = str(raw or '').strip()
+    if not s:
+        return ''
+    return s[:max_len]
+
+
 def _telecredito_params_from_json(body):
     """Parámetros comunes para listado y generación Telecrédito BCP."""
     body = body or {}
@@ -18609,9 +18616,13 @@ def api_pago_haberes_telecredito_listado():
     costcenter = _normalize_replicationunit_asig(
         body.get('costcenter') or body.get('centrocosto')
     )
+    if _es_cliente_ngservicios():
+        costcenter = '0'
     accountprofile = str(
         body.get('accountprofile') or body.get('perfil_contable') or ''
     ).strip()
+    if _es_cliente_ngservicios():
+        accountprofile = ''
     if accountprofile in ('0', '*'):
         accountprofile = ''
     if len(accountprofile) > 20:
@@ -18716,13 +18727,17 @@ def api_pago_haberes_telecredito_generar_txt():
         return jsonify({"error": "Seleccione al menos un trabajador."}), 400
 
     todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    referencia = _normalize_telecredito_referencia(
+        body.get('referencia') or body.get('par_referencia') or body.get('ref_cabecera')
+    )
 
     log_sp = (
         '[telecredito generar] EXEC sp_pr_generar_telecredito_web '
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@todos_bancos={todos_bancos!r} trabajadores_seleccionados={len(persons)}'
+        f'@todos_bancos={todos_bancos!r} @par_referencia={referencia!r} '
+        f'trabajadores_seleccionados={len(persons)}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -18739,10 +18754,11 @@ def api_pago_haberes_telecredito_generar_txt():
             "EXEC sp_pr_generar_telecredito_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
             "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
-            "@todos_bancos=?",
+            "@todos_bancos=?, @par_referencia=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
                 p['period'], p['processtype'], p['paydate'], todos_bancos,
+                referencia or None,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

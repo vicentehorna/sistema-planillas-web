@@ -1620,7 +1620,8 @@
                 }
                 const txtRef = document.getElementById('txtReferencia');
                 if (txtRef) {
-                    estado.referencia = String(txtRef.value || '').trim().slice(0, 25);
+                    const maxLen = parseInt(txtRef.maxLength, 10) || 40;
+                    estado.referencia = String(txtRef.value || '').trim().slice(0, maxLen);
                 }
                 localStorage.setItem(storageKey, JSON.stringify(estado));
             } catch (e) {
@@ -1772,7 +1773,8 @@
 
             const txtReferencia = document.getElementById('txtReferencia');
             if (txtReferencia && filtros.referencia != null) {
-                txtReferencia.value = String(filtros.referencia).slice(0, 25);
+                const maxLen = parseInt(txtReferencia.maxLength, 10) || 40;
+                txtReferencia.value = String(filtros.referencia).slice(0, maxLen);
             }
 
             guardar();

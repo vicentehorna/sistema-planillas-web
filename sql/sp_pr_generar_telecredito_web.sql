@@ -3,6 +3,7 @@
     Requiere tabla temporal #TelecreditoPersonas (person) creada por la app web
     con los trabajadores seleccionados antes de ejecutar este SP.
     @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
+    @par_referencia: texto cabecera TXT (40 chars). Si vacío, usa PLANILLA HABERES + proceso.
     Mismo banco → SalaryAccount (A/M/C); otro banco → SocialAssistanceNumber / CCI (B).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
@@ -13,7 +14,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
-    @todos_bancos    CHAR(1) = 'N'
+    @todos_bancos    CHAR(1) = 'N',
+    @par_referencia  VARCHAR(40) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -23,6 +25,7 @@ BEGIN
     IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
     SET @todos_bancos = UPPER(@todos_bancos);
     IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
+    SET @par_referencia = LTRIM(RTRIM(ISNULL(@par_referencia, '')));
 
     IF OBJECT_ID('tempdb..#TelecreditoPersonas') IS NULL
     BEGIN
@@ -72,6 +75,8 @@ BEGIN
     WHERE pt.ProcessType = @par_processtype;
 
     IF @tipo_proceso IS NULL OR @tipo_proceso = '' SET @tipo_proceso = '1';
+    IF @par_referencia <> ''
+        SET @ref_planilla = LEFT(@par_referencia, 40);
     IF @ref_planilla IS NULL OR LTRIM(RTRIM(@ref_planilla)) = '' SET @ref_planilla = 'PLANILLA HABERES';
     IF @tipo_cta_origen IS NULL OR @tipo_cta_origen = '' SET @tipo_cta_origen = 'C';
 

@@ -21279,6 +21279,23 @@ def get_lista_boletas():
                     'cese': fc if fc is not None else '',
                 }
             )
+
+        advertencia = None
+        if not trabajadores and repunit != '0':
+            cursor.execute(
+                'EXEC sp_pr_listadogenerarboletas_web @cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?, @repunit=?, @costcenter=?',
+                (cia, payroll_type, processtype, period, person, nombre, '0', costcenter),
+            )
+            alt_rows = _dicts_first_nonempty_resultset(cursor)
+            if alt_rows:
+                advertencia = (
+                    'No hay trabajadores en la unidad seleccionada. '
+                    f'Con «Todas» las unidades hay {len(alt_rows)} registro(s). '
+                    'Revise la unidad asignada en el maestro de trabajadores.'
+                )
+
+        if advertencia:
+            return jsonify({'rows': trabajadores, 'advertencia': advertencia})
         return jsonify(trabajadores)
     except Exception as e:
         logging.exception('get_lista_boletas')

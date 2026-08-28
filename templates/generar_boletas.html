@@ -820,11 +820,17 @@ document.addEventListener('DOMContentLoaded', async function () {
                 alert(data.error || 'Error al cargar la lista.');
                 return;
             }
-            if (!Array.isArray(data)) {
-                alert('Respuesta inválida del servidor.');
+            const rows = Array.isArray(data)
+                ? data
+                : (Array.isArray(data.rows) ? data.rows : []);
+            if (!Array.isArray(data) && !Array.isArray(data.rows) && data.error) {
+                alert(data.error || 'Respuesta inválida del servidor.');
                 return;
             }
-            boletasCache = data;
+            if (data.advertencia) {
+                alert(data.advertencia);
+            }
+            boletasCache = rows;
             renderListaBoletas(boletasCache);
         } catch (e) {
             console.error(e);
@@ -1190,6 +1196,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         const cia = this.value.trim();
+        if (cboUnidad) cboUnidad.value = '0';
         document.getElementById('cboProceso').innerHTML = '<option value="">Seleccione...</option>';
         document.getElementById('cboProceso').disabled = true;
         document.getElementById('cboPeriodo').innerHTML = '<option value="">Seleccione...</option>';

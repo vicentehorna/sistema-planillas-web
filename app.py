@@ -3235,6 +3235,221 @@ def _declaracion_afp_resumen_tiene_diferencias(resumen):
     return False
 
 
+def _es_bd_hm_alamo():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_alamo'
+    except Exception:
+        return False
+
+
+def _require_hm_alamo_json():
+    if not _es_bd_hm_alamo():
+        return jsonify({'error': 'AFP NET Masivo solo está disponible en hm_alamo.'}), 403
+    return None
+
+
+def _declaracion_afp_params_dict(
+    cia,
+    period_yyyymm,
+    payroll_type='',
+    payroll_all=None,
+    afp_all='Y',
+    afp='',
+    employee_all='Y',
+    employee='',
+):
+    period = str(period_yyyymm or '').strip()[:6]
+    payroll = str(payroll_type or '').strip()
+    if payroll_all is None:
+        payroll_all = 'Y' if not payroll else 'N'
+    payroll_all = str(payroll_all or 'Y').strip().upper()
+    if payroll_all == 'Y':
+        payroll = ''
+    return {
+        'cia': str(cia or '').strip(),
+        'period': period,
+        'payroll_all': payroll_all,
+        'payroll': payroll,
+        'afp_all': str(afp_all or 'Y').strip().upper(),
+        'afp': str(afp or '').strip(),
+        'employee_all': str(employee_all or 'Y').strip().upper(),
+        'employee': str(employee or '').strip(),
+    }
+
+
+def _declaracion_afp_masivo_filtros_from_json(body):
+    body = body or {}
+    payroll_desc = str(
+        body.get('payroll_desc')
+        or body.get('payrolltype_desc')
+        or body.get('payroll_desc')
+        or ''
+    ).strip()
+    proceso_desc = str(
+        body.get('proceso_desc')
+        or body.get('processtype_desc')
+        or body.get('proceso_desc')
+        or ''
+    ).strip()
+    period_raw = _normalize_pr_period(body.get('period'))
+    period_yyyymm = period_raw[:6] if len(period_raw) >= 6 else period_raw
+    companies = _companies_csv_from_list(body.get('companies') or [])
+    return payroll_desc, proceso_desc, period_raw, period_yyyymm, companies
+
+
+def _declaracion_afp_masivo_validar_filtros(payroll_desc, proceso_desc, period_yyyymm, companies_csv):
+    if not payroll_desc or not proceso_desc:
+        return 'Seleccione tipo de planilla y proceso.'
+    if not re.fullmatch(r'\d{6}', str(period_yyyymm or '').strip()):
+        return 'Seleccione un periodo válido.'
+    if not companies_csv:
+        return 'Seleccione al menos una empresa.'
+    return None
+
+
+def _declaracion_afp_masivo_company_map(cursor):
+    cursor.execute('EXEC sp_pr_selectorcompanias_web')
+    rows = cursor.fetchall()
+    mapping = {}
+    for r in rows:
+        code = str(getattr(r, 'Company', None) or (r[0] if r else '') or '').strip()
+        desc = str(getattr(r, 'description', None) or (r[1] if len(r) > 1 else '') or code).strip()
+        if code:
+            mapping[code] = desc
+    return mapping
+
+
+def _declaracion_afp_masivo_validar_periodo(cursor, payroll_desc, proceso_desc, period, companies_csv):
+    cursor.execute(
+        'EXEC sp_pr_validar_periodo_masivo_web '
+        '@payroll_desc=?, @proceso_desc=?, @period=?, @companies=?',
+        (payroll_desc, proceso_desc, period, companies_csv),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    items = []
+    for r in rows:
+        estado = str(r.get('estado') or '').strip().upper()
+        items.append({
+            'company': str(r.get('company') or '').strip(),
+            'company_desc': str(r.get('company_desc') or '').strip(),
+            'payrolltype': str(r.get('payrolltype') or '').strip(),
+            'processtype': str(r.get('processtype') or '').strip(),
+            'estado': estado,
+            'mensaje': str(r.get('mensaje') or '').strip(),
+        })
+    validas = [x for x in items if x.get('estado') == 'OK']
+    invalidas = [x for x in items if x.get('estado') != 'OK']
+    return items, validas, invalidas
+
+
+def _declaracion_afp_masivo_mov_personal(row):
+    inicio = str(row.get('inicio_relacion') or '').strip().upper()
+    cese = str(row.get('cese_relacion') or '').strip().upper()
+    if inicio == 'S' and cese == 'S':
+        return 'Inicio y cese'
+    if inicio == 'S':
+        return 'Inicio'
+    if cese == 'S':
+        return 'Cese'
+    fecha = str(row.get('fecha_cese') or '').strip()
+    return fecha or ''
+
+
+def _declaracion_afp_procesar_empresa(cursor, conn, p, sync=True, validar_regimen=False):
+    """Ejecuta sync + listado AFPnet para una empresa. Devuelve dict con filas y metadatos."""
+    sync_afp = {}
+    if sync:
+        sync_afp = _declaracion_afp_sincronizar_planilla(cursor, conn, p)
+    filas = _declaracion_afp_ejecutar_listado(cursor, p)
+    filas_val, validaciones = _declaracion_afp_aplicar_validaciones_filas(filas, p['period'])
+    if validar_regimen:
+        validaciones = list(validaciones or [])
+        validaciones.extend(_declaracion_afp_validar_regimen_pension_planilla(cursor, p))
+        validaciones.extend(_declaracion_afp_validar_jubilados_filas(filas_val))
+        validaciones = _declaracion_afp_validaciones_sync_afp(validaciones, sync_afp)
+    return {
+        'filas': filas_val,
+        'validaciones': validaciones,
+        'sync_afp': sync_afp,
+        'total': len(filas_val),
+    }
+
+
+def _declaracion_afp_masivo_listado(cursor, conn, payroll_desc, proceso_desc, period_raw, companies_csv):
+    period_yyyymm = period_raw[:6] if len(period_raw) >= 6 else period_raw
+    company_map = _declaracion_afp_masivo_company_map(cursor)
+    validacion, validas, invalidas = _declaracion_afp_masivo_validar_periodo(
+        cursor, payroll_desc, proceso_desc, period_raw, companies_csv,
+    )
+    filas = []
+    validaciones = []
+    empresas_ok = []
+    empresas_sin_planilla = []
+
+    for item in validas:
+        cia = item.get('company')
+        if not cia:
+            continue
+        payroll_type = item.get('payrolltype') or ''
+        if not payroll_type:
+            payroll_type, _ = _resolve_payroll_process_by_description(
+                cursor, cia, payroll_desc, proceso_desc,
+            )
+        if not payroll_type:
+            empresas_sin_planilla.append({
+                'company': cia,
+                'company_desc': item.get('company_desc') or company_map.get(cia, cia),
+                'mensaje': f'No existe la planilla "{payroll_desc}" en esta empresa.',
+            })
+            continue
+        p = _declaracion_afp_params_dict(
+            cia, period_yyyymm, payroll_type=payroll_type, payroll_all='N',
+        )
+        resultado = _declaracion_afp_procesar_empresa(cursor, conn, p, sync=True, validar_regimen=True)
+        company_desc = item.get('company_desc') or company_map.get(cia, cia)
+        if resultado['total'] > 0:
+            empresas_ok.append({
+                'company': cia,
+                'company_desc': company_desc,
+                'total': resultado['total'],
+            })
+        for row in resultado['filas']:
+            enriched = dict(row)
+            enriched['company'] = cia
+            enriched['company_desc'] = company_desc
+            enriched['mov_personal'] = _declaracion_afp_masivo_mov_personal(row)
+            filas.append(enriched)
+        for msg in resultado.get('validaciones') or []:
+            pref = f'{company_desc}: '
+            if msg and not str(msg).startswith(pref):
+                validaciones.append(pref + str(msg))
+            elif msg:
+                validaciones.append(str(msg))
+
+    advertencia = ''
+    excluidas = list(invalidas) + list(empresas_sin_planilla)
+    if excluidas:
+        detalle = '; '.join(
+            f"{x.get('company_desc') or x.get('company')}: {x.get('mensaje') or x.get('estado')}"
+            for x in excluidas
+        )
+        advertencia = (
+            'Las siguientes empresas no se incluyeron en la consulta: ' + detalle
+        )
+
+    return {
+        'rows': filas,
+        'total': len(filas),
+        'validacion': validacion,
+        'validas': validas,
+        'invalidas': excluidas,
+        'empresas_ok': empresas_ok,
+        'advertencia': advertencia,
+        'validaciones': list(dict.fromkeys(validaciones)),
+    }
+
+
 def _plame_rows_archivo15_from_json(body):
     rows = body.get('rows')
     if not isinstance(rows, list):
@@ -16272,6 +16487,15 @@ def declaracion_afp_page():
     return render_template('declaracion_afp.html')
 
 
+@app.route('/afp/declaracion-masivo')
+@login_required
+def declaracion_afp_masivo_page():
+    if not _es_bd_hm_alamo():
+        flash('AFP NET Masivo solo está disponible en hm_alamo.', 'warning')
+        return redirect(url_for('declaracion_afp_page'))
+    return render_template('declaracion_afp_masivo.html')
+
+
 @app.route('/afp/control-pagos')
 @login_required
 def control_pagos_afp_page():
@@ -18203,6 +18427,158 @@ def api_declaracion_afp_generar_xlsx():
     except Exception as e:
         logging.exception("api_declaracion_afp_generar_xlsx")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/declaracion-afp-masivo/listado', methods=['POST'])
+@login_required
+def api_declaracion_afp_masivo_listado():
+    denied = _require_hm_alamo_json()
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc, proceso_desc, period_raw, period_yyyymm, companies_csv = (
+        _declaracion_afp_masivo_filtros_from_json(body)
+    )
+    err = _declaracion_afp_masivo_validar_filtros(
+        payroll_desc, proceso_desc, period_yyyymm, companies_csv,
+    )
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        payload = _declaracion_afp_masivo_listado(
+            cursor, conn, payroll_desc, proceso_desc, period_raw, companies_csv,
+        )
+        payload['puede_generar_zip'] = payload.get('total', 0) > 0
+        return jsonify(payload)
+    except Exception as e:
+        logging.exception('api_declaracion_afp_masivo_listado')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/declaracion-afp-masivo/generar-zip', methods=['POST'])
+@login_required
+def api_declaracion_afp_masivo_generar_zip():
+    denied = _require_hm_alamo_json()
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc, proceso_desc, period_raw, period_yyyymm, companies_csv = (
+        _declaracion_afp_masivo_filtros_from_json(body)
+    )
+    err = _declaracion_afp_masivo_validar_filtros(
+        payroll_desc, proceso_desc, period_yyyymm, companies_csv,
+    )
+    if err:
+        return jsonify({'error': err}), 400
+
+    companies_filter = _companies_csv_from_list(body.get('only_companies') or [])
+    if companies_filter:
+        requested = {c.strip().upper() for c in companies_csv.split(',') if c.strip()}
+        only = {c.strip().upper() for c in companies_filter.split(',') if c.strip()}
+        companies_csv = ','.join(c for c in requested if c in only)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        company_map = _declaracion_afp_masivo_company_map(cursor)
+        _, validas, invalidas = _declaracion_afp_masivo_validar_periodo(
+            cursor, payroll_desc, proceso_desc, period_raw, companies_csv,
+        )
+
+        archivos = []
+        errores = []
+        omitidas = list(invalidas)
+
+        for item in validas:
+            cia = item.get('company')
+            if not cia:
+                continue
+            company_desc = item.get('company_desc') or company_map.get(cia, cia)
+            payroll_type = item.get('payrolltype') or ''
+            if not payroll_type:
+                payroll_type, _ = _resolve_payroll_process_by_description(
+                    cursor, cia, payroll_desc, proceso_desc,
+                )
+            if not payroll_type:
+                omitidas.append({
+                    'company': cia,
+                    'company_desc': company_desc,
+                    'mensaje': f'No existe la planilla "{payroll_desc}" en esta empresa.',
+                })
+                continue
+            p = _declaracion_afp_params_dict(
+                cia, period_yyyymm, payroll_type=payroll_type, payroll_all='N',
+            )
+            try:
+                resultado = _declaracion_afp_procesar_empresa(
+                    cursor, conn, p, sync=True, validar_regimen=False,
+                )
+                filas = resultado.get('filas') or []
+                if not filas:
+                    omitidas.append({
+                        'company': cia,
+                        'company_desc': company_desc,
+                        'mensaje': 'Sin registros AFPnet para el periodo.',
+                    })
+                    continue
+                ruc = _obtener_ruc_compania(cursor, cia) or '00000000000'
+                buf = _declaracion_afp_generar_xlsx_bytes(filas)
+                filename = f'AFPNET_{period_yyyymm}_{ruc}.xlsx'
+                archivos.append((filename, buf.getvalue(), company_desc))
+            except Exception as exc:
+                logging.exception('api_declaracion_afp_masivo_generar_zip cia=%s', cia)
+                errores.append(f'{company_desc}: {exc}')
+
+        if not archivos:
+            detalle = '; '.join(
+                f"{x.get('company_desc') or x.get('company')}: {x.get('mensaje') or x.get('estado')}"
+                for x in omitidas
+            )
+            msg = 'No se generó ningún archivo AFPnet.'
+            if detalle:
+                msg += ' ' + detalle
+            if errores:
+                msg += ' Errores: ' + '; '.join(errores[:5])
+            return jsonify({'error': msg, 'omitidas': omitidas, 'errores': errores}), 400
+
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for fname, raw, _desc in archivos:
+                zf.writestr(fname, raw)
+        memory_file.seek(0)
+        zip_name = f'AFPNET_MASIVO_{period_yyyymm}.zip'
+        resp = send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=zip_name,
+            as_attachment=True,
+        )
+        resp.headers['X-Afpnet-Generados'] = str(len(archivos))
+        if omitidas:
+            resp.headers['X-Afpnet-Omitidas'] = str(len(omitidas))
+        if errores:
+            resp.headers['X-Afpnet-Errores'] = str(len(errores))
+        return resp
+    except Exception as e:
+        logging.exception('api_declaracion_afp_masivo_generar_zip')
+        return jsonify({'error': str(e)}), 500
     finally:
         if conn:
             try:

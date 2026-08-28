@@ -1,0 +1,536 @@
+{% extends "layout.html" %}
+
+{% block title %}AFP NET Masivo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .masivo-panel-empresas {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+
+    .masivo-panel-empresas .list-group-item {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.82rem;
+    }
+
+    .table-scroll-container {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-afp-masivo {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-afp-masivo th,
+    .table-afp-masivo td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-afp-masivo thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-afp-masivo .col-monto {
+        text-align: right;
+        min-width: 5.5rem;
+    }
+
+    .table-afp-masivo tr.fila-invalida td {
+        background-color: #fff3cd;
+    }
+
+    #cardEmpresasExcluidas ul,
+    #cardValidacionesAfpMasivo ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body pt-3">
+        <form id="frmAfpMasivo" class="row g-3">
+            <div class="col-md-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="txtLocalizar" class="form-label small fw-bold text-muted">Localizar empresa</label>
+                <input type="text" id="txtLocalizar" class="form-control form-control-sm"
+                       placeholder="Filtrar lista de empresas" maxlength="80" autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
+                    <i class="bi bi-file-earmark-zip"></i> Generar archivos AFPnet
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Empresas: <span id="lblEmpresasSel">0</span>
+                    · Registros: <span id="lblRegistros">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardEmpresasExcluidas">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Empresas excluidas de la consulta</strong>
+            <p id="textoEmpresasExcluidas" class="mb-2 small"></p>
+            <ul id="listaEmpresasExcluidas" class="mt-0 mb-0"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesAfpMasivo">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Validaciones AFPnet (advertencias)</strong>
+            <ul id="listaValidacionesAfpMasivo"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-3">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                <span class="small fw-bold">Empresas</span>
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkTodasEmpresas" checked>
+                    <label class="form-check-label small" for="chkTodasEmpresas">Todas</label>
+                </div>
+            </div>
+            <div class="card-body p-2">
+                <div id="panelEmpresas" class="masivo-panel-empresas list-group list-group-flush">
+                    <div class="text-center text-muted small py-3">Cargando...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-9">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-body pt-3">
+                <h5 class="fw-bold mb-3 text-center" id="tituloAfpMasivo">Generación Masiva AFPnet</h5>
+                <div class="table-scroll-container">
+                    <table class="table table-bordered table-sm table-hover table-afp-masivo align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Empresa</th>
+                                <th>AFP</th>
+                                <th>Código</th>
+                                <th>CUSSP</th>
+                                <th>DNI</th>
+                                <th>Apellido Paterno</th>
+                                <th>Apellido Materno</th>
+                                <th>Nombres</th>
+                                <th>Mov. de Personal</th>
+                                <th class="col-monto">Remuneración Asegurable</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyAfpMasivo">
+                            <tr><td colspan="10" class="text-center text-muted py-3">Seleccione filtros y consulte.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
+    const URL_PROCESOS = {{ url_for('api_procesos_consolidada') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_periodos_consolidada') | tojson }};
+    const URL_COMPANIAS = {{ url_for('api_procesar_planilla_masivo_companias') | tojson }};
+    const URL_LISTADO = {{ url_for('api_declaracion_afp_masivo_listado') | tojson }};
+    const URL_GENERAR_ZIP = {{ url_for('api_declaracion_afp_masivo_generar_zip') | tojson }};
+
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboProc = document.getElementById('cboProceso');
+    const cboPer = document.getElementById('cboPeriodo');
+    const txtLocalizar = document.getElementById('txtLocalizar');
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodas = document.getElementById('chkTodasEmpresas');
+    const tbody = document.getElementById('tbodyAfpMasivo');
+    const btnGenerarZip = document.getElementById('btnGenerarZip');
+    let lastRows = [];
+    let empresasData = [];
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatearMonto(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function actualizarContadores() {
+        document.getElementById('lblEmpresasSel').textContent = String(empresasSeleccionadas().length);
+        document.getElementById('lblRegistros').textContent = String(lastRows.length);
+        btnGenerarZip.disabled = lastRows.length === 0;
+    }
+
+    function sincronizarChkTodas() {
+        const checks = panelEmpresas.querySelectorAll('.chk-empresa:not(.d-none)');
+        if (!checks.length) {
+            chkTodas.checked = false;
+            chkTodas.indeterminate = false;
+            return;
+        }
+        const marcados = panelEmpresas.querySelectorAll('.chk-empresa:checked:not(.d-none)').length;
+        chkTodas.checked = marcados === checks.length;
+        chkTodas.indeterminate = marcados > 0 && marcados < checks.length;
+        actualizarContadores();
+    }
+
+    function filtrarEmpresasVisibles() {
+        const q = String(txtLocalizar.value || '').trim().toLowerCase();
+        panelEmpresas.querySelectorAll('.empresa-item').forEach((el) => {
+            const text = String(el.getAttribute('data-text') || '').toLowerCase();
+            el.classList.toggle('d-none', q && !text.includes(q));
+        });
+        sincronizarChkTodas();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-3">Sin empresas activas.</div>';
+            sincronizarChkTodas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || e.company || '').trim();
+            const text = String(e.text || e.description || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2 empresa-item" data-text="${esc(text)} ${esc(code)}">
+                <input class="form-check-input mt-1 chk-empresa" type="checkbox" value="${esc(code)}" checked>
+                <span>${esc(text)}</span>
+            </label>`;
+        }).join('');
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+            el.addEventListener('change', sincronizarChkTodas);
+        });
+        filtrarEmpresasVisibles();
+    }
+
+    async function cargarCompanias() {
+        try {
+            const res = await fetch(URL_COMPANIAS);
+            const data = await res.json();
+            renderEmpresas(Array.isArray(data) ? data : []);
+        } catch (e) {
+            console.error(e);
+            panelEmpresas.innerHTML = '<div class="text-danger small py-3">Error al cargar empresas.</div>';
+        }
+    }
+
+    async function cargarPlanillas() {
+        cboPt.innerHTML = '<option value="">Seleccione...</option>';
+        cboProc.innerHTML = '<option value="">Seleccione...</option>';
+        cboProc.disabled = true;
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+        try {
+            const res = await fetch(URL_PLANILLAS);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text;
+                cboPt.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarProcesos() {
+        const payroll = cboPt.value.trim();
+        cboProc.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+        if (!payroll) {
+            cboProc.disabled = true;
+            return;
+        }
+        cboProc.disabled = false;
+        try {
+            const res = await fetch(`${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text;
+                cboProc.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarPeriodos() {
+        const payroll = cboPt.value.trim();
+        const proceso = cboProc.value.trim();
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        if (!payroll || !proceso) {
+            cboPer.disabled = true;
+            return;
+        }
+        cboPer.disabled = false;
+        try {
+            const res = await fetch(
+                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`
+            );
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text || item.id;
+                cboPer.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function payloadFiltros() {
+        return {
+            payroll_desc: cboPt.value.trim(),
+            proceso_desc: cboProc.value.trim(),
+            period: cboPer.value.trim(),
+            companies: empresasSeleccionadas(),
+        };
+    }
+
+    function ocultarAdvertenciaEmpresas() {
+        document.getElementById('cardEmpresasExcluidas').classList.add('d-none');
+        document.getElementById('textoEmpresasExcluidas').textContent = '';
+        document.getElementById('listaEmpresasExcluidas').innerHTML = '';
+    }
+
+    function renderAdvertenciaEmpresas(invalidas, advertencia) {
+        const card = document.getElementById('cardEmpresasExcluidas');
+        const texto = document.getElementById('textoEmpresasExcluidas');
+        const lista = document.getElementById('listaEmpresasExcluidas');
+        if (!invalidas || !invalidas.length) {
+            ocultarAdvertenciaEmpresas();
+            return;
+        }
+        texto.textContent = advertencia || '';
+        lista.innerHTML = invalidas.map((x) => {
+            const nom = x.company_desc || x.company || '';
+            const msg = x.mensaje || x.estado || '';
+            return `<li>${esc(nom)}${msg ? ` — ${esc(msg)}` : ''}</li>`;
+        }).join('');
+        card.classList.remove('d-none');
+    }
+
+    function renderValidaciones(items) {
+        const card = document.getElementById('cardValidacionesAfpMasivo');
+        const lista = document.getElementById('listaValidacionesAfpMasivo');
+        const arr = Array.isArray(items) ? items : [];
+        if (!arr.length) {
+            card.classList.add('d-none');
+            lista.innerHTML = '';
+            return;
+        }
+        lista.innerHTML = arr.map((m) => `<li>${esc(m)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
+    function renderTabla(rows) {
+        lastRows = Array.isArray(rows) ? rows : [];
+        if (!lastRows.length) {
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Sin registros.</td></tr>';
+            actualizarContadores();
+            return;
+        }
+        tbody.innerHTML = lastRows.map((row) => {
+            const invalida = row.validacion_ok === false;
+            return `<tr class="${invalida ? 'fila-invalida' : ''}" title="${invalida ? esc((row.validacion_errores || []).join(' | ')) : ''}">
+                <td>${esc(row.company_desc || row.company)}</td>
+                <td>${esc(row.afp_description)}</td>
+                <td>${esc(row.person)}</td>
+                <td>${esc(row.cuspp)}</td>
+                <td>${esc(row.documentnumber)}</td>
+                <td>${esc(row.lastname1)}</td>
+                <td>${esc(row.lastname2)}</td>
+                <td>${esc(row.names)}</td>
+                <td>${esc(row.mov_personal || row.fecha_cese)}</td>
+                <td class="col-monto">${esc(formatearMonto(row.remuneracion))}</td>
+            </tr>`;
+        }).join('');
+        actualizarContadores();
+    }
+
+    function actualizarTitulo() {
+        const period = cboPer.value.trim();
+        const s = String(period || '').replace(/\D/g, '');
+        const yyyymm = s.length >= 6 ? s.slice(0, 6) : '';
+        const titulo = document.getElementById('tituloAfpMasivo');
+        if (titulo && /^\d{6}$/.test(yyyymm)) {
+            titulo.textContent = `Generación Masiva AFPnet ${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}`;
+        }
+    }
+
+    async function ejecutarConsulta() {
+        const payload = payloadFiltros();
+        if (!payload.payroll_desc || !payload.proceso_desc || !payload.period) {
+            alert('Seleccione tipo de planilla, proceso y periodo.');
+            return;
+        }
+        if (!payload.companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
+
+        btnGenerarZip.disabled = true;
+        tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Consultando...</td></tr>';
+        ocultarAdvertenciaEmpresas();
+        renderValidaciones([]);
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-3">Error en la consulta.</td></tr>';
+                alert(data.error || 'Error al consultar.');
+                return;
+            }
+            renderAdvertenciaEmpresas(data.invalidas, data.advertencia);
+            renderValidaciones(data.validaciones);
+            renderTabla(data.rows);
+            actualizarTitulo();
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-3">Error de red.</td></tr>';
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function generarZip() {
+        const payload = payloadFiltros();
+        if (!payload.payroll_desc || !payload.proceso_desc || !payload.period) {
+            alert('Seleccione tipo de planilla, proceso y periodo.');
+            return;
+        }
+        if (!payload.companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
+        if (!lastRows.length) {
+            alert('Consulte el listado antes de generar los archivos.');
+            return;
+        }
+
+        const textoOriginal = btnGenerarZip.innerHTML;
+        btnGenerarZip.disabled = true;
+        btnGenerarZip.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+
+        try {
+            const res = await fetch(URL_GENERAR_ZIP, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || 'No se pudo generar el ZIP.');
+                return;
+            }
+            const blob = await res.blob();
+            const disp = res.headers.get('Content-Disposition') || '';
+            let filename = 'AFPNET_MASIVO.zip';
+            const m = /filename\*?=(?:UTF-8''|")?([^";]+)/i.exec(disp);
+            if (m && m[1]) filename = decodeURIComponent(m[1].replace(/"/g, ''));
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el ZIP.');
+        } finally {
+            btnGenerarZip.innerHTML = textoOriginal;
+            actualizarContadores();
+        }
+    }
+
+    document.getElementById('frmAfpMasivo').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+    btnGenerarZip.addEventListener('click', generarZip);
+    cboPt.addEventListener('change', cargarProcesos);
+    cboProc.addEventListener('change', cargarPeriodos);
+    cboPer.addEventListener('change', actualizarTitulo);
+    txtLocalizar.addEventListener('input', filtrarEmpresasVisibles);
+    chkTodas.addEventListener('change', function () {
+        const marcar = chkTodas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa:not(.d-none)').forEach((el) => {
+            el.checked = marcar;
+        });
+        sincronizarChkTodas();
+    });
+
+    cargarCompanias();
+    cargarPlanillas();
+});
+</script>
+{% endblock %}

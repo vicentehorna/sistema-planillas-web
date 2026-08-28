@@ -899,8 +899,9 @@
                 </li>
                 {% endif %}
 
-                {% set afp_active = request.endpoint in ('afps_page', 'declaracion_afp_page', 'control_pagos_afp_page') %}
-                {% set show_afp = can_menu('afps') or can_menu('afpnet') or can_menu('control_pagos_afp') %}
+                {% set afp_active = request.endpoint in ('afps_page', 'declaracion_afp_page', 'declaracion_afp_masivo_page', 'control_pagos_afp_page') %}
+                {% set es_alamo = (sql_database or '')|lower == 'hm_alamo' %}
+                {% set show_afp = can_menu('afps') or can_menu('afpnet') or can_menu('afpnet_masivo') or can_menu('control_pagos_afp') %}
                 {% if show_afp %}
                 <li class="sidebar-menu-parent {{ 'active' if afp_active else '' }}">
                     <a href="#submenuAfp"
@@ -924,6 +925,13 @@
                         <li class="{{ 'active' if request.endpoint == 'declaracion_afp_page' else '' }}">
                             <a href="{{ url_for('declaracion_afp_page') }}" title="AFPnet">
                                 <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">AFPnet</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_alamo and can_menu('afpnet_masivo') %}
+                        <li class="{{ 'active' if request.endpoint == 'declaracion_afp_masivo_page' else '' }}">
+                            <a href="{{ url_for('declaracion_afp_masivo_page') }}" title="AFP NET Masivo">
+                                <i class="bi bi-files"></i><span class="sidebar-link-text">AFP NET Masivo</span>
                             </a>
                         </li>
                         {% endif %}

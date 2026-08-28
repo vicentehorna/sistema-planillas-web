@@ -40,13 +40,28 @@ BEGIN
         ec.FlagFrecuencyType AS flagfrecuencytype,
         ec.CostCenter AS costcenter,
         ec.CostCenterCode AS costcentercode,
-        LTRIM(RTRIM(ISNULL(ec.Comments, ''))) AS comments
+        LTRIM(RTRIM(ISNULL(ec.Comments, ''))) AS comments,
+        LTRIM(RTRIM(ISNULL(ec.XLastUser, ''))) AS xlastuser,
+        ec.XLastDate AS xlastdate,
+        LTRIM(RTRIM(
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(audit_u.nombre)), ''),
+                NULLIF(LTRIM(RTRIM(ec.XLastUser)), '')
+            )
+        )) AS xlastusername
     FROM PR_EmployeeConcept ec WITH (NOLOCK)
         INNER JOIN PR_Employee e WITH (NOLOCK)
             ON e.Person = ec.Person
            AND e.Company = ec.Company
         INNER JOIN SY_Person sp WITH (NOLOCK)
             ON sp.Person = e.Person
+        OUTER APPLY (
+            SELECT TOP 1 LTRIM(RTRIM(ISNULL(ap.Name, ''))) AS nombre
+            FROM SY_User u (NOLOCK)
+            LEFT JOIN SY_Person ap (NOLOCK) ON ap.UserID = u.UserID
+            WHERE u.UserID = ec.XLastUser
+            ORDER BY ap.Person
+        ) audit_u
     WHERE ec.Company = @par_company
       AND ec.Person = @par_person
       AND ec.Concept = @par_concept

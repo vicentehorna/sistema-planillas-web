@@ -367,9 +367,19 @@
                                 Los periodos son de planilla (no fechas calendario). En temporal, “Hasta” es obligatorio.
                             </p>
                         </div>
-                        <div class="col-12">
+                        <div class="col-md-6">
                             <label for="txtModalObservacion" class="form-label small fw-bold text-muted">Observación</label>
                             <textarea id="txtModalObservacion" class="form-control form-control-sm" rows="2" maxlength="255" placeholder="Comentarios u observaciones de la asignación"></textarea>
+                        </div>
+                        <div class="col-md-6 d-flex flex-column gap-2">
+                            <div>
+                                <label for="txtModalAuditUsuario" class="form-label small fw-bold text-muted">Usuario</label>
+                                <input type="text" id="txtModalAuditUsuario" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
+                            </div>
+                            <div>
+                                <label for="txtModalAuditFecha" class="form-label small fw-bold text-muted">Fecha</label>
+                                <input type="text" id="txtModalAuditFecha" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -743,6 +753,29 @@ document.addEventListener('DOMContentLoaded', async function () {
         actualizarEstadoPeriodoFinModal();
     }
 
+    function formatearFechaAuditoria(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        let m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+        m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})/);
+        if (m) return `${m[1]}/${m[2]}/${m[3]} ${m[4]}:${m[5]}`;
+        m = s.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+        if (m) return `${m[1]}/${m[2]}/${m[3]}`;
+        return s;
+    }
+
+    function mostrarAuditoriaAsig(det) {
+        const usuario = det && (det.xlastusername || det.xlastuser) ? String(det.xlastusername || det.xlastuser).trim() : '';
+        document.getElementById('txtModalAuditUsuario').value = usuario;
+        document.getElementById('txtModalAuditFecha').value = formatearFechaAuditoria(det && det.xlastdate);
+    }
+
+    function limpiarAuditoriaAsig() {
+        document.getElementById('txtModalAuditUsuario').value = '';
+        document.getElementById('txtModalAuditFecha').value = '';
+    }
+
     function limpiarFormularioModal() {
         document.getElementById('frmModalAsignacion').reset();
         document.getElementById('hdModalModo').value = 'I';
@@ -755,6 +788,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('chkModalAplicaFormula').checked = false;
         document.getElementById('cboModalMoneda').value = 'LO';
         document.getElementById('txtModalObservacion').value = '';
+        limpiarAuditoriaAsig();
         actualizarEstadoPeriodoFinModal();
         setModalCamposClaveDisabled(false);
     }
@@ -912,6 +946,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cboModalMoneda').value = String(det.conceptcurrency || 'LO').trim().toUpperCase() === 'EX' ? 'EX' : 'LO';
         document.getElementById('chkModalAplicaFormula').checked = String(det.flagapplyformula || '').trim().toUpperCase() === 'Y';
         document.getElementById('txtModalObservacion').value = det.comments != null ? String(det.comments) : '';
+        mostrarAuditoriaAsig(det);
 
         setModalCamposClaveDisabled(true);
         modalAsignacion.show();

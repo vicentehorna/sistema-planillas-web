@@ -125,10 +125,13 @@ BEGIN
                     (
                         e.salarybank = m.creditobank
                         AND ISNULL(e.salaryaccount, '') <> ''
+                        AND NOT (
+                            ISNULL(tat.abrev, '') = 'B'
+                         OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                        )
                     )
                  OR (
-                        e.salarybank <> m.creditobank
-                        AND (
+                        (
                             ISNULL(tat.abrev, '') = 'B'
                          OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
                         )

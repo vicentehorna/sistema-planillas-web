@@ -3550,6 +3550,9 @@ def _asignacion_concepto_detalle_dict(r):
         "costcenter": _jsonable_value(r.get('costcenter')),
         "costcentercode": _jsonable_value(r.get('costcentercode')),
         "comments": _jsonable_value(r.get('comments')),
+        "xlastuser": _jsonable_value(r.get('xlastuser')),
+        "xlastdate": _jsonable_datetime_hm(r.get('xlastdate')),
+        "xlastusername": _jsonable_value(r.get('xlastusername')),
     }
 
 
@@ -24476,7 +24479,8 @@ def api_asignacion_conceptos_listado():
                 "comments": _jsonable_value(r.get('comments')),
                 "tareo": _jsonable_value(r.get('tareo')),
                 "xlastuser": _jsonable_value(r.get('xlastuser')),
-                "xlastdate": _jsonable_value(r.get('xlastdate')),
+                "xlastdate": _jsonable_datetime_hm(r.get('xlastdate')),
+                "xlastusername": _jsonable_value(r.get('xlastusername')),
             })
         return jsonify({
             "rows": resultado,
@@ -24559,7 +24563,7 @@ def api_asignacion_conceptos_guardar():
 
     conceptcurrency = _normalize_conceptcurrency_asig(body.get('conceptcurrency'))
     flagapplyformula = _normalize_flagapplyformula_asig(body.get('flagapplyformula'))
-    xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+    xlastuser = _xlastuser_id()
     comments = str(body.get('comments') or body.get('observacion') or '').strip()[:255] or None
 
     conn = None
@@ -24602,6 +24606,17 @@ def _jsonable_datetime(value):
         return None
     if isinstance(value, datetime):
         return value.strftime('%d/%m/%Y %H:%M:%S')
+    if isinstance(value, date):
+        return value.strftime('%d/%m/%Y')
+    return _jsonable_value(value)
+
+
+def _jsonable_datetime_hm(value):
+    """Fecha/hora para auditoría en UI (dd/mm/aaaa HH:MM)."""
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        return value.strftime('%d/%m/%Y %H:%M')
     if isinstance(value, date):
         return value.strftime('%d/%m/%Y')
     return _jsonable_value(value)

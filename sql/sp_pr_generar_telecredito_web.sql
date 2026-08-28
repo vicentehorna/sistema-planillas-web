@@ -4,7 +4,9 @@
     con los trabajadores seleccionados antes de ejecutar este SP.
     @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
     @par_referencia: texto cabecera TXT (40 chars). Si vacío, usa PLANILLA HABERES + proceso.
-    Mismo banco → SalaryAccount (A/M/C); otro banco → SocialAssistanceNumber / CCI (B).
+    Cuenta interbancaria (abrev B / descripción INTERBANCARIA) → siempre CCI (SocialAssistanceNumber) y tipo I,
+    aunque el banco del trabajador coincida con creditobank.
+    Mismo banco y cuenta propia → SalaryAccount (A/M/C/P); otro banco → CCI (I).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
     @par_company     VARCHAR(10),
@@ -115,6 +117,9 @@ BEGIN
             LEFT(
                 LTRIM(RTRIM(
                     CASE
+                        WHEN ISNULL(tat.abrev, '') = 'B'
+                             OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                            THEN ISNULL(e.socialassistancenumber, '')
                         WHEN e.salarybank = m.creditobank
                             THEN ISNULL(e.salaryaccount, '')
                         ELSE ISNULL(e.socialassistancenumber, '')
@@ -123,9 +128,12 @@ BEGIN
                 20
             ) AS cuenta,
             CASE
+                WHEN ISNULL(tat.abrev, '') = 'B'
+                     OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                    THEN 'I'
                 WHEN e.salarybank = m.creditobank
                     THEN LEFT(ISNULL(tat.abrev, 'A'), 1)
-                ELSE 'B'
+                ELSE 'I'
             END AS tipocuenta,
             CASE
                 WHEN ISNULL(pdt.PDT, '') = '01' THEN '1'
@@ -187,10 +195,13 @@ BEGIN
                         (
                             e.salarybank = m.creditobank
                             AND ISNULL(e.salaryaccount, '') <> ''
+                            AND NOT (
+                                ISNULL(tat.abrev, '') = 'B'
+                             OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
+                            )
                         )
                      OR (
-                            e.salarybank <> m.creditobank
-                            AND (
+                            (
                                 ISNULL(tat.abrev, '') = 'B'
                              OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
                             )

@@ -158,6 +158,14 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
+            <div class="col-6 col-sm-4 col-md-2 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
             <div class="col-12 col-md-auto filtro-fecha-ingreso">
                 <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
                 <div class="d-flex align-items-center flex-wrap gap-1">
@@ -408,6 +416,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         return 'Por rango';
     }
 
+    function etiquetaCesados(valor) {
+        const v = String(valor || 'T').trim().toUpperCase();
+        if (v === 'Y') return 'Sí';
+        if (v === 'N') return 'No';
+        return 'Todos';
+    }
+
     async function exportPlanillaVerticalExcel(payload, meta) {
         if (typeof ExcelJS === 'undefined') {
             alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
@@ -464,11 +479,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             'Proceso', meta.proceso || '',
             'Periodo', meta.periodo || '',
             'Banco haberes', meta.bancoHaberes || '',
+            'Cesados', meta.cesados || '',
             'Fecha ingreso', meta.fechaIngreso || '',
             ...(modoAgrupadoActivo ? ['Agrupado', 'Por C.Costo'] : [])
         ]);
         metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            if (colNumber <= (modoAgrupadoActivo ? 12 : 10)) {
+            if (colNumber <= (modoAgrupadoActivo ? 14 : 12)) {
                 cell.fill = fill(F.meta);
                 cell.font = { bold: colNumber % 2 === 1 };
                 cell.alignment = alignCenter;
@@ -629,6 +645,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!person) person = '0';
         const salarybank = document.getElementById('cboBancoHaberes').value.trim();
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
+        const cesados = document.getElementById('cboCesados')?.value.trim() || 'T';
         const fechaIngreso = leerFiltroFechaIngreso();
         if (fechaIngreso.activo) {
             if (!fechaIngreso.desde || !fechaIngreso.hasta) {
@@ -654,6 +671,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     person,
                     salarybank,
                     repunit,
+                    cesados,
                     agrupar_cc,
                     fecha_ingreso_activo: fechaIngreso.activo,
                     fecha_ingreso_desde: fechaIngreso.desde,
@@ -696,6 +714,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     periodo: selectedText('cboPeriodo'),
                     periodoValor: period,
                     bancoHaberes: selectedText('cboBancoHaberes'),
+                    cesados: etiquetaCesados(cesados),
                     fechaIngreso: etiquetaFechaIngresoFiltro(fechaIngreso)
                 }
             };

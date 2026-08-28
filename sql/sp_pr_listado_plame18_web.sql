@@ -14,6 +14,9 @@
       @payroll_all — Y = todas las planillas, N = filtrar por @payroll
       @payroll     — tipo de planilla (cuando @payroll_all = N)
       @cesados     — T = todos, Y = solo cesados, N = sin cese
+
+    ConceptType permitidos en detalle: I (Ingresos), A (Aportes), D (Descuentos).
+    No incluye auxiliares (X), aunque tengan PDT.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame18_web]
     @cia         VARCHAR(10),
@@ -54,7 +57,7 @@ BEGIN
       AND pr_employeecategory.PDT = '1'
       AND pr_employeepayrollconcept.concept = pr_concept.concept
       AND pr_concepttype.concepttype = pr_concept.concepttype
-      AND pr_concepttype.shortname IN ('I', 'A')
+      AND LTRIM(RTRIM(pr_concepttype.shortname)) IN ('I', 'A')
       AND (@payroll_all = 'Y' OR pr_employeepayrollconcept.payrolltype = @payroll)
       AND pr_employeepayrollconcept.person = pr_employee.person
       AND pr_employeepayrollconcept.company = pr_employee.company
@@ -160,6 +163,7 @@ BEGIN
           AND pr_mapping.company = pr_employee.company
           AND pr_employeepayrollconcept.concept = pr_concept.concept
           AND pr_concepttype.concepttype = pr_concept.concepttype
+          AND LTRIM(RTRIM(pr_concepttype.shortname)) IN ('I', 'A', 'D')
           AND pr_employeepayrollconcept.person = pr_employee.person
           AND pr_employeepayrollconcept.company = pr_employee.company
           AND (

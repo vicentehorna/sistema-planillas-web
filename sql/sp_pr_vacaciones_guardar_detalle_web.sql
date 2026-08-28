@@ -116,11 +116,22 @@ BEGIN
         RETURN;
     END;
 
-    SELECT @secuence = ISNULL(MAX(Secuence), 0) + 1
-    FROM PR_VacationDetail
-    WHERE company = @company
-      AND person = @person
-      AND line = @line;
+    /* Siguiente Secuence = MAX(Detail, Pay) + 1.
+       En datos migrados pueden diferir los correlativos entre ambas tablas. */
+    SELECT @secuence = ISNULL(MAX(sec), 0) + 1
+    FROM (
+        SELECT Secuence AS sec
+        FROM PR_VacationDetail
+        WHERE company = @company
+          AND person = @person
+          AND line = @line
+        UNION ALL
+        SELECT Secuence AS sec
+        FROM PR_VacationPay
+        WHERE company = @company
+          AND person = @person
+          AND line = @line
+    ) s;
 
     SELECT @replicationunit = ISNULL(ReplicationUnit, @company)
     FROM PR_Employee

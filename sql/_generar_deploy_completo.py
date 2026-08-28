@@ -13,6 +13,8 @@ EXCLUDE_FROM_DEPLOY = {
     "tables_usuarios_router.sql",
     # Contiene USE hm_atilio: cambia el contexto de BD a mitad del script.
     "alter_pr_mapping2_hm_atilio.sql",
+    # Seed solo para Lumat: hace DELETE de WEB_MenuOption (rompe otras BD).
+    "web_access_seed_hm_lumat.sql",
     # One-shot: limpia/replica formulas BGT -> SB01..SB06 (no son deploy web).
     "limpiar_formulas_liquidacion_destino.sql",
     "limpiar_formulas_provisiones_destino.sql",

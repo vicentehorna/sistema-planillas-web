@@ -1,11 +1,11 @@
 /*
   ALTER SCHEMA WEB - columnas/tablas requeridas por SPs web
-  Generado: 2026-08-17 14:08
+  Generado: 2026-08-24 20:42
 
   Ejecutar PRIMERO sobre la BD destino (hm_alamo, hm_aci, ...)
   antes o como parte de deploy_planillas_web_completo.sql.
 
-  Archivos (13):
+  Archivos (14):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
     - alter_pr_processtype_add_procedurename.sql
@@ -16,6 +16,7 @@
     - alter_pr_formuladetail_conceptlist.sql
     - alter_pr_formuladetail_divisor.sql
     - tables_pr_plame_sunat_web.sql
+    - alter_pr_position_add_status.sql
     - alter_pr_position_description_255.sql
     - alter_sy_company_add_branding_blobs.sql
     - tables_pr_parametroformula_web.sql
@@ -25,7 +26,7 @@ SET NOCOUNT ON;
 GO
 
 
--- [1/13] alter_pr_mapping_add_banbifbank.sql
+-- [1/14] alter_pr_mapping_add_banbifbank.sql
 
 /*
     Agrega la columna BanbifBank en PR_Mapping y la inicializa
@@ -59,7 +60,7 @@ GO
 
 
 
--- [2/13] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [2/14] alter_pr_payrolltype_add_diasvacaciones.sql
 
 /*
     Agrega dias anuales de vacaciones por tipo de planilla.
@@ -81,7 +82,7 @@ GO
 
 
 
--- [3/13] alter_pr_processtype_add_procedurename.sql
+-- [3/14] alter_pr_processtype_add_procedurename.sql
 
 /*
     Agrega la columna ProcedureName en PR_ProcessType y asigna el SP de cálculo
@@ -120,7 +121,7 @@ GO
 
 
 
--- [4/13] alter_pr_importconcept_xlastuser_20.sql
+-- [4/14] alter_pr_importconcept_xlastuser_20.sql
 
 /*
     Amplía XlastUser de VARCHAR(4) a VARCHAR(20) en plantillas de importación.
@@ -163,7 +164,7 @@ GO
 
 
 
--- [5/13] alter_sy_company_add_logoname_signaturename.sql
+-- [5/14] alter_sy_company_add_logoname_signaturename.sql
 
 /*
     Agrega columnas de logo y firma por compañía en SY_Company.
@@ -185,7 +186,7 @@ GO
 
 
 
--- [6/13] alter_sy_person_add_nacionalidad.sql
+-- [6/14] alter_sy_person_add_nacionalidad.sql
 
 /*
     Agrega campo de texto Nacionalidad en SY_Person.
@@ -200,7 +201,7 @@ GO
 
 
 
--- [7/13] alter_pr_concept_add_flagafectoutilidad.sql
+-- [7/14] alter_pr_concept_add_flagafectoutilidad.sql
 
 /*
     Agrega flag afecto a utilidades en PR_Concept (maestro Conceptos).
@@ -215,7 +216,7 @@ GO
 
 
 
--- [8/13] alter_pr_formuladetail_conceptlist.sql
+-- [8/14] alter_pr_formuladetail_conceptlist.sql
 
 /*
     Lista de conceptos para líneas SumaConc (tipo S).
@@ -231,7 +232,7 @@ GO
 
 
 
--- [9/13] alter_pr_formuladetail_divisor.sql
+-- [9/14] alter_pr_formuladetail_divisor.sql
 
 /*
     Divisor fijo para líneas Promedio Vac (tipo M) y Promedio Grati (tipo H).
@@ -247,7 +248,7 @@ GO
 
 
 
--- [10/13] tables_pr_plame_sunat_web.sql
+-- [10/14] tables_pr_plame_sunat_web.sql
 
 /*
     Tablas para carga de archivos XML SUNAT (R01, R04, R5) — validación PLAME.
@@ -320,7 +321,34 @@ GO
 
 
 
--- [11/13] alter_pr_position_description_255.sql
+-- [11/14] alter_pr_position_add_status.sql
+
+/*
+    Agrega PR_Position.Status (A = Activo, I = Inactivo).
+    Existentes quedan Activos.
+*/
+SET NOCOUNT ON;
+
+IF OBJECT_ID(N'dbo.PR_Position', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.PR_Position', N'Status') IS NULL
+BEGIN
+    ALTER TABLE dbo.PR_Position ADD Status CHAR(1) NULL;
+END
+GO
+
+IF OBJECT_ID(N'dbo.PR_Position', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.PR_Position', N'Status') IS NOT NULL
+BEGIN
+    UPDATE dbo.PR_Position
+    SET Status = 'A'
+    WHERE Status IS NULL
+       OR LTRIM(RTRIM(Status)) = '';
+END
+GO
+
+
+
+-- [12/14] alter_pr_position_description_255.sql
 
 /*
     Amplía PR_Position.Description (antes varchar(50) truncaba cargos largos)
@@ -354,7 +382,7 @@ GO
 
 
 
--- [12/13] alter_sy_company_add_branding_blobs.sql
+-- [13/14] alter_sy_company_add_branding_blobs.sql
 
 /*
     Branding por compañía: logo y firma en VARBINARY (autoservicio web).
@@ -392,7 +420,7 @@ GO
 
 
 
--- [13/13] tables_pr_parametroformula_web.sql
+-- [14/14] tables_pr_parametroformula_web.sql
 
 /*
     Catálogo de parámetros de fórmula (validación tipo V).

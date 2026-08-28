@@ -201,7 +201,7 @@
         };
     }
 
-    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso, incluyeUnidad) {
+    function crearPersistenciaReporte(storageKey, incluyeEmpleado, incluyeBancoHaberes, incluyeFechaIngreso, incluyeUnidad, incluyeCesados) {
         function guardar() {
             try {
                 const estado = {
@@ -224,6 +224,9 @@
                 }
                 if (incluyeUnidad) {
                     estado.repunit = val('cboUnidad') || '0';
+                }
+                if (incluyeCesados) {
+                    estado.cesados = val('cboCesados') || 'T';
                 }
                 const chkAgrupar = document.getElementById('chkAgruparCCosto');
                 if (chkAgrupar) {
@@ -352,6 +355,18 @@
                 restaurarFechaIngresoDesdeFiltros(filtros);
             }
 
+            if (incluyeCesados) {
+                const cboCesados = document.getElementById('cboCesados');
+                if (cboCesados) {
+                    const cesados = filtros.cesados != null ? String(filtros.cesados).trim().toUpperCase() : 'T';
+                    if (['T', 'Y', 'N'].includes(cesados) && optionExists(cboCesados, cesados)) {
+                        cboCesados.value = cesados;
+                    } else if (optionExists(cboCesados, 'T')) {
+                        cboCesados.value = 'T';
+                    }
+                }
+            }
+
             const chkAgrupar = document.getElementById('chkAgruparCCosto');
             if (chkAgrupar) {
                 chkAgrupar.checked = filtros.agruparCCosto === true;
@@ -385,6 +400,10 @@
             if (incluyeUnidad) {
                 const u = document.getElementById('cboUnidad');
                 if (u) u.addEventListener('change', guardar);
+            }
+            if (incluyeCesados) {
+                const c = document.getElementById('cboCesados');
+                if (c) c.addEventListener('change', guardar);
             }
             const chkAgrupar = document.getElementById('chkAgruparCCosto');
             if (chkAgrupar) chkAgrupar.addEventListener('change', guardar);
@@ -2904,7 +2923,7 @@
             return crearPersistenciaReporte(STORAGE_KEY_PROMEDIO_LIQ, true);
         },
         planillaVertical: function () {
-            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true, true);
+            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true, true, true);
         },
         planillaConsolidada: function () {
             return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true, true);

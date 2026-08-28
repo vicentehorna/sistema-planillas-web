@@ -4,7 +4,8 @@ Estos procedimientos **varían por cliente**. No deben ir en
 `deploy_planillas_web_completo.sql` ni sobrescribirse al actualizar una BD.
 
 Incluye:
-- `sp_pr_calcular_finmes_persona`
+- `sp_pr_calcular_finmes_persona` (referencia hm_aci)
+- `sp_pr_calcular_finmes_persona_atilio.sql` — **solo hm_atilio**, sin formulador. Desplegar con `python scripts/build_sp_finmes_atilio.py --deploy`
 - `sp_pr_calcular_gratificacion_persona`
 - `sp_pr_calcular_liquidacion_persona`
 - `sp_pr_calcular_quincena_persona`

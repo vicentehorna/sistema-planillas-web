@@ -23579,6 +23579,7 @@ def _fetch_planilla_vertical_for_company(
     fecha_ingreso_hasta,
     repunit='0',
     agrupar_cc='N',
+    cesados='T',
 ):
     """
     Ejecuta sp_pr_reporteplamevertical_web para una compañía y devuelve
@@ -23590,15 +23591,16 @@ def _fetch_planilla_vertical_for_company(
     fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
     repunit_val = _normalize_replicationunit_asig(repunit)
     agrupar_cc_val = _normalize_agrupar_cc_flag(agrupar_cc)
+    cesados_val = _normalize_cesados_telecredito(cesados)
     cursor.execute(
         "EXEC sp_pr_reporteplamevertical_web "
         "@cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?, "
         "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @repunit=?, "
-        "@agrupar_cc=?",
+        "@agrupar_cc=?, @cesados=?",
         (
             cia, payroll_type, process, period, person, salarybank,
             fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql, repunit_val,
-            agrupar_cc_val,
+            agrupar_cc_val, cesados_val,
         ),
     )
     _drain_all_cursor_resultsets(cursor)
@@ -23863,7 +23865,7 @@ def _resolve_bank_id_by_name(cursor, cia, bank_name):
 def reporte_planilla_vertical_post():
     """
     sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank,
-    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta, @repunit, @agrupar_cc.
+    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta, @repunit, @agrupar_cc, @cesados.
     Cabeceras dinámicas desde xx_plamevertical2 + PR_Concept; datos desde xx_reporteplanilla.
     @agrupar_cc='Y' solo aplica en hm_divisa (otras BD siempre ven el detalle por trabajador).
     """
@@ -23879,6 +23881,7 @@ def reporte_planilla_vertical_post():
     agrupar_cc = _normalize_agrupar_cc_flag(
         body.get('agrupar_cc') if body.get('agrupar_cc') is not None else body.get('agrupar')
     )
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
     # Solo hm_divisa puede usar el modo agrupado; resto transparente (siempre detalle).
     if agrupar_cc == 'Y' and not _es_bd_hm_divisa():
         agrupar_cc = 'N'
@@ -23902,6 +23905,7 @@ def reporte_planilla_vertical_post():
             fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta,
             repunit=repunit,
             agrupar_cc=agrupar_cc,
+            cesados=cesados,
         )
         if agrupar_cc == 'Y':
             headers = list(_PLANILLA_VERTICAL_AGRUPADO_HEADERS_ES) + concept_headers

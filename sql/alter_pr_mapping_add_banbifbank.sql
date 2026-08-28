@@ -20,7 +20,8 @@ BEGIN
         INNER JOIN (
             SELECT Company, MIN(bank) AS bank
             FROM dbo.ERP_Bank
-            WHERE name = ''BANCO BANBIF''
+            WHERE LTRIM(RTRIM(name)) IN (''BANCO BANBIF'', ''BANBIF'')
+               OR LTRIM(RTRIM(name)) LIKE ''%BANBIF%''
             GROUP BY Company
         ) b ON b.Company = m.Company
         WHERE m.BanbifBank IS NULL

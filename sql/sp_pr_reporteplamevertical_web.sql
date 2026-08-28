@@ -21,6 +21,7 @@
       @repunit     — unidad (ReplicationUnit); '0' = todas
       @agrupar_cc  — Y = agrupar por centro de costo (Cod.Costo, C.Costo, Cantidad + SUM conceptos)
                      N = detalle por trabajador (default; transparente para clientes sin la opción)
+      @cesados     — T = todos, Y = solo cesados, N = sin cese
 
     Resultado final:
       @agrupar_cc='N': una fila por trabajador con columnas fijas + concept01..concept65
@@ -47,7 +48,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @fecha_ingreso_desde  VARCHAR(10) = '',
     @fecha_ingreso_hasta  VARCHAR(10) = '',
     @repunit              VARCHAR(20) = '0',
-    @agrupar_cc           CHAR(1)     = 'N'
+    @agrupar_cc           CHAR(1)     = 'N',
+    @cesados              CHAR(1)     = 'T'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -59,6 +61,8 @@ BEGIN
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
     SET @agrupar_cc = UPPER(LTRIM(RTRIM(ISNULL(@agrupar_cc, 'N'))));
     IF @agrupar_cc NOT IN ('Y', 'N') SET @agrupar_cc = 'N';
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
 
     DECLARE @fd DATE = NULL;
     DECLARE @fh DATE = NULL;
@@ -142,6 +146,11 @@ BEGIN
       AND (@salarybank = '' OR E.SalaryBank = @salarybank)
       AND (@person = '0' OR SY_PERSON.person = @person)
       AND (@repunit = '0' OR SY_PERSON.ReplicationUnit = @repunit)
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+      )
       AND (
             @fecha_ingreso_all = 'Y'
          OR (

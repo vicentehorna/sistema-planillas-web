@@ -459,11 +459,16 @@ BEGIN
 
     /* --- Pensión --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_pension, ''))));
+    /* Si viene código PDT (p.ej. 21/23/24/25/02), normalizar a 2 dígitos */
+    IF @txt LIKE '[0-9]%' AND LEN(@txt) <= 3 AND @txt NOT LIKE '%[^0-9]%'
+        SET @txt = RIGHT('0' + @txt, 2);
+
     SELECT TOP 1 @pension_type_id = pt.pensiontype
     FROM pr_pensiontype pt (NOLOCK)
     WHERE (pt.company = @cia OR pt.pensiontype LIKE 'LIMA' + @cia + '%' OR pt.pensiontype LIKE @cia + '%')
       AND (
-            UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt
+            LTRIM(RTRIM(ISNULL(pt.pdt, ''))) = @txt
+         OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt
          OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%' + @txt + '%'
          OR @txt LIKE '%' + UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) + '%'
          OR (
@@ -474,26 +479,29 @@ BEGIN
                  OR @txt LIKE '%SISTEMA NACIONAL DE PENS%'
                  OR @txt LIKE '%S.N.P.%'
                  OR @txt LIKE '%SNP%'
+                 OR @txt IN ('02', '2')
                 )
             AND pt.pdt IN ('02', '2')
             )
-         OR (@txt LIKE '%INTEGRA%' AND pt.pdt = '21')
-         OR (@txt LIKE '%PROFUTURO%' AND pt.pdt = '23')
-         OR (@txt LIKE '%PRIMA%' AND @txt NOT LIKE '%ONP%' AND @txt NOT LIKE '%19990%' AND pt.pdt = '24')
-         OR ((@txt LIKE '%HABITAT%' OR @txt LIKE '%HORIZONTE%') AND pt.pdt = '25')
+         OR ((@txt LIKE '%INTEGRA%' OR @txt = '21') AND pt.pdt = '21')
+         OR ((@txt LIKE '%PROFUTURO%' OR @txt = '23') AND pt.pdt = '23')
+         OR ((@txt LIKE '%PRIMA%' OR @txt = '24') AND @txt NOT LIKE '%ONP%' AND @txt NOT LIKE '%19990%' AND pt.pdt = '24')
+         OR ((@txt LIKE '%HABITAT%' OR @txt LIKE '%HORIZONTE%' OR @txt = '25') AND pt.pdt = '25')
       )
     ORDER BY
         CASE
+            WHEN LTRIM(RTRIM(ISNULL(pt.pdt, ''))) = @txt THEN 0
             WHEN (
                     @txt LIKE '%ONP%'
                  OR @txt LIKE '%19990%'
                  OR @txt LIKE '%SISTEMA NACIONAL DE PENS%'
                  OR @txt LIKE '%DECRETO LEY 19990%'
+                 OR @txt IN ('02', '2')
                 )
              AND pt.pdt IN ('02', '2')
-                THEN 0
-            WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt THEN 1
-            ELSE 2
+                THEN 1
+            WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @txt THEN 2
+            ELSE 3
         END,
         CASE WHEN pt.pensiontype LIKE 'LIMA' + @cia + '%' THEN 0 WHEN pt.pensiontype LIKE @cia + '%' THEN 1 ELSE 2 END,
         pt.pensiontype;

@@ -4,7 +4,7 @@
     Requiere #ScotiabankPersonas (person) cargada por la app web.
     @par_responsible: referencia de pantalla (20 caracteres).
     Layout:
-      1  tipo doc (1er caracter PDT)
+      1  tipo doc (código Scotiabank: DNI=1, CE=3, Pasaporte=4)
      12  código empleado (EmployeeCode; si vacío, DNI)
      60  nombre
       1  tipo cuenta (siempre 3)
@@ -94,7 +94,12 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
-            LEFT(LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) + ' ', 1) AS tipo_doc_txt,
+            CASE
+                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
+                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
+                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
+                ELSE LEFT(LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) + ' ', 1)
+            END AS tipo_doc_txt,
             LEFT(
                 CASE
                     WHEN LTRIM(RTRIM(ISNULL(e.EmployeeCode, ''))) <> ''

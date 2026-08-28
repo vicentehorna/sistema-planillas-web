@@ -106,6 +106,12 @@
                 </select>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
                 <select id="cboAccountProfile" class="form-select form-select-sm">
                     <option value="">Todos</option>
@@ -297,6 +303,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function ejecutarListado() {
+        if (filtrosPersist) filtrosPersist.guardar();
+
         lastRowsInterbank = [];
         document.getElementById('tbody-interbank').innerHTML = '';
         document.getElementById('checkAllIbk').checked = false;
@@ -314,6 +322,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
         const accountprofile = String(document.getElementById('cboAccountProfile')?.value || '').trim();
 
         if (!cia || !payrolltype || !processtype || !period || !concept) {
@@ -327,7 +336,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     cia, payrolltype, processtype, period, currency, concept, paydate, cesados,
-                    accountprofile
+                    repunit, accountprofile
                 })
             });
             const payload = await res.json();
@@ -388,8 +397,39 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboUnidad = document.getElementById('cboUnidad');
     const cboAccountProfile = document.getElementById('cboAccountProfile');
     const txtFechaPago = document.getElementById('txtFechaPago');
+
+    async function cargarUnidades() {
+        if (!cboUnidad) return;
+        const prev = String(cboUnidad.value || '0').trim() || '0';
+        cboUnidad.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todas';
+        cboUnidad.appendChild(optAll);
+        try {
+            const res = await fetch('/api/selectores/unidades');
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboUnidad.appendChild(opt);
+            });
+            if (optionExists(cboUnidad, prev)) {
+                cboUnidad.value = prev;
+            } else {
+                cboUnidad.value = '0';
+            }
+        } catch (e) {
+            console.error(e);
+            cboUnidad.value = '0';
+        }
+    }
 
     async function cargarPerfilesContables(preferido) {
         if (!cboAccountProfile) return;
@@ -432,6 +472,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtFechaPago.value = hoyIsoLocal();
     }
 
+    await cargarUnidades();
     await poblarSelect('/api/selectores/companias', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
@@ -441,6 +482,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (filtrosPersist && ciaGuardada) {
         await filtrosPersist.aplicarRestauracionCascada({
             poblarSelect,
+            poblarUnidades: cargarUnidades,
             poblarPerfilesContables: cargarPerfilesContables
         });
     } else if (!String(cboCia.value || '').trim()) {

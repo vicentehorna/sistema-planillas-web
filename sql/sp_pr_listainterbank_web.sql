@@ -3,6 +3,7 @@
     Usa pr_mapping.interbankbank (no creditobank).
 
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
+    @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
     @accountprofile: '' o '0' = todos; otro valor filtra PR_Employee.AccountProfile.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listainterbank_web]
@@ -14,6 +15,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listainterbank_web]
     @par_processtype VARCHAR(20),
     @par_paydate     DATETIME = NULL,
     @cesados         CHAR(1),
+    @repunit         VARCHAR(20) = '0',
     @accountprofile  VARCHAR(20) = NULL
 AS
 BEGIN
@@ -22,6 +24,7 @@ BEGIN
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
+    IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
     SET @accountprofile = LTRIM(RTRIM(ISNULL(@accountprofile, '')));
     IF @accountprofile = '0' SET @accountprofile = '';
 
@@ -84,6 +87,7 @@ BEGIN
          OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)
          OR (@cesados = 'N' AND e.CeaseDate IS NULL)
       )
+      AND (@repunit = '0' OR sp.ReplicationUnit = @repunit)
       AND ISNULL(e.salaryaccount, '') <> ''
       AND ISNULL(m.interbankbank, '') <> ''
       AND e.salarybank = m.interbankbank

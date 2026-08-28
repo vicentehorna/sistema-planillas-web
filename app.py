@@ -18826,6 +18826,7 @@ def api_pago_haberes_interbank_listado():
         return jsonify({"error": err}), 400
 
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
     accountprofile = str(
         body.get('accountprofile') or body.get('perfil_contable') or ''
     ).strip()
@@ -18839,7 +18840,7 @@ def api_pago_haberes_interbank_listado():
         f'@par_company={p["cia"]!r} @par_currency={p["currency"]!r} @par_concept={p["concept"]!r} '
         f'@par_payrolltype={p["payrolltype"]!r} @par_period={p["period"]!r} '
         f'@par_processtype={p["processtype"]!r} @par_paydate={p["paydate"].strftime("%Y-%m-%d %H:%M:%S")!r} '
-        f'@cesados={cesados!r} @accountprofile={accountprofile!r}'
+        f'@cesados={cesados!r} @repunit={repunit!r} @accountprofile={accountprofile!r}'
     )
     logging.info(log_sp)
     print(log_sp, flush=True)
@@ -18852,10 +18853,10 @@ def api_pago_haberes_interbank_listado():
             "EXEC sp_pr_listainterbank_web "
             "@par_company=?, @par_currency=?, @par_concept=?, "
             "@par_payrolltype=?, @par_period=?, @par_processtype=?, @par_paydate=?, "
-            "@cesados=?, @accountprofile=?",
+            "@cesados=?, @repunit=?, @accountprofile=?",
             (
                 p['cia'], p['currency'], p['concept'], p['payrolltype'],
-                p['period'], p['processtype'], p['paydate'], cesados,
+                p['period'], p['processtype'], p['paydate'], cesados, repunit,
                 accountprofile or None,
             ),
         )

@@ -5180,7 +5180,8 @@ _FORMATO_LIQ_GRATI_FORMULACODES = (
     'NUMERO_MESES',
     'NUMERO_DIAS',
     'XFALTASGRATI',
-    'GRATI_TRUNCA',
+    'GRATIXMES',
+    'GRATIXDIA',
     'BONIF_EXTRA_ESSALUD',
 )
 
@@ -5515,21 +5516,13 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
         'XFALTASGRATI',
     )
     formula_values = formula_values or {}
-    x_mes = _formato_liquidacion_fc_valor(formula_values, 'GRATI_TRUNCA')
+    x_mes = _formato_liquidacion_fc_valor(formula_values, 'GRATIXMES')
+    x_dia = _formato_liquidacion_fc_valor(formula_values, 'GRATIXDIA')
     resultado['formula_meses'] = f"({resultado['base_fmt']} / 6)"
     resultado['x_mes_fmt'] = _formato_liquidacion_moneda(x_mes)
-    dias = _formato_liquidacion_fc_valor(formula_values, 'NUMERO_DIAS')
-    try:
-        base = float(total_remuneracion_grati or 0)
-    except (TypeError, ValueError):
-        base = 0.0
-    x_dia = (base / 180.0) * dias if base else 0.0
     resultado['formula_dias'] = f"({resultado['base_fmt']} / 180)"
     resultado['x_dia_fmt'] = _formato_liquidacion_moneda(x_dia)
-    try:
-        total = float((formula_values or {}).get('GRATI_TRUNCA') or 0)
-    except (TypeError, ValueError):
-        total = 0.0
+    total = x_mes + x_dia
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
     try:
@@ -5538,12 +5531,12 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
         bono_9 = 0.0
     resultado['bono_9'] = bono_9
     resultado['bono_9_fmt'] = _formato_liquidacion_moneda(bono_9)
-    resultado['x_mes_fc'] = 'GRATI_TRUNCA'
-    resultado['x_dia_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS'
-    resultado['total_fc'] = 'GRATI_TRUNCA'
+    resultado['x_mes_fc'] = 'GRATIXMES'
+    resultado['x_dia_fc'] = 'GRATIXDIA'
+    resultado['total_fc'] = 'GRATIXMES + GRATIXDIA'
     resultado['bono_9_fc'] = 'BONIF_EXTRA_ESSALUD'
-    resultado['formula_meses_fc'] = '(Σ rem.GRATI / 6) × NUMERO_MESES → GRATI_TRUNCA'
-    resultado['formula_dias_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS'
+    resultado['formula_meses_fc'] = '(Σ rem.GRATI / 6) × NUMERO_MESES → GRATIXMES'
+    resultado['formula_dias_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS → GRATIXDIA'
     return resultado
 
 

@@ -190,7 +190,9 @@ begin
 
 	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')))
+	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')
+
+	and not exists (select 1 from PR_EmployeeConcept TT where TT.Company = PR_EmployeeConcept.Company and TT.Person = PR_EmployeeConcept.Person and TT.Concept = PR_EmployeeConcept.Concept and TT.PayRollType = PR_EmployeeConcept.PayRollType and TT.FlagFrecuencyType = 'T' and @period between TT.PRPeriodStart and TT.PRPeriodEnd)))
 
 
 
@@ -222,7 +224,9 @@ begin
 
 	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')))
+	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')
+
+	and not exists (select 1 from PR_EmployeeConcept TT where TT.Company = PR_EmployeeConcept.Company and TT.Person = PR_EmployeeConcept.Person and TT.Concept = PR_EmployeeConcept.Concept and TT.PayRollType = PR_EmployeeConcept.PayRollType and TT.FlagFrecuencyType = 'T' and @period between TT.PRPeriodStart and TT.PRPeriodEnd)))
 
 
 
@@ -238,7 +242,9 @@ begin
 
 	and (PR_EmployeeConcept.FlagFrecuencyType = 'T' or (PR_EmployeeConcept.FlagFrecuencyType = 'P' and PR_EmployeeConcept.PRPeriodStart = (select MAX(PRPeriodStart) from PR_EmployeeConcept T where 
 
-	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')))
+	T.Company = PR_EmployeeConcept.Company and T.Person = PR_EmployeeConcept.Person AND T.Concept = PR_EmployeeConcept.Concept AND T.PayRollType = PR_EmployeeConcept.PayRollType AND T.FlagFrecuencyType = 'P')
+
+	and not exists (select 1 from PR_EmployeeConcept TT where TT.Company = PR_EmployeeConcept.Company and TT.Person = PR_EmployeeConcept.Person and TT.Concept = PR_EmployeeConcept.Concept and TT.PayRollType = PR_EmployeeConcept.PayRollType and TT.FlagFrecuencyType = 'T' and @period between TT.PRPeriodStart and TT.PRPeriodEnd)))
 
 
 

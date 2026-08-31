@@ -20,9 +20,14 @@ BEGIN
     DECLARE @secuence        INT;
     DECLARE @acquireddays    INT;
     DECLARE @consumeddays    INT;
-    DECLARE @pendientes      INT;
+    DECLARE @pendientes      DECIMAL(10, 2);
+    DECLARE @adquiridos_ganados DECIMAL(10, 2);
     DECLARE @dias_nuevos     INT;
     DECLARE @replicationunit VARCHAR(4);
+    DECLARE @fecha_hoy       DATE = CAST(GETDATE() AS DATE);
+    DECLARE @dias_vacaciones DECIMAL(10, 2);
+    DECLARE @inicio_provision DATE;
+    DECLARE @inicio_derecho  DATE;
 
     IF @datebegin IS NULL OR @dateend IS NULL
     BEGIN
@@ -97,7 +102,9 @@ BEGIN
 
     SELECT
         @acquireddays = ISNULL(AcquiredDays, 0),
-        @consumeddays = ISNULL(consumeddays, 0)
+        @consumeddays = ISNULL(consumeddays, 0),
+        @inicio_provision = CAST(DateBeginProvision AS DATE),
+        @inicio_derecho = CAST(DateBeginRights AS DATE)
     FROM PR_Vacation
     WHERE company = @company
       AND person = @person
@@ -109,10 +116,30 @@ BEGIN
         RETURN;
     END;
 
-    SET @pendientes = ABS(@consumeddays - @acquireddays);
-    IF (@consumeddays + @dias_nuevos) > @acquireddays
+    SELECT @dias_vacaciones = CAST(ISNULL(pt.DiasVacaciones, 30) AS DECIMAL(10, 2))
+    FROM PR_Employee e
+        INNER JOIN PR_PayRollType pt
+            ON pt.Company = e.Company
+           AND pt.PayRollType = e.PayRollType
+    WHERE e.Company = @company
+      AND e.Person = @person;
+
+    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
+        SET @dias_vacaciones = 30;
+
+    SET @adquiridos_ganados = CASE
+        WHEN @inicio_provision > @fecha_hoy THEN 0
+        WHEN @inicio_derecho <= @fecha_hoy THEN CAST(@acquireddays AS DECIMAL(10, 2))
+        ELSE ROUND(dbo.f_getDias360(@inicio_provision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
+    END;
+
+    SET @pendientes = @adquiridos_ganados - CAST(@consumeddays AS DECIMAL(10, 2));
+    IF @pendientes < 0
+        SET @pendientes = 0;
+
+    IF (CAST(@consumeddays AS DECIMAL(10, 2)) + @dias_nuevos) > @adquiridos_ganados
     BEGIN
-        RAISERROR('Los días solicitados superan el saldo pendiente del periodo (%d día(s)).', 16, 1, @pendientes);
+        RAISERROR('Los días solicitados superan el saldo pendiente del periodo.', 16, 1);
         RETURN;
     END;
 

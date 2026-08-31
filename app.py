@@ -8686,8 +8686,6 @@ def api_importacion_conceptos_procesar():
                 meta = _importacion_conceptos_meta_concepto(
                     cursor, cia_fila, concept, concepto_cache
                 )
-                if meta.get('flagismonetary') == 'N':
-                    continue
 
                 total_conceptos += 1
                 modo = 'U' if _importacion_conceptos_existe(
@@ -24647,14 +24645,20 @@ def _vacacion_resumen_dict(row):
 
 
 def _vacacion_periodo_dict(row):
+    def _dias_vac(val):
+        try:
+            return round(float(val or 0), 2)
+        except (TypeError, ValueError):
+            return 0.0
+
     return {
         'line': int(row.get('line') or 0),
         'controlyear': _jsonable_value(row.get('controlyear')),
         'periodo': _jsonable_value(row.get('periodo')),
         'dias': int(row.get('dias') or 0),
-        'dias_adquiridos': int(row.get('dias_adquiridos') or 0),
-        'consumidos': int(row.get('consumidos') or 0),
-        'pendientes': int(row.get('pendientes') or 0),
+        'dias_adquiridos': _dias_vac(row.get('dias_adquiridos')),
+        'consumidos': _dias_vac(row.get('consumidos')),
+        'pendientes': _dias_vac(row.get('pendientes')),
         'pagados': int(row.get('pagados') or 0),
         'por_pagar': int(row.get('por_pagar') or 0),
         'inicio_provision': _jsonable_value(row.get('inicio_provision')),

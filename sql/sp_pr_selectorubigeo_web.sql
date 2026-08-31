@@ -3,6 +3,8 @@
     Usado por: GET /api/selectores/ubigeo
 
     @cia      — opcional (filtra SY_Localite.Company si tiene valor).
+              Si la compañía no tiene catálogo propio, usa BGT (o la primera
+              compañía con data) como catálogo geográfico compartido.
     @busqueda — nombre distrito/provincia/departamento o código PDT.
     @top      — máximo de filas (default 40).
 */
@@ -18,6 +20,22 @@ BEGIN
     SET @busqueda = LTRIM(RTRIM(ISNULL(@busqueda, '')));
     IF ISNULL(@top, 0) <= 0 SET @top = 40;
     IF @top > 100 SET @top = 100;
+
+    DECLARE @cia_filtro VARCHAR(10) = @cia;
+    IF @cia_filtro IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1 FROM SY_Localite l0 (NOLOCK)
+            WHERE l0.Company = @cia_filtro
+       )
+    BEGIN
+        IF EXISTS (SELECT 1 FROM SY_Localite (NOLOCK) WHERE Company = 'BGT')
+            SET @cia_filtro = 'BGT';
+        ELSE
+            SELECT TOP 1 @cia_filtro = Company
+            FROM SY_Localite (NOLOCK)
+            WHERE ISNULL(Company, '') <> ''
+            ORDER BY Company;
+    END
 
     SELECT TOP (@top)
         LTRIM(RTRIM(l.Localite)) AS id,
@@ -42,9 +60,9 @@ BEGIN
             ON c.Country = d.Country
     WHERE UPPER(LTRIM(RTRIM(ISNULL(c.Name, '')))) = 'PERU'
       AND (
-            @cia IS NULL
+            @cia_filtro IS NULL
          OR LTRIM(RTRIM(ISNULL(l.Company, ''))) = ''
-         OR l.Company = @cia
+         OR l.Company = @cia_filtro
       )
       AND (
             @busqueda = ''

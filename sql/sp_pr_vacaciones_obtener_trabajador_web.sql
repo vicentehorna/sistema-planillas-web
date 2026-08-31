@@ -51,15 +51,41 @@ BEGIN
     WHERE v.company = @company
       AND v.person = @person;
 
-    /* 3) Periodos vacacionales */
+    /* 3) Periodos vacacionales — adquiridos = días ganados a la fecha (misma lógica que sp_pr_saldovacaciones_web) */
+    DECLARE @fecha_hoy DATE = CAST(GETDATE() AS DATE);
+    DECLARE @dias_vacaciones DECIMAL(10, 2);
+
+    SELECT @dias_vacaciones = CAST(ISNULL(pt.DiasVacaciones, 30) AS DECIMAL(10, 2))
+    FROM PR_Employee e
+        INNER JOIN PR_PayRollType pt
+            ON pt.Company = e.Company
+           AND pt.PayRollType = e.PayRollType
+    WHERE e.Company = @company
+      AND e.Person = @person;
+
+    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
+        SET @dias_vacaciones = 30;
+
     SELECT
         v.line,
         v.controlyear,
         CAST(v.controlyear AS VARCHAR(4)) + '-' + CAST(CAST(v.controlyear AS INT) + 1 AS VARCHAR(4)) AS periodo,
         ISNULL(v.days, 0) AS dias,
-        ISNULL(v.AcquiredDays, 0) AS dias_adquiridos,
-        ISNULL(v.consumeddays, 0) AS consumidos,
-        ABS(ISNULL(v.consumeddays, 0) - ISNULL(v.AcquiredDays, 0)) AS pendientes,
+        CASE
+            WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
+            WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
+            ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
+        END AS dias_adquiridos,
+        CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2)) AS consumidos,
+        CASE
+            WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
+            ELSE
+                CASE
+                    WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
+                    ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
+                END
+                - CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2))
+        END AS pendientes,
         ISNULL(v.payeddays, 0) AS pagados,
         ISNULL(v.AcquiredDays, 0) - ISNULL(v.payeddays, 0) AS por_pagar,
         v.DateBeginProvision AS inicio_provision,

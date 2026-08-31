@@ -4,9 +4,9 @@
     con los trabajadores seleccionados antes de ejecutar este SP.
     @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
     @par_referencia: texto cabecera TXT (40 chars). Si vacío, usa PLANILLA HABERES + proceso.
-    Cuenta interbancaria (abrev B / descripción INTERBANCARIA) → siempre CCI (SocialAssistanceNumber) y tipo I,
+    Cuenta interbancaria (abrev B / descripción INTERBANCARIA) → siempre CCI (SocialAssistanceNumber) y tipo B,
     aunque el banco del trabajador coincida con creditobank.
-    Mismo banco y cuenta propia → SalaryAccount (A/M/C/P); otro banco → CCI (I).
+    Mismo banco y cuenta propia → SalaryAccount (A/M/C/P); otro banco → CCI (B).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecredito_web]
     @par_company     VARCHAR(10),
@@ -130,10 +130,10 @@ BEGIN
             CASE
                 WHEN ISNULL(tat.abrev, '') = 'B'
                      OR UPPER(ISNULL(tat.description, '')) LIKE '%INTERBANCARIA%'
-                    THEN 'I'
+                    THEN 'B'
                 WHEN e.salarybank = m.creditobank
                     THEN LEFT(ISNULL(tat.abrev, 'A'), 1)
-                ELSE 'I'
+                ELSE 'B'
             END AS tipocuenta,
             CASE
                 WHEN ISNULL(pdt.PDT, '') = '01' THEN '1'

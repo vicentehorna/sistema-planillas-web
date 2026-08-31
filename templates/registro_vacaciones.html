@@ -751,6 +751,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/"/g, '&quot;');
     }
 
+    function fmtDiasVac(val) {
+        const n = Number(val);
+        if (!Number.isFinite(n)) return '0';
+        const rounded = Math.round(n * 100) / 100;
+        return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(2);
+    }
+
     function mostrarError(msg) {
         const texto = msg || 'Ocurrió un error.';
         if (window.HmUi && typeof HmUi.error === 'function') {
@@ -800,7 +807,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
         const nombre = String(periodo.periodo || `Línea ${periodo.line}`).trim();
-        const pend = Number(periodo.pendientes || 0);
+        const pend = fmtDiasVac(periodo.pendientes);
         if (badge) {
             badge.textContent = `${nombre} · ${pend} pend.`;
             badge.className = 'badge text-bg-primary';
@@ -846,7 +853,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         lblDias.textContent = String(dias);
 
         const pendientes = periodoSeleccionado ? Number(periodoSeleccionado.pendientes || 0) : 0;
-        lblPend.textContent = String(pendientes);
+        lblPend.textContent = fmtDiasVac(pendientes);
 
         const excede = dias > pendientes;
         const incompleto = !consumo || !inicio || !fin || !periodoSeleccionado;
@@ -994,9 +1001,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-sel-periodo">${icono}</td>
                 <td>${escHtml(p.periodo)}</td>
                 <td class="text-end">${p.dias}</td>
-                <td class="text-end">${p.dias_adquiridos}</td>
-                <td class="text-end">${p.consumidos}</td>
-                <td class="text-end fw-semibold">${p.pendientes}</td>
+                <td class="text-end">${fmtDiasVac(p.dias_adquiridos)}</td>
+                <td class="text-end">${fmtDiasVac(p.consumidos)}</td>
+                <td class="text-end fw-semibold">${fmtDiasVac(p.pendientes)}</td>
                 <td>${escHtml(p.inicio_provision || '')}</td>
                 <td>${escHtml(p.inicio_derecho || '')}</td>
                 <td>${escHtml(p.estado_texto || '')}</td>

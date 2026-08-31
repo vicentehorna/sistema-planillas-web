@@ -1,7 +1,9 @@
 /*
-    Actualiza datos laborales del trabajador (PR_Employee) y sincroniza REM_BASICA si existe.
+    Actualiza datos laborales del trabajador (PR_Employee).
     Fechas: VARCHAR(10) YYYY-MM-DD o vacío → NULL.
     @modo_reingreso = 'Y': limpia cese, Status='N', EntryDate inmutable y valida nueva ReEntryDate.
+
+    Nota: la asignación REM_BASICA solo se crea en sp_pr_registrar_trabajador_web (alta).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @cia                VARCHAR(10),
@@ -176,28 +178,5 @@ BEGIN
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia
       AND person = @person;
-
-    IF @rembasica IS NOT NULL
-    BEGIN
-        UPDATE ec
-        SET
-            ec.ConceptValue = @rembasica,
-            ec.ConceptValueLo = CASE
-                WHEN UPPER(LTRIM(RTRIM(ISNULL(ec.ConceptCurrency, 'LO')))) = 'LO'
-                    THEN @rembasica
-                ELSE ec.ConceptValueLo
-            END,
-            ec.XLastDate = GETDATE(),
-            ec.XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
-        FROM PR_EmployeeConcept ec
-            INNER JOIN PR_Concept c
-                ON c.Concept = ec.Concept
-               AND c.Company = ec.Company
-        WHERE ec.Company = @cia
-          AND ec.Person = @person
-          AND c.FormulaCode = 'REM_BASICA'
-          AND ec.FlagFrecuencyType = 'P'
-          AND ec.PRPeriodEnd IS NULL;
-    END
 END
 GO

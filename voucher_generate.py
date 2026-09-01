@@ -234,6 +234,22 @@ def _person_title_tag(dni: str) -> str:
     return f"DNI:{_s(dni)}"
 
 
+def _dni_candidates(dni: str) -> List[str]:
+    """Variantes de documento para comparar (con/sin ceros a la izquierda)."""
+    raw = _s(dni)
+    if not raw:
+        return []
+    digits = "".join(c for c in raw if c.isdigit())
+    out = {raw}
+    if digits:
+        out.add(digits)
+        stripped = digits.lstrip("0") or "0"
+        out.add(stripped)
+        out.add(digits.zfill(8))
+        out.add(stripped.zfill(8))
+    return sorted(out)
+
+
 def resolve_trabajador_voucher(
     cursor,
     *,
@@ -252,24 +268,35 @@ def resolve_trabajador_voucher(
     if not dni:
         return {"ok": False, "error": "Ingrese el DNI del trabajador."}
 
+    dni_vals = _dni_candidates(dni)
+    dni_placeholders = ",".join("?" * len(dni_vals))
+
     cursor.execute(
-        """
+        f"""
         SELECT TOP 1
             e.Person AS person,
             LTRIM(RTRIM(ISNULL(p.DocumentNumber, e.Person))) AS dni,
             LTRIM(RTRIM(ISNULL(p.Name, ''))) AS nombre
         FROM PR_Employee e (NOLOCK)
-        INNER JOIN SY_Person p (NOLOCK)
-            ON p.Person = e.Person AND p.Company = e.Company
+        OUTER APPLY (
+            SELECT TOP 1 sp.DocumentNumber, sp.Name
+            FROM SY_Person sp (NOLOCK)
+            WHERE sp.Person = e.Person
+            ORDER BY CASE WHEN sp.Company = e.Company THEN 0 ELSE 1 END, sp.Company
+        ) p
         WHERE e.Company = ?
           AND e.PayRollType = ?
           AND (
-                LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = ?
-             OR LTRIM(RTRIM(e.Person)) = ?
+                LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) IN ({dni_placeholders})
+             OR LTRIM(RTRIM(e.Person)) IN ({dni_placeholders})
           )
-        ORDER BY CASE WHEN LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) = ? THEN 0 ELSE 1 END
+        ORDER BY CASE
+            WHEN LTRIM(RTRIM(ISNULL(p.DocumentNumber, ''))) IN ({dni_placeholders}) THEN 0
+            WHEN LTRIM(RTRIM(e.Person)) IN ({dni_placeholders}) THEN 1
+            ELSE 2
+        END
         """,
-        (company, payrolltype, dni, dni, dni),
+        (company, payrolltype) + tuple(dni_vals) + tuple(dni_vals) + tuple(dni_vals) + tuple(dni_vals),
     )
     row = cursor.fetchone()
     if not row:

@@ -204,6 +204,9 @@
                 <button type="button" class="btn btn-warning btn-sm px-4" id="btnReingresoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
                     <i class="bi bi-arrow-repeat"></i> Reingreso
                 </button>
+                <button type="button" class="btn btn-info btn-sm px-4" id="btnTrasladoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
+                    <i class="bi bi-building"></i> Traslado
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm px-4" id="btnInactivarCesados" disabled title="Inactivar trabajadores cesados en un rango de periodos">
                     <i class="bi bi-person-x"></i> Inactivar
                 </button>
@@ -222,6 +225,32 @@
                 <thead id="thead-trabajadores"></thead>
                 <tbody id="tbody-trabajadores"></tbody>
             </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalTrasladoTrabajador" tabindex="-1" aria-labelledby="modalTrasladoTrabajadorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalTrasladoTrabajadorLabel">Traslado de trabajador</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-2" id="lblTrasladoTrabajadorNombre"></p>
+                <div class="mb-2">
+                    <label for="cboTrasladoEmpresaDestino" class="form-label small fw-bold text-muted mb-1">Empresa destino</label>
+                    <select id="cboTrasladoEmpresaDestino" class="form-select form-select-sm"></select>
+                </div>
+                <div class="mb-1">
+                    <label for="txtTrasladoFechaIngreso" class="form-label small fw-bold text-muted mb-1">Fecha de ingreso</label>
+                    <input type="date" id="txtTrasladoFechaIngreso" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm" id="btnConfirmarTrasladoTrabajador">Confirmar traslado</button>
+            </div>
         </div>
     </div>
 </div>
@@ -261,6 +290,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnConsultarTrab = document.getElementById('btnConsultarTrabajadores');
     const btnNuevoTrab = document.getElementById('btnNuevoTrabajador');
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
+    const btnTrasladoTrab = document.getElementById('btnTrasladoTrabajador');
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
@@ -270,6 +300,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (btnNuevoTrab) btnNuevoTrab.disabled = !enabled;
         if (btnInactivarCesados) btnInactivarCesados.disabled = !enabled;
         actualizarBotonReingreso();
+        actualizarBotonTraslado();
     }
 
     function actualizarBotonReingreso() {
@@ -284,6 +315,18 @@ document.addEventListener('DOMContentLoaded', async function () {
             : 'Seleccione un trabajador cesado en el listado';
     }
 
+    function actualizarBotonTraslado() {
+        if (!btnTrasladoTrab) return;
+        const ok = consultaHabilitada
+            && trabajadorSeleccionado
+            && trabajadorSeleccionado.person
+            && trabajadorSeleccionado.cesado;
+        btnTrasladoTrab.disabled = !ok;
+        btnTrasladoTrab.title = ok
+            ? ('Trasladar a otra empresa: ' + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person))
+            : 'Seleccione un trabajador cesado en el listado';
+    }
+
     function seleccionarFilaTrabajador(tr) {
         const tbody = document.getElementById('tbody-trabajadores');
         if (!tbody || !tr) return;
@@ -295,8 +338,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             person: String(tr.getAttribute('data-person') || '').trim(),
             nombre: String(tr.getAttribute('data-nombre') || '').trim(),
             cesado: String(tr.getAttribute('data-cesado') || '') === '1',
+            fechacese: String(tr.getAttribute('data-fechacese') || '').trim(),
         };
         actualizarBotonReingreso();
+        actualizarBotonTraslado();
     }
 
     if (frmTrabajadores) {
@@ -344,6 +389,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     function hmAdvertencia(mensaje) {
         if (window.HmUi && typeof HmUi.advertencia === 'function') HmUi.advertencia(mensaje);
         else alert(mensaje);
+    }
+
+    function fechaIsoDesdeValor(valor) {
+        const s = String(valor || '').trim();
+        if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+        const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+        if (m) {
+            return m[3] + '-' + String(m[2]).padStart(2, '0') + '-' + String(m[1]).padStart(2, '0');
+        }
+        return '';
     }
 
     function etiquetaCompaniaSeleccionada() {
@@ -488,7 +543,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             const person = String(meta.person || '').trim();
             const nombre = String(meta.nombre || '').trim();
             const cesado = !!meta.cesado || !!String(meta.fechacese || '').trim();
-            htmlBody += `<tr data-person="${escapeHtml(person)}" data-nombre="${escapeHtml(nombre)}" data-cesado="${cesado ? '1' : '0'}">`;
+            const fechacese = fechaIsoDesdeValor(meta.fechacese);
+            htmlBody += `<tr data-person="${escapeHtml(person)}" data-nombre="${escapeHtml(nombre)}" data-cesado="${cesado ? '1' : '0'}" data-fechacese="${escapeHtml(fechacese)}">`;
             (rowVals || []).forEach((valor, index) => {
                 if (index === idxAcciones) {
                     const editUrl = person
@@ -519,6 +575,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         tbody.innerHTML = htmlBody;
         document.getElementById('lblRowCountTrab').textContent = String(filas.length);
         actualizarBotonReingreso();
+        actualizarBotonTraslado();
     }
 
     async function exportTrabajadoresExcel(payload, meta) {
@@ -879,11 +936,30 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
 
+            let infoEliminar = null;
+            try {
+                const resInfo = await fetch(
+                    '/api/trabajadores/eliminar-info?cia=' + encodeURIComponent(cia) +
+                    '&person=' + encodeURIComponent(person)
+                );
+                const dataInfo = await resInfo.json().catch(function () { return {}; });
+                if (!resInfo.ok) {
+                    hmError(dataInfo.error || 'No se pudo validar la eliminación.');
+                    return;
+                }
+                infoEliminar = dataInfo;
+            } catch (e) {
+                console.error(e);
+                hmError('No se pudo validar la eliminación del trabajador.');
+                return;
+            }
+
             const ok = await hmConfirmar({
                 titulo: 'Eliminar trabajador',
                 mensaje:
-                    `Se eliminará completamente el registro del trabajador${nombre ? ` "${nombre}"` : ''} ` +
-                    `de la empresa "${ciaTxt}".\n\nEsta acción no se podrá revertir.`,
+                    (infoEliminar.mensaje_confirmacion || '') +
+                    `\n\nTrabajador${nombre ? ` "${nombre}"` : ''} (${person}).` +
+                    `\nEmpresa: "${ciaTxt}".\n\nEsta acción no se podrá revertir.`,
                 textoOk: 'Eliminar',
                 textoCancelar: 'Cancelar',
                 variant: 'danger',
@@ -959,6 +1035,151 @@ document.addEventListener('DOMContentLoaded', async function () {
                 '/trabajadores/editar/' + encodeURIComponent(person) +
                 '?cia=' + encodeURIComponent(cia) +
                 '&seccion=laborales&modo=reingreso';
+        });
+    }
+
+    async function poblarEmpresasTraslado(ciaActual) {
+        const cbo = document.getElementById('cboTrasladoEmpresaDestino');
+        if (!cbo) return;
+        cbo.innerHTML = '';
+        try {
+            const res = await fetch('/api/selectores/companias');
+            const items = await res.json();
+            (Array.isArray(items) ? items : []).forEach(function (item) {
+                const id = String(item.id || item.company || '').trim();
+                if (!id || id === ciaActual) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = String(item.text || item.description || id).trim();
+                cbo.appendChild(opt);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function mostrarModalTrasladoTrabajador() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        if (!cia) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        if (!trabajadorSeleccionado || !trabajadorSeleccionado.person) {
+            hmAdvertencia('Seleccione en el listado el trabajador cesado a trasladar.');
+            return;
+        }
+        if (!trabajadorSeleccionado.cesado) {
+            hmAdvertencia('Solo se puede trasladar un trabajador con fecha de cese.');
+            return;
+        }
+        const lbl = document.getElementById('lblTrasladoTrabajadorNombre');
+        if (lbl) {
+            lbl.textContent = (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person)
+                + ' (' + trabajadorSeleccionado.person + ')';
+        }
+        const txtFecha = document.getElementById('txtTrasladoFechaIngreso');
+        if (txtFecha) txtFecha.value = fechaIsoLocal(new Date());
+        await poblarEmpresasTraslado(cia);
+        const cboDest = document.getElementById('cboTrasladoEmpresaDestino');
+        if (!cboDest || !cboDest.options.length) {
+            hmAdvertencia('No hay otra empresa disponible para el traslado.');
+            return;
+        }
+        const modalEl = document.getElementById('modalTrasladoTrabajador');
+        if (!modalEl || !window.bootstrap) return;
+        bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    if (btnTrasladoTrab) {
+        btnTrasladoTrab.addEventListener('click', function () {
+            if (!consultaHabilitada) return;
+            mostrarModalTrasladoTrabajador();
+        });
+    }
+
+    const btnConfirmarTraslado = document.getElementById('btnConfirmarTrasladoTrabajador');
+    if (btnConfirmarTraslado) {
+        btnConfirmarTraslado.addEventListener('click', async function () {
+            const ciaOrigen = document.getElementById('cboCompania').value.trim();
+            const cboDest = document.getElementById('cboTrasladoEmpresaDestino');
+            const ciaDestino = cboDest ? String(cboDest.value || '').trim() : '';
+            const fechaIngreso = document.getElementById('txtTrasladoFechaIngreso')
+                ? String(document.getElementById('txtTrasladoFechaIngreso').value || '').trim()
+                : '';
+            if (!ciaOrigen || !ciaDestino) {
+                hmAdvertencia('Seleccione la empresa destino.');
+                return;
+            }
+            if (!fechaIngreso) {
+                hmAdvertencia('Indique la fecha de ingreso en la nueva empresa.');
+                return;
+            }
+            if (!trabajadorSeleccionado || !trabajadorSeleccionado.person) {
+                hmAdvertencia('Seleccione el trabajador a trasladar.');
+                return;
+            }
+            const fechaceseIso = fechaIsoDesdeValor(trabajadorSeleccionado.fechacese);
+            if (fechaceseIso && fechaIngreso && fechaIngreso <= fechaceseIso) {
+                hmAdvertencia(
+                    'La fecha de ingreso en la nueva empresa (' + formatearFechaDmY(fechaIngreso) +
+                    ') debe ser posterior a la fecha de cese en la empresa actual (' +
+                    formatearFechaDmY(fechaceseIso) + ').'
+                );
+                return;
+            }
+            const ok = await hmConfirmar({
+                titulo: 'Confirmar traslado',
+                mensaje:
+                    '¿Trasladar a ' + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person) +
+                    ' a la empresa ' + (cboDest.options[cboDest.selectedIndex]?.text || ciaDestino) +
+                    ' con fecha de ingreso ' + formatearFechaDmY(fechaIngreso) + '?',
+                tipo: 'warning',
+            });
+            if (!ok) return;
+
+            btnConfirmarTraslado.disabled = true;
+            try {
+                const res = await fetch('/api/trabajadores/trasladar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        cia_origen: ciaOrigen,
+                        cia_destino: ciaDestino,
+                        person: trabajadorSeleccionado.person,
+                        entrydate: fechaIngreso,
+                    }),
+                });
+                const data = await res.json().catch(function () { return {}; });
+                if (!res.ok || data.error) {
+                    hmAdvertencia(data.error || 'No se pudo completar el traslado.');
+                    return;
+                }
+                const modalEl = document.getElementById('modalTrasladoTrabajador');
+                if (modalEl && window.bootstrap) {
+                    const inst = bootstrap.Modal.getInstance(modalEl);
+                    if (inst) inst.hide();
+                }
+                const cboCia = document.getElementById('cboCompania');
+                if (cboCia) {
+                    cboCia.value = ciaDestino;
+                    await poblarDependientesCompania(ciaDestino);
+                }
+                if (filtrosPersist) filtrosPersist.guardar();
+                trabajadorSeleccionado = null;
+                actualizarBotonReingreso();
+                actualizarBotonTraslado();
+                if (typeof hmExito === 'function') {
+                    hmExito(data.mensaje || 'Trabajador trasladado correctamente.');
+                } else {
+                    alert(data.mensaje || 'Trabajador trasladado correctamente.');
+                }
+                if (consultaHabilitada) await ejecutarConsultaTrabajadores();
+            } catch (e) {
+                console.error(e);
+                hmAdvertencia('Error de conexión al trasladar el trabajador.');
+            } finally {
+                btnConfirmarTraslado.disabled = false;
+            }
         });
     }
 

@@ -23082,6 +23082,76 @@ def api_trabajadores_listado():
                 pass
 
 
+@app.route('/api/trabajadores/trasladar', methods=['POST'])
+@login_required
+def api_trabajadores_trasladar():
+    """sp_pr_trasladar_trabajador_web: nuevo PR_Employee en otra empresa (mismo SY_Person)."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia_origen') or body.get('cia') or body.get('company') or '').strip()
+    cia_destino = str(body.get('cia_destino') or body.get('cia_dest') or '').strip()
+    person = str(body.get('person') or '').strip()
+    entrydate = _parse_optional_date(body.get('entrydate') or body.get('fecha_ingreso'))
+
+    if not cia_origen:
+        return jsonify({"error": "Seleccione la compañía origen."}), 400
+    if not cia_destino:
+        return jsonify({"error": "Seleccione la empresa destino."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione el trabajador a trasladar."}), 400
+    if cia_origen == cia_destino:
+        return jsonify({"error": "La empresa destino debe ser distinta a la actual."}), 400
+    if not entrydate:
+        return jsonify({"error": "Indique la fecha de ingreso en la nueva empresa."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'DECLARE @mensaje_out VARCHAR(500); '
+            'EXEC sp_pr_trasladar_trabajador_web '
+            '@cia_origen=?, @cia_destino=?, @person=?, @entrydate=?, @xlastuser=?, '
+            '@mensaje_out=@mensaje_out OUTPUT; '
+            'SELECT @mensaje_out AS mensaje;',
+            (
+                cia_origen,
+                cia_destino,
+                person,
+                _sql_date_str_param(entrydate),
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        mensaje = 'Trabajador trasladado correctamente.'
+        if rows:
+            mensaje = str(rows[0].get('mensaje') or mensaje).strip() or mensaje
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "cia_destino": cia_destino,
+            "person": person,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_trabajadores_trasladar")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/trabajadores/inactivar-cesados', methods=['POST'])
 @login_required
 def api_trabajadores_inactivar_cesados():
@@ -23150,6 +23220,70 @@ def api_trabajadores_inactivar_cesados():
                 pass
 
 
+@app.route('/api/trabajadores/eliminar-info', methods=['GET'])
+@login_required
+def api_trabajadores_eliminar_info():
+    """Indica si al eliminar se conserva SY_Person (trabajador en varias empresas)."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    person = str(request.args.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione el trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                (SELECT COUNT(DISTINCT e.Company)
+                   FROM PR_Employee e (NOLOCK)
+                  WHERE e.Person = ?) AS total_empresas,
+                (SELECT COUNT(DISTINCT e.Company)
+                   FROM PR_Employee e (NOLOCK)
+                  WHERE e.Person = ?
+                    AND e.Company <> ?) AS otras_empresas
+            """,
+            (person, person, cia),
+        )
+        row = cursor.fetchone()
+        total = int((row[0] if row else 0) or 0)
+        otras = int((row[1] if row else 0) or 0)
+        if total < 1:
+            return jsonify({"error": "El trabajador no existe en la compañía indicada."}), 404
+        conserva_sy = otras > 0
+        if conserva_sy:
+            mensaje = (
+                "Se eliminará el trabajador solo de la empresa actual. "
+                "Se conservará SY_Person porque está registrado en otra(s) empresa(s)."
+            )
+        else:
+            mensaje = (
+                "Se eliminará el trabajador de la empresa actual y también "
+                "sus datos generales (SY_Person), porque no está en otra empresa."
+            )
+        return jsonify({
+            "ok": True,
+            "cia": cia,
+            "person": person,
+            "total_empresas": total,
+            "conserva_sy_person": conserva_sy,
+            "mensaje_confirmacion": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_trabajadores_eliminar_info")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/trabajadores/eliminar', methods=['POST'])
 @login_required
 def api_trabajadores_eliminar():
@@ -23191,6 +23325,8 @@ def api_trabajadores_eliminar():
             "ok": True,
             "mensaje": mensaje,
             "borro_sy_person": _jsonable_value(row.get('borro_sy_person')),
+            "conserva_sy_person": _jsonable_value(row.get('conserva_sy_person')),
+            "total_empresas": _jsonable_value(row.get('total_empresas')),
             "person": _jsonable_value(row.get('person')),
             "cia": _jsonable_value(row.get('cia')),
             "nombre": _jsonable_value(row.get('nombre')),

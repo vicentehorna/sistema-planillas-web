@@ -5240,6 +5240,7 @@ _FORMATO_LIQ_GRATI_FORMULACODES = (
     'GRATIXMES',
     'GRATIXDIA',
     'BONIF_EXTRA_ESSALUD',
+    'LEY_29714_BONIF_GRAT',
 )
 
 _FORMATO_LIQ_VACA_FORMULACODES = (
@@ -5583,7 +5584,10 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
     try:
-        bono_9 = float((formula_values or {}).get('BONIF_EXTRA_ESSALUD') or 0)
+        bono_9 = (
+            float((formula_values or {}).get('BONIF_EXTRA_ESSALUD') or 0)
+            + float((formula_values or {}).get('LEY_29714_BONIF_GRAT') or 0)
+        )
     except (TypeError, ValueError):
         bono_9 = 0.0
     resultado['bono_9'] = bono_9
@@ -5591,7 +5595,7 @@ def _build_formato_liquidacion_grati(total_remuneracion_grati, formula_values):
     resultado['x_mes_fc'] = 'GRATIXMES'
     resultado['x_dia_fc'] = 'GRATIXDIA'
     resultado['total_fc'] = 'GRATIXMES + GRATIXDIA'
-    resultado['bono_9_fc'] = 'BONIF_EXTRA_ESSALUD'
+    resultado['bono_9_fc'] = 'BONIF_EXTRA_ESSALUD + LEY_29714_BONIF_GRAT'
     resultado['formula_meses_fc'] = '(Σ rem.GRATI / 6) × NUMERO_MESES → GRATIXMES'
     resultado['formula_dias_fc'] = '(Σ rem.GRATI / 180) × NUMERO_DIAS → GRATIXDIA'
     return resultado

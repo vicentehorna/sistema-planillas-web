@@ -81,6 +81,13 @@
             margin: 0 auto 5px;
             display: block;
         }
+        /* hm_ngservicios: firma con nombre/cargo en la imagen → contenedor +50% */
+        .firma-img.firma-ampliada {
+            max-height: 120px;
+            max-width: 330px;
+        }
+        .firma-spacer { height: 80px; }
+        .firma-spacer.firma-ampliada { height: 120px; }
     </style>
 </head>
 <body>
@@ -281,15 +288,15 @@
             <tr>
                 <td width="50%">
                     {% if firma_src %}
-                    <img src="{{ firma_src }}" class="firma-img" alt="Firma empleador">
+                    <img src="{{ firma_src }}" class="firma-img{% if firma_ampliada %} firma-ampliada{% endif %}" alt="Firma empleador">
                     {% else %}
-                    <div style="height: 80px;"></div>
+                    <div class="firma-spacer{% if firma_ampliada %} firma-ampliada{% endif %}"></div>
                     {% endif %}
                     <div class="linea-firma">EMPLEADOR</div>
                     <div style="font-size: 9px; color: #555;">{{ cabecera.nombre_representante }}<br>{{ cabecera.cargo_representante }}</div>
                 </td>
                 <td width="50%">
-                    <div style="height: 80px;"></div>
+                    <div class="firma-spacer{% if firma_ampliada %} firma-ampliada{% endif %}"></div>
                     <div class="linea-firma">TRABAJADOR</div>
                     <div style="font-size: 9px; color: #555;">DNI: {{ cabecera.dni }}</div>
                 </td>

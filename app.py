@@ -4520,6 +4520,7 @@ def generar_pdf_en_memoria(params):
             aportes=aportes,
             logo_src=logo_src,
             firma_src=firma_src,
+            firma_ampliada=_es_cliente_ngservicios(),
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)

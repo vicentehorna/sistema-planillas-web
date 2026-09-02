@@ -3,7 +3,7 @@ DSL de fórmulas condicionales (tipo K / Código) para el formulador web.
 
 Se valida y compila al GUARDAR. En cálculo solo se evalúa la expresión SQL
 ya compilada (placeholders #C:FORMULACODE#, #P:SHORTNAME#, #A:FORMULACODE#,
-#E:CAMPO#).
+#E:CAMPO#, #S:PROC|N|args|#).
 
 Sintaxis soportada:
   LET nombre = expr
@@ -14,6 +14,7 @@ Sintaxis soportada:
 
   CONCEPT("FORMULACODE")  PARAM("SHORTNAME")  ASSIGN("FORMULACODE")
   EMPLOYEE("CAMPO")   -- datos del trabajador (#empleado): PENSION, TOPAFP, PORC_SEGURO, ...
+  PROC("SP_NOMBRE" [, arg1, ...])  -- ejecuta SP autorizado; contexto (@cia, @period, ...) implícito
   números, 6.75%, +, -, *, /, paréntesis, comparaciones >, <, >=, <=, =, <>
 """
 from __future__ import annotations
@@ -31,7 +32,18 @@ _KEYWORDS = {
     "LET", "RESULT", "IF", "THEN", "ELSE", "END",
     "SI", "ENTONCES", "CASOCONTRARIO", "FINSI", "FIN",
     "CONCEPT", "PARAM", "ASSIGN", "ASIGNACION",
-    "EMPLOYEE", "EMPLEADO",
+    "EMPLOYEE", "EMPLEADO", "PROC",
+}
+
+# Catálogo de SPs invocables desde PROC(). Clave = nombre en mayúsculas.
+FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
+    "SP_PR_REPORTETOTALQUINTAPERSONA": {
+        "display": "SP_PR_ReporteTotalQuintaPERSONA",
+        "description": "Impuesto anual de quinta categoría por persona",
+        "min_args": 0,
+        "max_args": 1,
+        "param_names": ["deducible"],
+    },
 }
 
 _ALIASES = {
@@ -75,6 +87,33 @@ class CompileResult:
     parameters: list[str] = field(default_factory=list)
     assigns: list[str] = field(default_factory=list)
     employees: list[str] = field(default_factory=list)
+    procedures: list[str] = field(default_factory=list)
+
+
+def _normalize_proc_name(raw: str) -> str:
+    name = str(raw or "").strip().upper()
+    if not name:
+        raise FormulaDslError('PROC("") vacío.')
+    return name
+
+
+def _validate_proc(name: str, nargs: int) -> None:
+    spec = FORMULA_PROCEDURES.get(name)
+    if not spec:
+        allowed = ", ".join(
+            sorted(v.get("display", k) for k, v in FORMULA_PROCEDURES.items())
+        )
+        raise FormulaDslError(
+            f'PROC("{name}") no está autorizado. SPs permitidos: {allowed}.'
+        )
+    min_a = int(spec.get("min_args", 0))
+    max_a = int(spec.get("max_args", min_a))
+    if nargs < min_a or nargs > max_a:
+        pnames = ", ".join(spec.get("param_names") or [])
+        hint = f" Acepta entre {min_a} y {max_a} argumento(s)"
+        if pnames:
+            hint += f" ({pnames})"
+        raise FormulaDslError(f'PROC("{name}"):{hint}. Recibió {nargs}.')
 
 
 def _normalize_employee_field(raw: str) -> str:
@@ -98,7 +137,7 @@ def _tokenize(src: str) -> list[tuple[str, Any]]:
         if "//" in line:
             line = line[: line.index("//")]
         stripped = line.lstrip()
-        if stripped.startswith("#") and not re.match(r"^#[CPAE]:", stripped, re.I):
+        if stripped.startswith("#") and not re.match(r"^#[CPAES]:", stripped, re.I):
             # comentario de línea estilo # texto (no placeholder)
             continue
         lines.append(line)
@@ -114,6 +153,10 @@ def _tokenize(src: str) -> list[tuple[str, Any]]:
             continue
         if ch in "()":
             tokens.append((ch, ch))
+            i += 1
+            continue
+        if ch == ",":
+            tokens.append((",", ","))
             i += 1
             continue
         if s.startswith("<>", i) or s.startswith(">=", i) or s.startswith("<=", i):
@@ -174,6 +217,7 @@ class _Parser:
         self.parameters: set[str] = set()
         self.assigns: set[str] = set()
         self.employees: set[str] = set()
+        self.procedures: set[str] = set()
 
     def peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else (None, None)
@@ -321,6 +365,18 @@ class _Parser:
             code = _normalize_employee_field(raw)
             self.employees.add(code)
             return ("EMPLOYEE", code)
+        if k == "PROC":
+            self.pop()
+            self.expect("(")
+            proc_name = _normalize_proc_name(str(self.expect("STR")))
+            args: list[Any] = []
+            while self.peek()[0] == ",":
+                self.pop()
+                args.append(self.parse_expr())
+            self.expect(")")
+            _validate_proc(proc_name, len(args))
+            self.procedures.add(proc_name)
+            return ("PROC", proc_name, args)
         if k == "ID":
             self.pop()
             name = str(v).upper()
@@ -355,6 +411,13 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return f"#A:{node[1]}#"
     if kind == "EMPLOYEE":
         return f"#E:{node[1]}#"
+    if kind == "PROC":
+        proc_name = node[1]
+        arg_exprs = [_emit_sql(a, lets) for a in node[2]]
+        n = len(arg_exprs)
+        if n == 0:
+            return f"#S:{proc_name}|0|#"
+        return f"#S:{proc_name}|{n}|" + "|".join(arg_exprs) + "|#"
     if kind == "VAR":
         return _emit_sql(lets[node[1]], lets)
     if kind == "NEG":
@@ -393,7 +456,7 @@ def compile_formula_dsl(source: str) -> CompileResult:
     # Seguridad: charset acotado (sin comillas / punto y coma / comandos).
     if re.search(r"[;'\"\\]", compiled):
         raise FormulaDslError("La expresión compilada contiene caracteres no permitidos.")
-    bad = re.findall(r"[^0-9A-Za-z_#:\.\s\+\-\*/\(\)=<>]", compiled)
+    bad = re.findall(r"[^0-9A-Za-z_#:\.\s\+\-\*/\(\)=<>|]", compiled)
     if bad:
         raise FormulaDslError(f"Caracteres no permitidos en expresión: {sorted(set(bad))}")
 
@@ -404,6 +467,7 @@ def compile_formula_dsl(source: str) -> CompileResult:
         parameters=sorted(parser.parameters),
         assigns=sorted(parser.assigns),
         employees=sorted(parser.employees),
+        procedures=sorted(parser.procedures),
     )
 
 
@@ -425,6 +489,14 @@ def example_essalud_source() -> str:
         "      PARAM(\"RMV\") * PARAM(\"PORC_SEG_SOCIAL\") / 100\n"
         "    END\n"
         "  END\n"
+    )
+
+
+def example_quinta_proc_source() -> str:
+    return (
+        'LET DEDUCIBLE = CONCEPT("TOTAL_AUXILIAR")\n'
+        'LET IMPUESTO = PROC("SP_PR_ReporteTotalQuintaPERSONA", DEDUCIBLE)\n'
+        "RESULT = IMPUESTO\n"
     )
 
 
@@ -489,5 +561,20 @@ def validate_refs_against_db(cursor, company: str, compiled: CompileResult) -> l
         if emp not in EMPLOYEE_FIELDS:
             allowed = ", ".join(sorted(EMPLOYEE_FIELDS))
             errors.append(f'EMPLOYEE("{emp}") no es un campo válido. Use: {allowed}.')
+
+    for proc in compiled.procedures:
+        if proc not in FORMULA_PROCEDURES:
+            errors.append(f'PROC("{proc}") no está en el catálogo de procedimientos autorizados.')
+            continue
+        display = FORMULA_PROCEDURES[proc].get("display", proc)
+        cursor.execute(
+            "SELECT OBJECT_ID(?)",
+            (f"dbo.{display}",),
+        )
+        row = cursor.fetchone()
+        if not row or row[0] is None:
+            errors.append(
+                f'PROC("{display}") no existe en la base de datos del cliente.'
+            )
 
     return errors

@@ -43,6 +43,8 @@ Begin
 	declare @ceasedate datetime, @fechaingreso datetime
 	declare @conceptcode varchar(50), @flag_cts char(1), @conceptlist varchar(500), @divisor numeric(19,4)
 	declare @compiledexpr nvarchar(max), @expr_k nvarchar(max), @ph nvarchar(200), @code_k varchar(80), @p1 int, @p2 int
+	declare @sp_name varchar(128), @sp_nargs int, @sp_arg1 numeric(19,4), @sp_arg2 numeric(19,4), @sp_arg3 numeric(19,4)
+	declare @sp_out numeric(19,4), @sp_seg nvarchar(max), @sp_pend int, @p1_start int
 
 	set @flag_cts = case when isnull((select ShortName from pr_processtype where ProcessType = @processtype),'') = 'CTS' then 'Y' else 'N' end 
 	
@@ -254,6 +256,66 @@ Begin
 					), 0)
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PROC("SP...") compilado como #S:NOMBRE|N|args|# */
+				WHILE CHARINDEX(N'#S:', @expr_k) > 0
+				BEGIN
+					SET @p1_start = CHARINDEX(N'#S:', @expr_k)
+					SET @p1 = @p1_start + 3
+					SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+					IF @p2 <= 0 BREAK
+					SET @sp_name = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+					SET @p1 = @p2 + 1
+					SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+					IF @p2 <= 0 BREAK
+					SET @sp_nargs = CONVERT(int, SUBSTRING(@expr_k, @p1, @p2 - @p1))
+					SET @sp_arg1 = 0
+					SET @sp_arg2 = 0
+					SET @sp_arg3 = 0
+					SET @p1 = @p2 + 1
+					IF @sp_nargs >= 1
+					BEGIN
+						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
+						SET @p1 = @p2 + 1
+					END
+					IF @sp_nargs >= 2
+					BEGIN
+						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg2 = CONVERT(NUMERIC(19,4), @sp_seg)
+						SET @p1 = @p2 + 1
+					END
+					IF @sp_nargs >= 3
+					BEGIN
+						SET @p2 = CHARINDEX(N'|#', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg3 = CONVERT(NUMERIC(19,4), @sp_seg)
+					END
+					SET @sp_pend = CHARINDEX(N'|#', @expr_k, @p1_start)
+					IF @sp_pend <= 0 BREAK
+					SET @ph = SUBSTRING(@expr_k, @p1_start, @sp_pend + 2 - @p1_start)
+					SET @sp_out = 0
+					IF OBJECT_ID('dbo.sp_pr_formula_exec_proc_web', 'P') IS NOT NULL
+					BEGIN
+						EXEC dbo.sp_pr_formula_exec_proc_web
+							@procname = @sp_name,
+							@nargs = @sp_nargs,
+							@arg1 = @sp_arg1,
+							@arg2 = @sp_arg2,
+							@arg3 = @sp_arg3,
+							@cia = @cia,
+							@period = @period,
+							@payrolltype = @payrolltype,
+							@processtype = @processtype,
+							@person = @person,
+							@result = @sp_out OUTPUT
+					END
+					SET @expr_k = STUFF(@expr_k, @p1_start, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@sp_out, 0)))
 				END
 				SET @query = @query + CONVERT(VARCHAR(MAX), @expr_k) + @op
 			END
@@ -676,6 +738,66 @@ Begin
 					), 0)
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PROC("SP...") compilado como #S:NOMBRE|N|args|# */
+				WHILE CHARINDEX(N'#S:', @expr_k) > 0
+				BEGIN
+					SET @p1_start = CHARINDEX(N'#S:', @expr_k)
+					SET @p1 = @p1_start + 3
+					SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+					IF @p2 <= 0 BREAK
+					SET @sp_name = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+					SET @p1 = @p2 + 1
+					SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+					IF @p2 <= 0 BREAK
+					SET @sp_nargs = CONVERT(int, SUBSTRING(@expr_k, @p1, @p2 - @p1))
+					SET @sp_arg1 = 0
+					SET @sp_arg2 = 0
+					SET @sp_arg3 = 0
+					SET @p1 = @p2 + 1
+					IF @sp_nargs >= 1
+					BEGIN
+						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
+						SET @p1 = @p2 + 1
+					END
+					IF @sp_nargs >= 2
+					BEGIN
+						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg2 = CONVERT(NUMERIC(19,4), @sp_seg)
+						SET @p1 = @p2 + 1
+					END
+					IF @sp_nargs >= 3
+					BEGIN
+						SET @p2 = CHARINDEX(N'|#', @expr_k, @p1)
+						IF @p2 <= 0 BREAK
+						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
+						SET @sp_arg3 = CONVERT(NUMERIC(19,4), @sp_seg)
+					END
+					SET @sp_pend = CHARINDEX(N'|#', @expr_k, @p1_start)
+					IF @sp_pend <= 0 BREAK
+					SET @ph = SUBSTRING(@expr_k, @p1_start, @sp_pend + 2 - @p1_start)
+					SET @sp_out = 0
+					IF OBJECT_ID('dbo.sp_pr_formula_exec_proc_web', 'P') IS NOT NULL
+					BEGIN
+						EXEC dbo.sp_pr_formula_exec_proc_web
+							@procname = @sp_name,
+							@nargs = @sp_nargs,
+							@arg1 = @sp_arg1,
+							@arg2 = @sp_arg2,
+							@arg3 = @sp_arg3,
+							@cia = @cia,
+							@period = @period,
+							@payrolltype = @payrolltype,
+							@processtype = @processtype,
+							@person = @person,
+							@result = @sp_out OUTPUT
+					END
+					SET @expr_k = STUFF(@expr_k, @p1_start, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@sp_out, 0)))
 				END
 				SET @query2 = @query2 + CONVERT(VARCHAR(MAX), @expr_k) + @op
 			END

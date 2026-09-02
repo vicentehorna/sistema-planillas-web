@@ -15202,6 +15202,7 @@ def api_formulas_validar_codigo():
                 "concepts": compiled.concepts,
                 "parameters": compiled.parameters,
                 "assigns": compiled.assigns,
+                "procedures": compiled.procedures,
             }), 400
         return jsonify({
             "ok": True,
@@ -15210,6 +15211,7 @@ def api_formulas_validar_codigo():
             "concepts": compiled.concepts,
             "parameters": compiled.parameters,
             "assigns": compiled.assigns,
+            "procedures": compiled.procedures,
             "mensaje": "Código válido y compilado correctamente.",
         })
     except FormulaDslError as ex:

@@ -445,7 +445,7 @@
                 </tr>
                 <tr>
                     <td class="col-izq wrap"><span class="lbl datos-lbl">Tipo de contrato:</span><span class="datos-val">{{ liq.contract_modality or '' }}</span></td>
-                    <td class="col-der nowrap{% if es_ngservicios %} oculto-ngservicios{% endif %}"><span class="lbl datos-lbl">Régimen laboral:</span><span class="datos-val">{{ liq.regimen_laboral or '' }}</span></td>
+                    <td class="col-der nowrap{% if es_ngservicios or es_ultraseguros %} oculto-ngservicios{% endif %}"><span class="lbl datos-lbl">Régimen laboral:</span><span class="datos-val">{{ liq.regimen_laboral or '' }}</span></td>
                 </tr>
                 <tr>
                     <td class="col-izq nowrap"><span class="lbl datos-lbl">Sueldo:</span><span class="datos-val">{{ basico_fmt }}</span></td>

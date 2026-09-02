@@ -5778,6 +5778,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'aportaciones_calc': aportaciones_calc,
         'neto_a_pagar_fmt': neto_a_pagar_fmt,
         'es_ngservicios': _es_cliente_ngservicios(),
+        'es_ultraseguros': _es_cliente_ultraseguros(),
     }
 
 

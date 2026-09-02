@@ -184,11 +184,17 @@
                 <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted">Localizar trabajador</label>
                 <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboAccountProfile" class="form-label small fw-bold text-muted">Perfil contable</label>
                 <select id="cboAccountProfile" class="form-select form-select-sm">
                     <option value="">Todos</option>
                 </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="txtTipoCambio" class="form-label small fw-bold text-muted">T.C.</label>
+                <input type="number" id="txtTipoCambio" class="form-control form-control-sm text-end"
+                       value="3.36" min="0.0001" step="0.0001" inputmode="decimal" required
+                       title="Tipo de cambio para el cálculo (soles a dólares)">
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultarPlanilla">
@@ -347,6 +353,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
     const cboAccountProfile = document.getElementById('cboAccountProfile');
+    const txtTipoCambio = document.getElementById('txtTipoCambio');
     const txtBuscarTrabajador = document.getElementById('txtBuscarTrabajador');
     const btnResumenCalculo = document.getElementById('btnResumenCalculo');
     const modalResumenCalculoEl = document.getElementById('modalResumenCalculo');
@@ -358,6 +365,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     function bumpFiltrosLoadSeq() {
         filtrosLoadSeq += 1;
         return filtrosLoadSeq;
+    }
+
+    function leerTipoCambio() {
+        const raw = txtTipoCambio ? String(txtTipoCambio.value || '').trim().replace(',', '.') : '';
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n) || n <= 0) return 3.36;
+        return Math.round(n * 10000) / 10000;
     }
 
     function textoOpcionSeleccionada(selectEl) {
@@ -1248,6 +1262,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     processtype: processtype,
                     payroll_type: payroll_type,
                     period: period,
+                    tc: leerTipoCambio(),
                     trabajadores: listaPerson
                 })
             });
@@ -1444,6 +1459,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (ap && cboAccountProfile && optEx && optEx(cboAccountProfile, ap)) {
                     cboAccountProfile.value = ap;
                 }
+                if (txtTipoCambio && guardado.tc != null && String(guardado.tc).trim() !== '') {
+                    txtTipoCambio.value = String(guardado.tc).trim();
+                }
                 const perSaved = guardado.periodo != null ? String(guardado.periodo).trim() : '';
                 await cargarPeriodo(perSaved || undefined);
                 const hid = document.getElementById('hidPeriodoCalculo').value.trim();
@@ -1547,6 +1565,16 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (cboAccountProfile) {
         cboAccountProfile.addEventListener('change', function () {
             limpiarTablaTrabajadores();
+            if (filtrosPersist) filtrosPersist.guardar();
+        });
+    }
+
+    if (txtTipoCambio) {
+        txtTipoCambio.addEventListener('change', function () {
+            if (filtrosPersist) filtrosPersist.guardar();
+        });
+        txtTipoCambio.addEventListener('blur', function () {
+            txtTipoCambio.value = String(leerTipoCambio());
             if (filtrosPersist) filtrosPersist.guardar();
         });
     }

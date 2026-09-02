@@ -84,6 +84,12 @@
                 </select>
             </div>
             <div class="col-md-2">
+                <label for="txtTipoCambio" class="form-label small fw-bold text-muted">T.C.</label>
+                <input type="number" id="txtTipoCambio" class="form-control form-control-sm text-end"
+                       value="3.36" min="0.0001" step="0.0001" inputmode="decimal" required
+                       title="Tipo de cambio para el cálculo (soles a dólares)">
+            </div>
+            <div class="col-md-2">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
                     <option value="T" selected>Todos</option>
@@ -205,6 +211,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
     const cboCesados = document.getElementById('cboCesados');
+    const txtTipoCambio = document.getElementById('txtTipoCambio');
     const txtNombre = document.getElementById('txtNombre');
     const panelEmpresas = document.getElementById('panelEmpresas');
     const chkTodas = document.getElementById('chkTodasEmpresas');
@@ -221,6 +228,13 @@ document.addEventListener('DOMContentLoaded', function () {
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+    }
+
+    function leerTipoCambio() {
+        const raw = txtTipoCambio ? String(txtTipoCambio.value || '').trim().replace(',', '.') : '';
+        const n = parseFloat(raw);
+        if (!Number.isFinite(n) || n <= 0) return 3.36;
+        return Math.round(n * 10000) / 10000;
     }
 
     function claveTrabajador(t) {
@@ -615,6 +629,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     period,
+                    tc: leerTipoCambio(),
                     trabajadores: seleccionados.map((t) => ({
                         company: t.company,
                         person: t.person,

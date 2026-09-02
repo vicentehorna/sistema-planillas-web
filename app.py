@@ -390,6 +390,27 @@ def _normalize_pr_period(period_raw):
     return str(period_raw or '').strip()
 
 
+DEFAULT_PAYROLL_EXCHANGE_RATE = 3.36
+
+
+def _parse_payroll_exchange_rate(body, *, default=None):
+    """Tipo de cambio (@tc) para SPs de cálculo de planilla."""
+    if default is None:
+        default = DEFAULT_PAYROLL_EXCHANGE_RATE
+    raw = None
+    if isinstance(body, dict):
+        raw = body.get('tc')
+        if raw is None:
+            raw = body.get('exchangerate')
+    try:
+        tc = float(raw if raw is not None else default)
+    except (TypeError, ValueError):
+        tc = float(default)
+    if tc <= 0:
+        tc = float(default)
+    return round(tc, 4)
+
+
 def _ejercicio_utilidades_from_period(period_raw):
     """
     Ejercicio de utilidades = año del periodo de pago menos uno.
@@ -18541,7 +18562,8 @@ def api_declaracion_afp_masivo_generar_zip():
                     continue
                 ruc = _obtener_ruc_compania(cursor, cia) or '00000000000'
                 buf = _declaracion_afp_generar_xlsx_bytes(filas)
-                filename = f'AFPNET_{period_yyyymm}_{ruc}.xlsx'
+                empresa_token = _boleta_filename_token(company_desc, fallback=cia or 'EMPRESA')
+                filename = f'AFPNET_{period_yyyymm}_{ruc}_{empresa_token}.xlsx'
                 archivos.append((filename, buf.getvalue(), company_desc))
             except Exception as exc:
                 logging.exception('api_declaracion_afp_masivo_generar_zip cia=%s', cia)
@@ -27625,7 +27647,7 @@ def ejecutar_calculo_planilla():
     except AttributeError:
         return jsonify({'error': 'Usuario no identificado.'}), 401
 
-    tc = 3.0
+    tc = _parse_payroll_exchange_rate(body)
     conn = None
     try:
         conn = get_db_connection()
@@ -27789,7 +27811,7 @@ def ejecutar_calculo_streaming():
         client_db = get_active_database(required=True)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
-    tc = 3.0
+    tc = _parse_payroll_exchange_rate(body)
 
     def generar_progreso():
         conn = None
@@ -28273,7 +28295,7 @@ def ejecutar_comparar_planilla_streaming():
     except Exception as e:
         return jsonify({'error': f'No se pudo conectar a BD referencia "{bd_ref}": {e}'}), 400
 
-    tc = 3.0
+    tc = _parse_payroll_exchange_rate(body)
 
     def generar():
         conn = None
@@ -28697,7 +28719,7 @@ def ejecutar_calculo_masivo_streaming():
         client_db = get_active_database(required=True)
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
-    tc = 3.0
+    tc = _parse_payroll_exchange_rate(body)
 
     def generar_progreso():
         conn = None

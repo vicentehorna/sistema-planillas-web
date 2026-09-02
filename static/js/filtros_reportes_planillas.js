@@ -605,6 +605,7 @@
                     cesados: val('cboCesados'),
                     repunit: val('cboUnidad'),
                     accountprofile: val('cboAccountProfile'),
+                    tc: val('txtTipoCambio'),
                     periodo: valHidden('hidPeriodoCalculo'),
                     seleccionPersonas: seleccionPersonas,
                     timestamp: Date.now()
@@ -628,7 +629,7 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboProcesoCalculo', 'cboCesados', 'cboUnidad', 'cboAccountProfile'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboProcesoCalculo', 'cboCesados', 'cboUnidad', 'cboAccountProfile', 'txtTipoCambio'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

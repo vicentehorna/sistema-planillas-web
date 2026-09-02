@@ -124,7 +124,7 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
-            {% if (sql_database or '')|lower == 'hm_ngservicios' %}
+            {% if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra'] %}
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
                 <input type="text" id="txtReferencia" class="form-control form-control-sm"
@@ -175,7 +175,7 @@
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const ES_NGSERVICIOS = {{ 'true' if (sql_database or '')|lower == 'hm_ngservicios' else 'false' }};
+    const ES_TELECREDITO_REFERENCIA = {{ 'true' if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra'] else 'false' }};
     const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.telecredito
         ? window.FiltrosPlanillasReportes.telecredito()
         : null;
@@ -401,10 +401,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cesados = document.getElementById('cboCesados').value.trim() || 'T';
         const todosBancos = !!document.getElementById('chkTodosBancos')?.checked;
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
-        const costcenter = ES_NGSERVICIOS
+        const costcenter = ES_TELECREDITO_REFERENCIA
             ? '0'
             : String(document.getElementById('cboCentroCosto')?.value || '0').trim() || '0';
-        const accountprofile = ES_NGSERVICIOS
+        const accountprofile = ES_TELECREDITO_REFERENCIA
             ? ''
             : String(document.getElementById('cboAccountProfile')?.value || '').trim();
 
@@ -518,7 +518,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarCentrosCosto() {
-        if (ES_NGSERVICIOS || !cboCentroCosto) return;
+        if (ES_TELECREDITO_REFERENCIA || !cboCentroCosto) return;
         const prev = String(cboCentroCosto.value || '0').trim() || '0';
         const cia = String(cboCia?.value || '').trim();
         cboCentroCosto.innerHTML = '';
@@ -553,7 +553,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarPerfilesContables(preferido) {
-        if (ES_NGSERVICIOS || !cboAccountProfile) return;
+        if (ES_TELECREDITO_REFERENCIA || !cboAccountProfile) return;
         const prev = preferido != null
             ? String(preferido).trim()
             : String(cboAccountProfile.value || '').trim();
@@ -643,10 +643,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     // Seguridad: si hay compañía y el combo quedó solo en "Todos", reintentar carga.
-    if (!ES_NGSERVICIOS && String(cboCia.value || '').trim() && cboCentroCosto && cboCentroCosto.options.length <= 1) {
+    if (!ES_TELECREDITO_REFERENCIA && String(cboCia.value || '').trim() && cboCentroCosto && cboCentroCosto.options.length <= 1) {
         await cargarCentrosCosto();
     }
-    if (!ES_NGSERVICIOS && String(cboCia.value || '').trim() && cboAccountProfile && cboAccountProfile.options.length <= 1) {
+    if (!ES_TELECREDITO_REFERENCIA && String(cboCia.value || '').trim() && cboAccountProfile && cboAccountProfile.options.length <= 1) {
         await cargarPerfilesContables();
     }
 
@@ -764,7 +764,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = document.getElementById('cboConcepto').value.trim();
         const paydate = document.getElementById('txtFechaPago').value.trim();
         const todosBancos = !!document.getElementById('chkTodosBancos')?.checked;
-        const referencia = ES_NGSERVICIOS
+        const referencia = ES_TELECREDITO_REFERENCIA
             ? String(document.getElementById('txtReferencia')?.value || '').trim().slice(0, 40)
             : '';
 

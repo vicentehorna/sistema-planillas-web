@@ -52,6 +52,7 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_obtenerasignacionconcepto_web.sql` | Detalle |
 | `sp_pr_guardarasignacionconcepto_web.sql` | Alta / edición |
 | `sp_pr_eliminarasignacionconcepto_web.sql` | Baja |
+| `sp_pr_eliminarasignacionconceptos_filtrado_web.sql` | Baja masiva (filtros listado) |
 | `sp_pr_selectorunidades_web.sql` | Selector unidades |
 
 ## Selectores y utilitarios

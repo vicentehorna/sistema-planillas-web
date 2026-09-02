@@ -1778,6 +1778,41 @@ def _normalize_replicationunit_asig(raw):
     return '0' if v in ('', '0') else v
 
 
+def _asignacion_conceptos_listado_params_from_json(body):
+    """Parámetros de listado/borrado masivo de asignación de conceptos."""
+    body = body or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    period_raw = body.get('period')
+    ps = str(period_raw).strip() if period_raw is not None else ''
+    period = '0' if ps in ('', '0') else ps
+    concept_raw = body.get('concept')
+    cs = str(concept_raw).strip() if concept_raw is not None else ''
+    concept = '0' if cs in ('', '0') else cs
+    person_raw = body.get('person') or body.get('trabajador') or body.get('empleado') or ''
+    ps_person = str(person_raw).strip() if person_raw is not None else ''
+    person = '0' if ps_person in ('', '0') else ps_person
+    nombre = str(body.get('nombre') or body.get('name') or '').strip()
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    frecuencytype = _normalize_tipo_concepto_asig(
+        body.get('frecuencytype') or body.get('tipo_concepto') or body.get('tipoconcepto')
+    )
+    replicationunit = _normalize_replicationunit_asig(
+        body.get('replicationunit') or body.get('unidad') or body.get('repunit')
+    )
+    return {
+        'cia': cia,
+        'payrolltype': payrolltype,
+        'period': period,
+        'concept': concept,
+        'person': person,
+        'nombre': nombre,
+        'cesados': cesados,
+        'frecuencytype': frecuencytype,
+        'replicationunit': replicationunit,
+    }
+
+
 PLAME_ARCHIVO_EXTENSION = {
     '7': 'ps4',
     '14': 'jor',
@@ -26392,6 +26427,65 @@ def api_asignacion_conceptos_eliminar():
         return jsonify({"ok": True})
     except Exception as e:
         logging.exception("api_asignacion_conceptos_eliminar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asignacion-conceptos/eliminar-filtrados', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_eliminar_filtrados():
+    """sp_pr_eliminarasignacionconceptos_filtrado_web: elimina asignaciones del listado filtrado."""
+    body = request.get_json(silent=True) or {}
+    p = _asignacion_conceptos_listado_params_from_json(body)
+    cia = p['cia']
+    payrolltype = p['payrolltype']
+    period = p['period']
+    concept = p['concept']
+    person = p['person']
+    nombre = p['nombre']
+    cesados = p['cesados']
+    frecuencytype = p['frecuencytype']
+    replicationunit = p['replicationunit']
+
+    if not cia:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not payrolltype:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminarasignacionconceptos_filtrado_web "
+            "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, "
+            "@par_person=?, @nombre=?, @cesados=?, @par_frecuencytype=?, @par_replicationunit=?",
+            (cia, payrolltype, period, concept, person, nombre, cesados, frecuencytype, replicationunit),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        row = rows[0] if rows else {}
+        eliminados = int(row.get('eliminados') or 0)
+        mensaje = str(row.get('mensaje') or '').strip() or (
+            f"Se eliminaron {eliminados} registro(s)." if eliminados else "No hay asignaciones que coincidan con el filtro."
+        )
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "eliminados": eliminados,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_eliminar_filtrados")
         err = str(e)
         if 'RAISERROR' in err or '50000' in err:
             parts = err.split(']')

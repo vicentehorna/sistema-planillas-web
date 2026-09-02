@@ -246,6 +246,9 @@
                 <button type="button" class="btn btn-nueva-asignacion btn-sm px-3" id="btnNuevaAsignacion" disabled>
                     <i class="bi bi-plus-lg"></i> Nueva asignación
                 </button>
+                <button type="button" class="btn btn-outline-danger btn-sm px-3" id="btnEliminarFiltradosAsigConceptos" disabled>
+                    <i class="bi bi-trash"></i> Eliminar
+                </button>
                 <span class="ms-auto text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCountAsigConceptos">0</span>
                 </span>
@@ -407,6 +410,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_asignacion_conceptos_listado') | tojson }};
     const URL_GUARDAR = {{ url_for('api_asignacion_conceptos_guardar') | tojson }};
     const URL_ELIMINAR = {{ url_for('api_asignacion_conceptos_eliminar') | tojson }};
+    const URL_ELIMINAR_FILTRADOS = {{ url_for('api_asignacion_conceptos_eliminar_filtrados') | tojson }};
     const HEADERS = [
         'Item', 'Código', 'Empleado', 'Concepto', 'Tipo', 'Valor', 'Moneda',
         'Vigente Desde', 'Hasta', 'C.Costo', 'Tareo', 'Aplica'
@@ -473,6 +477,25 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = document.getElementById('cboCompania').value.trim();
         const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
         document.getElementById('btnNuevaAsignacion').disabled = !(cia && payrolltype);
+    }
+
+    function actualizarBtnsResultado(count) {
+        const hayRegistros = Number(count) > 0;
+        document.getElementById('btnExportExcelAsigConceptos').disabled = !hayRegistros;
+        document.getElementById('btnEliminarFiltradosAsigConceptos').disabled = !hayRegistros;
+    }
+
+    function obtenerFiltrosAsigConceptos() {
+        const cia = document.getElementById('cboCompania').value.trim();
+        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim() || '0';
+        const concept = document.getElementById('cboConcepto').value.trim() || '0';
+        let person = document.getElementById('cboTrabajador').value.trim();
+        if (!person) person = '0';
+        const replicationunit = document.getElementById('cboUnidad').value.trim() || '0';
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const frecuencytype = document.getElementById('cboTipoConcepto').value.trim() || '0';
+        return { cia, payrolltype, period, concept, person, replicationunit, cesados, frecuencytype };
     }
 
     function tipoAsignacionSeleccionado() {
@@ -1498,20 +1521,58 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function eliminarFiltradosAsigConceptos() {
+        const count = parseInt(document.getElementById('lblRowCountAsigConceptos').textContent, 10) || 0;
+        if (!consultaEjecutada || count <= 0) {
+            hmAdvertencia('Ejecute primero una consulta con resultados.');
+            return;
+        }
+
+        const ok = await hmConfirmar({
+            titulo: 'Eliminar asignaciones',
+            mensaje: `¿Eliminar ${count} registro(s) del listado actual?\n\nEsta acción no se puede deshacer.`,
+            textoOk: 'Eliminar',
+            textoCancelar: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        const filtros = obtenerFiltrosAsigConceptos();
+        if (!filtros.cia || !filtros.payrolltype) {
+            hmAdvertencia('Complete compañía y tipo planilla.');
+            return;
+        }
+
+        const btn = document.getElementById('btnEliminarFiltradosAsigConceptos');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_ELIMINAR_FILTRADOS, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(filtros)
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                hmError(payload.error || 'No se pudieron eliminar las asignaciones.');
+                actualizarBtnsResultado(count);
+                return;
+            }
+            hmExito(payload.mensaje || `Se eliminaron ${payload.eliminados || 0} registro(s).`);
+            await ejecutarConsulta();
+        } catch (err) {
+            console.error(err);
+            hmError('Error de red o del servidor al eliminar.');
+            actualizarBtnsResultado(count);
+        }
+    }
+
     async function ejecutarConsulta() {
         lastExportAsigConceptos = null;
-        document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+        actualizarBtnsResultado(0);
         if (filtrosPersist) filtrosPersist.guardar();
 
-        const cia = document.getElementById('cboCompania').value.trim();
-        const payrolltype = document.getElementById('cboTipoPlanilla').value.trim();
-        const period = document.getElementById('cboPeriodo').value.trim() || '0';
-        const concept = document.getElementById('cboConcepto').value.trim() || '0';
-        let person = document.getElementById('cboTrabajador').value.trim();
-        if (!person) person = '0';
-        const replicationunit = document.getElementById('cboUnidad').value.trim() || '0';
-        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
-        const frecuencytype = document.getElementById('cboTipoConcepto').value.trim() || '0';
+        const filtros = obtenerFiltrosAsigConceptos();
+        const { cia, payrolltype, period, concept, person, replicationunit, cesados, frecuencytype } = filtros;
 
         if (!cia || !payrolltype) {
             hmAdvertencia('Complete compañía y tipo planilla.');
@@ -1531,7 +1592,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const payload = await res.json();
             if (!res.ok || payload.error) {
                 document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
-                document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+                actualizarBtnsResultado(0);
                 hmError(payload.error || 'Error al consultar el listado.');
                 return;
             }
@@ -1539,7 +1600,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!rows.length) {
                 renderizarTabla([]);
                 document.getElementById('cardResultadoAsigConceptos').classList.remove('d-none');
-                document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+                actualizarBtnsResultado(0);
                 consultaEjecutada = true;
                 return;
             }
@@ -1560,12 +1621,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }
             };
             document.getElementById('cardResultadoAsigConceptos').classList.remove('d-none');
-            document.getElementById('btnExportExcelAsigConceptos').disabled = false;
+            actualizarBtnsResultado(built.count);
             consultaEjecutada = true;
         } catch (err) {
             console.error(err);
             document.getElementById('cardResultadoAsigConceptos').classList.add('d-none');
-            document.getElementById('btnExportExcelAsigConceptos').disabled = true;
+            actualizarBtnsResultado(0);
             hmError('Error de red o del servidor.');
         }
     }
@@ -1773,6 +1834,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             hmError('No se pudo generar el archivo Excel.');
         }
     });
+
+    document.getElementById('btnEliminarFiltradosAsigConceptos').addEventListener('click', eliminarFiltradosAsigConceptos);
 });
 </script>
 {% endblock %}

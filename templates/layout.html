@@ -818,8 +818,9 @@
                 </li>
                 {% endif %}
 
-                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_por_trabajador_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
-                {% set show_plame = can_menu('plame_archivo_14') or can_menu('plame_archivo_15') or can_menu('plame_archivo_18') or can_menu('plame_archivo_26') or can_menu('plame_archivos_4ta') or can_menu('plame_por_trabajador') or can_menu('plame_tregistro') or can_menu('plame_validar') or can_menu('tregistro_importar') %}
+                {% set es_alamo = (sql_database or '')|lower == 'hm_alamo' %}
+                {% set plame_active = request.endpoint in ('plame_archivo14_page', 'plame_archivo14_masivo_page', 'plame_archivo15_page', 'plame_archivo18_page', 'plame_archivo26_page', 'plame_archivos_7_20_page', 'plame_por_trabajador_page', 'plame_tregistro_page', 'plame_validar_page', 'tregistro_importar_page') %}
+                {% set show_plame = can_menu('plame_archivo_14') or can_menu('plame_archivo_14_masivo') or can_menu('plame_archivo_15') or can_menu('plame_archivo_18') or can_menu('plame_archivo_26') or can_menu('plame_archivos_4ta') or can_menu('plame_por_trabajador') or can_menu('plame_tregistro') or can_menu('plame_validar') or can_menu('tregistro_importar') %}
                 {% if show_plame %}
                 <li class="sidebar-menu-parent {{ 'active' if plame_active else '' }}">
                     <a href="#submenuPlame"
@@ -836,6 +837,13 @@
                         <li class="{{ 'active' if request.endpoint == 'plame_archivo14_page' else '' }}">
                             <a href="{{ url_for('plame_archivo14_page') }}" title="Archivo 14 (.jor)">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Archivo 14 (.jor)</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_alamo and can_menu('plame_archivo_14_masivo') %}
+                        <li class="{{ 'active' if request.endpoint == 'plame_archivo14_masivo_page' else '' }}">
+                            <a href="{{ url_for('plame_archivo14_masivo_page') }}" title="Archivo 14 Masivo (.jor)">
+                                <i class="bi bi-files"></i><span class="sidebar-link-text">Archivo 14 Masivo (.jor)</span>
                             </a>
                         </li>
                         {% endif %}

@@ -5870,9 +5870,23 @@ def _contexto_formato_liquidacion(params, include_images=True):
         remuneracion_totales_raw,
         remuneracion_totales_fc,
     ) = _build_formato_liquidacion_remuneracion(formula_values)
-    cts_calc = _build_formato_liquidacion_cts(remuneracion_totales_raw.get('cts'), formula_values)
-    grati_calc = _build_formato_liquidacion_grati(remuneracion_totales_raw.get('grati'), formula_values)
-    vaca_calc = _build_formato_liquidacion_vaca(remuneracion_totales_raw.get('vaca'), formula_values)
+
+    rc_cts_totales_raw = None
+    rc_cts_totales_fmt = None
+    if _es_cliente_ultraseguros():
+        rc_cts_totales_raw = {
+            col: float(remuneracion_totales_raw.get(col) or 0) / 2.0
+            for col in ('cts', 'grati', 'vaca')
+        }
+        rc_cts_totales_fmt = {
+            col: _formato_liquidacion_moneda(rc_cts_totales_raw[col])
+            for col in ('cts', 'grati', 'vaca')
+        }
+
+    base_calculo = rc_cts_totales_raw if rc_cts_totales_raw else remuneracion_totales_raw
+    cts_calc = _build_formato_liquidacion_cts(base_calculo.get('cts'), formula_values)
+    grati_calc = _build_formato_liquidacion_grati(base_calculo.get('grati'), formula_values)
+    vaca_calc = _build_formato_liquidacion_vaca(base_calculo.get('vaca'), formula_values)
     total_ingresos = (
         float(cts_calc.get('total') or 0)
         + float(grati_calc.get('total') or 0)
@@ -5910,6 +5924,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'remuneracion_rows': remuneracion_rows,
         'remuneracion_totales': remuneracion_totales,
         'remuneracion_totales_fc': remuneracion_totales_fc,
+        'rc_cts_totales': rc_cts_totales_fmt,
         'cts_calc': cts_calc,
         'grati_calc': grati_calc,
         'vaca_calc': vaca_calc,

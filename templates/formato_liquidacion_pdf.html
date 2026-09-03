@@ -499,6 +499,14 @@
                         <td class="monto">{{ remuneracion_totales.grati }}</td>
                         <td class="monto">{{ remuneracion_totales.vaca }}</td>
                     </tr>
+                    {% if rc_cts_totales %}
+                    <tr class="fila-total">
+                        <td class="concepto">R.C. CTS</td>
+                        <td class="monto">{{ rc_cts_totales.cts }}</td>
+                        <td class="monto">{{ rc_cts_totales.grati }}</td>
+                        <td class="monto">{{ rc_cts_totales.vaca }}</td>
+                    </tr>
+                    {% endif %}
                 </tbody>
             </table>
         </div>

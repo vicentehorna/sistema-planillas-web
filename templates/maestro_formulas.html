@@ -864,6 +864,11 @@
             params: 'Elemento: concepto. Proceso, Per. fin + #, Mín. (meses), Div. (opcional), Operador.',
         },
         {
+            v: 'U', t: 'Promedio CTS',
+            desc: 'Igual que Promedio Vac/Grati, pero el periodo inicial lo fija el ciclo CTS: may–oct → mayo; nov–abr → noviembre (año anterior si ene–abr).',
+            params: 'Elemento: concepto. Proceso, Per. fin + #, Mín. (meses), Div. (opcional), Operador.',
+        },
+        {
             v: 'X', t: 'CuentaLiq',
             desc: 'En liquidación: suma el concepto en el tramo del ciclo (CTS / GRATI / VACA según T.Liq) desde ingreso hasta la fecha de cese.',
             params: 'Elemento: concepto. T.Liq (CTS, GRATI o VACA), Operador.',
@@ -1204,11 +1209,11 @@
     }
 
     function tipoDetalleMuestraConcepto(tipo) {
-        return ['C', 'A', 'B', 'I', 'R', 'M', 'H', 'X', 'Y', 'Z', 'T'].includes(tipo);
+        return ['C', 'A', 'B', 'I', 'R', 'M', 'H', 'U', 'X', 'Y', 'Z', 'T'].includes(tipo);
     }
 
     function tipoDetalleMuestraSuma(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'I' || tipo === 'B' || tipo === 'R';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'U' || tipo === 'I' || tipo === 'B' || tipo === 'R';
     }
 
     function tipoDetalleMuestraPerIni(tipo) {
@@ -1216,15 +1221,15 @@
     }
 
     function tipoDetalleMuestraPerFin(tipo) {
-        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'I' || tipo === 'B' || tipo === 'R';
+        return tipo === 'S' || tipo === 'Z' || tipo === 'M' || tipo === 'H' || tipo === 'U' || tipo === 'I' || tipo === 'B' || tipo === 'R';
     }
 
     function tipoDetalleMuestraMinimo(tipo) {
-        return tipo === 'M' || tipo === 'H';
+        return tipo === 'M' || tipo === 'H' || tipo === 'U';
     }
 
     function tipoDetalleMuestraDivisor(tipo) {
-        return tipo === 'M' || tipo === 'H';
+        return tipo === 'M' || tipo === 'H' || tipo === 'U';
     }
 
     function tipoDetalleMuestraTipoLiq(tipo) {
@@ -1933,7 +1938,7 @@
     function lineaEmiteImporte(ln) {
         const t = String(ln && ln.tipo || '').toUpperCase();
         if (t === 'G') return false;
-        return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K'].includes(t);
+        return ['A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'U', 'V', 'T', 'X', 'Y', 'Z', 'K'].includes(t);
     }
 
     function labelInsertarEn(flag) {

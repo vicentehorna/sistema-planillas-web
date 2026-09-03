@@ -455,6 +455,18 @@ Begin
 				set @query =  @query + convert(varchar(20),@importe) + @op 
 			End
 
+			IF @tipo = 'U'
+			Begin
+				set @period_end = 
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
+
+				set @importe = dbo.f_getPromedioCts(
+					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid, @numero, @divisor, @fechaingreso)
+
+				set @query =  @query + convert(varchar(20),@importe) + @op 
+			End
+
 			IF @tipo = 'G' set @query = @query + case when @grupo = 'O' then '(' else convert(varchar(20),0) + ')' end + @op
 
 			IF @tipo = 'V' set @query = @query + convert(varchar(20),@numero) + @op
@@ -929,6 +941,18 @@ Begin
 					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
 
 				set @importe = dbo.f_getPromedioGrati(
+					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid, @numero, @divisor, @fechaingreso)
+
+				set @query2 =  @query2 + convert(varchar(20),@importe) + @op 
+			End
+
+			IF @tipo = 'U'
+			Begin
+				set @period_end = 
+					(select PRPeriod from PR_Period where Company = @cia and PayRollType = @payrolltype and PeriodOrder = (
+					select PeriodOrder from PR_Period where Company = @cia and PayRollType = @payrolltype and PRPeriod = (case when @periodofin = 'A' then @period else left(@period,4) + '0101' end)) + ISNULL(@numberfin, 0))
+
+				set @importe = dbo.f_getPromedioCts(
 					@cia, @person, @payrolltype, @process, @period, @period_end, @conceptid, @numero, @divisor, @fechaingreso)
 
 				set @query2 =  @query2 + convert(varchar(20),@importe) + @op 

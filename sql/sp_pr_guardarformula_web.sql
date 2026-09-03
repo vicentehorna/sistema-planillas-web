@@ -196,8 +196,8 @@ BEGIN
             CONTINUE;
         END;
 
-        IF ISNULL(@t1, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K')
-           AND ISNULL(@t2, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'V', 'T', 'X', 'Y', 'Z', 'K')
+        IF ISNULL(@t1, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'U', 'V', 'T', 'X', 'Y', 'Z', 'K')
+           AND ISNULL(@t2, '') IN ('A', 'P', 'C', 'S', 'I', 'B', 'R', 'M', 'H', 'U', 'V', 'T', 'X', 'Y', 'Z', 'K')
            AND ISNULL(@o1, '') NOT IN ('M', 'P', 'X', 'D')
         BEGIN
             RAISERROR(

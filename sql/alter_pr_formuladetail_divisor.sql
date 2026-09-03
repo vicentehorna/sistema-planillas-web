@@ -1,5 +1,5 @@
 /*
-    Divisor fijo para líneas Promedio Vac (tipo M) y Promedio Grati (tipo H).
+    Divisor fijo para líneas Promedio Vac (tipo M), Promedio Grati (tipo H) y Promedio CTS (tipo U).
     Si > 0, la suma del rango se divide entre este valor.
     Si NULL o 0, se divide entre meses del rango (ajustado por ingreso/reingreso).
 */

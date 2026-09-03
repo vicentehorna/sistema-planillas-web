@@ -178,5 +178,17 @@ BEGIN
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia
       AND person = @person;
+
+    /* Al inactivar: permanentes → temporales con fin = periodo del cese */
+    IF @modo_reingreso = 'N'
+       AND @status = 'Y'
+       AND @fecha_cese IS NOT NULL
+    BEGIN
+        EXEC dbo.sp_pr_cerrar_asignaciones_permanentes_cese_web
+            @cia = @cia,
+            @person = @person,
+            @xlastuser = @xlastuser,
+            @emit_result = 'N';
+    END
 END
 GO

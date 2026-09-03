@@ -67,6 +67,17 @@ BEGIN
 
     SET @cantidad = @@ROWCOUNT;
 
+    /* Cerrar asignaciones permanentes de los recién inactivados en el rango */
+    IF @cantidad > 0
+    BEGIN
+        EXEC dbo.sp_pr_cerrar_asignaciones_permanentes_cese_web
+            @cia = @cia_n,
+            @fecha_desde = @fecha_desde,
+            @fecha_hasta = @fecha_hasta,
+            @xlastuser = @user_n,
+            @emit_result = 'N';
+    END
+
     SELECT
         @cia_n AS cia,
         CONVERT(VARCHAR(10), @fd, 23) AS fecha_desde,

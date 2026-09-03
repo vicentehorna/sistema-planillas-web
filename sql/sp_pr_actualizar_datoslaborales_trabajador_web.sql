@@ -190,5 +190,60 @@ BEGIN
             @xlastuser = @xlastuser,
             @emit_result = 'N';
     END
+
+    /*
+        Histórico auxiliar (PR_HistoricoFechas): solo en reingreso confirmado.
+        No interviene en cálculo; solo visualización de ciclos ingreso/cese.
+    */
+    IF @modo_reingreso = 'Y'
+       AND OBJECT_ID(N'dbo.PR_HistoricoFechas', N'U') IS NOT NULL
+       AND @fecha_reingreso IS NOT NULL
+    BEGIN
+        /* Cierra ciclo abierto con el cese previo al reingreso */
+        IF @cese_actual IS NOT NULL
+        BEGIN
+            UPDATE dbo.PR_HistoricoFechas
+            SET
+                FechaFin = CONVERT(DATETIME, CONVERT(DATE, @cese_actual)),
+                XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                XLastDate = GETDATE()
+            WHERE Company = @cia
+              AND Person = @person
+              AND FechaFin IS NULL
+              AND CONVERT(DATE, FechaInicio) < CONVERT(DATE, @fecha_reingreso);
+        END
+
+        IF NOT EXISTS (
+            SELECT 1
+            FROM dbo.PR_HistoricoFechas
+            WHERE Company = @cia
+              AND Person = @person
+              AND CONVERT(DATE, FechaInicio) = CONVERT(DATE, @fecha_reingreso)
+        )
+        BEGIN
+            INSERT INTO dbo.PR_HistoricoFechas (
+                Company, Person, FechaInicio, FechaFin, XLastUser, XLastDate
+            )
+            VALUES (
+                @cia,
+                @person,
+                CONVERT(DATETIME, CONVERT(DATE, @fecha_reingreso)),
+                NULL,
+                NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                GETDATE()
+            );
+        END
+        ELSE
+        BEGIN
+            UPDATE dbo.PR_HistoricoFechas
+            SET
+                FechaFin = NULL,
+                XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                XLastDate = GETDATE()
+            WHERE Company = @cia
+              AND Person = @person
+              AND CONVERT(DATE, FechaInicio) = CONVERT(DATE, @fecha_reingreso);
+        END
+    END
 END
 GO

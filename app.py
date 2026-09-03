@@ -23562,6 +23562,53 @@ def api_trabajadores_inactivar_cesados():
                 pass
 
 
+@app.route('/api/trabajadores/historico-fechas', methods=['GET'])
+@login_required
+def api_trabajadores_historico_fechas():
+    """sp_pr_listar_historico_fechas_trabajador_web: ciclos ingreso/cese (auxiliar UI)."""
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    person = str(request.args.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione el trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_historico_fechas_trabajador_web @cia=?, @person=?",
+            (cia, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                "fecha_inicio": _jsonable_value(r.get('fecha_inicio')),
+                "fecha_fin": _jsonable_value(r.get('fecha_fin')),
+                "vigente": _jsonable_value(r.get('vigente')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_trabajadores_historico_fechas")
+        err = str(e)
+        if 'Invalid object name' in err or 'PR_HistoricoFechas' in err:
+            return jsonify({"rows": [], "total": 0, "mensaje": "Histórico no disponible en esta base."})
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/trabajadores/eliminar-info', methods=['GET'])
 @login_required
 def api_trabajadores_eliminar_info():

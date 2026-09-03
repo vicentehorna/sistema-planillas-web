@@ -340,7 +340,7 @@
                             <input type="text" id="txtPerson" class="form-control form-control-sm campo-bloqueado text-uppercase"
                                    value="{{ empleado.person or person_id }}" readonly disabled>
                             {% endif %}
-                        </div>
+    </div>
                         <div class="col-md-4">
                             <label for="txtName1" class="form-label small fw-bold text-muted te-req">Primer Nombre</label>
                             <input type="text" id="txtName1" name="name1" class="form-control form-control-sm campo-obligatorio text-uppercase"
@@ -381,7 +381,7 @@
                         </div>
                     </div>
                 </div>
-            </div>
+</div>
 
             <div class="section-card">
                 <div class="section-title">Contacto y documento</div>
@@ -391,12 +391,12 @@
                             <label for="txtCelular" class="form-label small fw-bold text-muted">Celular</label>
                             <input type="text" id="txtCelular" name="sectelephone" class="form-control form-control-sm"
                                    maxlength="15" value="{{ empleado.sectelephone or '' }}" autocomplete="off">
-                        </div>
+    </div>
                         <div class="col-md-8">
                             <label for="txtEmail" class="form-label small fw-bold text-muted">Email</label>
                             <input type="email" id="txtEmail" name="email" class="form-control form-control-sm"
                                    maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off">
-                        </div>
+</div>
                         <div class="col-md-6">
                             <label for="txtAddress" class="form-label small fw-bold text-muted">Dirección</label>
                             <input type="text" id="txtAddress" name="address" class="form-control form-control-sm"
@@ -504,14 +504,23 @@
                         </div>
                         <div class="col-md-6">
                             <label for="txtReentryDate" class="form-label small fw-bold text-muted{% if modo_reingreso %} te-req{% endif %}">Fecha de reingreso</label>
-                            <input type="date" id="txtReentryDate" name="reentrydate"
-                                   class="form-control form-control-sm{% if modo_reingreso %} campo-obligatorio border-primary{% endif %}"
-                                   value="{{ empleado.reentrydate or '' }}"
-                                   {% if modo_reingreso %}
-                                   data-reentry-anterior="{{ empleado.reentrydate_anterior or '' }}"
-                                   data-cese-anterior="{{ empleado.ceasedate_anterior or '' }}"
-                                   required
-                                   {% endif %}>
+                            <div class="input-group input-group-sm">
+                                <input type="date" id="txtReentryDate" name="reentrydate"
+                                       class="form-control form-control-sm{% if modo_reingreso %} campo-obligatorio border-primary{% endif %}"
+                                       value="{{ empleado.reentrydate or '' }}"
+                                       {% if modo_reingreso %}
+                                       data-reentry-anterior="{{ empleado.reentrydate_anterior or '' }}"
+                                       data-cese-anterior="{{ empleado.ceasedate_anterior or '' }}"
+                                       required
+                                       {% endif %}>
+                                {% if not modo_nuevo %}
+                                <button type="button" class="btn btn-outline-secondary" id="btnHistoricoFechas"
+                                        title="Ver histórico de ingresos y ceses"
+                                        data-cia="{{ cia }}" data-person="{{ person_id }}">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                {% endif %}
+                            </div>
                             {% if modo_reingreso %}
                             <div class="form-text text-primary fw-semibold">
                                 Ingrese la fecha de reingreso (debe ser posterior a la fecha de ingreso/reingreso anterior
@@ -611,8 +620,8 @@
                             </select>
                         </div>
                     </div>
-                </div>
-            </div>
+        </div>
+    </div>
 
             <div class="section-card">
                 <div class="section-title">Planilla</div>
@@ -771,9 +780,9 @@
                                 {% endfor %}
                             </select>
                         </div>
-                    </div>
-                </div>
-            </div>
+                            </div>
+                        </div>
+                            </div>
 {% endmacro %}
 
 {% macro campos_bancario() %}
@@ -927,7 +936,7 @@
                         <button type="submit" form="{{ form_id }}" id="btnGuardarTrabajador"
                                 class="btn btn-success btn-sm te-btn-guardar" title="Ctrl+S">
                             <i class="bi bi-save"></i> Guardar
-                        </button>
+                </button>
                     </div>
                 </div>
                 <div class="te-dw-body">
@@ -1007,6 +1016,35 @@
                 </div>
             </div>
         </section>
+    </div>
+</div>
+
+<div class="modal fade" id="modalHistoricoFechas" tabindex="-1" aria-labelledby="modalHistoricoFechasLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalHistoricoFechasLabel">Histórico de ingresos / ceses</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Inicio</th>
+                                <th>Fin</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyHistoricoFechas">
+                            <tr><td colspan="2" class="text-muted text-center small">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -1610,82 +1648,82 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function wireBancario() {
         const frm = document.getElementById(modoNuevo ? 'frmNuevoTrabajador' : 'frmBancario');
-        const cboFormaPago = document.getElementById('cboFormaPago');
-        const cboBancoHaberes = document.getElementById('cboBancoHaberes');
-        const cboTipoCuenta = document.getElementById('cboTipoCuenta');
-        const txtNumeroCuenta = document.getElementById('txtNumeroCuenta');
-        const txtCci = document.getElementById('txtCci');
-        const cboBancoCts = document.getElementById('cboBancoCts');
-        const txtCuentaCts = document.getElementById('txtCuentaCts');
-        const cboMonedaCts = document.getElementById('cboMonedaCts');
+    const cboFormaPago = document.getElementById('cboFormaPago');
+    const cboBancoHaberes = document.getElementById('cboBancoHaberes');
+    const cboTipoCuenta = document.getElementById('cboTipoCuenta');
+    const txtNumeroCuenta = document.getElementById('txtNumeroCuenta');
+    const txtCci = document.getElementById('txtCci');
+    const cboBancoCts = document.getElementById('cboBancoCts');
+    const txtCuentaCts = document.getElementById('txtCuentaCts');
+    const cboMonedaCts = document.getElementById('cboMonedaCts');
         if (!cboFormaPago || !cboBancoHaberes) return;
 
-        function esDeposito() {
-            const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
-            const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
-            const val = (cboFormaPago.value || '').trim();
-            return text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
-        }
+    function esDeposito() {
+        const opt = cboFormaPago.options[cboFormaPago.selectedIndex];
+        const text = (opt && (opt.dataset.text || opt.textContent) || '').toUpperCase();
+        const val = (cboFormaPago.value || '').trim();
+        return text.indexOf('DEPOSITO') >= 0 || val.indexOf('000000000009') >= 0;
+    }
 
-        function toggleCamposHaberes() {
-            const habilitado = !!cboBancoHaberes.value.trim();
-            cboTipoCuenta.disabled = !habilitado;
-            txtNumeroCuenta.disabled = !habilitado;
-            if (!habilitado) {
-                cboTipoCuenta.value = '';
-                txtNumeroCuenta.value = '';
-            }
+    function toggleCamposHaberes() {
+        const habilitado = !!cboBancoHaberes.value.trim();
+        cboTipoCuenta.disabled = !habilitado;
+        txtNumeroCuenta.disabled = !habilitado;
+        if (!habilitado) {
+            cboTipoCuenta.value = '';
+            txtNumeroCuenta.value = '';
         }
+    }
 
-        function toggleCamposCts() {
-            const habilitado = !!cboBancoCts.value.trim();
-            txtCuentaCts.disabled = !habilitado;
-            cboMonedaCts.disabled = !habilitado;
-            if (!habilitado) {
-                txtCuentaCts.value = '';
-                cboMonedaCts.value = 'LO';
-            }
+    function toggleCamposCts() {
+        const habilitado = !!cboBancoCts.value.trim();
+        txtCuentaCts.disabled = !habilitado;
+        cboMonedaCts.disabled = !habilitado;
+        if (!habilitado) {
+            txtCuentaCts.value = '';
+            cboMonedaCts.value = 'LO';
         }
+    }
 
-        function validarCci() {
-            const cci = (txtCci.value || '').replace(/\D/g, '');
-            txtCci.value = cci;
+    function validarCci() {
+        const cci = (txtCci.value || '').replace(/\D/g, '');
+        txtCci.value = cci;
             // Opcional: si está vacío OK; si tiene valor, debe ser 20 dígitos
             if (!cci) {
-                txtCci.classList.remove('is-invalid');
-                return true;
-            }
-            const ok = cci.length === 20;
-            txtCci.classList.toggle('is-invalid', !ok);
-            return ok;
+            txtCci.classList.remove('is-invalid');
+            return true;
         }
+        const ok = cci.length === 20;
+        txtCci.classList.toggle('is-invalid', !ok);
+        return ok;
+    }
 
-        cboBancoHaberes.addEventListener('change', toggleCamposHaberes);
-        cboBancoCts.addEventListener('change', toggleCamposCts);
-        cboFormaPago.addEventListener('change', validarCci);
-        txtCci.addEventListener('input', function () {
-            this.value = this.value.replace(/\D/g, '').slice(0, 20);
-            validarCci();
-        });
+    cboBancoHaberes.addEventListener('change', toggleCamposHaberes);
+    cboBancoCts.addEventListener('change', toggleCamposCts);
+    cboFormaPago.addEventListener('change', validarCci);
+    txtCci.addEventListener('input', function () {
+        this.value = this.value.replace(/\D/g, '').slice(0, 20);
+        validarCci();
+    });
 
         if (!modoNuevo && frm) {
-            frm.addEventListener('submit', function (e) {
-                if (!validarCci()) {
-                    e.preventDefault();
-                    txtCci.focus();
-                    return;
-                }
-                if (esDeposito() && !cboBancoHaberes.value.trim()) {
-                    e.preventDefault();
+    frm.addEventListener('submit', function (e) {
+        if (!validarCci()) {
+            e.preventDefault();
+            txtCci.focus();
+            return;
+        }
+        if (esDeposito() && !cboBancoHaberes.value.trim()) {
+            e.preventDefault();
                     mostrarError('Seleccione el banco de haberes cuando la forma de pago es depósito.');
-                    cboBancoHaberes.focus();
-                }
-            });
+            cboBancoHaberes.focus();
+        }
+    });
         }
 
-        toggleCamposHaberes();
-        toggleCamposCts();
-        validarCci();
+    toggleCamposHaberes();
+    toggleCamposCts();
+    validarCci();
         if (!modoNuevo) capturarSnapshot();
 
         return { validarCci, esDeposito, cboBancoHaberes, txtCci };
@@ -1867,6 +1905,60 @@ document.addEventListener('DOMContentLoaded', function () {
     if (modoNuevo && frmActivo) {
         frmActivo.addEventListener('submit', validarYEnviarNuevo);
     }
+
+    function fmtFechaHist(iso) {
+        const s = String(iso || '').trim();
+        if (!s) return '—';
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) return m[3] + '/' + m[2] + '/' + m[1];
+        return s;
+    }
+
+    async function abrirHistoricoFechas() {
+        const btn = document.getElementById('btnHistoricoFechas');
+        const tbody = document.getElementById('tbodyHistoricoFechas');
+        const modalEl = document.getElementById('modalHistoricoFechas');
+        if (!btn || !tbody || !modalEl) return;
+
+        const ciaHist = (btn.getAttribute('data-cia') || cia || '').trim();
+        const personHist = (btn.getAttribute('data-person') || '').trim();
+        tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center small">Cargando...</td></tr>';
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+
+        try {
+            const url = '/api/trabajadores/historico-fechas?cia=' + encodeURIComponent(ciaHist)
+                + '&person=' + encodeURIComponent(personHist);
+            const res = await fetch(url);
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center small">'
+                    + (payload.error || 'No se pudo cargar el histórico.') + '</td></tr>';
+                return;
+            }
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center small">'
+                    + (payload.mensaje || 'Sin histórico registrado.') + '</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                const vigente = String(r.vigente || '').toUpperCase() === 'Y';
+                tr.innerHTML = '<td>' + fmtFechaHist(r.fecha_inicio) + '</td>'
+                    + '<td>' + (vigente ? '<span class="text-success">Vigente</span>' : fmtFechaHist(r.fecha_fin)) + '</td>';
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center small">Error de red.</td></tr>';
+        }
+    }
+
+    const btnHist = document.getElementById('btnHistoricoFechas');
+    if (btnHist) btnHist.addEventListener('click', abrirHistoricoFechas);
 });
 </script>
 {% endblock %}

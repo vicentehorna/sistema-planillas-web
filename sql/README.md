@@ -79,6 +79,9 @@ Scripts SQL versionados del proyecto. Ejecutar en SQL Server con permisos sobre 
 | `sp_pr_selectortipocuenta_web.sql` | Tipo de cuenta |
 | `sp_pr_obtener_bancario_trabajador_web.sql` | Datos bancarios |
 | `sp_pr_actualizar_bancario_trabajador_web.sql` | Actualizar bancarios |
+| `create_pr_historicofechas.sql` | Tabla `PR_HistoricoFechas` (auxiliar UI) |
+| `cargar_pr_historicofechas_finmes.sql` | Carga masiva desde `PR_EmployeePayRoll` FIN_DE_MES |
+| `sp_pr_listar_historico_fechas_trabajador_web.sql` | Listado histórico → GET `/api/trabajadores/historico-fechas` |
 
 ## Usuarios por empresa
 

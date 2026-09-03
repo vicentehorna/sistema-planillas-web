@@ -408,9 +408,13 @@
         .firma-spacer {
             height: 65px;
         }
+        body.formato-ultra table.cts-grid tr.cts-detalle td.cts-formula,
+        body.formato-ultra table.cts-grid tr.cts-detalle td.cts-op {
+            visibility: hidden;
+        }
     </style>
 </head>
-<body>
+<body{% if es_ultraseguros %} class="formato-ultra"{% endif %}>
     <div class="doc">
         <div class="encabezado">
             <div class="logo-cell">
@@ -523,7 +527,7 @@
                         <td class="cts-eq"></td>
                         <td class="cts-res"></td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl">Cálculo:</td>
                         <td class="cts-formula">{{ cts_calc.formula_meses }}</td>
                         <td class="cts-op">X</td>
@@ -531,7 +535,7 @@
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ cts_calc.x_mes_fmt }}</td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl"></td>
                         <td class="cts-formula">{{ cts_calc.formula_dias }}</td>
                         <td class="cts-op">X</td>
@@ -559,7 +563,7 @@
                         <td class="cts-eq"></td>
                         <td class="cts-res"></td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl">Cálculo:</td>
                         <td class="cts-formula">{{ grati_calc.formula_meses }}</td>
                         <td class="cts-op">X</td>
@@ -567,7 +571,7 @@
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ grati_calc.x_mes_fmt }}</td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl"></td>
                         <td class="cts-formula">{{ grati_calc.formula_dias }}</td>
                         <td class="cts-op">X</td>
@@ -603,7 +607,7 @@
                         <td class="cts-eq"></td>
                         <td class="cts-res"></td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl">Cálculo:</td>
                         <td class="cts-formula">{{ vaca_calc.formula_anios }}</td>
                         <td class="cts-op">X</td>
@@ -611,7 +615,7 @@
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ vaca_calc.x_anio_fmt }}</td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl"></td>
                         <td class="cts-formula">{{ vaca_calc.formula_meses }}</td>
                         <td class="cts-op">X</td>
@@ -619,7 +623,7 @@
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ vaca_calc.x_mes_fmt }}</td>
                     </tr>
-                    <tr>
+                    <tr class="cts-detalle">
                         <td class="cts-lbl"></td>
                         <td class="cts-formula">{{ vaca_calc.formula_dias }}</td>
                         <td class="cts-op">X</td>

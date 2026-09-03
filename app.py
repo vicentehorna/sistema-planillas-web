@@ -23231,23 +23231,48 @@ def api_periodos_plame():
             "EXEC sp_pr_selectorperiodos_plame_web @cia=?",
             (cia,),
         )
-        desc = cursor.description
-        rows = cursor.fetchall()
-        if not rows or not desc:
-            return jsonify([])
-        cols = [str(c[0] or '').strip().lower() for c in desc]
-        data = []
-        for row in rows:
-            rd = {cols[i]: row[i] for i in range(len(cols))}
-            pid = rd.get('prperiod')
-            txt = rd.get('description')
-            pid_s = str(pid).strip() if pid is not None else ''
-            txt_s = str(txt).strip() if txt is not None else pid_s
-            if pid_s:
-                data.append({"id": pid_s, "text": txt_s})
-        return jsonify(data)
+        return jsonify(_periodos_plame_rows_to_json(cursor))
     except Exception:
         logging.exception("api_periodos_plame")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _periodos_plame_rows_to_json(cursor):
+    desc = cursor.description
+    rows = cursor.fetchall()
+    if not rows or not desc:
+        return []
+    cols = [str(c[0] or '').strip().lower() for c in desc]
+    data = []
+    for row in rows:
+        rd = {cols[i]: row[i] for i in range(len(cols))}
+        pid = rd.get('prperiod')
+        txt = rd.get('description')
+        pid_s = str(pid).strip() if pid is not None else ''
+        txt_s = str(txt).strip() if txt is not None else pid_s
+        if pid_s:
+            data.append({"id": pid_s, "text": txt_s})
+    return data
+
+
+@app.route('/api/selectores/periodos-plame-consolidada')
+@login_required
+def api_periodos_plame_consolidada():
+    """sp_pr_selectorperiodos_plame_consolidada_web → periodos PLAME sin filtrar por empresa."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('EXEC sp_pr_selectorperiodos_plame_consolidada_web')
+        return jsonify(_periodos_plame_rows_to_json(cursor))
+    except Exception:
+        logging.exception('api_periodos_plame_consolidada')
         return jsonify([])
     finally:
         if conn:

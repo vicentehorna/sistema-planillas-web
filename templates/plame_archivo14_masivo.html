@@ -70,6 +70,18 @@
     .plame-info code {
         font-size: 0.78rem;
     }
+
+    .plame-filtro-periodo {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .plame-filtro-periodo {
+            flex: 0 0 10rem;
+            max-width: 10rem;
+        }
+    }
 </style>
 {% endblock %}
 
@@ -84,11 +96,13 @@
 <div class="card shadow-sm border-0 mb-3">
     <div class="card-body pt-3">
         <form id="frmPlame14Masivo" class="row g-3">
-            <div class="col-md-3 col-lg-2">
-                <label for="txtPeriodo" class="form-label small fw-bold text-muted">Periodo tributario</label>
-                <input type="month" id="txtPeriodo" class="form-control form-control-sm" required>
+            <div class="col-12 col-sm-auto plame-filtro-periodo">
+                <label for="cboPeriodoTributario" class="form-label small fw-bold text-muted">Periodo tributario</label>
+                <select id="cboPeriodoTributario" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
             </div>
-            <div class="col-md-9 col-lg-10">
+            <div class="col-12 col-sm">
                 <label for="txtLocalizar" class="form-label small fw-bold text-muted">Localizar empresa</label>
                 <input type="text" id="txtLocalizar" class="form-control form-control-sm"
                        placeholder="Filtrar lista de empresas" maxlength="80" autocomplete="off">
@@ -177,10 +191,11 @@
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const URL_COMPANIAS = {{ url_for('api_procesar_planilla_masivo_companias') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_periodos_plame_consolidada') | tojson }};
     const URL_LISTADO = {{ url_for('api_plame_archivo14_masivo_listado') | tojson }};
     const URL_GENERAR_ZIP = {{ url_for('api_plame_archivo14_masivo_generar_zip') | tojson }};
 
-    const txtPeriodo = document.getElementById('txtPeriodo');
+    const cboPeriodo = document.getElementById('cboPeriodoTributario');
     const txtLocalizar = document.getElementById('txtLocalizar');
     const panelEmpresas = document.getElementById('panelEmpresas');
     const chkTodas = document.getElementById('chkTodasEmpresas');
@@ -204,14 +219,33 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function periodoYyyymm() {
-        const v = String(txtPeriodo.value || '').trim();
-        if (!v) return '';
-        const parts = v.split('-');
-        if (parts.length !== 2) return '';
-        const yyyy = parts[0];
-        const mm = parts[1];
-        if (!/^\d{4}$/.test(yyyy) || !/^\d{2}$/.test(mm)) return '';
-        return `${yyyy}${mm}`;
+        return String(cboPeriodo.value || '').trim();
+    }
+
+    function periodoTributarioEsValido() {
+        return /^\d{6}$/.test(periodoYyyymm());
+    }
+
+    async function cargarPeriodosPlame() {
+        if (!cboPeriodo) return;
+        cboPeriodo.innerHTML = '<option value="">Cargando...</option>';
+        cboPeriodo.disabled = true;
+        try {
+            const res = await fetch(URL_PERIODOS);
+            const data = await res.json();
+            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                cboPeriodo.appendChild(opt);
+            });
+            cboPeriodo.disabled = false;
+        } catch (e) {
+            console.error(e);
+            cboPeriodo.innerHTML = '<option value="">Error</option>';
+            cboPeriodo.disabled = true;
+        }
     }
 
     function empresasSeleccionadas() {
@@ -360,7 +394,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function ejecutarConsulta() {
         const payload = payloadFiltros();
-        if (!payload.period) {
+        if (!periodoTributarioEsValido()) {
             alert('Seleccione un periodo tributario válido.');
             return;
         }
@@ -399,7 +433,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function generarZip() {
         const payload = payloadFiltros();
-        if (!payload.period) {
+        if (!periodoTributarioEsValido()) {
             alert('Seleccione un periodo tributario válido.');
             return;
         }
@@ -463,8 +497,7 @@ document.addEventListener('DOMContentLoaded', function () {
         sincronizarChkTodas();
     });
 
-    const hoy = new Date();
-    txtPeriodo.value = `${hoy.getFullYear()}-${String(hoy.getMonth() + 1).padStart(2, '0')}`;
+    cargarPeriodosPlame();
     cargarCompanias();
 });
 </script>

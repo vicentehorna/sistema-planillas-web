@@ -1984,6 +1984,25 @@
         );
     }
 
+    function validarConceptoUnicoEnListado(payload) {
+        const conceptId = String(payload.concept || '').trim();
+        if (!conceptId) return null;
+        const fhActual = String(payload.formulaheader || '').trim();
+        const dup = (formulasCache || []).find((x) => {
+            const mismoConcepto = String(x.concept || '').trim() === conceptId;
+            const otraFormula = String(x.formulaheader || '').trim() !== fhActual;
+            return mismoConcepto && otraFormula;
+        });
+        if (!dup) return null;
+        const nombre = String(dup.concepto || '').trim()
+            || ((cacheConceptos || []).find((c) => String(c.id) === conceptId) || {}).text
+            || conceptId;
+        return (
+            `Ya existe otra fórmula asociada al concepto "${nombre}" ` +
+            `en la misma empresa, planilla y proceso. Cambie el concepto de la cabecera antes de guardar.`
+        );
+    }
+
     function validarConstruccionFormula(payload) {
         const tipoH = String(payload.tipo || 'N').toUpperCase().slice(0, 1) || 'N';
         const cond = String(payload.conceptcond || '').trim();
@@ -2018,6 +2037,11 @@
         const errInsertar = validarConceptoInsertarNinguno(payload.concept);
         if (errInsertar) {
             hmAdvertencia(errInsertar);
+            return;
+        }
+        const errConceptoUnico = validarConceptoUnicoEnListado(payload);
+        if (errConceptoUnico) {
+            hmAdvertencia(errConceptoUnico);
             return;
         }
         if (!Array.isArray(payload.detalle) || payload.detalle.length === 0) {

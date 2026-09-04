@@ -142,10 +142,12 @@ BEGIN
     FROM PR_FormulaHeader fh
     WHERE fh.Company = @cia AND fh.FormulaHeader = @formulaheader;
 
+    /* Incluye Tipo K (Código): ScriptSource + CompiledExpr */
     INSERT INTO PR_FormulaDetail (
         FormulaHeader, line, company, Tipo, Operador, Concept, grupo, valor,
         XLastUser, XLastDate, parameter, process, PeriodoINI, PeriodoFin,
-        NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor
+        NumberINI, NumberFIN, TipoLiq, ConceptList, Divisor,
+        ScriptSource, CompiledExpr
     )
     SELECT
         @id,
@@ -166,7 +168,9 @@ BEGIN
         fd.NumberFIN,
         fd.TipoLiq,
         fd.ConceptList,
-        fd.Divisor
+        fd.Divisor,
+        fd.ScriptSource,
+        fd.CompiledExpr
     FROM PR_FormulaDetail fd
     WHERE fd.FormulaHeader = @formulaheader;
 

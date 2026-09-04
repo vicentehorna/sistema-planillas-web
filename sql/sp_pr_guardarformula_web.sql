@@ -99,6 +99,28 @@ BEGIN
         RETURN;
     END;
 
+    /* Concepto de cabecera unico por empresa / planilla / proceso. */
+    IF EXISTS (
+        SELECT 1
+        FROM PR_FormulaHeader fh (NOLOCK)
+        WHERE fh.Company = @company
+          AND fh.Payrolltype = @payrolltype
+          AND fh.Proccestype = @proccestype
+          AND fh.Concept = @concept
+          AND (
+                @modo = 'I'
+                OR @formulaheader IS NULL
+                OR fh.FormulaHeader <> @formulaheader
+              )
+    )
+    BEGIN
+        /* Mensaje sin acentos: el ODBC/latin1 corrompe UTF-8 en RAISERROR. */
+        RAISERROR(
+            'Ya existe otra formula asociada al concepto "%s" en la misma empresa, planilla y proceso. Cambie el concepto de la cabecera antes de guardar.',
+            16, 1, @concept_desc);
+        RETURN;
+    END;
+
     IF @tipo = 'N'
         SET @conceptcond = NULL;
     IF @tipo <> 'V'

@@ -15453,14 +15453,49 @@ def api_formulas_guardar():
                 "error": "El concepto de la cabecera no existe en el maestro de conceptos.",
             }), 400
         flag_ins = str(conc_row[0] or 'N').strip().upper()[:1] or 'N'
+        desc = str(conc_row[1] or concept).strip() or concept
         if flag_ins != 'N':
-            desc = str(conc_row[1] or concept).strip() or concept
             destino = _insertar_labels.get(flag_ins, flag_ins)
             return jsonify({
                 "error": (
                     f'El concepto de la cabecera ("{desc}") debe tener Insertar en = Ninguno '
                     f'en el maestro de conceptos. Actualmente está en: {destino}. '
                     f'Corrija el concepto o cambie Insertar en a Ninguno antes de grabar la fórmula.'
+                ),
+            }), 400
+
+        # Concepto de cabecera único por empresa / planilla / proceso.
+        if modo == 'U' and formulaheader:
+            cursor.execute(
+                """
+                SELECT TOP 1 fh.FormulaHeader
+                FROM PR_FormulaHeader fh (NOLOCK)
+                WHERE fh.Company = ?
+                  AND fh.Payrolltype = ?
+                  AND fh.Proccestype = ?
+                  AND fh.Concept = ?
+                  AND fh.FormulaHeader <> ?
+                """,
+                (cia, payrolltype, proccestype, concept, formulaheader),
+            )
+        else:
+            cursor.execute(
+                """
+                SELECT TOP 1 fh.FormulaHeader
+                FROM PR_FormulaHeader fh (NOLOCK)
+                WHERE fh.Company = ?
+                  AND fh.Payrolltype = ?
+                  AND fh.Proccestype = ?
+                  AND fh.Concept = ?
+                """,
+                (cia, payrolltype, proccestype, concept),
+            )
+        if cursor.fetchone():
+            return jsonify({
+                "error": (
+                    f'Ya existe otra fórmula asociada al concepto "{desc}" '
+                    f'en la misma empresa, planilla y proceso. '
+                    f'Cambie el concepto de la cabecera antes de guardar.'
                 ),
             }), 400
 

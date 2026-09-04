@@ -5669,15 +5669,17 @@ def _build_formato_liquidacion_descuentos(liq, formula_values):
     resultado = _build_formato_liquidacion_tabla_conceptos(
         _FORMATO_LIQ_DESCUENTOS_DEF, formula_values, liq=liq
     )
-    # hm_ultra: si el trabajador está en ONP, la base afecta de AFP debe ir en 0.
+    # hm_ultra: base afecta solo en el régimen del trabajador (AFP u ONP).
     if _es_cliente_ultraseguros():
         tipo_pension = str((liq or {}).get('type_pension') or '').strip().upper()
-        if tipo_pension == 'ONP':
-            cero_fmt = _formato_liquidacion_moneda(0)
-            afp_codes = {'AFP_APORTE_PORC_8', 'AFP_COMISION_VARIABL', 'AFP_SEGUROS'}
-            for fila in resultado.get('filas') or []:
-                if str(fila.get('formula_code') or '').strip().upper() in afp_codes:
-                    fila['base_fmt'] = cero_fmt
+        cero_fmt = _formato_liquidacion_moneda(0)
+        afp_codes = {'AFP_APORTE_PORC_8', 'AFP_COMISION_VARIABL', 'AFP_SEGUROS'}
+        for fila in resultado.get('filas') or []:
+            code = str(fila.get('formula_code') or '').strip().upper()
+            if tipo_pension == 'ONP' and code in afp_codes:
+                fila['base_fmt'] = cero_fmt
+            elif tipo_pension and tipo_pension != 'ONP' and code == 'ONP':
+                fila['base_fmt'] = cero_fmt
     return resultado
 
 

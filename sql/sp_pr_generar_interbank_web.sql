@@ -5,6 +5,7 @@
     Requiere #InterbankPersonas (person) cargada por la app web.
     Banco destino: pr_mapping.interbankbank.
     Código empresa en cabecera (pos. 100-104): MC001 (temporal, en duro).
+    @par_referencia: texto cabecera TXT (36 chars, pos. 5-40). Si vacío, espacios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_interbank_web]
     @par_company     VARCHAR(10),
@@ -13,13 +14,15 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_interbank_web]
     @par_payrolltype VARCHAR(20),
     @par_period      VARCHAR(8),
     @par_processtype VARCHAR(20),
-    @par_paydate     DATETIME = NULL
+    @par_paydate     DATETIME = NULL,
+    @par_referencia  VARCHAR(36) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
 
     IF RTRIM(ISNULL(@par_currency, '')) = '' SET @par_currency = 'LO';
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
+    SET @par_referencia = LTRIM(RTRIM(ISNULL(@par_referencia, '')));
 
     IF OBJECT_ID('tempdb..#InterbankPersonas') IS NULL
     BEGIN
@@ -29,6 +32,7 @@ BEGIN
 
     DECLARE @fecha_envio     VARCHAR(14);
     DECLARE @codigo_empresa  VARCHAR(5);
+    DECLARE @ref_cabecera    VARCHAR(36);
     DECLARE @total_reg       INT;
     DECLARE @total_soles     DECIMAL(18, 2);
     DECLARE @total_dolares   DECIMAL(18, 2);
@@ -43,6 +47,7 @@ BEGIN
         RIGHT('0' + CAST(DATEPART(SECOND, GETDATE()) AS VARCHAR(2)), 2);
 
     SET @codigo_empresa = 'MC001';
+    SET @ref_cabecera = LEFT(@par_referencia + REPLICATE(' ', 36), 36);
 
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
@@ -223,7 +228,7 @@ BEGIN
     SET @linea_cabecera =
         '01' +
         '04' +
-        REPLICATE(' ', 36) +
+        @ref_cabecera +
         @fecha_envio +
         REPLICATE(' ', 9) +
         RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +

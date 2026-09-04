@@ -27,7 +27,6 @@ ROOT = Path(__file__).resolve().parents[1]
 # Bases cliente habituales del sistema web (actualizar aquí si se agrega un cliente).
 DEFAULT_CLIENT_DBS = [
     "hm_aci",
-    "hm_aci2",
     "hm_divisa",
     "hm_credireport",
     "hm_globaltec",

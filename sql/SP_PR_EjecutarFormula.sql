@@ -42,7 +42,7 @@ Begin
 	declare @concept varchar(20), @conceptcond varchar(20), @tipocond char(1), @periodoini varchar(20), @periodofin varchar(20), @formulaid varchar(20)
 	declare @ceasedate datetime, @fechaingreso datetime
 	declare @conceptcode varchar(50), @flag_cts char(1), @conceptlist varchar(500), @divisor numeric(19,4)
-	declare @compiledexpr nvarchar(max), @expr_k nvarchar(max), @ph nvarchar(200), @code_k varchar(80), @p1 int, @p2 int
+	declare @compiledexpr nvarchar(max), @expr_k nvarchar(max), @ph nvarchar(250), @code_k varchar(100), @p1 int, @p2 int
 	declare @sp_name varchar(128), @sp_nargs int, @sp_arg1 numeric(19,4), @sp_arg2 numeric(19,4), @sp_arg3 numeric(19,4)
 	declare @sp_out numeric(19,4), @sp_seg nvarchar(max), @sp_pend int, @p1_start int
 
@@ -254,6 +254,40 @@ Begin
 						END
 						FROM #empleado
 					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PAYROLL/PLANILLA("SHORTNAME") → #R:SHORTNAME# (1/0) */
+				WHILE CHARINDEX(N'#R:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#R:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE WHEN EXISTS (
+						SELECT 1
+						FROM PR_PayRollType
+						WHERE Company = @cia
+						  AND PayRollType = @payrolltype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					) THEN 1 ELSE 0 END
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PROCESS/PROCESO("SHORTNAME") → #O:SHORTNAME# (1/0) */
+				WHILE CHARINDEX(N'#O:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#O:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE WHEN EXISTS (
+						SELECT 1
+						FROM PR_ProcessType
+						WHERE Company = @cia
+						  AND ProcessType = @processtype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					) THEN 1 ELSE 0 END
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
 				END
@@ -748,6 +782,40 @@ Begin
 						END
 						FROM #empleado
 					), 0)
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PAYROLL/PLANILLA("SHORTNAME") → #R:SHORTNAME# (1/0) */
+				WHILE CHARINDEX(N'#R:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#R:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE WHEN EXISTS (
+						SELECT 1
+						FROM PR_PayRollType
+						WHERE Company = @cia
+						  AND PayRollType = @payrolltype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					) THEN 1 ELSE 0 END
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* PROCESS/PROCESO("SHORTNAME") → #O:SHORTNAME# (1/0) */
+				WHILE CHARINDEX(N'#O:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#O:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE WHEN EXISTS (
+						SELECT 1
+						FROM PR_ProcessType
+						WHERE Company = @cia
+						  AND ProcessType = @processtype
+						  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
+					) THEN 1 ELSE 0 END
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
 				END

@@ -3,7 +3,7 @@ DSL de fórmulas condicionales (tipo K / Código) para el formulador web.
 
 Se valida y compila al GUARDAR. En cálculo solo se evalúa la expresión SQL
 ya compilada (placeholders #C:FORMULACODE#, #P:SHORTNAME#, #A:FORMULACODE#,
-#E:CAMPO#, #S:PROC|N|args|#).
+#E:CAMPO#, #S:PROC|N|args|#, #R:PAYROLL_SHORT#, #O:PROCESS_SHORT#).
 
 Sintaxis soportada:
   LET nombre = expr
@@ -15,6 +15,8 @@ Sintaxis soportada:
   CONCEPT("FORMULACODE")  PARAM("SHORTNAME")  ASSIGN("FORMULACODE")
   EMPLOYEE("CAMPO")   -- datos del trabajador (#empleado): PENSION, TOPAFP, PORC_SEGURO, ...
   PROC("SP_NOMBRE" [, arg1, ...])  -- ejecuta SP autorizado; contexto (@cia, @period, ...) implícito
+  PAYROLL("SHORTNAME") / PLANILLA("SHORTNAME")  -- 1 si la planilla actual coincide (PR_PayRollType.ShortName)
+  PROCESS("SHORTNAME") / PROCESO("SHORTNAME")   -- 1 si el proceso actual coincide (PR_ProcessType.ShortName)
   números, 6.75%, +, -, *, /, paréntesis, comparaciones >, <, >=, <=, =, <>
 """
 from __future__ import annotations
@@ -33,6 +35,7 @@ _KEYWORDS = {
     "SI", "ENTONCES", "CASOCONTRARIO", "FINSI", "FIN",
     "CONCEPT", "PARAM", "ASSIGN", "ASIGNACION",
     "EMPLOYEE", "EMPLEADO", "PROC",
+    "PAYROLL", "PLANILLA", "PROCESS", "PROCESO",
 }
 
 # Catálogo de SPs invocables desde PROC(). Clave = nombre en mayúsculas.
@@ -54,6 +57,8 @@ _ALIASES = {
     "FIN": "END",
     "ASIGNACION": "ASSIGN",
     "EMPLEADO": "EMPLOYEE",
+    "PLANILLA": "PAYROLL",
+    "PROCESO": "PROCESS",
     "VAR": "LET",
 }
 
@@ -88,6 +93,8 @@ class CompileResult:
     assigns: list[str] = field(default_factory=list)
     employees: list[str] = field(default_factory=list)
     procedures: list[str] = field(default_factory=list)
+    payrolls: list[str] = field(default_factory=list)
+    processes: list[str] = field(default_factory=list)
 
 
 def _normalize_proc_name(raw: str) -> str:
@@ -129,6 +136,20 @@ def _normalize_employee_field(raw: str) -> str:
     return code
 
 
+def _normalize_context_shortname(raw: str, kind: str) -> str:
+    """Normaliza ShortName de planilla/proceso para placeholder #R:# / #O:#."""
+    code = re.sub(r"\s+", " ", str(raw or "").strip().upper())
+    if not code:
+        raise FormulaDslError(f'{kind}("") vacío.')
+    if len(code) > 80:
+        raise FormulaDslError(f'{kind}("{raw}"): máximo 80 caracteres.')
+    if not re.fullmatch(r"[A-Z0-9][A-Z0-9 _/\-]*", code):
+        raise FormulaDslError(
+            f'{kind}("{raw}"): use el ShortName (letras, números, espacio, /, -).'
+        )
+    return code
+
+
 def _tokenize(src: str) -> list[tuple[str, Any]]:
     s = src.replace("\r\n", "\n").replace("\r", "\n")
     # Quitar comentarios # ... o // ...
@@ -137,7 +158,7 @@ def _tokenize(src: str) -> list[tuple[str, Any]]:
         if "//" in line:
             line = line[: line.index("//")]
         stripped = line.lstrip()
-        if stripped.startswith("#") and not re.match(r"^#[CPAES]:", stripped, re.I):
+        if stripped.startswith("#") and not re.match(r"^#[CPAESRO]:", stripped, re.I):
             # comentario de línea estilo # texto (no placeholder)
             continue
         lines.append(line)
@@ -218,6 +239,8 @@ class _Parser:
         self.assigns: set[str] = set()
         self.employees: set[str] = set()
         self.procedures: set[str] = set()
+        self.payrolls: set[str] = set()
+        self.processes: set[str] = set()
 
     def peek(self):
         return self.tokens[self.pos] if self.pos < len(self.tokens) else (None, None)
@@ -365,6 +388,22 @@ class _Parser:
             code = _normalize_employee_field(raw)
             self.employees.add(code)
             return ("EMPLOYEE", code)
+        if k == "PAYROLL":
+            self.pop()
+            self.expect("(")
+            raw = str(self.expect("STR"))
+            self.expect(")")
+            code = _normalize_context_shortname(raw, "PAYROLL")
+            self.payrolls.add(code)
+            return ("PAYROLL", code)
+        if k == "PROCESS":
+            self.pop()
+            self.expect("(")
+            raw = str(self.expect("STR"))
+            self.expect(")")
+            code = _normalize_context_shortname(raw, "PROCESS")
+            self.processes.add(code)
+            return ("PROCESS", code)
         if k == "PROC":
             self.pop()
             self.expect("(")
@@ -384,7 +423,8 @@ class _Parser:
                 return ("VAR", name)
             raise FormulaDslError(
                 f"Identificador '{v}' no definido. Use LET {v} = ... "
-                f"o CONCEPT(\"{v}\") / PARAM(\"{v}\") / EMPLOYEE(\"{v}\")."
+                f"o CONCEPT(\"{v}\") / PARAM(\"{v}\") / EMPLOYEE(\"{v}\") / "
+                f"PAYROLL(\"{v}\") / PROCESS(\"{v}\")."
             )
         if k == "(":
             self.pop()
@@ -411,6 +451,10 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return f"#A:{node[1]}#"
     if kind == "EMPLOYEE":
         return f"#E:{node[1]}#"
+    if kind == "PAYROLL":
+        return f"#R:{node[1]}#"
+    if kind == "PROCESS":
+        return f"#O:{node[1]}#"
     if kind == "PROC":
         proc_name = node[1]
         arg_exprs = [_emit_sql(a, lets) for a in node[2]]
@@ -468,6 +512,8 @@ def compile_formula_dsl(source: str) -> CompileResult:
         assigns=sorted(parser.assigns),
         employees=sorted(parser.employees),
         procedures=sorted(parser.procedures),
+        payrolls=sorted(parser.payrolls),
+        processes=sorted(parser.processes),
     )
 
 
@@ -561,6 +607,36 @@ def validate_refs_against_db(cursor, company: str, compiled: CompileResult) -> l
         if emp not in EMPLOYEE_FIELDS:
             allowed = ", ".join(sorted(EMPLOYEE_FIELDS))
             errors.append(f'EMPLOYEE("{emp}") no es un campo válido. Use: {allowed}.')
+
+    for pay in compiled.payrolls:
+        cursor.execute(
+            """
+            SELECT TOP 1 PayRollType
+            FROM PR_PayRollType (NOLOCK)
+            WHERE Company = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = ?
+            """,
+            (company, pay),
+        )
+        if not cursor.fetchone():
+            errors.append(
+                f'PAYROLL("{pay}") no existe como ShortName en PR_PayRollType.'
+            )
+
+    for proc_sn in compiled.processes:
+        cursor.execute(
+            """
+            SELECT TOP 1 ProcessType
+            FROM PR_ProcessType (NOLOCK)
+            WHERE Company = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = ?
+            """,
+            (company, proc_sn),
+        )
+        if not cursor.fetchone():
+            errors.append(
+                f'PROCESS("{proc_sn}") no existe como ShortName en PR_ProcessType.'
+            )
 
     for proc in compiled.procedures:
         if proc not in FORMULA_PROCEDURES:

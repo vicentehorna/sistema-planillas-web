@@ -15389,6 +15389,8 @@ def api_formulas_validar_codigo():
                 "parameters": compiled.parameters,
                 "assigns": compiled.assigns,
                 "procedures": compiled.procedures,
+                "payrolls": compiled.payrolls,
+                "processes": compiled.processes,
             }), 400
         return jsonify({
             "ok": True,
@@ -15398,6 +15400,8 @@ def api_formulas_validar_codigo():
             "parameters": compiled.parameters,
             "assigns": compiled.assigns,
             "procedures": compiled.procedures,
+            "payrolls": compiled.payrolls,
+            "processes": compiled.processes,
             "mensaje": "Código válido y compilado correctamente.",
         })
     except FormulaDslError as ex:

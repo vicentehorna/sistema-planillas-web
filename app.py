@@ -5361,6 +5361,23 @@ _FORMATO_LIQ_REMUNERACION_DEF = (
     {'label': 'Promedio Feriado', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
 )
 
+# hm_elclan: filas de promedios con labels y FormulaCodes propios.
+_FORMATO_LIQ_REMUNERACION_DEF_ELCLAN = (
+    {'label': 'Remuneración Básica', 'cts': 'BASICO_CTS', 'grati': 'BASICO_GRATI', 'vaca': 'BASICO_VACA'},
+    {'label': 'Asignación familiar', 'cts': 'ASIG_FAM_CTS', 'grati': 'ASIG_FAM_GRATI', 'vaca': 'ASIG_FAM_VACA'},
+    {'label': 'Sexto de Gratificación', 'cts': 'PROMEDIO_GRATI', 'grati': None, 'vaca': None},
+    {'label': 'Promedio Premio', 'cts': 'BONONOCHECTS', 'grati': 'BONONOCHEGRATI', 'vaca': 'PROBNOCHEVAC'},
+    {'label': 'Promedio Plata Segura', 'cts': 'PROMPLATACTS', 'grati': 'PROMPLATAGRATI', 'vaca': 'PROMPLATAVACACION'},
+    {'label': 'Promedio Comisión', 'cts': 'LIQ_PROM_COMI_CTS', 'grati': 'LIQ_PROM_COMI_GRA', 'vaca': 'LIQ_PROM_COMI_VAC'},
+)
+
+
+def _formato_liquidacion_remuneracion_def():
+    if _es_cliente_elclan():
+        return _FORMATO_LIQ_REMUNERACION_DEF_ELCLAN
+    return _FORMATO_LIQ_REMUNERACION_DEF
+
+
 _FORMATO_LIQ_CTS_FORMULACODES = (
     'C_CTSMESES',
     'DIAS_CTS_TRUNCO',
@@ -5453,7 +5470,7 @@ def _formato_liquidacion_cantidad(val):
 def _formato_liquidacion_formulacodes_requeridos():
     codes = {
         code
-        for row in _FORMATO_LIQ_REMUNERACION_DEF
+        for row in _formato_liquidacion_remuneracion_def()
         for code in (row.get('cts'), row.get('grati'), row.get('vaca'))
         if code
     }
@@ -5515,7 +5532,7 @@ def _build_formato_liquidacion_remuneracion(formula_values):
         es_divisa = str(get_active_database() or '').strip().lower() == 'hm_divisa'
     except Exception:
         es_divisa = False
-    for defn in _FORMATO_LIQ_REMUNERACION_DEF:
+    for defn in _formato_liquidacion_remuneracion_def():
         label = defn['label']
         if es_divisa and defn.get('cts') == 'BONO_PROD_CTS':
             label = 'Promedio Descanso'

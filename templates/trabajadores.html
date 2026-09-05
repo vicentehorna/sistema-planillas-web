@@ -198,6 +198,12 @@
                 <button type="button" class="btn btn-primary btn-sm px-4" id="btnConsultarTrabajadores" disabled>
                     <i class="bi bi-search"></i> Consultar
                 </button>
+                {% if (sql_database or '')|lower == 'hm_alamo' %}
+                <button type="button" class="btn btn-outline-primary btn-sm px-4" id="btnBuscarTodosTrabajadores"
+                        title="Buscar trabajador en todas las empresas">
+                    <i class="bi bi-people"></i> Buscar todos
+                </button>
+                {% endif %}
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoTrabajador" disabled>
                     <i class="bi bi-person-plus"></i> Nuevo
                 </button>
@@ -279,6 +285,75 @@
         </div>
     </div>
 </div>
+
+{% if (sql_database or '')|lower == 'hm_alamo' %}
+<div class="modal fade" id="modalBuscarTodosTrabajadores" tabindex="-1"
+     aria-labelledby="modalBuscarTodosTrabajadoresLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalBuscarTodosTrabajadoresLabel">
+                    Buscar trabajador en todas las empresas
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-12 col-md-5">
+                        <label for="txtBuscarTodosFiltro" class="form-label small fw-bold text-muted mb-1">
+                            Buscar <span class="fw-normal opacity-75">(mín. 2 caracteres)</span>
+                        </label>
+                        <input type="search" id="txtBuscarTodosFiltro" class="form-control form-control-sm"
+                               placeholder="DNI, nombre o empresa..." autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="col-auto">
+                        <button type="button" class="btn btn-primary btn-sm px-3" id="btnEjecutarBuscarTodos">
+                            <i class="bi bi-search"></i> Buscar
+                        </button>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label for="txtLocalizarBuscarTodos" class="form-label small fw-bold text-muted mb-1">
+                            Localizar en resultados
+                        </label>
+                        <input type="search" id="txtLocalizarBuscarTodos" class="form-control form-control-sm"
+                               placeholder="Filtrar lista cargada..." autocomplete="off" spellcheck="false">
+                    </div>
+                    <div class="col-auto ms-md-auto">
+                        <span class="small text-muted">Registros: <strong id="lblBuscarTodosCount">0</strong></span>
+                    </div>
+                </div>
+                <div class="table-scroll-container" style="max-height: 55vh;">
+                    <table class="table table-bordered table-sm table-hover align-middle mb-0" id="tblBuscarTodos">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Documento</th>
+                                <th>Nombre</th>
+                                <th>Compañía</th>
+                                <th>Planilla</th>
+                                <th>Estado</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyBuscarTodos">
+                            <tr class="text-muted">
+                                <td colspan="5" class="text-center py-3">Escriba un criterio y pulse Buscar.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="small text-muted mb-0 mt-2">
+                    Doble clic o Seleccionar: filtra la lista por compañía + documento (activos e inactivos).
+                </p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSeleccionarBuscarTodos" disabled>
+                    Seleccionar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
@@ -1312,6 +1387,228 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('No se pudo generar el archivo Excel.');
         }
     });
+
+    // --- Buscar todos (solo hm_alamo) ---
+    const btnBuscarTodos = document.getElementById('btnBuscarTodosTrabajadores');
+    const modalBuscarTodosEl = document.getElementById('modalBuscarTodosTrabajadores');
+    if (btnBuscarTodos && modalBuscarTodosEl) {
+        const URL_BUSCAR_TODOS = {{ url_for('api_trabajadores_buscar_todas_empresas') | tojson }};
+        const txtBuscarTodosFiltro = document.getElementById('txtBuscarTodosFiltro');
+        const txtLocalizarBuscarTodos = document.getElementById('txtLocalizarBuscarTodos');
+        const btnEjecutarBuscarTodos = document.getElementById('btnEjecutarBuscarTodos');
+        const btnSeleccionarBuscarTodos = document.getElementById('btnSeleccionarBuscarTodos');
+        const tbodyBuscarTodos = document.getElementById('tbodyBuscarTodos');
+        const lblBuscarTodosCount = document.getElementById('lblBuscarTodosCount');
+        let buscarTodosRows = [];
+        let buscarTodosSeleccionado = null;
+
+        function actualizarBtnSeleccionarBuscarTodos() {
+            if (btnSeleccionarBuscarTodos) {
+                btnSeleccionarBuscarTodos.disabled = !buscarTodosSeleccionado;
+            }
+        }
+
+        function filaCoincideLocalizar(row, q) {
+            if (!q) return true;
+            const blob = [
+                row.documentnumber, row.nombre, row.companynombre,
+                row.company, row.planilla, row.estado,
+            ].join(' ').toLowerCase();
+            return blob.includes(q);
+        }
+
+        function renderBuscarTodosTabla() {
+            const q = String(txtLocalizarBuscarTodos?.value || '').trim().toLowerCase();
+            const visibles = buscarTodosRows.filter((r) => filaCoincideLocalizar(r, q));
+            if (lblBuscarTodosCount) lblBuscarTodosCount.textContent = String(visibles.length);
+            if (!tbodyBuscarTodos) return;
+            if (!visibles.length) {
+                tbodyBuscarTodos.innerHTML =
+                    '<tr class="text-muted"><td colspan="5" class="text-center py-3">' +
+                    (buscarTodosRows.length ? 'Sin coincidencias en Localizar.' : 'Sin resultados.') +
+                    '</td></tr>';
+                buscarTodosSeleccionado = null;
+                actualizarBtnSeleccionarBuscarTodos();
+                return;
+            }
+            let html = '';
+            visibles.forEach((r, idx) => {
+                const sel = buscarTodosSeleccionado
+                    && buscarTodosSeleccionado.company === r.company
+                    && buscarTodosSeleccionado.documentnumber === r.documentnumber
+                    && buscarTodosSeleccionado.person === r.person;
+                html += '<tr class="fila-buscar-todos' + (sel ? ' table-primary' : '') + '"'
+                    + ' data-idx="' + idx + '"'
+                    + ' data-company="' + escapeHtml(r.company) + '"'
+                    + ' data-doc="' + escapeHtml(r.documentnumber) + '"'
+                    + ' data-person="' + escapeHtml(r.person) + '"'
+                    + ' style="cursor:pointer">'
+                    + '<td class="font-monospace">' + escapeHtml(r.documentnumber) + '</td>'
+                    + '<td>' + escapeHtml(r.nombre) + '</td>'
+                    + '<td>' + escapeHtml(r.companynombre || r.company) + '</td>'
+                    + '<td>' + escapeHtml(r.planilla) + '</td>'
+                    + '<td>' + escapeHtml(r.estado) + '</td>'
+                    + '</tr>';
+            });
+            tbodyBuscarTodos.innerHTML = html;
+            // re-bind selection from visible list
+            if (buscarTodosSeleccionado) {
+                const still = visibles.find((r) =>
+                    r.company === buscarTodosSeleccionado.company
+                    && r.documentnumber === buscarTodosSeleccionado.documentnumber
+                    && r.person === buscarTodosSeleccionado.person
+                );
+                if (!still) buscarTodosSeleccionado = null;
+            }
+            actualizarBtnSeleccionarBuscarTodos();
+        }
+
+        function seleccionarFilaBuscarTodos(tr) {
+            if (!tr || !tbodyBuscarTodos) return;
+            tbodyBuscarTodos.querySelectorAll('tr.table-primary').forEach((el) => {
+                el.classList.remove('table-primary');
+            });
+            tr.classList.add('table-primary');
+            const company = String(tr.getAttribute('data-company') || '').trim();
+            const documentnumber = String(tr.getAttribute('data-doc') || '').trim();
+            const person = String(tr.getAttribute('data-person') || '').trim();
+            const q = String(txtLocalizarBuscarTodos?.value || '').trim().toLowerCase();
+            const visibles = buscarTodosRows.filter((r) => filaCoincideLocalizar(r, q));
+            const idx = Number(tr.getAttribute('data-idx'));
+            buscarTodosSeleccionado = visibles[idx] || { company, documentnumber, person };
+            actualizarBtnSeleccionarBuscarTodos();
+        }
+
+        async function ejecutarBuscarTodos() {
+            const filtro = String(txtBuscarTodosFiltro?.value || '').trim();
+            if (filtro.length < 2) {
+                hmAdvertencia('Ingrese al menos 2 caracteres para buscar.');
+                return;
+            }
+            if (btnEjecutarBuscarTodos) btnEjecutarBuscarTodos.disabled = true;
+            if (tbodyBuscarTodos) {
+                tbodyBuscarTodos.innerHTML =
+                    '<tr class="text-muted"><td colspan="5" class="text-center py-3">Buscando...</td></tr>';
+            }
+            buscarTodosSeleccionado = null;
+            actualizarBtnSeleccionarBuscarTodos();
+            try {
+                const res = await fetch(URL_BUSCAR_TODOS, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filtro }),
+                });
+                const payload = await res.json().catch(() => ({}));
+                if (!res.ok || payload.error) {
+                    throw new Error(payload.error || 'No se pudo buscar.');
+                }
+                buscarTodosRows = Array.isArray(payload.data) ? payload.data : [];
+                if (txtLocalizarBuscarTodos) txtLocalizarBuscarTodos.value = '';
+                renderBuscarTodosTabla();
+            } catch (err) {
+                console.error(err);
+                buscarTodosRows = [];
+                if (tbodyBuscarTodos) {
+                    tbodyBuscarTodos.innerHTML =
+                        '<tr class="text-danger"><td colspan="5" class="text-center py-3">' +
+                        escapeHtml(err.message || String(err)) +
+                        '</td></tr>';
+                }
+                if (lblBuscarTodosCount) lblBuscarTodosCount.textContent = '0';
+                hmError(err.message || String(err));
+            } finally {
+                if (btnEjecutarBuscarTodos) btnEjecutarBuscarTodos.disabled = false;
+            }
+        }
+
+        async function aplicarSeleccionBuscarTodos() {
+            const row = buscarTodosSeleccionado;
+            if (!row || !row.company) {
+                hmAdvertencia('Seleccione un trabajador de la lista.');
+                return;
+            }
+            const okCia = seleccionarCompaniaInsensitive(cboCia, row.company);
+            if (!okCia) {
+                hmError(
+                    'La compañía "' + (row.companynombre || row.company) +
+                    '" no está disponible en el selector de empresas.'
+                );
+                return;
+            }
+            await poblarDependientesCompania(cboCia.value.trim());
+            if (cboPlanilla) {
+                cboPlanilla.value = '0';
+                cboPlanilla.disabled = false;
+            }
+            if (cboTrabajador) {
+                cboTrabajador.value = '0';
+                cboTrabajador.disabled = false;
+            }
+            if (txtDni) txtDni.value = String(row.documentnumber || '').trim();
+            if (txtNombre) txtNombre.value = '';
+            const cboEstado = document.getElementById('cboEstado');
+            if (cboEstado) cboEstado.value = 'T';
+            if (filtrosPersist) filtrosPersist.guardar();
+
+            if (window.bootstrap) {
+                const inst = bootstrap.Modal.getInstance(modalBuscarTodosEl);
+                if (inst) inst.hide();
+            }
+            await ejecutarConsultaTrabajadores();
+        }
+
+        btnBuscarTodos.addEventListener('click', function () {
+            buscarTodosRows = [];
+            buscarTodosSeleccionado = null;
+            if (txtBuscarTodosFiltro) txtBuscarTodosFiltro.value = '';
+            if (txtLocalizarBuscarTodos) txtLocalizarBuscarTodos.value = '';
+            if (lblBuscarTodosCount) lblBuscarTodosCount.textContent = '0';
+            if (tbodyBuscarTodos) {
+                tbodyBuscarTodos.innerHTML =
+                    '<tr class="text-muted"><td colspan="5" class="text-center py-3">' +
+                    'Escriba un criterio y pulse Buscar.</td></tr>';
+            }
+            actualizarBtnSeleccionarBuscarTodos();
+            bootstrap.Modal.getOrCreateInstance(modalBuscarTodosEl).show();
+            setTimeout(() => { if (txtBuscarTodosFiltro) txtBuscarTodosFiltro.focus(); }, 200);
+        });
+
+        if (btnEjecutarBuscarTodos) {
+            btnEjecutarBuscarTodos.addEventListener('click', function () {
+                ejecutarBuscarTodos();
+            });
+        }
+        if (txtBuscarTodosFiltro) {
+            txtBuscarTodosFiltro.addEventListener('keydown', function (e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    ejecutarBuscarTodos();
+                }
+            });
+        }
+        if (txtLocalizarBuscarTodos) {
+            txtLocalizarBuscarTodos.addEventListener('input', function () {
+                renderBuscarTodosTabla();
+            });
+        }
+        if (tbodyBuscarTodos) {
+            tbodyBuscarTodos.addEventListener('click', function (ev) {
+                const tr = ev.target.closest('tr.fila-buscar-todos');
+                if (tr) seleccionarFilaBuscarTodos(tr);
+            });
+            tbodyBuscarTodos.addEventListener('dblclick', function (ev) {
+                const tr = ev.target.closest('tr.fila-buscar-todos');
+                if (!tr) return;
+                seleccionarFilaBuscarTodos(tr);
+                aplicarSeleccionBuscarTodos();
+            });
+        }
+        if (btnSeleccionarBuscarTodos) {
+            btnSeleccionarBuscarTodos.addEventListener('click', function () {
+                aplicarSeleccionBuscarTodos();
+            });
+        }
+    }
 });
 </script>
 {% endblock %}

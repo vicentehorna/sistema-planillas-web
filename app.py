@@ -23499,6 +23499,51 @@ def api_trabajadores_listado():
                 pass
 
 
+@app.route('/api/trabajadores/buscar-todas-empresas', methods=['POST'])
+@login_required
+def api_trabajadores_buscar_todas_empresas():
+    """sp_pr_selectorpersonas_todas_empresas_web: búsqueda cross-empresa (solo hm_alamo)."""
+    denied = _require_hm_alamo_json('Buscar todos')
+    if denied:
+        return denied
+
+    body = request.get_json(silent=True) or {}
+    filtro = str(body.get('filtro') or body.get('q') or body.get('texto') or '').strip()
+    if len(filtro) < 2:
+        return jsonify({'error': 'Ingrese al menos 2 caracteres para buscar.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorpersonas_todas_empresas_web @filtro=?",
+            (filtro,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        data = []
+        for r in rows:
+            data.append({
+                'documentnumber': str(r.get('documentnumber') or '').strip(),
+                'nombre': str(r.get('nombre') or '').strip(),
+                'company': str(r.get('company') or '').strip(),
+                'companynombre': str(r.get('companynombre') or '').strip(),
+                'planilla': str(r.get('planilla') or '').strip(),
+                'person': str(r.get('person') or '').strip(),
+                'estado': str(r.get('estado') or '').strip(),
+            })
+        return jsonify({'data': data, 'total': len(data)})
+    except Exception as e:
+        logging.exception("api_trabajadores_buscar_todas_empresas")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/trabajadores/trasladar', methods=['POST'])
 @login_required
 def api_trabajadores_trasladar():

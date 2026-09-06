@@ -13849,6 +13849,61 @@ def api_usuarios_obtener():
                 pass
 
 
+@app.route('/api/usuarios/perfiles/guardar', methods=['POST'])
+@login_required
+def api_usuarios_perfiles_guardar():
+    """sp_pr_guardarperfil_web: alta de SY_Profile (Profile + Description)."""
+    body = request.get_json(silent=True) or {}
+    profile = str(body.get('profile') or body.get('perfil') or body.get('id') or '').strip()
+    description = str(
+        body.get('description') or body.get('descripcion') or body.get('text') or ''
+    ).strip()
+    xlastuser = _xlastuser_id()
+    company = str(
+        body.get('cia') or body.get('company') or session.get('company') or ''
+    ).strip() or None
+
+    if not profile:
+        return jsonify({"error": "Indique el código de perfil."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarperfil_web "
+            "@profile=?, @description=?, @xlastuser=?, @company=?",
+            (profile, description or None, xlastuser, company),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        perfil_id = _jsonable_value(row.get('id') or row.get('profile')) or profile.upper()
+        perfil_text = (
+            _jsonable_value(row.get('text') or row.get('description'))
+            or description
+            or perfil_id
+        )
+        return jsonify({
+            "ok": True,
+            "id": perfil_id,
+            "text": perfil_text,
+            "profile": perfil_id,
+            "description": perfil_text,
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Perfil registrado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_usuarios_perfiles_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/usuarios/guardar', methods=['POST'])
 @login_required
 def api_usuarios_guardar():

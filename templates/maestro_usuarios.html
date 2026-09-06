@@ -216,7 +216,7 @@
                     <div class="col-12">
                         <label class="form-label fw-semibold text-muted mb-1">Perfiles del usuario</label>
                         <div class="row g-2 align-items-end">
-                            <div class="col-12 col-md-8">
+                            <div class="col-12 col-md-7">
                                 <select id="cboPerfilAdd" class="form-select form-select-sm">
                                     <option value="">Seleccione perfil...</option>
                                 </select>
@@ -224,6 +224,12 @@
                             <div class="col-auto">
                                 <button type="button" class="btn btn-outline-primary btn-sm" id="btnAgregarPerfil">
                                     <i class="bi bi-plus"></i> Agregar
+                                </button>
+                            </div>
+                            <div class="col-auto">
+                                <button type="button" class="btn btn-success btn-sm" id="btnNuevoPerfil"
+                                        title="Crear un nuevo perfil en el catálogo">
+                                    <i class="bi bi-plus-lg"></i> Nuevo
                                 </button>
                             </div>
                         </div>
@@ -237,6 +243,39 @@
         </div>
     </section>
 </div>
+
+<!-- Modal: nuevo perfil SY_Profile -->
+<div class="modal fade" id="modalNuevoPerfil" tabindex="-1" aria-labelledby="modalNuevoPerfilLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalNuevoPerfilLabel">Nuevo perfil</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <form id="frmNuevoPerfil" autocomplete="off">
+                    <div class="mb-2">
+                        <label for="txtNuevoPerfilCodigo" class="form-label small fw-semibold text-muted mb-1">Perfil</label>
+                        <input type="text" id="txtNuevoPerfilCodigo" class="form-control form-control-sm"
+                               maxlength="20" required placeholder="Código (máx. 20)">
+                    </div>
+                    <div class="mb-0">
+                        <label for="txtNuevoPerfilDesc" class="form-label small fw-semibold text-muted mb-1">Descripción</label>
+                        <input type="text" id="txtNuevoPerfilDesc" class="form-control form-control-sm"
+                               maxlength="50" placeholder="Descripción (máx. 50)">
+                    </div>
+                </form>
+                <div id="msgNuevoPerfil" class="small mt-2 d-none" role="status"></div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnGuardarNuevoPerfil">
+                    <i class="bi bi-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -247,6 +286,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_OBTENER = {{ url_for('api_usuarios_obtener') | tojson }};
     const URL_GUARDAR = {{ url_for('api_usuarios_guardar') | tojson }};
     const URL_PERFILES = {{ url_for('api_selectores_perfiles_sy') | tojson }};
+    const URL_GUARDAR_PERFIL = {{ url_for('api_usuarios_perfiles_guardar') | tojson }};
 
     let perfilesCatalogo = [];
     let perfilesAsignados = [];
@@ -559,6 +599,73 @@ document.addEventListener('DOMContentLoaded', async function () {
         perfilesAsignados.sort((a, b) => a.profile.localeCompare(b.profile));
         renderPerfilesAsignados();
         cbo.value = '';
+    });
+
+    const modalNuevoPerfilEl = document.getElementById('modalNuevoPerfil');
+    const modalNuevoPerfil = (typeof bootstrap !== 'undefined' && modalNuevoPerfilEl)
+        ? new bootstrap.Modal(modalNuevoPerfilEl)
+        : null;
+
+    function msgNuevoPerfil(texto, ok) {
+        const el = document.getElementById('msgNuevoPerfil');
+        el.classList.remove('d-none', 'text-success', 'text-danger');
+        el.classList.add(ok ? 'text-success' : 'text-danger');
+        el.textContent = texto;
+    }
+
+    document.getElementById('btnNuevoPerfil').addEventListener('click', () => {
+        document.getElementById('frmNuevoPerfil').reset();
+        const msg = document.getElementById('msgNuevoPerfil');
+        msg.classList.add('d-none');
+        msg.textContent = '';
+        if (modalNuevoPerfil) {
+            modalNuevoPerfil.show();
+        } else {
+            modalNuevoPerfilEl.classList.add('show');
+            modalNuevoPerfilEl.style.display = 'block';
+        }
+        setTimeout(() => document.getElementById('txtNuevoPerfilCodigo').focus(), 200);
+    });
+
+    document.getElementById('btnGuardarNuevoPerfil').addEventListener('click', async () => {
+        const profile = document.getElementById('txtNuevoPerfilCodigo').value.trim();
+        const description = document.getElementById('txtNuevoPerfilDesc').value.trim();
+        if (!profile) {
+            msgNuevoPerfil('Indique el código de perfil.', false);
+            document.getElementById('txtNuevoPerfilCodigo').focus();
+            return;
+        }
+        const btn = document.getElementById('btnGuardarNuevoPerfil');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_GUARDAR_PERFIL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ profile, description })
+            });
+            const data = await leerJson(res);
+            const nuevoId = String(data.id || data.profile || profile).trim().toUpperCase();
+            const nuevoText = String(data.text || data.description || description || nuevoId).trim();
+            await cargarCatalogoPerfiles();
+            const cboAdd = document.getElementById('cboPerfilAdd');
+            if (Array.from(cboAdd.options).some((o) => o.value === nuevoId)) {
+                cboAdd.value = nuevoId;
+            }
+            if (modalNuevoPerfil) {
+                modalNuevoPerfil.hide();
+            }
+            msgNuevoPerfil(data.mensaje || 'Perfil creado.', true);
+        } catch (e) {
+            console.error(e);
+            msgNuevoPerfil(e.message || 'No se pudo crear el perfil.', false);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('frmNuevoPerfil').addEventListener('submit', (e) => {
+        e.preventDefault();
+        document.getElementById('btnGuardarNuevoPerfil').click();
     });
 
     document.getElementById('frmFiltrosUsuarios').addEventListener('submit', async (e) => {

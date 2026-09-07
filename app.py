@@ -25419,21 +25419,28 @@ def api_contratos_trabajadores():
                 CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS fechaingreso,
                 e.PayRollType AS payrolltype,
                 ISNULL(pt.Description, e.PayRollType) AS tipoplanilla,
+                CONVERT(varchar(10), ca.startdate, 23) AS inicio_contrato,
+                CONVERT(varchar(10), ca.enddate, 23) AS fin_contrato,
                 CASE
-                    WHEN EXISTS (
-                        SELECT 1
-                        FROM PR_PersonContract pc
-                        WHERE pc.Company = e.Company
-                          AND pc.Person = e.Person
-                          AND LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
-                          AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
-                    ) THEN 'Y'
+                    WHEN ca.Person IS NOT NULL THEN 'Y'
                     ELSE 'N'
                 END AS contrato_activo
             FROM PR_Employee e
             INNER JOIN SY_Person p ON p.Person = e.Person
             LEFT JOIN PR_PayRollType pt
                 ON pt.Company = e.Company AND pt.PayRollType = e.PayRollType
+            OUTER APPLY (
+                SELECT TOP 1
+                    pc.Person,
+                    pc.startdate,
+                    pc.enddate
+                FROM PR_PersonContract pc
+                WHERE pc.Company = e.Company
+                  AND pc.Person = e.Person
+                  AND LTRIM(RTRIM(ISNULL(pc.Status, ''))) = 'A'
+                  AND (pc.enddate IS NULL OR CONVERT(date, pc.enddate) >= CONVERT(date, GETDATE()))
+                ORDER BY pc.startdate DESC, pc.Contractno DESC
+            ) ca
             WHERE e.Company = ?
               AND (? = '0' OR e.PayRollType = ?)
               AND (
@@ -25474,6 +25481,8 @@ def api_contratos_trabajadores():
                 'fechaingreso': _jsonable_value(r.get('fechaingreso')),
                 'payrolltype': _jsonable_value(r.get('payrolltype')),
                 'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+                'inicio_contrato': _jsonable_value(r.get('inicio_contrato')),
+                'fin_contrato': _jsonable_value(r.get('fin_contrato')),
                 'contrato_activo': _jsonable_value(r.get('contrato_activo')),
             })
         return jsonify({"rows": resultado, "total": len(resultado)})

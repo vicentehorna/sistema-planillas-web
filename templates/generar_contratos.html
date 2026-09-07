@@ -134,8 +134,8 @@
                         <th>Código</th>
                         <th>Trabajador</th>
                         <th>Documento</th>
-                        <th>F. ingreso</th>
-                        <th>Tipo planilla</th>
+                        <th>Inicio contrato</th>
+                        <th>Fin contrato</th>
                         <th class="text-center">Contrato activo</th>
                     </tr>
                 </thead>
@@ -355,8 +355,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="font-monospace">${escapeHtml(t.codigo || t.person || '')}</td>
                 <td>${escapeHtml(t.nombre || '')}</td>
                 <td>${escapeHtml(t.documento || '')}</td>
-                <td class="text-center">${escapeHtml(t.fechaingreso || '')}</td>
-                <td>${escapeHtml(t.tipoplanilla || '')}</td>
+                <td class="text-center">${escapeHtml(t.inicio_contrato || '')}</td>
+                <td class="text-center">${escapeHtml(t.fin_contrato || '')}</td>
                 <td class="text-center">${activo ? '<span class="text-success fw-bold">Sí</span>' : '<span class="text-muted">No</span>'}</td>
             `;
             tbody.appendChild(tr);

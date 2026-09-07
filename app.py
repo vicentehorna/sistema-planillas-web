@@ -2510,6 +2510,294 @@ def _plame_archivo14_masivo_listado(cursor, period, companies_csv):
     }
 
 
+def _plame_masivo_filtros_from_json(body):
+    return _plame_archivo14_masivo_filtros_from_json(body)
+
+
+def _plame_masivo_validar_filtros(period, companies_csv):
+    return _plame_archivo14_masivo_validar_filtros(period, companies_csv)
+
+
+def _plame_masivo_listado_multi(
+    cursor,
+    period,
+    companies_csv,
+    listado_empresa_fn,
+    filas_exportables_fn,
+):
+    """Consulta PLAME por empresa (misma lógica que Archivo 14 Masivo)."""
+    company_map = _declaracion_afp_masivo_company_map(cursor)
+    filas = []
+    validaciones = []
+    empresas_ok = []
+    empresas_sin_datos = []
+
+    for cia in str(companies_csv or '').split(','):
+        cia = cia.strip()
+        if not cia:
+            continue
+        company_desc = company_map.get(cia, cia)
+        try:
+            rows, vals = listado_empresa_fn(cursor, cia, period)
+        except Exception as exc:
+            empresas_sin_datos.append({
+                'company': cia,
+                'company_desc': company_desc,
+                'mensaje': str(exc),
+            })
+            continue
+        for msg in vals or []:
+            pref = f'{company_desc}: '
+            if msg and not str(msg).startswith(pref):
+                validaciones.append(pref + str(msg))
+            elif msg:
+                validaciones.append(str(msg))
+        exportables = filas_exportables_fn(rows)
+        if exportables:
+            empresas_ok.append({
+                'company': cia,
+                'company_desc': company_desc,
+                'total': len(exportables),
+            })
+        else:
+            empresas_sin_datos.append({
+                'company': cia,
+                'company_desc': company_desc,
+                'mensaje': 'Sin registros exportables para el periodo.',
+            })
+        for row in rows:
+            enriched = dict(row)
+            enriched['company'] = cia
+            enriched['company_desc'] = company_desc
+            filas.append(enriched)
+
+    advertencia = ''
+    if empresas_sin_datos:
+        detalle = '; '.join(
+            f"{x.get('company_desc') or x.get('company')}: {x.get('mensaje') or 'sin datos'}"
+            for x in empresas_sin_datos
+        )
+        advertencia = f'Empresas sin registros exportables: {detalle}'
+
+    return {
+        'rows': filas,
+        'total': len(filas),
+        'validaciones': validaciones,
+        'empresas_ok': empresas_ok,
+        'invalidas': empresas_sin_datos,
+        'advertencia': advertencia,
+    }
+
+
+def _plame_archivo15_listado_empresa(cursor, cia, period):
+    cursor.execute(
+        'EXEC sp_pr_listado_plame15_web @cia=?, @period=?',
+        (cia, period),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    resultado = []
+    for r in rows:
+        try:
+            days_num = int(float(r.get('days') or 0))
+        except (TypeError, ValueError):
+            days_num = 0
+        resultado.append({
+            'person': _jsonable_value(r.get('person')),
+            'documenttype': _jsonable_value(r.get('documenttype')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'name': _jsonable_value(r.get('name')),
+            'suspensiontype': _jsonable_value(r.get('suspensiontype')),
+            'suspensionname': _jsonable_value(r.get('suspensionname')),
+            'days': days_num,
+            'selection': _jsonable_value(r.get('selection')),
+            'incidencia': False,
+            'exportable': days_num > 0,
+        })
+    return resultado, []
+
+
+def _plame_archivo15_filas_exportables(rows):
+    return [r for r in (rows or []) if r.get('exportable', int(r.get('days') or 0) > 0)]
+
+
+def _plame_archivo15_generar_contenido_txt(filas):
+    lineas = [_plame_linea_archivo15(row) for row in filas]
+    contenido = '\r\n'.join(lineas)
+    if lineas:
+        contenido += '\r\n'
+    return contenido.encode('latin-1', errors='replace')
+
+
+def _plame_archivo18_listado_empresa(cursor, cia, period, payroll_all='Y', payroll='', cesados='N'):
+    p = {
+        'cia': cia,
+        'period': period,
+        'payroll_all': payroll_all or 'Y',
+        'payroll': payroll or '',
+        'cesados': cesados or 'N',
+    }
+    cursor.execute(
+        'EXEC sp_pr_listado_plame18_web @cia=?, @period=?, @payroll_all=?, @payroll=?, @cesados=?',
+        (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None, p['cesados']),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    validaciones, personas_incidencia = _plame_validar_archivo18_incidencias(cursor, p)
+    resultado = []
+    for r in rows:
+        try:
+            cv = float(r.get('conceptvalue') or 0)
+        except (TypeError, ValueError):
+            cv = 0.0
+        try:
+            cl = float(r.get('conceptvaluelo') or 0)
+        except (TypeError, ValueError):
+            cl = 0.0
+        person = _jsonable_value(r.get('person'))
+        person_key = str(person or '').strip()
+        resultado.append({
+            'person': person,
+            'documenttype': _jsonable_value(r.get('documenttype')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'name': _jsonable_value(r.get('name')),
+            'pdt': _jsonable_value(r.get('pdt')),
+            'conceptvalue': cv,
+            'conceptvaluelo': cl,
+            'selection': _jsonable_value(r.get('selection')),
+            'incidencia': person_key in personas_incidencia,
+        })
+    return resultado, validaciones
+
+
+def _plame_archivo18_listado_empresa_masivo(cursor, cia, period):
+    """Archivo 18 masivo: todas las planillas, solo no cesados."""
+    return _plame_archivo18_listado_empresa(cursor, cia, period, 'Y', '', 'N')
+
+
+def _plame_archivo18_filas_exportables(rows):
+    return [r for r in (rows or []) if not r.get('incidencia')]
+
+
+def _plame_archivo18_generar_contenido_txt(filas):
+    lineas = [_plame_linea_archivo18(row) for row in filas]
+    contenido = '\r\n'.join(lineas)
+    if lineas:
+        contenido += '\r\n'
+    return contenido.encode('latin-1', errors='replace')
+
+
+def _plame_archivo26_listado_empresa(cursor, cia, period):
+    cursor.execute(
+        'EXEC sp_pr_listado_plame26_web @cia=?, @period=?',
+        (cia, period),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    resultado = []
+    for r in rows:
+        resultado.append({
+            'person': _jsonable_value(r.get('person')),
+            'documenttype': _jsonable_value(r.get('documenttype')),
+            'documentnumber': _jsonable_value(r.get('documentnumber')),
+            'name': _jsonable_value(r.get('name')),
+            'pensionmembership': _jsonable_value(r.get('pensionmembership')),
+            'accidentinsurance': _jsonable_value(r.get('accidentinsurance')),
+            'typeaporte': _jsonable_value(r.get('typeaporte')),
+            'isdomiciled': _jsonable_value(r.get('isdomiciled')),
+            'selection': _jsonable_value(r.get('selection')),
+            'incidencia': False,
+        })
+    return resultado, []
+
+
+def _plame_archivo26_filas_exportables(rows):
+    return list(rows or [])
+
+
+def _plame_archivo26_generar_contenido_txt(filas):
+    lineas = [_plame_linea_archivo26(row) for row in filas]
+    contenido = '\r\n'.join(lineas)
+    if lineas:
+        contenido += '\r\n'
+    return contenido.encode('latin-1', errors='replace')
+
+
+def _plame_masivo_generar_zip_response(
+    cursor,
+    period,
+    companies_csv,
+    *,
+    listado_empresa_fn,
+    filas_exportables_fn,
+    contenido_fn,
+    codigo_archivo,
+    zip_prefix,
+    titulo_error,
+):
+    company_map = _declaracion_afp_masivo_company_map(cursor)
+    archivos = []
+    errores = []
+    omitidas = []
+
+    for cia in str(companies_csv or '').split(','):
+        cia = cia.strip()
+        if not cia:
+            continue
+        company_desc = company_map.get(cia, cia)
+        try:
+            rows, _vals = listado_empresa_fn(cursor, cia, period)
+            filas = filas_exportables_fn(rows)
+            if not filas:
+                omitidas.append({
+                    'company': cia,
+                    'company_desc': company_desc,
+                    'mensaje': 'Sin registros exportables para el periodo.',
+                })
+                continue
+            ruc = _obtener_ruc_compania(cursor, cia)
+            if not ruc:
+                omitidas.append({
+                    'company': cia,
+                    'company_desc': company_desc,
+                    'mensaje': 'No se encontró el RUC de la compañía.',
+                })
+                continue
+            filename = _plame_filename(ruc, period, codigo_archivo)
+            archivos.append((filename, contenido_fn(filas), company_desc))
+        except Exception as exc:
+            logging.exception('plame_masivo_generar_zip codigo=%s cia=%s', codigo_archivo, cia)
+            errores.append(f'{company_desc}: {exc}')
+
+    if not archivos:
+        detalle = '; '.join(
+            f"{x.get('company_desc') or x.get('company')}: {x.get('mensaje') or 'sin datos'}"
+            for x in omitidas
+        )
+        msg = titulo_error
+        if detalle:
+            msg += ' ' + detalle
+        if errores:
+            msg += ' Errores: ' + '; '.join(errores[:5])
+        return None, {'error': msg, 'omitidas': omitidas, 'errores': errores}
+
+    memory_file = io.BytesIO()
+    with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        for fname, raw, _desc in archivos:
+            zf.writestr(fname, raw)
+    memory_file.seek(0)
+    zip_name = f'{zip_prefix}_{period}.zip'
+    resp = send_file(
+        memory_file,
+        mimetype='application/zip',
+        download_name=zip_name,
+        as_attachment=True,
+    )
+    resp.headers[f'X-Plame{codigo_archivo}-Generados'] = str(len(archivos))
+    if omitidas:
+        resp.headers[f'X-Plame{codigo_archivo}-Omitidas'] = str(len(omitidas))
+    if errores:
+        resp.headers[f'X-Plame{codigo_archivo}-Errores'] = str(len(errores))
+    return resp, None
+
+
 def _plame_validar_archivo18_incidencias(cursor, p):
     """sp_pr_plame_validar_archivo18_web → mensajes y personas con incidencia por fila."""
     cursor.execute(
@@ -16728,6 +17016,113 @@ def plame_archivo14_masivo_page():
     return render_template('plame_archivo14_masivo.html')
 
 
+@app.route('/plame/archivo-15-masivo')
+@login_required
+def plame_archivo15_masivo_page():
+    if not _es_bd_hm_alamo():
+        flash('PLAME Archivo 15 Masivo solo está disponible en hm_alamo.', 'warning')
+        return redirect(url_for('plame_archivo15_page'))
+    return render_template(
+        'plame_archivo_masivo.html',
+        plame_cfg={
+            'codigo': '15',
+            'ext': 'snl',
+            'titulo': 'PLAME Archivo 15 Masivo',
+            'descripcion': (
+                'PLAME Archivo 15 Masivo — Días subsidiados y no laborados (.snl). '
+                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                '0601AAAAmmRRRRRRRRRRR.snl por empresa en un ZIP.'
+            ),
+            'btn_generar': 'Generar archivos PLAME (.snl)',
+            'url_listado': url_for('api_plame_archivo15_masivo_listado'),
+            'url_generar_zip': url_for('api_plame_archivo15_masivo_generar_zip'),
+            'tiene_validaciones': False,
+            'zip_default': 'PLAME15_MASIVO.zip',
+            'columnas': [
+                {'key': 'company_desc', 'label': 'Empresa'},
+                {'key': 'documenttype', 'label': 'Tipo', 'class': 'text-center'},
+                {'key': 'documentnumber', 'label': 'Código'},
+                {'key': 'name', 'label': 'Nombre'},
+                {'key': 'suspensiontype', 'label': 'Motivo', 'class': 'text-center'},
+                {'key': 'suspensionname', 'label': 'Descripción'},
+                {'key': 'days', 'label': 'Días', 'class': 'text-end', 'format': 'int'},
+            ],
+        },
+    )
+
+
+@app.route('/plame/archivo-18-masivo')
+@login_required
+def plame_archivo18_masivo_page():
+    if not _es_bd_hm_alamo():
+        flash('PLAME Archivo 18 Masivo solo está disponible en hm_alamo.', 'warning')
+        return redirect(url_for('plame_archivo18_page'))
+    return render_template(
+        'plame_archivo_masivo.html',
+        plame_cfg={
+            'codigo': '18',
+            'ext': 'rem',
+            'titulo': 'PLAME Archivo 18 Masivo',
+            'descripcion': (
+                'PLAME Archivo 18 Masivo — Ingresos, tributos y descuentos (.rem). '
+                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                '0601AAAAmmRRRRRRRRRRR.rem por empresa en un ZIP. '
+                'Las filas con incidencia (validaciones) no se exportan.'
+            ),
+            'btn_generar': 'Generar archivos PLAME (.rem)',
+            'url_listado': url_for('api_plame_archivo18_masivo_listado'),
+            'url_generar_zip': url_for('api_plame_archivo18_masivo_generar_zip'),
+            'tiene_validaciones': True,
+            'zip_default': 'PLAME18_MASIVO.zip',
+            'columnas': [
+                {'key': 'company_desc', 'label': 'Empresa'},
+                {'key': 'documenttype', 'label': 'Tipo', 'class': 'text-center'},
+                {'key': 'documentnumber', 'label': 'Código'},
+                {'key': 'name', 'label': 'Nombre'},
+                {'key': 'pdt', 'label': 'PDT', 'class': 'text-center'},
+                {'key': 'conceptvalue', 'label': 'Devengado', 'class': 'text-end', 'format': 'monto'},
+                {'key': 'conceptvaluelo', 'label': 'Pagado', 'class': 'text-end', 'format': 'monto'},
+            ],
+        },
+    )
+
+
+@app.route('/plame/archivo-26-masivo')
+@login_required
+def plame_archivo26_masivo_page():
+    if not _es_bd_hm_alamo():
+        flash('PLAME Archivo 26 Masivo solo está disponible en hm_alamo.', 'warning')
+        return redirect(url_for('plame_archivo26_page'))
+    return render_template(
+        'plame_archivo_masivo.html',
+        plame_cfg={
+            'codigo': '26',
+            'ext': 'toc',
+            'titulo': 'PLAME Archivo 26 Masivo',
+            'descripcion': (
+                'PLAME Archivo 26 Masivo — Otras condiciones (.toc). '
+                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                '0601AAAAmmRRRRRRRRRRR.toc por empresa en un ZIP.'
+            ),
+            'btn_generar': 'Generar archivos PLAME (.toc)',
+            'url_listado': url_for('api_plame_archivo26_masivo_listado'),
+            'url_generar_zip': url_for('api_plame_archivo26_masivo_generar_zip'),
+            'tiene_validaciones': False,
+            'zip_default': 'PLAME26_MASIVO.zip',
+            'columnas': [
+                {'key': 'company_desc', 'label': 'Empresa'},
+                {'key': 'documenttype', 'label': 'Tipo', 'class': 'text-center'},
+                {'key': 'documentnumber', 'label': 'Código'},
+                {'key': 'name', 'label': 'Nombre'},
+                {'key': 'pensionmembership', 'label': 'Pensión', 'class': 'text-center'},
+                {'key': 'accidentinsurance', 'label': 'Vida', 'class': 'text-center'},
+                {'key': 'typeaporte', 'label': 'Tipo aporte', 'class': 'text-center'},
+                {'key': 'isdomiciled', 'label': 'Domiciliado', 'class': 'text-center'},
+            ],
+        },
+    )
+
+
 @app.route('/plame/archivo-15')
 @login_required
 def plame_archivo15_page():
@@ -18148,6 +18543,170 @@ def api_plame_archivo14_masivo_generar_zip():
                 conn.close()
             except Exception:
                 pass
+
+
+def _api_plame_masivo_listado_handler(
+    feature,
+    listado_empresa_fn,
+    filas_exportables_fn,
+):
+    denied = _require_hm_alamo_json(feature)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    period, companies_csv = _plame_masivo_filtros_from_json(body)
+    err = _plame_masivo_validar_filtros(period, companies_csv)
+    if err:
+        return jsonify({'error': err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        payload = _plame_masivo_listado_multi(
+            cursor,
+            period,
+            companies_csv,
+            listado_empresa_fn,
+            filas_exportables_fn,
+        )
+        exportables = filas_exportables_fn(payload.get('rows'))
+        payload['puede_generar_zip'] = len(exportables) > 0
+        return jsonify(payload)
+    except Exception as e:
+        logging.exception('api_plame_masivo_listado feature=%s', feature)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _api_plame_masivo_generar_zip_handler(
+    feature,
+    listado_empresa_fn,
+    filas_exportables_fn,
+    contenido_fn,
+    codigo_archivo,
+    zip_prefix,
+    titulo_error,
+):
+    denied = _require_hm_alamo_json(feature)
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    period, companies_csv = _plame_masivo_filtros_from_json(body)
+    err = _plame_masivo_validar_filtros(period, companies_csv)
+    if err:
+        return jsonify({'error': err}), 400
+
+    companies_filter = _companies_csv_from_list(body.get('only_companies') or [])
+    if companies_filter:
+        requested = {c.strip().upper() for c in companies_csv.split(',') if c.strip()}
+        only = {c.strip().upper() for c in companies_filter.split(',') if c.strip()}
+        companies_csv = ','.join(c for c in requested if c in only)
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        resp, err_payload = _plame_masivo_generar_zip_response(
+            cursor,
+            period,
+            companies_csv,
+            listado_empresa_fn=listado_empresa_fn,
+            filas_exportables_fn=filas_exportables_fn,
+            contenido_fn=contenido_fn,
+            codigo_archivo=codigo_archivo,
+            zip_prefix=zip_prefix,
+            titulo_error=titulo_error,
+        )
+        if err_payload:
+            return jsonify(err_payload), 400
+        return resp
+    except Exception as e:
+        logging.exception('api_plame_masivo_generar_zip feature=%s', feature)
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/archivo-15-masivo/listado', methods=['POST'])
+@login_required
+def api_plame_archivo15_masivo_listado():
+    return _api_plame_masivo_listado_handler(
+        'PLAME Archivo 15 Masivo',
+        _plame_archivo15_listado_empresa,
+        _plame_archivo15_filas_exportables,
+    )
+
+
+@app.route('/api/plame/archivo-15-masivo/generar-zip', methods=['POST'])
+@login_required
+def api_plame_archivo15_masivo_generar_zip():
+    return _api_plame_masivo_generar_zip_handler(
+        'PLAME Archivo 15 Masivo',
+        _plame_archivo15_listado_empresa,
+        _plame_archivo15_filas_exportables,
+        _plame_archivo15_generar_contenido_txt,
+        '15',
+        'PLAME15_MASIVO',
+        'No se generó ningún archivo PLAME Archivo 15.',
+    )
+
+
+@app.route('/api/plame/archivo-18-masivo/listado', methods=['POST'])
+@login_required
+def api_plame_archivo18_masivo_listado():
+    return _api_plame_masivo_listado_handler(
+        'PLAME Archivo 18 Masivo',
+        _plame_archivo18_listado_empresa_masivo,
+        _plame_archivo18_filas_exportables,
+    )
+
+
+@app.route('/api/plame/archivo-18-masivo/generar-zip', methods=['POST'])
+@login_required
+def api_plame_archivo18_masivo_generar_zip():
+    return _api_plame_masivo_generar_zip_handler(
+        'PLAME Archivo 18 Masivo',
+        _plame_archivo18_listado_empresa_masivo,
+        _plame_archivo18_filas_exportables,
+        _plame_archivo18_generar_contenido_txt,
+        '18',
+        'PLAME18_MASIVO',
+        'No se generó ningún archivo PLAME Archivo 18.',
+    )
+
+
+@app.route('/api/plame/archivo-26-masivo/listado', methods=['POST'])
+@login_required
+def api_plame_archivo26_masivo_listado():
+    return _api_plame_masivo_listado_handler(
+        'PLAME Archivo 26 Masivo',
+        _plame_archivo26_listado_empresa,
+        _plame_archivo26_filas_exportables,
+    )
+
+
+@app.route('/api/plame/archivo-26-masivo/generar-zip', methods=['POST'])
+@login_required
+def api_plame_archivo26_masivo_generar_zip():
+    return _api_plame_masivo_generar_zip_handler(
+        'PLAME Archivo 26 Masivo',
+        _plame_archivo26_listado_empresa,
+        _plame_archivo26_filas_exportables,
+        _plame_archivo26_generar_contenido_txt,
+        '26',
+        'PLAME26_MASIVO',
+        'No se generó ningún archivo PLAME Archivo 26.',
+    )
 
 
 @app.route('/api/plame/archivo-15/listado', methods=['POST'])

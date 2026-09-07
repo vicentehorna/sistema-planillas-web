@@ -5409,6 +5409,7 @@ _FORMATO_LIQ_VACA_FORMULACODES = (
     'DEVOLUCION_QUINTA',
     'LIQINGRESOAFECTO',
     'INDEMNIZACION_DESPID',
+    'LIQ_OTROS_ING',
 )
 
 _FORMATO_LIQ_DESCUENTOS_DEF = (
@@ -5800,6 +5801,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     devolucion_quinta = _formato_liquidacion_fc_valor(formula_values, 'DEVOLUCION_QUINTA')
     otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
     indemnizacion_despido = _formato_liquidacion_fc_valor(formula_values, 'INDEMNIZACION_DESPID')
+    otros_ingresos = _formato_liquidacion_fc_valor(formula_values, 'LIQ_OTROS_ING')
 
     def _mostrar_ingreso(val):
         try:
@@ -5830,6 +5832,9 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'indemnizacion_despido': indemnizacion_despido,
         'indemnizacion_despido_fmt': _formato_liquidacion_moneda(indemnizacion_despido),
         'mostrar_indemnizacion_despido': _mostrar_ingreso(indemnizacion_despido),
+        'otros_ingresos': otros_ingresos,
+        'otros_ingresos_fmt': _formato_liquidacion_moneda(otros_ingresos),
+        'mostrar_otros_ingresos': _mostrar_ingreso(otros_ingresos),
         'anios_fc': 'ANIOSVACTRUNCA',
         'meses_fc': 'MESES_VAC_TRUN',
         'dias_fc': 'DIAS_VAC_TRUN',
@@ -5841,6 +5846,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'devolucion_quinta_fc': 'DEVOLUCION_QUINTA',
         'otros_ingresos_afectos_fc': 'LIQINGRESOAFECTO',
         'indemnizacion_despido_fc': 'INDEMNIZACION_DESPID',
+        'otros_ingresos_fc': 'LIQ_OTROS_ING',
         'formula_anios_fc': 'Σ rem.VACA × ANIOSVACTRUNCA → VACACIONANIO',
         'formula_meses_fc': '(Σ rem.VACA / 12) × MESES_VAC_TRUN → VACXMES',
         'formula_dias_fc': '(Σ rem.VACA / 360) × DIAS_VAC_TRUN → VACXDIA',
@@ -5916,6 +5922,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
     cts_calc = _build_formato_liquidacion_cts(base_calculo.get('cts'), formula_values)
     grati_calc = _build_formato_liquidacion_grati(base_calculo.get('grati'), formula_values)
     vaca_calc = _build_formato_liquidacion_vaca(base_calculo.get('vaca'), formula_values)
+    es_elclan = _es_cliente_elclan()
     total_ingresos = (
         float(cts_calc.get('total') or 0)
         + float(grati_calc.get('total') or 0)
@@ -5925,6 +5932,8 @@ def _contexto_formato_liquidacion(params, include_images=True):
         + float(vaca_calc.get('otros_ingresos_afectos') or 0)
         + float(vaca_calc.get('indemnizacion_despido') or 0)
     )
+    if es_elclan:
+        total_ingresos += float(vaca_calc.get('otros_ingresos') or 0)
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
     aportaciones_calc = _build_formato_liquidacion_aportaciones(liq, formula_values)
@@ -5963,6 +5972,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'neto_a_pagar_fmt': neto_a_pagar_fmt,
         'es_ngservicios': _es_cliente_ngservicios(),
         'es_ultraseguros': _es_cliente_ultraseguros(),
+        'es_elclan': es_elclan,
     }
 
 

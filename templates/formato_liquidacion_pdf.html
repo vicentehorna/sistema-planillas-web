@@ -644,6 +644,20 @@
                 </table>
             </div>
 
+            {% if es_elclan %}
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="2">Otros Ingresos</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ vaca_calc.otros_ingresos_fmt }}</td>
+                    </tr>
+                </table>
+            </div>
+            {% endif %}
+
             {% if vaca_calc.mostrar_devolucion_quinta %}
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">

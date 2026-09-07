@@ -291,6 +291,39 @@ Begin
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
 				END
+				/* MES()/ANIO() → #M:MES# / #M:ANIO# desde @period (YYYYMM / YYYYMMDD) */
+				WHILE CHARINDEX(N'#M:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#M:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE @code_k
+						WHEN 'MES' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 6
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 5, 2)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 5, 2))
+							ELSE 0 END
+						WHEN 'MONTH' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 6
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 5, 2)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 5, 2))
+							ELSE 0 END
+						WHEN 'ANIO' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 4
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 1, 4)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 1, 4))
+							ELSE 0 END
+						WHEN 'YEAR' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 4
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 1, 4)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 1, 4))
+							ELSE 0 END
+						ELSE 0
+					END
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
 				/* PROC("SP...") compilado como #S:NOMBRE|N|args|# */
 				WHILE CHARINDEX(N'#S:', @expr_k) > 0
 				BEGIN
@@ -816,6 +849,39 @@ Begin
 						  AND ProcessType = @processtype
 						  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = @code_k
 					) THEN 1 ELSE 0 END
+					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
+					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
+				END
+				/* MES()/ANIO() → #M:MES# / #M:ANIO# desde @period (YYYYMM / YYYYMMDD) */
+				WHILE CHARINDEX(N'#M:', @expr_k) > 0
+				BEGIN
+					SET @p1 = CHARINDEX(N'#M:', @expr_k)
+					SET @p2 = CHARINDEX(N'#', @expr_k, @p1 + 3)
+					IF @p2 <= 0 BREAK
+					SET @code_k = UPPER(LTRIM(RTRIM(SUBSTRING(@expr_k, @p1 + 3, @p2 - @p1 - 3))))
+					SET @importe = CASE @code_k
+						WHEN 'MES' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 6
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 5, 2)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 5, 2))
+							ELSE 0 END
+						WHEN 'MONTH' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 6
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 5, 2)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 5, 2))
+							ELSE 0 END
+						WHEN 'ANIO' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 4
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 1, 4)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 1, 4))
+							ELSE 0 END
+						WHEN 'YEAR' THEN CASE
+							WHEN LEN(LTRIM(RTRIM(ISNULL(@period, '')))) >= 4
+							 AND ISNUMERIC(SUBSTRING(LTRIM(RTRIM(@period)), 1, 4)) = 1
+							THEN CONVERT(NUMERIC(19,4), SUBSTRING(LTRIM(RTRIM(@period)), 1, 4))
+							ELSE 0 END
+						ELSE 0
+					END
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
 				END

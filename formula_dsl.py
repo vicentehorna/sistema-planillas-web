@@ -3,7 +3,8 @@ DSL de fórmulas condicionales (tipo K / Código) para el formulador web.
 
 Se valida y compila al GUARDAR. En cálculo solo se evalúa la expresión SQL
 ya compilada (placeholders #C:FORMULACODE#, #P:SHORTNAME#, #A:FORMULACODE#,
-#E:CAMPO#, #S:PROC|N|args|#, #R:PAYROLL_SHORT#, #O:PROCESS_SHORT#).
+#E:CAMPO#, #S:PROC|N|args|#, #R:PAYROLL_SHORT#, #O:PROCESS_SHORT#,
+#M:MES# / #M:ANIO#).
 
 Sintaxis soportada:
   LET nombre = expr
@@ -17,6 +18,9 @@ Sintaxis soportada:
   PROC("SP_NOMBRE" [, arg1, ...])  -- ejecuta SP autorizado; contexto (@cia, @period, ...) implícito
   PAYROLL("SHORTNAME") / PLANILLA("SHORTNAME")  -- 1 si la planilla actual coincide (PR_PayRollType.ShortName)
   PROCESS("SHORTNAME") / PROCESO("SHORTNAME")   -- 1 si el proceso actual coincide (PR_ProcessType.ShortName)
+  MES() / MONTH()       -- mes numérico (1-12) del periodo en cálculo (@period)
+  ANIO() / YEAR()       -- año (YYYY) del periodo en cálculo
+  MES("YYYYMMDD") / ANIO("YYYYMMDD")  -- literal (se resuelve al compilar)
   números, 6.75%, +, -, *, /, paréntesis, comparaciones >, <, >=, <=, =, <>
 """
 from __future__ import annotations
@@ -36,6 +40,7 @@ _KEYWORDS = {
     "CONCEPT", "PARAM", "ASSIGN", "ASIGNACION",
     "EMPLOYEE", "EMPLEADO", "PROC",
     "PAYROLL", "PLANILLA", "PROCESS", "PROCESO",
+    "MES", "ANIO", "MONTH", "YEAR",
 }
 
 # Catálogo de SPs invocables desde PROC(). Clave = nombre en mayúsculas.
@@ -60,6 +65,8 @@ _ALIASES = {
     "PLANILLA": "PAYROLL",
     "PROCESO": "PROCESS",
     "VAR": "LET",
+    "MONTH": "MES",
+    "YEAR": "ANIO",
 }
 
 # Campos numéricos/códigos expuestos desde #empleado en SP_PR_EjecutarFormula.
@@ -150,6 +157,32 @@ def _normalize_context_shortname(raw: str, kind: str) -> str:
     return code
 
 
+def _period_digits(raw: str, kind: str) -> str:
+    """Extrae dígitos de un periodo YYYYMM / YYYYMMDD (mín. 6)."""
+    digits = re.sub(r"\D", "", str(raw or "").strip())
+    if len(digits) < 6:
+        raise FormulaDslError(
+            f'{kind}("{raw}"): use un periodo YYYYMM o YYYYMMDD (ej. "20260808").'
+        )
+    return digits
+
+
+def _month_from_period_literal(raw: str) -> int:
+    digits = _period_digits(raw, "MES")
+    month = int(digits[4:6])
+    if month < 1 or month > 12:
+        raise FormulaDslError(f'MES("{raw}"): mes inválido ({month}).')
+    return month
+
+
+def _year_from_period_literal(raw: str) -> int:
+    digits = _period_digits(raw, "ANIO")
+    year = int(digits[0:4])
+    if year < 1900 or year > 2999:
+        raise FormulaDslError(f'ANIO("{raw}"): año inválido ({year}).')
+    return year
+
+
 def _tokenize(src: str) -> list[tuple[str, Any]]:
     s = src.replace("\r\n", "\n").replace("\r", "\n")
     # Quitar comentarios # ... o // ...
@@ -158,7 +191,7 @@ def _tokenize(src: str) -> list[tuple[str, Any]]:
         if "//" in line:
             line = line[: line.index("//")]
         stripped = line.lstrip()
-        if stripped.startswith("#") and not re.match(r"^#[CPAESRO]:", stripped, re.I):
+        if stripped.startswith("#") and not re.match(r"^#[A-Z]:", stripped, re.I):
             # comentario de línea estilo # texto (no placeholder)
             continue
         lines.append(line)
@@ -404,6 +437,22 @@ class _Parser:
             code = _normalize_context_shortname(raw, "PROCESS")
             self.processes.add(code)
             return ("PROCESS", code)
+        if k in ("MES", "ANIO"):
+            self.pop()
+            self.expect("(")
+            pk, pv = self.peek()
+            if pk == ")":
+                self.pop()
+                return ("PERIOD_PART", k)
+            if pk == "STR":
+                self.pop()
+                self.expect(")")
+                if k == "MES":
+                    return ("NUM", float(_month_from_period_literal(str(pv))))
+                return ("NUM", float(_year_from_period_literal(str(pv))))
+            raise FormulaDslError(
+                f'{k}() usa el periodo actual, o {k}("YYYYMMDD") con literal.'
+            )
         if k == "PROC":
             self.pop()
             self.expect("(")
@@ -424,7 +473,7 @@ class _Parser:
             raise FormulaDslError(
                 f"Identificador '{v}' no definido. Use LET {v} = ... "
                 f"o CONCEPT(\"{v}\") / PARAM(\"{v}\") / EMPLOYEE(\"{v}\") / "
-                f"PAYROLL(\"{v}\") / PROCESS(\"{v}\")."
+                f"PAYROLL(\"{v}\") / PROCESS(\"{v}\") / MES() / ANIO()."
             )
         if k == "(":
             self.pop()
@@ -455,6 +504,8 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return f"#R:{node[1]}#"
     if kind == "PROCESS":
         return f"#O:{node[1]}#"
+    if kind == "PERIOD_PART":
+        return f"#M:{node[1]}#"
     if kind == "PROC":
         proc_name = node[1]
         arg_exprs = [_emit_sql(a, lets) for a in node[2]]

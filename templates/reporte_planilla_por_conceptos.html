@@ -701,7 +701,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodoDesde = document.getElementById('cboPeriodoDesde');
     const cboPeriodoHasta = document.getElementById('cboPeriodoHasta');
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     let periodoDesdeGuardado = '';
     let periodoHastaGuardado = '';

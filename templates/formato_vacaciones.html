@@ -421,7 +421,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (!txtFecha.value) txtFecha.value = hoyIsoLocal();
     if (!txtAnio.value) txtAnio.value = String(new Date().getFullYear());
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     const guardado = leerFiltros();
     const DEFAULT_CIA = 'BGT';

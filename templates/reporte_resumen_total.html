@@ -455,7 +455,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    await poblarSelect('/api/selectores/companias', document.getElementById('cboCompania'));
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', document.getElementById('cboCompania'));
     if (filtrosPersist) {
         await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
     }

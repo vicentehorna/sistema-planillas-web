@@ -435,7 +435,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     syncFechaIngreso();
     await cargarUnidades();
-    await poblarSelect('/api/selectores/companias', cboCia, { value: '', text: 'Seleccione...' });
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia, { value: '', text: 'Seleccione...' });
     if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
     if (cboCia.value) await cargarPlanillas();
 });

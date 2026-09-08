@@ -486,7 +486,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('frmPlanillaAnual').addEventListener('submit', consultar);
     btnExcel.addEventListener('click', exportExcel);
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     await poblarSelect('/api/selectores/unidades', cboUnidad, {
         incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
     });

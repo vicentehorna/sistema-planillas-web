@@ -5,6 +5,7 @@ import sys
 import time
 import logging
 import io
+import csv
 import zipfile
 import base64
 import unicodedata
@@ -2058,11 +2059,30 @@ def _plame_rh_parse_float(valor):
         return 0.0
 
 
-def _plame_rh_recomponer_lineas(texto):
+def _plame_rh_detect_delimiter(texto):
+    """Detecta delimitador del export SUNAT RH: '|' (TXT) o ',' (CSV)."""
+    for raw in re.split(r'\r?\n', texto or ''):
+        s = (raw or '').strip()
+        if not s:
+            continue
+        # Cabecera o fila de datos con fecha DD/MM/YYYY
+        if s.lower().startswith('fecha') or re.match(r'^\d{2}/\d{2}/\d{4}[|,]', s):
+            if '|' in s and s.count('|') >= 10:
+                return '|'
+            if ',' in s and s.count(',') >= 10:
+                return ','
+            if '|' in s:
+                return '|'
+            if ',' in s:
+                return ','
+    return '|'
+
+
+def _plame_rh_recomponer_lineas(texto, delimiter='|'):
     lineas = re.split(r'\r?\n', texto or '')
     resultado = []
     buffer = ''
-    inicio_fila = re.compile(r'^\d{2}/\d{2}/\d{4}\|')
+    inicio_fila = re.compile(r'^\d{2}/\d{2}/\d{4}' + re.escape(delimiter or '|'))
     for linea in lineas:
         s = linea.rstrip('\r')
         if not s.strip():
@@ -2080,8 +2100,25 @@ def _plame_rh_recomponer_lineas(texto):
     return resultado
 
 
+def _plame_rh_split_campos(linea, delimiter='|'):
+    """Parte una fila SUNAT RH por | o por CSV (,)."""
+    s = str(linea or '').rstrip('\r')
+    if not s:
+        return []
+    if delimiter == ',':
+        try:
+            partes = next(csv.reader([s], delimiter=',', quotechar='"'))
+        except Exception:
+            partes = s.split(',')
+    else:
+        partes = s.split('|')
+    if partes and str(partes[-1]).strip() == '':
+        partes = partes[:-1]
+    return [str(p).strip() if p is not None else '' for p in partes]
+
+
 def _plame_rh_parse_txt_sunat(texto, period=None):
-    """Parsea TXT SUNAT de recibos por honorarios (export RH)."""
+    """Parsea TXT/CSV SUNAT de recibos por honorarios (export RH)."""
     columnas = (
         'fecha_emision', 'tipo_doc_emitido', 'nro_doc_emitido', 'estado',
         'tipo_doc_emisor', 'nro_doc_emisor', 'nombre_emisor', 'tipo_renta',
@@ -2090,13 +2127,12 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
     )
     filas = []
     omitidos = []
-    lineas = _plame_rh_recomponer_lineas(texto)
+    delimiter = _plame_rh_detect_delimiter(texto)
+    lineas = _plame_rh_recomponer_lineas(texto, delimiter=delimiter)
     for idx, linea in enumerate(lineas, start=1):
         if idx == 1 and 'fecha' in linea.lower() and 'emis' in linea.lower():
             continue
-        partes = linea.split('|')
-        if partes and partes[-1] == '':
-            partes = partes[:-1]
+        partes = _plame_rh_split_campos(linea, delimiter=delimiter)
         if len(partes) < 14:
             omitidos.append({
                 'linea': idx,
@@ -19207,7 +19243,7 @@ def api_plame_archivo26_generar_txt():
 @app.route('/api/plame/archivos-7-20/importar', methods=['POST'])
 @login_required
 def api_plame_archivos_7_20_importar():
-    """Importa TXT SUNAT de recibos por honorarios y normaliza filas para PLAME 7/20."""
+    """Importa TXT/CSV SUNAT de recibos por honorarios y normaliza filas para PLAME 7/20."""
     period = _plame_period_yyyymm(
         request.form.get('period') or request.form.get('periodo') or ''
     )

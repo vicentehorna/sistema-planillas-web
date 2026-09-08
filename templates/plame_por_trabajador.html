@@ -375,7 +375,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     [cboPeriodo, cboTrabajador, txtPdt].forEach((el) => el.addEventListener('change', guardar));
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     const guardado = leer();
     if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
     else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;

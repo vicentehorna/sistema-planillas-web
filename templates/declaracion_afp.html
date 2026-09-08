@@ -933,7 +933,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCompania = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboPlanilla');
 
-    await poblarSelect('/api/selectores/companias', cboCompania, '<option value="">Seleccione...</option>');
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCompania, '<option value="">Seleccione...</option>');
 
     const guardado = filtrosPersist ? filtrosPersist.leer() : null;
     if (guardado && guardado.cia) {

@@ -887,7 +887,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         nuevosParaActualizar = [];
         document.getElementById('btnActualizarNuevos').disabled = true;
     });
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
     renderListaTxt();
 });

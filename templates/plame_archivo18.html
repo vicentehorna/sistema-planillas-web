@@ -478,7 +478,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodo = document.getElementById('cboPeriodoTributario');
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     async function onCompaniaChange(cia, periodoRestaurar) {
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';

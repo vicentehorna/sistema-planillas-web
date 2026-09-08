@@ -540,7 +540,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     const guardado = filtrosPersist ? filtrosPersist.leer() : null;
     if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {

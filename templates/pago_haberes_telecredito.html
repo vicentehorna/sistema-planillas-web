@@ -594,7 +594,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     await cargarUnidades();
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
 
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;

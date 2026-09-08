@@ -460,7 +460,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     txtDesde.value = primerDiaMesIso();
     txtHasta.value = hoyIso();
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     if (filtrosPersist) {
         const saved = filtrosPersist.leer();

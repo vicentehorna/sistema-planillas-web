@@ -1158,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnEjecutarBoletas').addEventListener('click', ejecutarAccion);
     syncModoProcesoUI();
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     await cargarUnidades();
 
     let filtrosRestaurados = false;

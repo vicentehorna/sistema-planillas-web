@@ -309,7 +309,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     async function cargarCompanias() {
         try {
-            const res = await fetch(URL_COMPANIAS);
+            const res = await fetch(URL_COMPANIAS + (URL_COMPANIAS.includes('?') ? '&' : '?') + 'filtro_usuario=1');
             const data = await res.json();
             renderEmpresas(Array.isArray(data) ? data : []);
         } catch (e) {

@@ -359,7 +359,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         ejecutarAccion(URL_CERRAR);
     });
 
-    await poblarSelect('/api/selectores/companias', document.getElementById('cboCompania'));
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', document.getElementById('cboCompania'));
 
     async function restaurarFiltrosYListar() {
         const saved = filtrosPersist ? filtrosPersist.leer() : null;

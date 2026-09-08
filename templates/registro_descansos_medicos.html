@@ -1682,7 +1682,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.click();
     });
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     if (filtrosPersist && filtrosPersist.leer) {
         const saved = filtrosPersist.leer();
         if (saved && saved.cia) seleccionarCompaniaInsensitive(cboCia, saved.cia);

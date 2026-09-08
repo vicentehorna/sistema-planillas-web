@@ -1693,7 +1693,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         valorTodos: '0',
         textoTodos: 'Todos'
     });
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     actualizarBtnNuevaAsignacion();
 
     let ciaGuardada = null;

@@ -910,7 +910,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const paramsUrl = new URLSearchParams(window.location.search);
     const esRetornoListado = paramsUrl.get('retorno') === '1';
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
     await cargarUnidades();
 
@@ -1118,7 +1118,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!cbo) return;
         cbo.innerHTML = '';
         try {
-            const res = await fetch('/api/selectores/companias');
+            const res = await fetch('/api/selectores/companias?filtro_usuario=1');
             const items = await res.json();
             (Array.isArray(items) ? items : []).forEach(function (item) {
                 const id = String(item.id || item.company || '').trim();

@@ -3765,6 +3765,82 @@ def _require_hm_alamo_json(feature='Esta opción'):
     return None
 
 
+# BDs donde el selector de compañías se filtra por SY_UserCompany (idcompany).
+# hm_alamo se sumará cuando tengan asignaciones cargadas.
+_BDS_FILTRO_COMPANIAS_USERCOMPANY = frozenset({'hm_garc'})
+
+
+def _filtro_companias_usercompany_habilitado():
+    """True si la BD activa debe restringir compañías por SY_UserCompany."""
+    try:
+        from database import get_active_database
+        db = str(get_active_database() or '').strip().lower()
+        return db in _BDS_FILTRO_COMPANIAS_USERCOMPANY
+    except Exception:
+        return False
+
+
+def _userid_sesion_actual():
+    uid = ''
+    try:
+        uid = str(getattr(current_user, 'id', None) or '').strip()
+    except Exception:
+        uid = ''
+    if not uid:
+        uid = str(session.get('login_userid') or '').strip()
+    return uid
+
+
+def _ids_companias_usercompany(cursor, userid):
+    """
+    Empresas asignadas al usuario en SY_UserCompany (columna idcompany).
+    Retorna set de códigos; vacío si no hay asignaciones o userid vacío.
+    """
+    userid = str(userid or '').strip()
+    if not userid:
+        return set()
+    try:
+        cursor.execute(
+            """
+            SELECT DISTINCT LTRIM(RTRIM(uc.idcompany))
+            FROM SY_UserCompany uc (NOLOCK)
+            WHERE uc.UserID = ?
+              AND NULLIF(LTRIM(RTRIM(uc.idcompany)), '') IS NOT NULL
+            """,
+            (userid,),
+        )
+        return {
+            str(r[0]).strip()
+            for r in (cursor.fetchall() or [])
+            if r and r[0] is not None and str(r[0]).strip()
+        }
+    except Exception:
+        logging.exception('_ids_companias_usercompany userid=%s', userid)
+        return set()
+
+
+def _filtrar_rows_companias_por_usercompany(cursor, rows, *, forzar=False):
+    """
+    Filtra filas Company/description según SY_UserCompany del usuario en sesión.
+    Solo aplica si la BD está en la lista (o forzar=True) y hay userid.
+    Sin asignaciones → lista vacía (no “ver todas”).
+    """
+    if not forzar and not _filtro_companias_usercompany_habilitado():
+        return rows
+    userid = _userid_sesion_actual()
+    if not userid:
+        return []
+    allowed = _ids_companias_usercompany(cursor, userid)
+    if not allowed:
+        return []
+    out = []
+    for r in rows or []:
+        code = str(getattr(r, 'Company', None) or (r[0] if r else '') or '').strip()
+        if code in allowed:
+            out.append(r)
+    return out
+
+
 def _declaracion_afp_params_dict(
     cia,
     period_yyyymm,
@@ -23047,13 +23123,20 @@ def api_alertas_liquidacion_cese_pendiente():
 @app.route('/api/selectores/companias')
 @login_required
 def api_companias():
-    """sp_pr_selectorcompanias_web → Company, description (@cia para el resto)."""
+    """sp_pr_selectorcompanias_web → Company, description (@cia para el resto).
+
+    Con filtro_usuario=1 (y BD habilitada, p.ej. hm_garc) solo empresas de SY_UserCompany.
+    """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("EXEC sp_pr_selectorcompanias_web")
         rows = cursor.fetchall()
+        raw_flag = str(request.args.get('filtro_usuario') or '').strip().lower()
+        aplicar_filtro = raw_flag in ('1', 'true', 'y', 's', 'si', 'sí')
+        if aplicar_filtro:
+            rows = _filtrar_rows_companias_por_usercompany(cursor, rows)
         data = [{"id": r.Company, "text": r.description} for r in rows]
         return jsonify(data)
     except Exception:
@@ -29720,13 +29803,19 @@ def _companies_csv_from_list(companies):
 @app.route('/api/procesar-planilla-masivo/companias', methods=['GET'])
 @login_required
 def api_procesar_planilla_masivo_companias():
-    """Empresas activas (SY_Company.status = 'A') para el panel de planilla masivo."""
+    """Empresas activas (SY_Company.status = 'A') para el panel de planilla masivo.
+
+    Con filtro_usuario=1 (y BD habilitada, p.ej. hm_garc) solo empresas de SY_UserCompany.
+    """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("EXEC sp_pr_selectorcompanias_web")
         rows = cursor.fetchall()
+        raw_flag = str(request.args.get('filtro_usuario') or '').strip().lower()
+        if raw_flag in ('1', 'true', 'y', 's', 'si', 'sí'):
+            rows = _filtrar_rows_companias_por_usercompany(cursor, rows)
         data = [{"id": r.Company, "text": r.description} for r in rows]
         return jsonify(data)
     except Exception:

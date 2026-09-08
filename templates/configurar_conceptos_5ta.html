@@ -566,7 +566,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         setMsg('');
     });
 
-    await poblarSelect('/api/selectores/companias', cboCia, 'Seleccione...');
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia, 'Seleccione...');
     if (!seleccionarInsensitive(cboCia, DEFAULT_CIA) && cboCia.options.length > 1) {
         cboCia.selectedIndex = 1;
     }

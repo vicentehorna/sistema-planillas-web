@@ -767,7 +767,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnEjecutarCertificados').addEventListener('click', ejecutarAccion);
     syncModoProcesoUI();
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     let filtrosRestaurados = false;
     if (filtrosPersist) {

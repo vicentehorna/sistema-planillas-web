@@ -892,7 +892,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     poblarAnios(ANIO_ACTUAL);
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     let filtrosRestaurados = false;
     if (filtrosPersist) {

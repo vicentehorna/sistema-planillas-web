@@ -283,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         await verMapa();
     });
 
-    await poblarSelect('/api/selectores/companias', cboCia);
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     const bgt = Array.from(cboCia.options).find((o) => String(o.value || '').toUpperCase() === 'BGT');
     if (bgt) cboCia.value = bgt.value;
     if (cboCia.value.trim()) {

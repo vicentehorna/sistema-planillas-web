@@ -80,6 +80,16 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
+            {% if plame_cfg.mostrar_cesados %}
+            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            {% endif %}
             <div class="col-12 col-sm">
                 <label for="txtLocalizar" class="form-label small fw-bold text-muted">Localizar empresa</label>
                 <input type="text" id="txtLocalizar" class="form-control form-control-sm"
@@ -320,10 +330,15 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function payloadFiltros() {
-        return {
+        const payload = {
             period: periodoYyyymm(),
             companies: empresasSeleccionadas(),
         };
+        if (CFG.mostrar_cesados) {
+            const cboCesados = document.getElementById('cboCesados');
+            payload.cesados = (cboCesados && cboCesados.value.trim()) || 'T';
+        }
+        return payload;
     }
 
     function ocultarAdvertenciaEmpresas() {

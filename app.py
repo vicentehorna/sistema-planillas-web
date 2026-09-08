@@ -2704,9 +2704,11 @@ def _plame_archivo18_listado_empresa(cursor, cia, period, payroll_all='Y', payro
     return resultado, validaciones
 
 
-def _plame_archivo18_listado_empresa_masivo(cursor, cia, period):
-    """Archivo 18 masivo: todas las planillas, solo no cesados."""
-    return _plame_archivo18_listado_empresa(cursor, cia, period, 'Y', '', 'N')
+def _plame_archivo18_listado_empresa_masivo(cursor, cia, period, cesados='T'):
+    """Archivo 18 masivo: todas las planillas; cesados T/Y/N (default Todos)."""
+    return _plame_archivo18_listado_empresa(
+        cursor, cia, period, 'Y', '', _normalize_cesados_telecredito(cesados, default='T')
+    )
 
 
 def _plame_archivo18_filas_exportables(rows):
@@ -17177,7 +17179,7 @@ def plame_archivo18_masivo_page():
             'titulo': 'PLAME Archivo 18 Masivo',
             'descripcion': (
                 'PLAME Archivo 18 Masivo — Ingresos, tributos y descuentos (.rem). '
-                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                'Seleccione empresas, periodo tributario y filtro de cesados. Se genera un archivo '
                 '0601AAAAmmRRRRRRRRRRR.rem por empresa en un ZIP. '
                 'Las filas con incidencia (validaciones) no se exportan.'
             ),
@@ -17185,6 +17187,7 @@ def plame_archivo18_masivo_page():
             'url_listado': url_for('api_plame_archivo18_masivo_listado'),
             'url_generar_zip': url_for('api_plame_archivo18_masivo_generar_zip'),
             'tiene_validaciones': True,
+            'mostrar_cesados': True,
             'zip_default': 'PLAME18_MASIVO.zip',
             'columnas': [
                 {'key': 'company_desc', 'label': 'Empresa'},
@@ -18776,9 +18779,15 @@ def api_plame_archivo15_masivo_generar_zip():
 @app.route('/api/plame/archivo-18-masivo/listado', methods=['POST'])
 @login_required
 def api_plame_archivo18_masivo_listado():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo18_listado_empresa_masivo(cursor, cia, period, cesados)
+
     return _api_plame_masivo_listado_handler(
         'PLAME Archivo 18 Masivo',
-        _plame_archivo18_listado_empresa_masivo,
+        listado_fn,
         _plame_archivo18_filas_exportables,
     )
 
@@ -18786,9 +18795,15 @@ def api_plame_archivo18_masivo_listado():
 @app.route('/api/plame/archivo-18-masivo/generar-zip', methods=['POST'])
 @login_required
 def api_plame_archivo18_masivo_generar_zip():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo18_listado_empresa_masivo(cursor, cia, period, cesados)
+
     return _api_plame_masivo_generar_zip_handler(
         'PLAME Archivo 18 Masivo',
-        _plame_archivo18_listado_empresa_masivo,
+        listado_fn,
         _plame_archivo18_filas_exportables,
         _plame_archivo18_generar_contenido_txt,
         '18',

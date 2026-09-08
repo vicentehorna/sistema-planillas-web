@@ -2059,6 +2059,41 @@ def _plame_rh_parse_float(valor):
         return 0.0
 
 
+def _plame_rh_es_moneda_dolares(moneda):
+    """True si la moneda SUNAT es USD (tolera encoding dañado: Dï¿½LARES...)."""
+    raw = str(moneda or '').strip().upper()
+    if not raw:
+        return False
+    if 'SOLE' in raw or raw in ('PEN', 'S/', 'SOL', 'MN', 'S'):
+        return False
+    if 'USD' in raw or 'DOLLAR' in raw or 'DOLAR' in raw:
+        return True
+    # DÓLARES / DOLARES / D�LARES / Dï¿½LARES (mojibake UTF-8)
+    if re.search(r'D.{0,6}LARES', raw):
+        return True
+    compact = unicodedata.normalize('NFKD', raw)
+    compact = ''.join(ch for ch in compact if not unicodedata.combining(ch))
+    compact = re.sub(r'[^A-Z0-9]', '', compact.upper())
+    if 'DOLAR' in compact or 'DOLLAR' in compact or compact in ('USD', 'US'):
+        return True
+    # Tras quitar basura de encoding: D + LARES...
+    return bool(re.search(r'DLARES', compact))
+
+
+def _plame_rh_parse_tipo_cambio(raw):
+    """Tipo de cambio opcional; None si vacío, ValueError si inválido."""
+    s = str(raw or '').strip().replace(',', '.')
+    if not s:
+        return None
+    try:
+        tc = float(s)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Tipo de cambio inválido.') from exc
+    if tc <= 0:
+        raise ValueError('Tipo de cambio debe ser mayor a 0.')
+    return tc
+
+
 def _plame_rh_detect_delimiter(texto):
     """Detecta delimitador del export SUNAT RH: '|' (TXT) o ',' (CSV)."""
     for raw in re.split(r'\r?\n', texto or ''):
@@ -2117,8 +2152,11 @@ def _plame_rh_split_campos(linea, delimiter='|'):
     return [str(p).strip() if p is not None else '' for p in partes]
 
 
-def _plame_rh_parse_txt_sunat(texto, period=None):
-    """Parsea TXT/CSV SUNAT de recibos por honorarios (export RH)."""
+def _plame_rh_parse_txt_sunat(texto, period=None, tipo_cambio=None):
+    """Parsea TXT/CSV SUNAT de recibos por honorarios (export RH).
+
+    Importes en dólares se convierten a soles con tipo_cambio (obligatorio si hay USD).
+    """
     columnas = (
         'fecha_emision', 'tipo_doc_emitido', 'nro_doc_emitido', 'estado',
         'tipo_doc_emisor', 'nro_doc_emisor', 'nombre_emisor', 'tipo_renta',
@@ -2127,6 +2165,7 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
     )
     filas = []
     omitidos = []
+    convertidos_usd = 0
     delimiter = _plame_rh_detect_delimiter(texto)
     lineas = _plame_rh_recomponer_lineas(texto, delimiter=delimiter)
     for idx, linea in enumerate(lineas, start=1):
@@ -2213,6 +2252,19 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
 
         impuesto = _plame_rh_parse_float(data.get('impuesto'))
         renta_bruta = _plame_rh_parse_float(data.get('renta_bruta'))
+        moneda_raw = str(data.get('moneda') or '').strip()
+        es_usd = _plame_rh_es_moneda_dolares(moneda_raw)
+        monto_orig = renta_bruta
+        impuesto_orig = impuesto
+        if es_usd:
+            if tipo_cambio is None:
+                raise ValueError(
+                    'El archivo tiene importes en dólares. Indique el tipo de cambio del día.'
+                )
+            renta_bruta = round(renta_bruta * float(tipo_cambio), 2)
+            impuesto = round(impuesto * float(tipo_cambio), 2)
+            convertidos_usd += 1
+
         ap_paterno, ap_materno, nombres = _plame_rh_split_nombre(data.get('nombre_emisor'))
         periodo_fila = _plame_rh_fecha_yyyymm(fecha_emision)
         fuera_periodo = bool(period and periodo_fila and periodo_fila != period)
@@ -2232,6 +2284,11 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
             'tipo_comprobante': tipo_comp,
             'serie': serie,
             'numero': numero,
+            'moneda': moneda_raw,
+            'moneda_usd': es_usd,
+            'monto_original': monto_orig if es_usd else None,
+            'impuesto_original': impuesto_orig if es_usd else None,
+            'tipo_cambio': float(tipo_cambio) if es_usd and tipo_cambio is not None else None,
             'monto': renta_bruta,
             'monto_fmt': _plame_rh_format_monto(renta_bruta),
             'impuesto': impuesto,
@@ -2243,7 +2300,7 @@ def _plame_rh_parse_txt_sunat(texto, period=None):
             'periodo_fila': periodo_fila,
             'fuera_periodo': fuera_periodo,
         })
-    return filas, omitidos
+    return filas, omitidos, convertidos_usd
 
 
 def _plame_rh_advertencias_suspension(filas, umbral=1500.0):
@@ -19376,6 +19433,13 @@ def api_plame_archivos_7_20_importar():
     if archivo is None or not getattr(archivo, 'filename', None):
         return jsonify({"error": "Seleccione un archivo TXT de recibos por honorarios."}), 400
 
+    try:
+        tipo_cambio = _plame_rh_parse_tipo_cambio(
+            request.form.get('tipo_cambio') or request.form.get('tipocambio') or ''
+        )
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+
     raw = archivo.read() or b''
     if not raw:
         return jsonify({"error": "El archivo está vacío."}), 400
@@ -19391,12 +19455,21 @@ def api_plame_archivos_7_20_importar():
         texto = raw.decode('latin-1', errors='replace')
 
     try:
-        filas, omitidos = _plame_rh_parse_txt_sunat(texto, period=period or None)
+        filas, omitidos, convertidos_usd = _plame_rh_parse_txt_sunat(
+            texto, period=period or None, tipo_cambio=tipo_cambio
+        )
         fuera = sum(1 for r in filas if r.get('fuera_periodo'))
         omitidos_nc = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'NC')
         omitidos_rev = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'REV')
         omitidos_anu = sum(1 for o in omitidos if str(o.get('tipo_omitido') or '').upper() == 'ANU')
         advertencias = _plame_rh_advertencias_suspension(filas)
+        if convertidos_usd and tipo_cambio is not None:
+            advertencias = list(advertencias or [])
+            advertencias.insert(
+                0,
+                f'{convertidos_usd} comprobante(s) en dólares convertidos a soles '
+                f'con tipo de cambio {tipo_cambio:g}.',
+            )
         return jsonify({
             "rows": filas,
             "total": len(filas),
@@ -19408,7 +19481,11 @@ def api_plame_archivos_7_20_importar():
             "advertencias": advertencias,
             "fuera_periodo": fuera,
             "period": period,
+            "convertidos_usd": convertidos_usd,
+            "tipo_cambio": tipo_cambio,
         })
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
     except Exception as e:
         logging.exception("api_plame_archivos_7_20_importar")
         return jsonify({"error": str(e)}), 500

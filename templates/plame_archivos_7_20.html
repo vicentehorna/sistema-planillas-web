@@ -101,6 +101,7 @@
     Defaults: tipo doc <code>06</code> (RUC), domiciliado <code>1</code>, convenio <code>0</code>,
     fecha pago = emisión, retención 4ta si Impuesto &gt; 0; régimen pensiones y aporte vacíos.
     Se excluyen estados ANULADO / REVERTIDO y notas de crédito (NC).
+    Si hay comprobantes en dólares, indique el tipo de cambio del día para convertir a soles antes de generar el TXT.
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -117,6 +118,11 @@
                 <select id="cboPeriodoTributario" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
+            </div>
+            <div class="col-6 col-sm-3 col-md-2">
+                <label for="txtTipoCambio" class="form-label small fw-bold text-muted">T.C. (USD→S/)</label>
+                <input type="text" id="txtTipoCambio" class="form-control form-control-sm" inputmode="decimal"
+                       placeholder="Ej. 3.35" maxlength="12" autocomplete="off">
             </div>
             <div class="col-12 col-md-auto">
                 <label for="fileTxtRh" class="form-label small fw-bold text-muted">TXT SUNAT (RH)</label>
@@ -312,6 +318,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             const key = rowKey(row);
             const comprobante = `${row.tipo_doc_emitido || ''} ${row.nro_doc_emitido || ''}`.trim();
+            let importeTxt = formatMonto(row.monto);
+            if (row.moneda_usd) {
+                const orig = formatMonto(row.monto_original);
+                const tc = row.tipo_cambio != null ? String(row.tipo_cambio) : '';
+                importeTxt = `${importeTxt} <span class="text-muted small">(USD ${escapeHtml(orig)}${tc ? ` × ${escapeHtml(tc)}` : ''})</span>`;
+            }
             tr.innerHTML = `
                 <td class="text-center">
                     <input type="checkbox" class="check-plame720 form-check-input" value="${escapeHtml(key)}" checked>
@@ -319,7 +331,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td>${escapeHtml(row.documentnumber)}</td>
                 <td>${escapeHtml(row.name)}</td>
                 <td>${escapeHtml(comprobante)}</td>
-                <td class="text-end">${escapeHtml(formatMonto(row.monto))}</td>
+                <td class="text-end">${importeTxt}</td>
                 <td>${escapeHtml(row.fecha_emision)}</td>
                 <td class="text-center">${escapeHtml(row.retencion_4ta)}</td>
             `;
@@ -408,6 +420,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         fd.append('archivo', fileInput.files[0]);
         fd.append('period', period);
         fd.append('cia', cia);
+        const tc = (document.getElementById('txtTipoCambio').value || '').trim();
+        if (tc) fd.append('tipo_cambio', tc);
 
         document.getElementById('btnImportarPlame720').disabled = true;
         try {

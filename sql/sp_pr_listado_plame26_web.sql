@@ -17,12 +17,14 @@
     Solo tipos de documento Tabla 3: 01, 04, 07, 09 (carné extranjería 03 → 04).
 
     Parámetros:
-      @cia    — compañía
-      @period — periodo tributario YYYYMM (6 dígitos)
+      @cia     — compañía
+      @period  — periodo tributario YYYYMM (6 dígitos)
+      @cesados — T = todos, Y = solo cesados, N = sin cese
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame26_web]
-    @cia    VARCHAR(10),
-    @period VARCHAR(20)
+    @cia     VARCHAR(10),
+    @period  VARCHAR(20),
+    @cesados CHAR(1) = 'T'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -30,6 +32,8 @@ BEGIN
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
     IF LEN(@period) > 6
         SET @period = LEFT(@period, 6);
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
 
     SELECT DISTINCT
         pr_employee.person,
@@ -67,6 +71,11 @@ BEGIN
       AND pr_employeecategory.PDT IN ('1')
       AND LEFT(pr_employeepayroll.PRPeriod, 6) = @period
       AND LTRIM(RTRIM(ISNULL(sy_person.documentnumber, ''))) <> ''
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND pr_employee.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND pr_employee.CeaseDate IS NULL)
+      )
       AND (
             CHARINDEX(
                 'SAINC',

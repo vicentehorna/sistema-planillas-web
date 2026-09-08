@@ -7,17 +7,21 @@
     Ejemplo:   01|46741460|01|07|
 
     Parámetros:
-      @cia    — compañía
-      @period — periodo tributario YYYYMM (6 dígitos)
+      @cia     — compañía
+      @period  — periodo tributario YYYYMM (6 dígitos)
+      @cesados — T = todos, Y = solo cesados, N = sin cese
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame15_web]
-    @cia    VARCHAR(10),
-    @period VARCHAR(20)
+    @cia     VARCHAR(10),
+    @period  VARCHAR(20),
+    @cesados CHAR(1) = 'T'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
 
     SELECT
         D.person,
@@ -107,6 +111,11 @@ BEGIN
             ON T21.pdt = LTRIM(RTRIM(D.pdt))
     WHERE ISNULL(D.days, 0) <> 0
       AND LTRIM(RTRIM(ISNULL(sy_person.documentnumber, ''))) <> ''
+      AND (
+            @cesados = 'T'
+         OR (@cesados = 'Y' AND pr_employee.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND pr_employee.CeaseDate IS NULL)
+      )
     ORDER BY name, suspensiontype;
 END
 GO

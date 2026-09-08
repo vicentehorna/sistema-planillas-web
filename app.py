@@ -2439,12 +2439,13 @@ def _plame_archivo14_enriquecer_fila(r, personas_incidencia):
     }
 
 
-def _plame_archivo14_listado_empresa(cursor, cia, period):
+def _plame_archivo14_listado_empresa(cursor, cia, period, cesados='T'):
     """Listado Archivo 14 PLAME para una empresa (jornada / sobretiempo)."""
-    p = {'cia': cia, 'period': period}
+    cesados = _normalize_cesados_telecredito(cesados, default='T')
+    p = {'cia': cia, 'period': period, 'cesados': cesados}
     cursor.execute(
-        'EXEC sp_pr_listado_plame14_web @cia=?, @period=?',
-        (cia, period),
+        'EXEC sp_pr_listado_plame14_web @cia=?, @period=?, @cesados=?',
+        (cia, period, cesados),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
     validaciones, personas_incidencia = _plame_validar_archivo14_incidencias(cursor, p)
@@ -2482,12 +2483,13 @@ def _plame_archivo14_generar_contenido_txt(filas):
     return contenido.encode('latin-1', errors='replace')
 
 
-def _plame_archivo14_masivo_listado(cursor, period, companies_csv):
+def _plame_archivo14_masivo_listado(cursor, period, companies_csv, cesados='T'):
     company_map = _declaracion_afp_masivo_company_map(cursor)
     filas = []
     validaciones = []
     empresas_ok = []
     empresas_sin_datos = []
+    cesados = _normalize_cesados_telecredito(cesados, default='T')
 
     for cia in str(companies_csv or '').split(','):
         cia = cia.strip()
@@ -2495,7 +2497,7 @@ def _plame_archivo14_masivo_listado(cursor, period, companies_csv):
             continue
         company_desc = company_map.get(cia, cia)
         try:
-            rows, vals = _plame_archivo14_listado_empresa(cursor, cia, period)
+            rows, vals = _plame_archivo14_listado_empresa(cursor, cia, period, cesados)
         except Exception as exc:
             empresas_sin_datos.append({
                 'company': cia,
@@ -2625,10 +2627,11 @@ def _plame_masivo_listado_multi(
     }
 
 
-def _plame_archivo15_listado_empresa(cursor, cia, period):
+def _plame_archivo15_listado_empresa(cursor, cia, period, cesados='T'):
+    cesados = _normalize_cesados_telecredito(cesados, default='T')
     cursor.execute(
-        'EXEC sp_pr_listado_plame15_web @cia=?, @period=?',
-        (cia, period),
+        'EXEC sp_pr_listado_plame15_web @cia=?, @period=?, @cesados=?',
+        (cia, period, cesados),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
     resultado = []
@@ -2723,10 +2726,11 @@ def _plame_archivo18_generar_contenido_txt(filas):
     return contenido.encode('latin-1', errors='replace')
 
 
-def _plame_archivo26_listado_empresa(cursor, cia, period):
+def _plame_archivo26_listado_empresa(cursor, cia, period, cesados='T'):
+    cesados = _normalize_cesados_telecredito(cesados, default='T')
     cursor.execute(
-        'EXEC sp_pr_listado_plame26_web @cia=?, @period=?',
-        (cia, period),
+        'EXEC sp_pr_listado_plame26_web @cia=?, @period=?, @cesados=?',
+        (cia, period, cesados),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
     resultado = []
@@ -17144,13 +17148,14 @@ def plame_archivo15_masivo_page():
             'titulo': 'PLAME Archivo 15 Masivo',
             'descripcion': (
                 'PLAME Archivo 15 Masivo — Días subsidiados y no laborados (.snl). '
-                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                'Seleccione empresas, periodo tributario y filtro de cesados. Se genera un archivo '
                 '0601AAAAmmRRRRRRRRRRR.snl por empresa en un ZIP.'
             ),
             'btn_generar': 'Generar archivos PLAME (.snl)',
             'url_listado': url_for('api_plame_archivo15_masivo_listado'),
             'url_generar_zip': url_for('api_plame_archivo15_masivo_generar_zip'),
             'tiene_validaciones': False,
+            'mostrar_cesados': True,
             'zip_default': 'PLAME15_MASIVO.zip',
             'columnas': [
                 {'key': 'company_desc', 'label': 'Empresa'},
@@ -17216,13 +17221,14 @@ def plame_archivo26_masivo_page():
             'titulo': 'PLAME Archivo 26 Masivo',
             'descripcion': (
                 'PLAME Archivo 26 Masivo — Otras condiciones (.toc). '
-                'Seleccione empresas y periodo tributario. Se genera un archivo '
+                'Seleccione empresas, periodo tributario y filtro de cesados. Se genera un archivo '
                 '0601AAAAmmRRRRRRRRRRR.toc por empresa en un ZIP.'
             ),
             'btn_generar': 'Generar archivos PLAME (.toc)',
             'url_listado': url_for('api_plame_archivo26_masivo_listado'),
             'url_generar_zip': url_for('api_plame_archivo26_masivo_generar_zip'),
             'tiene_validaciones': False,
+            'mostrar_cesados': True,
             'zip_default': 'PLAME26_MASIVO.zip',
             'columnas': [
                 {'key': 'company_desc', 'label': 'Empresa'},
@@ -18543,12 +18549,13 @@ def api_plame_archivo14_masivo_listado():
     err = _plame_archivo14_masivo_validar_filtros(period, companies_csv)
     if err:
         return jsonify({'error': err}), 400
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        payload = _plame_archivo14_masivo_listado(cursor, period, companies_csv)
+        payload = _plame_archivo14_masivo_listado(cursor, period, companies_csv, cesados)
         exportables = _plame_archivo14_filas_exportables(payload.get('rows'))
         payload['puede_generar_zip'] = len(exportables) > 0
         return jsonify(payload)
@@ -18574,6 +18581,7 @@ def api_plame_archivo14_masivo_generar_zip():
     err = _plame_archivo14_masivo_validar_filtros(period, companies_csv)
     if err:
         return jsonify({'error': err}), 400
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
 
     companies_filter = _companies_csv_from_list(body.get('only_companies') or [])
     if companies_filter:
@@ -18596,7 +18604,7 @@ def api_plame_archivo14_masivo_generar_zip():
                 continue
             company_desc = company_map.get(cia, cia)
             try:
-                rows, _vals = _plame_archivo14_listado_empresa(cursor, cia, period)
+                rows, _vals = _plame_archivo14_listado_empresa(cursor, cia, period, cesados)
                 filas = _plame_archivo14_filas_exportables(rows)
                 if not filas:
                     omitidas.append({
@@ -18755,9 +18763,15 @@ def _api_plame_masivo_generar_zip_handler(
 @app.route('/api/plame/archivo-15-masivo/listado', methods=['POST'])
 @login_required
 def api_plame_archivo15_masivo_listado():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo15_listado_empresa(cursor, cia, period, cesados)
+
     return _api_plame_masivo_listado_handler(
         'PLAME Archivo 15 Masivo',
-        _plame_archivo15_listado_empresa,
+        listado_fn,
         _plame_archivo15_filas_exportables,
     )
 
@@ -18765,9 +18779,15 @@ def api_plame_archivo15_masivo_listado():
 @app.route('/api/plame/archivo-15-masivo/generar-zip', methods=['POST'])
 @login_required
 def api_plame_archivo15_masivo_generar_zip():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo15_listado_empresa(cursor, cia, period, cesados)
+
     return _api_plame_masivo_generar_zip_handler(
         'PLAME Archivo 15 Masivo',
-        _plame_archivo15_listado_empresa,
+        listado_fn,
         _plame_archivo15_filas_exportables,
         _plame_archivo15_generar_contenido_txt,
         '15',
@@ -18815,9 +18835,15 @@ def api_plame_archivo18_masivo_generar_zip():
 @app.route('/api/plame/archivo-26-masivo/listado', methods=['POST'])
 @login_required
 def api_plame_archivo26_masivo_listado():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo26_listado_empresa(cursor, cia, period, cesados)
+
     return _api_plame_masivo_listado_handler(
         'PLAME Archivo 26 Masivo',
-        _plame_archivo26_listado_empresa,
+        listado_fn,
         _plame_archivo26_filas_exportables,
     )
 
@@ -18825,9 +18851,15 @@ def api_plame_archivo26_masivo_listado():
 @app.route('/api/plame/archivo-26-masivo/generar-zip', methods=['POST'])
 @login_required
 def api_plame_archivo26_masivo_generar_zip():
+    body = request.get_json(silent=True) or {}
+    cesados = _normalize_cesados_telecredito(body.get('cesados'), default='T')
+
+    def listado_fn(cursor, cia, period):
+        return _plame_archivo26_listado_empresa(cursor, cia, period, cesados)
+
     return _api_plame_masivo_generar_zip_handler(
         'PLAME Archivo 26 Masivo',
-        _plame_archivo26_listado_empresa,
+        listado_fn,
         _plame_archivo26_filas_exportables,
         _plame_archivo26_generar_contenido_txt,
         '26',

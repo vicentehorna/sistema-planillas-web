@@ -5,20 +5,24 @@
     Basado en sp_pr_listado_plame14 legacy (PowerBuilder).
 
     Parámetros:
-      @cia    — código de compañía
-      @period — periodo tributario YYYYMM (6 dígitos)
+      @cia     — código de compañía
+      @period  — periodo tributario YYYYMM (6 dígitos)
+      @cesados — T = todos, Y = solo cesados, N = sin cese
 
     Campos exportables (pipe |):
       Tipo doc (2), N° doc (15), Horas ord (3), Min ord (2), Horas extra (3), Min extra (2)
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame14_web]
-    @cia    VARCHAR(4),
-    @period VARCHAR(20)
+    @cia     VARCHAR(4),
+    @period  VARCHAR(20),
+    @cesados CHAR(1) = 'T'
 AS
 BEGIN
     SET NOCOUNT ON;
 
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
+    SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
+    IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
 
     SELECT
         person,
@@ -88,6 +92,11 @@ BEGIN
             )
         WHERE pr_employeecategory.PDT IN ('1')
           AND SUBSTRING(pr_employeepayroll.PRPeriod, 1, 6) = @period
+          AND (
+                @cesados = 'T'
+             OR (@cesados = 'Y' AND pr_employee.CeaseDate IS NOT NULL)
+             OR (@cesados = 'N' AND pr_employee.CeaseDate IS NULL)
+          )
     ) T
     GROUP BY
         person,

@@ -327,7 +327,11 @@ begin
 
 	set @fechaingreso = (select fechaingreso from #empleado)
 
-
+	if @ceasedate is null
+	begin
+		raiserror('Liquidacion: el trabajador no tiene fecha de cese (CeaseDate). Registre el cese antes de calcular.', 16, 1)
+		return
+	end
 
 	/* Obtenemos el periodo de inicio para las vacaciones truncas.
 	   Usar la línea más reciente sin detalle (goce), con DateBeginProvision <= cese

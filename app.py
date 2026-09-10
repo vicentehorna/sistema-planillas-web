@@ -1183,6 +1183,15 @@ def _es_cliente_elclan():
         return False
 
 
+def _es_cliente_divisa():
+    """True cuando la BD activa es hm_divisa (distribución porcentual por CC)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_divisa'
+    except Exception:
+        return False
+
+
 _MESES_ES_A_NUM = {
     'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
     'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
@@ -13152,6 +13161,431 @@ def api_distribucion_porcentual_eliminar():
             except Exception:
                 pass
         logging.exception("api_distribucion_porcentual_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _dist_cc_norm_dni(raw):
+    """Normaliza DNI desde Excel (texto o número)."""
+    if raw is None:
+        return ''
+    if isinstance(raw, float):
+        if raw != raw:  # NaN
+            return ''
+        if raw == int(raw):
+            return str(int(raw))
+        return str(raw).strip()
+    if isinstance(raw, int):
+        return str(raw)
+    s = str(raw).strip()
+    if re.fullmatch(r'\d+\.0+', s):
+        return s.split('.', 1)[0]
+    return s
+
+
+def _dist_cc_norm_header(cell):
+    s = str(cell or '').strip().upper()
+    s = (
+        s.replace('Á', 'A').replace('É', 'E').replace('Í', 'I')
+        .replace('Ó', 'O').replace('Ú', 'U').replace('Ñ', 'N')
+    )
+    s = re.sub(r'[^A-Z0-9]+', ' ', s)
+    return re.sub(r'\s+', ' ', s).strip()
+
+
+def _dist_cc_parse_excel(file_storage):
+    """Parsea Hoja1 del Excel de distribución CC.
+
+    Estructura esperada:
+      Doc. de Identidad DNI | APELLIDOS Y NOMBRES | CENTRO DE COSTO | PORCENTAJE
+    Retorna (filas, error).
+    """
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return None, 'Falta openpyxl para leer Excel.'
+
+    try:
+        data = file_storage.read() or b''
+        if not data:
+            return None, 'El archivo está vacío.'
+        wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+    except Exception as exc:
+        return None, f'No se pudo leer el Excel: {exc}'
+
+    try:
+        if not wb.sheetnames:
+            return None, 'El archivo no tiene hojas.'
+        ws = wb[wb.sheetnames[0]]
+        rows_raw = [list(r) for r in ws.iter_rows(values_only=True)]
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+    header_idx = None
+    col_dni = col_nom = col_cc = col_pct = None
+    for i, row in enumerate(rows_raw[:40]):
+        cells = [_dist_cc_norm_header(c) for c in (row or [])]
+        for j, cell in enumerate(cells):
+            if not cell:
+                continue
+            if col_dni is None and ('DNI' in cell or 'IDENTIDAD' in cell or cell == 'DOC'):
+                col_dni = j
+            if col_nom is None and ('NOMBRE' in cell or 'APELLIDO' in cell):
+                col_nom = j
+            if col_cc is None and (
+                ('CENTRO' in cell and 'COSTO' in cell)
+                or cell in ('C COSTO', 'CCOSTO', 'CC', 'CODIGO CC', 'ABBREV')
+            ):
+                col_cc = j
+            if col_pct is None and ('PORCENT' in cell or cell in ('PCT', '%', 'VALOR')):
+                col_pct = j
+        if col_dni is not None and col_nom is not None and col_cc is not None and col_pct is not None:
+            header_idx = i
+            break
+
+    if header_idx is None:
+        return None, (
+            'No se encontró la cabecera esperada '
+            '(DNI, APELLIDOS Y NOMBRES, CENTRO DE COSTO, PORCENTAJE) en la primera hoja.'
+        )
+
+    filas = []
+    omitidos = []
+    for excel_row, row in enumerate(rows_raw[header_idx + 1 :], start=header_idx + 2):
+        if not row:
+            continue
+        def _cell(idx):
+            if idx is None or idx >= len(row):
+                return None
+            return row[idx]
+
+        dni = _dist_cc_norm_dni(_cell(col_dni))
+        if not dni:
+            continue
+        nombre = str(_cell(col_nom) or '').strip()
+        codigo = str(_cell(col_cc) or '').strip()
+        pct_raw = _cell(col_pct)
+        if not nombre or not codigo:
+            omitidos.append({
+                'fila_excel': excel_row,
+                'dni': dni,
+                'motivo': 'Falta nombre o centro de costo.',
+            })
+            continue
+        try:
+            if isinstance(pct_raw, str):
+                pct_raw = pct_raw.strip().replace('%', '').replace(',', '.')
+            valor = round(float(pct_raw), 2)
+        except (TypeError, ValueError):
+            omitidos.append({
+                'fila_excel': excel_row,
+                'dni': dni,
+                'codigo': codigo,
+                'motivo': f'Porcentaje inválido: {pct_raw!r}',
+            })
+            continue
+        if valor < 0.01 or valor > 100:
+            omitidos.append({
+                'fila_excel': excel_row,
+                'dni': dni,
+                'codigo': codigo,
+                'motivo': f'Porcentaje fuera de rango (0.01–100): {valor}',
+            })
+            continue
+        filas.append({
+            'fila_excel': excel_row,
+            'dni': dni,
+            'nombre': nombre,
+            'codigo': codigo,
+            'valor': valor,
+        })
+
+    if not filas and not omitidos:
+        return None, 'El Excel no tiene filas de distribución.'
+    return {'filas': filas, 'omitidos_parseo': omitidos}, None
+
+
+def _dist_cc_validar_import(cursor, cia, filas):
+    """Valida CC existentes y suma 100% por DNI.
+
+    Retorna dict con rows_ok, omitidos_cc, errores_suma, centros_faltantes.
+    """
+    cursor.execute(
+        """
+        SELECT LTRIM(RTRIM(Abbrev))
+        FROM AC_CostCenter WITH (NOLOCK)
+        WHERE Company = ?
+          AND NULLIF(LTRIM(RTRIM(Abbrev)), '') IS NOT NULL
+        """,
+        (cia,),
+    )
+    abbrevs = {str(r[0]).strip() for r in cursor.fetchall() if r and r[0] is not None}
+
+    rows_ok = []
+    omitidos_cc = []
+    centros_faltantes = sorted({
+        str(f.get('codigo') or '').strip()
+        for f in (filas or [])
+        if str(f.get('codigo') or '').strip()
+        and str(f.get('codigo') or '').strip() not in abbrevs
+    })
+
+    for f in filas or []:
+        codigo = str(f.get('codigo') or '').strip()
+        if codigo not in abbrevs:
+            omitidos_cc.append({
+                'fila_excel': f.get('fila_excel'),
+                'dni': f.get('dni'),
+                'nombre': f.get('nombre'),
+                'codigo': codigo,
+                'valor': f.get('valor'),
+                'motivo': f'Centro de costo inexistente en AC_CostCenter: {codigo}',
+            })
+            continue
+        rows_ok.append(dict(f))
+
+    from collections import defaultdict
+    sumas = defaultdict(float)
+    nombres = {}
+    for f in rows_ok:
+        dni = f['dni']
+        sumas[dni] += float(f['valor'])
+        nombres[dni] = f.get('nombre') or ''
+
+    errores_suma = []
+    for dni, total in sorted(sumas.items()):
+        total_r = round(total, 2)
+        if abs(total_r - 100.0) > 0.01:
+            errores_suma.append({
+                'dni': dni,
+                'nombre': nombres.get(dni, ''),
+                'suma': total_r,
+                'motivo': f'La suma de porcentajes debe ser 100 (actual: {total_r:g}).',
+            })
+
+    # Duplicados dni+codigo en el Excel
+    vistos = {}
+    errores_dup = []
+    for f in rows_ok:
+        key = (f['dni'], f['codigo'])
+        if key in vistos:
+            errores_dup.append({
+                'dni': f['dni'],
+                'codigo': f['codigo'],
+                'motivo': (
+                    f'DNI+centro duplicado en Excel '
+                    f'(filas {vistos[key]} y {f.get("fila_excel")}).'
+                ),
+            })
+        else:
+            vistos[key] = f.get('fila_excel')
+
+    return {
+        'rows_ok': rows_ok,
+        'omitidos_cc': omitidos_cc,
+        'centros_faltantes': centros_faltantes,
+        'errores_suma': errores_suma,
+        'errores_dup': errores_dup,
+        'personas': len(sumas),
+    }
+
+
+@app.route('/api/asientos/distribucion-porcentual/importar-excel', methods=['POST'])
+@login_required
+def api_distribucion_porcentual_importar_excel():
+    """Importa distribución CC desde Excel (solo hm_divisa).
+
+    Reglas:
+    - Si el periodo ya tiene data CC: requiere confirmar=1 (borra e importa).
+    - Centros inexistentes: no se importan (advertencia).
+    - Suma por DNI debe ser 100 sobre filas con CC válido (error si no).
+    """
+    if not _es_cliente_divisa():
+        return jsonify({"error": "Importar Excel solo está disponible en hm_divisa."}), 404
+
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    period = str(request.form.get('period') or request.form.get('periodo') or '').strip()
+    confirmar = str(
+        request.form.get('confirmar') or request.form.get('confirm') or ''
+    ).strip().lower() in ('1', 'true', 'yes', 'y', 'si', 'sí')
+    archivo = request.files.get('archivo') or request.files.get('file')
+
+    if not cia or not period:
+        return jsonify({"error": "Seleccione compañía y periodo."}), 400
+    if archivo is None or not getattr(archivo, 'filename', None):
+        return jsonify({"error": "Seleccione el archivo Excel de distribución."}), 400
+
+    parsed, err = _dist_cc_parse_excel(archivo)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas_parse = parsed.get('filas') or []
+    omitidos_parseo = parsed.get('omitidos_parseo') or []
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        valid = _dist_cc_validar_import(cursor, cia, filas_parse)
+        rows_ok = valid['rows_ok']
+        omitidos_cc = valid['omitidos_cc']
+        errores_suma = valid['errores_suma']
+        errores_dup = valid['errores_dup']
+        centros_faltantes = valid['centros_faltantes']
+
+        if errores_dup:
+            return jsonify({
+                "error": "Hay DNI+centro de costo duplicados en el Excel.",
+                "errores_dup": errores_dup[:50],
+                "centros_faltantes": centros_faltantes,
+                "omitidos_cc": omitidos_cc[:50],
+            }), 400
+
+        if errores_suma:
+            return jsonify({
+                "error": (
+                    f"{len(errores_suma)} trabajador(es) no suman 100% "
+                    f"en centros de costo válidos. Corrija el Excel."
+                ),
+                "errores_suma": errores_suma[:50],
+                "centros_faltantes": centros_faltantes,
+                "omitidos_cc": omitidos_cc[:50],
+                "omitidos_parseo": omitidos_parseo[:50],
+            }), 400
+
+        if not rows_ok:
+            return jsonify({
+                "error": "No hay filas válidas para importar.",
+                "centros_faltantes": centros_faltantes,
+                "omitidos_cc": omitidos_cc[:50],
+                "omitidos_parseo": omitidos_parseo[:50],
+            }), 400
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM PR_DistribucionVoucher WITH (NOLOCK)
+            WHERE company = ?
+              AND period = ?
+              AND LTRIM(RTRIM(ISNULL(tipo, ''))) = 'CC'
+            """,
+            (cia, period),
+        )
+        existing_count = int(cursor.fetchone()[0] or 0)
+
+        advertencias = []
+        if centros_faltantes:
+            advertencias.append(
+                'Centros de costo inexistentes (no se importan): '
+                + ', '.join(centros_faltantes)
+            )
+        if omitidos_cc:
+            advertencias.append(
+                f'{len(omitidos_cc)} fila(s) omitida(s) por centro de costo inexistente.'
+            )
+        if omitidos_parseo:
+            advertencias.append(
+                f'{len(omitidos_parseo)} fila(s) omitida(s) por datos inválidos en el Excel.'
+            )
+
+        if existing_count > 0 and not confirmar:
+            return jsonify({
+                "ok": False,
+                "needs_confirm": True,
+                "existing_count": existing_count,
+                "a_importar": len(rows_ok),
+                "personas": valid['personas'],
+                "centros_faltantes": centros_faltantes,
+                "omitidos_cc_total": len(omitidos_cc),
+                "advertencias": advertencias,
+                "mensaje": (
+                    f'El periodo ya tiene {existing_count} registro(s) de distribución. '
+                    f'Se borrarán e importarán {len(rows_ok)} fila(s) del Excel. '
+                    f'¿Desea continuar?'
+                ),
+            })
+
+        # Confirmar también si hay omisiones por CC y el periodo está vacío
+        # (el front puede reenviar con confirmar=1 tras mostrar advertencias).
+        if existing_count == 0 and omitidos_cc and not confirmar:
+            return jsonify({
+                "ok": False,
+                "needs_confirm": True,
+                "existing_count": 0,
+                "a_importar": len(rows_ok),
+                "personas": valid['personas'],
+                "centros_faltantes": centros_faltantes,
+                "omitidos_cc_total": len(omitidos_cc),
+                "advertencias": advertencias,
+                "mensaje": (
+                    f'Se omitirán {len(omitidos_cc)} fila(s) por centro de costo inexistente. '
+                    f'Se importarán {len(rows_ok)} fila(s) válidas. ¿Desea continuar?'
+                ),
+            })
+
+        if existing_count > 0:
+            cursor.execute(
+                """
+                DELETE FROM PR_DistribucionVoucher
+                WHERE company = ?
+                  AND period = ?
+                  AND LTRIM(RTRIM(ISNULL(tipo, ''))) = 'CC'
+                """,
+                (cia, period),
+            )
+            borrados = cursor.rowcount if cursor.rowcount is not None and cursor.rowcount >= 0 else existing_count
+        else:
+            borrados = 0
+
+        insertados = 0
+        for f in rows_ok:
+            cursor.execute(
+                """
+                EXEC sp_pr_guardar_distribucion_voucher_cc_web
+                    @modo=?, @company=?, @period=?, @fila=?, @dni=?, @nombre=?,
+                    @codigo=?, @valor=?, @xlastuser=?
+                """,
+                (
+                    'I', cia, period, None,
+                    f['dni'], f['nombre'], f['codigo'], f['valor'],
+                    _xlastuser_id(),
+                ),
+            )
+            _drain_all_cursor_resultsets(cursor)
+            insertados += 1
+
+        conn.commit()
+        msg_parts = [f'Importados {insertados} registro(s) de distribución.']
+        if borrados:
+            msg_parts.insert(0, f'Se eliminaron {borrados} registro(s) previo(s).')
+        if omitidos_cc:
+            msg_parts.append(f'Omitidos por CC inexistente: {len(omitidos_cc)}.')
+        return jsonify({
+            "ok": True,
+            "importados": insertados,
+            "borrados": borrados,
+            "personas": valid['personas'],
+            "centros_faltantes": centros_faltantes,
+            "omitidos_cc_total": len(omitidos_cc),
+            "omitidos_parseo_total": len(omitidos_parseo),
+            "advertencias": advertencias,
+            "mensaje": ' '.join(msg_parts),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_distribucion_porcentual_importar_excel")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

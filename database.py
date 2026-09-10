@@ -1119,12 +1119,14 @@ def get_reporte_descargas(company, tipodoc='BOL', prperiod=None):
 
 
 def actualizar_fecha_envio_db(company, person, tipodoc):
-    """Actualiza la fecha de envío en PR_DocumentPerson"""
+    """Actualiza FechaEnvio en todas las filas del tipodoc (legacy; preferir registrar_fecha_envio_boleta)."""
     try:
         conn = DatabaseConfig.get_connection()
         cursor = conn.cursor()
-        # Usamos GETDATE() para registrar el momento exacto del envío
-        query = "UPDATE PR_DocumentPerson SET fechaenvio = GETDATE() WHERE Company = ? AND Person = ? AND Tipodocumento = ?"
+        query = (
+            "UPDATE PR_DocumentPerson SET FechaEnvio = GETDATE() "
+            "WHERE Company = ? AND Person = ? AND Tipodocumento = ?"
+        )
         cursor.execute(query, (company, person, tipodoc))
         conn.commit()
         cursor.close()
@@ -1132,6 +1134,142 @@ def actualizar_fecha_envio_db(company, person, tipodoc):
         return True
     except Exception as e:
         print(f"Error actualizando fecha de envío: {e}")
+        return False
+
+
+def registrar_fecha_envio_boleta(
+    company,
+    person,
+    period,
+    payrolltype=None,
+    processtype=None,
+    userid=None,
+    filename=None,
+    tipodoc='BOL',
+):
+    """
+    Registra la fecha de envío de boleta en PR_DocumentPerson.FechaEnvio.
+
+    - Si ya existe fila BOL del mismo Company/Person/period/(payroll|process),
+      actualiza FechaEnvio = GETDATE() (último envío).
+    - Si no existe, inserta el registro con FechaEnvio = GETDATE().
+    Periodo portal histórico: yyyymm (6 dígitos), igual que Subir Portal.
+    """
+    company = str(company or '').strip()
+    person = str(person or '').strip()
+    period_raw = str(period or '').strip()
+    tipodoc = str(tipodoc or 'BOL').strip() or 'BOL'
+    payrolltype = str(payrolltype or '').strip() or None
+    processtype = str(processtype or '').strip() or None
+    userid = str(userid or '').strip() or 'WEB'
+    filename = str(filename or '').strip() or None
+
+    if not (company and person and period_raw):
+        return False
+
+    period_portal = period_raw[:6] if len(period_raw) >= 6 else period_raw
+
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            UPDATE PR_DocumentPerson
+            SET FechaEnvio = GETDATE(),
+                xlastdate = CONVERT(varchar(20), GETDATE(), 100),
+                xlastuser = ?
+            WHERE Company = ?
+              AND Person = ?
+              AND Tipodocumento = ?
+              AND period = ?
+              AND ISNULL(payrolltype, '') = ISNULL(?, '')
+              AND ISNULL(processtype, '') = ISNULL(?, '')
+            """,
+            (userid, company, person, tipodoc, period_portal, payrolltype, processtype),
+        )
+        if int(cursor.rowcount or 0) > 0:
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+
+        # Misma persona/periodo BOL (p.ej. Subir Portal sin planilla/proceso o solo yyyymm).
+        cursor.execute(
+            """
+            UPDATE PR_DocumentPerson
+            SET FechaEnvio = GETDATE(),
+                xlastdate = CONVERT(varchar(20), GETDATE(), 100),
+                xlastuser = ?
+            WHERE Company = ?
+              AND Person = ?
+              AND Tipodocumento = ?
+              AND period = ?
+            """,
+            (userid, company, person, tipodoc, period_portal),
+        )
+        if int(cursor.rowcount or 0) > 0:
+            conn.commit()
+            cursor.close()
+            conn.close()
+            return True
+
+        cursor.execute(
+            """
+            SELECT ISNULL(MAX(Line), 0)
+            FROM PR_DocumentPerson WITH (UPDLOCK, HOLDLOCK)
+            WHERE Company = ? AND Tipodocumento = ?
+            """,
+            (company, tipodoc),
+        )
+        row = cursor.fetchone()
+        next_line = int(row[0] or 0) + 1
+        if not filename:
+            filename = f"boleta_{person}_{period_portal}.pdf"
+
+        cursor.execute(
+            """
+            INSERT INTO PR_DocumentPerson (
+                Person, Company, Line, Tipodocumento, Fileroot, Filename,
+                xlastuser, xlastdate, registerdate, period,
+                flagdescarga, fechadescarga, payrolltype, processtype,
+                FechaEnvio, longitud
+            ) VALUES (
+                ?, ?, ?, ?, NULL, ?,
+                ?, CONVERT(varchar(20), GETDATE(), 100), GETDATE(), ?,
+                NULL, NULL, ?, ?,
+                GETDATE(), 0
+            )
+            """,
+            (
+                person,
+                company,
+                next_line,
+                tipodoc,
+                filename,
+                userid,
+                period_portal,
+                payrolltype,
+                processtype,
+            ),
+        )
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error en registrar_fecha_envio_boleta: {e}")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        try:
+            if conn:
+                conn.close()
+        except Exception:
+            pass
         return False
 
 

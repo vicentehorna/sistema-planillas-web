@@ -23321,6 +23321,33 @@ def enviar_boletas_masivo():
                     status = 'Enviado'
                     detalle = msg
                     motivo = ''
+                    try:
+                        from database import registrar_fecha_envio_boleta
+
+                        ok_fecha = registrar_fecha_envio_boleta(
+                            company=cia,
+                            person=emp_code,
+                            period=period,
+                            payrolltype=payroll_type,
+                            processtype=process,
+                            userid=_xlastuser_id() or 'WEB',
+                            filename=_boleta_pdf_filename(
+                                emp_code, period, nombre=emp_nombre
+                            ),
+                            tipodoc='BOL',
+                        )
+                        if not ok_fecha:
+                            logging.warning(
+                                'enviar_boletas_masivo: no se guardó FechaEnvio person=%s period=%s',
+                                emp_code,
+                                period,
+                            )
+                            detalle = f"{detalle} (aviso: no se guardó FechaEnvio)"
+                    except Exception:
+                        logging.exception(
+                            'enviar_boletas_masivo FechaEnvio person=%s', emp_code
+                        )
+                        detalle = f"{detalle} (aviso: no se guardó FechaEnvio)"
                 else:
                     errores += 1
                     status = 'Error'

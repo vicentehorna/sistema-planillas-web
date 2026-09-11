@@ -6515,17 +6515,35 @@ def _contexto_formato_liquidacion(params, include_images=True):
     grati_calc = _build_formato_liquidacion_grati(base_calculo.get('grati'), formula_values)
     vaca_calc = _build_formato_liquidacion_vaca(base_calculo.get('vaca'), formula_values)
     es_elclan = _es_cliente_elclan()
+
+    # Si un ingreso ya viene por flag Formato Liquidacion, no repetir el bloque fijo.
+    cfg_codes = {
+        str(f.get('formula_code') or '').strip().upper()
+        for f in (ingresos_config_calc.get('filas') or [])
+        if str(f.get('formula_code') or '').strip()
+    }
+    _extras_fijos = (
+        ('DEVOLUCION_QUINTA', 'mostrar_devolucion_quinta', 'devolucion_quinta'),
+        ('LIQINGRESOAFECTO', 'mostrar_otros_ingresos_afectos', 'otros_ingresos_afectos'),
+        ('INDEMNIZACION_DESPID', 'mostrar_indemnizacion_despido', 'indemnizacion_despido'),
+        ('LIQ_OTROS_ING', 'mostrar_otros_ingresos', 'otros_ingresos'),
+    )
+    for formula_code, mostrar_key, valor_key in _extras_fijos:
+        if formula_code in cfg_codes:
+            vaca_calc[mostrar_key] = False
+
     total_ingresos = (
         float(cts_calc.get('total') or 0)
         + float(grati_calc.get('total') or 0)
         + float(vaca_calc.get('total') or 0)
         + float(grati_calc.get('bono_9') or 0)
-        + float(vaca_calc.get('devolucion_quinta') or 0)
-        + float(vaca_calc.get('otros_ingresos_afectos') or 0)
-        + float(vaca_calc.get('indemnizacion_despido') or 0)
     )
-    if es_elclan:
-        total_ingresos += float(vaca_calc.get('otros_ingresos') or 0)
+    for formula_code, mostrar_key, valor_key in _extras_fijos:
+        if formula_code in cfg_codes:
+            continue
+        if formula_code == 'LIQ_OTROS_ING' and not es_elclan:
+            continue
+        total_ingresos += float(vaca_calc.get(valor_key) or 0)
     total_ingresos += float(ingresos_config_calc.get('total') or 0)
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)

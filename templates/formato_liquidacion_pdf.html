@@ -644,6 +644,22 @@
                 </table>
             </div>
 
+            {% if ingresos_config_calc and ingresos_config_calc.filas %}
+            <div class="cts-calculo-bloque">
+                <table class="cts-grid">
+                    {% for row in ingresos_config_calc.filas %}
+                    <tr class="cts-titulo-row">
+                        <td class="cts-titulo-text" colspan="2">{{ row.label }}</td>
+                        <td class="cts-op"></td>
+                        <td class="cts-cant"></td>
+                        <td class="cts-eq">=</td>
+                        <td class="cts-res">{{ row.importe_fmt }}</td>
+                    </tr>
+                    {% endfor %}
+                </table>
+            </div>
+            {% endif %}
+
             {% if es_elclan %}
             <div class="cts-calculo-bloque">
                 <table class="cts-grid">

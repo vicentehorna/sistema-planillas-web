@@ -32,6 +32,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarconcepto_web]
     @flagafectoafp        CHAR(1) = NULL,
     @flagafecto5ta        CHAR(1) = NULL,
     @flagafectoutilidad   CHAR(1) = NULL,
+    @flagformatoliquidacion CHAR(1) = NULL,
     @xlastuser            VARCHAR(20) = NULL
 AS
 BEGIN
@@ -61,6 +62,7 @@ BEGIN
     SET @flagafectoafp = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoafp, '')))), '');
     SET @flagafecto5ta = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafecto5ta, '')))), '');
     SET @flagafectoutilidad = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagafectoutilidad, '')))), '');
+    SET @flagformatoliquidacion = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@flagformatoliquidacion, '')))), '');
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @modo NOT IN ('I', 'U')
@@ -140,6 +142,9 @@ BEGIN
 
     IF @flagafectoutilidad IS NULL
         SET @flagafectoutilidad = 'N';
+
+    IF @flagformatoliquidacion IS NULL
+        SET @flagformatoliquidacion = 'N';
 
     IF NOT EXISTS (
         SELECT 1 FROM PR_ConceptType (NOLOCK)
@@ -236,7 +241,8 @@ BEGIN
             flaginsertar,
             flagafectoAFP,
             flagafecto5ta,
-            flagafectoUtilidad
+            flagafectoUtilidad,
+            flagformatoliquidacion
         )
         VALUES (
             @concept_nuevo,
@@ -265,7 +271,8 @@ BEGIN
             @flaginsertar,
             @flagafectoafp,
             @flagafecto5ta,
-            @flagafectoutilidad
+            @flagafectoutilidad,
+            @flagformatoliquidacion
         );
 
         SELECT
@@ -317,7 +324,8 @@ BEGIN
         flaginsertar = @flaginsertar,
         flagafectoAFP = @flagafectoafp,
         flagafecto5ta = @flagafecto5ta,
-        flagafectoUtilidad = @flagafectoutilidad
+        flagafectoUtilidad = @flagafectoutilidad,
+        flagformatoliquidacion = @flagformatoliquidacion
     WHERE Concept = @concept
       AND Company = @company;
 

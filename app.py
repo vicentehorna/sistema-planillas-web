@@ -1192,6 +1192,15 @@ def _es_cliente_divisa():
         return False
 
 
+def _es_cliente_alamo():
+    """True cuando la BD activa es hm_alamo (ingresos configurables en liquidación)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_alamo'
+    except Exception:
+        return False
+
+
 _MESES_ES_A_NUM = {
     'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
     'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
@@ -5955,8 +5964,12 @@ def _formato_liquidacion_formulacodes_requeridos():
     return sorted(codes)
 
 
-def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, person):
-    codes = _formato_liquidacion_formulacodes_requeridos()
+def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, person, extra_codes=None):
+    codes = list(_formato_liquidacion_formulacodes_requeridos())
+    for code in extra_codes or []:
+        fc = str(code or '').strip()
+        if fc and fc not in codes:
+            codes.append(fc)
     if not codes:
         return {}
 
@@ -5992,6 +6005,74 @@ def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, p
         except (TypeError, ValueError):
             valores[fc] = 0.0
     return valores
+
+
+def _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia):
+    """Conceptos tipo Ingreso (I) marcados para el formato de liquidación."""
+    try:
+        cursor.execute(
+            "SELECT COL_LENGTH('dbo.PR_Concept', 'flagformatoliquidacion')"
+        )
+        row = cursor.fetchone()
+        if not row or row[0] is None:
+            return []
+    except Exception:
+        return []
+
+    cursor.execute(
+        """
+        SELECT
+            ISNULL(NULLIF(LTRIM(RTRIM(C.PrintText)), ''), C.Description) AS label,
+            LTRIM(RTRIM(C.FormulaCode)) AS formula_code,
+            C.ConceptOrder AS concept_order
+        FROM PR_Concept C (NOLOCK)
+            INNER JOIN PR_ConceptType T (NOLOCK)
+                ON C.ConceptType = T.ConceptType
+        WHERE C.Company = ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(C.flagformatoliquidacion, 'N')))) = 'Y'
+          AND UPPER(LTRIM(RTRIM(ISNULL(T.ShortName, '')))) = 'I'
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
+          AND UPPER(LTRIM(RTRIM(ISNULL(C.Status, 'A')))) = 'A'
+        ORDER BY
+            CASE WHEN C.ConceptOrder IS NULL THEN 1 ELSE 0 END,
+            C.ConceptOrder,
+            ISNULL(NULLIF(LTRIM(RTRIM(C.PrintText)), ''), C.Description),
+            C.FormulaCode
+        """,
+        (cia,),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    out = []
+    for row in rows or []:
+        fc = str(row.get('formula_code') or '').strip()
+        label = str(row.get('label') or '').strip() or fc
+        if not fc:
+            continue
+        out.append({'label': label, 'formula_code': fc})
+    return out
+
+
+def _build_formato_liquidacion_ingresos_configurados(conceptos, formula_values):
+    formula_values = formula_values or {}
+    filas = []
+    total = 0.0
+    for item in conceptos or []:
+        fc = str(item.get('formula_code') or '').strip()
+        if not fc:
+            continue
+        valor = _formato_liquidacion_fc_valor(formula_values, fc)
+        total += valor
+        filas.append({
+            'label': str(item.get('label') or fc).strip() or fc,
+            'formula_code': fc,
+            'importe': valor,
+            'importe_fmt': _formato_liquidacion_moneda(valor),
+        })
+    return {
+        'filas': filas,
+        'total': total,
+        'total_fmt': _formato_liquidacion_moneda(total),
+    }
 
 
 def _build_formato_liquidacion_remuneracion(formula_values):
@@ -6365,6 +6446,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
 
     conn = None
     formula_values = {}
+    ingresos_config_calc = {'filas': [], 'total': 0.0, 'total_fmt': _formato_liquidacion_moneda(0)}
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -6374,9 +6456,21 @@ def _contexto_formato_liquidacion(params, include_images=True):
             'EXEC sp_pr_formatoliquidacion_web @cia=?, @payrolltype=?, @period=?, @person=?',
             (cia, payroll_type, period, person),
         )
+        ingresos_cfg_conceptos = []
+        if _es_cliente_alamo():
+            ingresos_cfg_conceptos = _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia)
         formula_values = _fetch_formato_liquidacion_formulacodes(
-            cursor, cia, payroll_type, period, person
+            cursor,
+            cia,
+            payroll_type,
+            period,
+            person,
+            extra_codes=[c.get('formula_code') for c in ingresos_cfg_conceptos],
         )
+        if ingresos_cfg_conceptos:
+            ingresos_config_calc = _build_formato_liquidacion_ingresos_configurados(
+                ingresos_cfg_conceptos, formula_values
+            )
     finally:
         if conn:
             try:
@@ -6432,6 +6526,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
     )
     if es_elclan:
         total_ingresos += float(vaca_calc.get('otros_ingresos') or 0)
+    total_ingresos += float(ingresos_config_calc.get('total') or 0)
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
     aportaciones_calc = _build_formato_liquidacion_aportaciones(liq, formula_values)
@@ -6464,6 +6559,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'cts_calc': cts_calc,
         'grati_calc': grati_calc,
         'vaca_calc': vaca_calc,
+        'ingresos_config_calc': ingresos_config_calc,
         'total_ingresos_fmt': total_ingresos_fmt,
         'descuentos_calc': descuentos_calc,
         'aportaciones_calc': aportaciones_calc,
@@ -6471,6 +6567,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'es_ngservicios': _es_cliente_ngservicios(),
         'es_ultraseguros': _es_cliente_ultraseguros(),
         'es_elclan': es_elclan,
+        'es_alamo': _es_cliente_alamo(),
     }
 
 
@@ -15863,6 +15960,7 @@ def _concepto_detalle_dict(r):
         'flagafecto5ta': _jsonable_value(r.get('flagafecto5ta')) or 'N',
         'flagafectoafp': _jsonable_value(r.get('flagafectoafp')) or 'N',
         'flagafectoutilidad': _jsonable_value(r.get('flagafectoutilidad')) or 'N',
+        'flagformatoliquidacion': _jsonable_value(r.get('flagformatoliquidacion')) or 'N',
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -15984,6 +16082,7 @@ def _concepto_guardar_sp_params(body, *, company=None, concept=None, modo=None, 
         _normalize_flag_yn(body.get('flagafectoafp')),
         _normalize_flag_yn(body.get('flagafecto5ta')),
         _normalize_flag_yn(body.get('flagafectoutilidad')),
+        _normalize_flag_yn(body.get('flagformatoliquidacion')),
         _xlastuser_id(),
     )
 
@@ -16001,7 +16100,8 @@ def _concepto_guardar_ejecutar(cursor, body, *, company=None, concept=None, modo
         "@modo=?, @company=?, @concept=?, @description=?, @formulacode=?, @concepttype=?, "
         "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
         "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
-        "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, @xlastuser=?",
+        "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, "
+        "@flagformatoliquidacion=?, @xlastuser=?",
         params,
     )
     rows = _dicts_first_nonempty_resultset(cursor)

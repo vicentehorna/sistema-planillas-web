@@ -34,6 +34,7 @@ BEGIN
         ISNULL(C.flagafecto5ta, 'N') AS flagafecto5ta,
         ISNULL(C.flagafectoAFP, 'N') AS flagafectoafp,
         ISNULL(C.flagafectoUtilidad, 'N') AS flagafectoutilidad,
+        ISNULL(C.flagformatoliquidacion, 'N') AS flagformatoliquidacion,
         C.XLastUser AS xlastuser,
         C.XLastDate AS xlastdate
     FROM PR_Concept C (NOLOCK)

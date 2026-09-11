@@ -6159,17 +6159,41 @@ def _build_formato_liquidacion_descuentos(liq, formula_values):
     resultado = _build_formato_liquidacion_tabla_conceptos(
         _FORMATO_LIQ_DESCUENTOS_DEF, formula_values, liq=liq
     )
+    tipo_pension = str((liq or {}).get('type_pension') or '').strip().upper()
+    afp_codes = {'AFP_APORTE_PORC_8', 'AFP_COMISION_VARIABL', 'AFP_SEGUROS'}
+    filas = list(resultado.get('filas') or [])
+
+    # Formato general: ocultar filas del régimen que no aplica (siempre en cero).
+    if tipo_pension == 'ONP':
+        filas = [
+            f for f in filas
+            if str(f.get('formula_code') or '').strip().upper() not in afp_codes
+        ]
+    elif tipo_pension:
+        filas = [
+            f for f in filas
+            if str(f.get('formula_code') or '').strip().upper() != 'ONP'
+        ]
+
     # hm_ultra: base afecta solo en el régimen del trabajador (AFP u ONP).
     if _es_cliente_ultraseguros():
-        tipo_pension = str((liq or {}).get('type_pension') or '').strip().upper()
         cero_fmt = _formato_liquidacion_moneda(0)
-        afp_codes = {'AFP_APORTE_PORC_8', 'AFP_COMISION_VARIABL', 'AFP_SEGUROS'}
-        for fila in resultado.get('filas') or []:
+        for fila in filas:
             code = str(fila.get('formula_code') or '').strip().upper()
             if tipo_pension == 'ONP' and code in afp_codes:
                 fila['base_fmt'] = cero_fmt
             elif tipo_pension and tipo_pension != 'ONP' and code == 'ONP':
                 fila['base_fmt'] = cero_fmt
+
+    total = 0.0
+    for fila in filas:
+        try:
+            total += float(fila.get('importe') or 0)
+        except (TypeError, ValueError):
+            pass
+    resultado['filas'] = filas
+    resultado['total'] = total
+    resultado['total_fmt'] = _formato_liquidacion_moneda(total)
     return resultado
 
 

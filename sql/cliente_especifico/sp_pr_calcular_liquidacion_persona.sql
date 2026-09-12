@@ -489,7 +489,7 @@ begin
 
 		,convert(date,@ceasedate) ) +
 
-		ISNULL((select count(*) from PR_Vacation where person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
+		ISNULL((select count(*) from PR_Vacation where Company = @company and person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
 
 	end
 

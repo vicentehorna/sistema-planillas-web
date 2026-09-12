@@ -594,19 +594,66 @@ begin
 
 	declare @dia_faltas_vaca numeric(19,4)
 
+	declare @anios_vac_consumidos int
 
 
-	set @dia_faltas_vaca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XFALTASVACA'),'N') = 'Y' then 
 
-			isnull((select ConceptValue from #conceptos where FormulaCode = 'XFALTASVACA'),0) else  
+	/*
+	  hm_ultra: XFALTASVACA = FALTAS + LSG + SUSP en el tramo que aún no toma vacaciones.
+	  Solo cuenta años con 15 días gozados completos (sin parciales):
+	    periodo_inicial = DATEADD(year, FLOOR(gozados/15), ingreso)
+	  Ejemplo: ingreso 01/08/2025, 15 gozados → inicio 01/08/2026 hasta cese.
+	*/
+	if DB_NAME() = 'hm_ultra'
+	begin
+		if ISNULL(@dias_vac_anuales, 0) <= 0
+		begin
+			set @dias_vac_gozados = ISNULL((
+				select SUM(ISNULL(ConsumedDays, 0))
+				from PR_Vacation
+				where Company = @company and Person = @person
+			), 0)
 
-		
+			set @dias_vac_anuales = ISNULL(NULLIF((
+				select MAX(AcquiredDays)
+				from PR_Vacation
+				where Company = @company and Person = @person and ISNULL(AcquiredDays, 0) > 0
+			), 0), 15)
+		end
 
-	dbo.f_getDiasFalta(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) +  
+		set @anios_vac_consumidos = case
+			when ISNULL(@dias_vac_anuales, 0) > 0
+				then FLOOR(ISNULL(@dias_vac_gozados, 0) / @dias_vac_anuales)
+			else 0
+		end
 
-	dbo.f_getDiasLSG(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) + 
+		set @periodo_inicial = DATEADD(year, @anios_vac_consumidos, CONVERT(date, @fechaingreso))
 
-	dbo.f_getDiasSUSP(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) end
+		set @dia_faltas_vaca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XFALTASVACA'),'N') = 'Y' then
+			isnull((select ConceptValue from #conceptos where FormulaCode = 'XFALTASVACA'),0)
+		else
+			case when @periodo_inicial is null or @periodo_inicial > @ceasedate then 0
+			else
+				ISNULL(dbo.f_getDiasFalta(convert(date,@periodo_inicial), convert(date,@ceasedate), @company, @person), 0) +
+				ISNULL(dbo.f_getDiasLSG(convert(date,@periodo_inicial), convert(date,@ceasedate), @company, @person), 0) +
+				ISNULL(dbo.f_getDiasSUSP(convert(date,@periodo_inicial), convert(date,@ceasedate), @company, @person), 0)
+			end
+		end
+	end
+	else
+	begin
+		set @dia_faltas_vaca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XFALTASVACA'),'N') = 'Y' then 
+
+				isnull((select ConceptValue from #conceptos where FormulaCode = 'XFALTASVACA'),0) else  
+
+			
+
+		dbo.f_getDiasFalta(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) +  
+
+		dbo.f_getDiasLSG(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) + 
+
+		dbo.f_getDiasSUSP(convert(date,@periodo_inicial)  ,convert(date,@ceasedate), @company, @person ) end
+	end
 
 	
 

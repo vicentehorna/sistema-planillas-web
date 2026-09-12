@@ -463,6 +463,8 @@ begin
 
 	declare @dia_vaca_trunca numeric(19,4), @dias_vaca_totales numeric(19,4)
 
+	declare @dias_vac_gozados numeric(19,4), @dias_vac_anuales numeric(19,4), @equiv_vac_gozada numeric(19,4)
+
 	--set @dia_vaca_trunca = dbo.f_getDias360(convert(date,@fechaingreso) ,convert(date,@ceasedate) )
 
 
@@ -475,22 +477,59 @@ begin
 
 	--print DATEDIFF(year, convert(date,convert(varchar(4),year(@ceasedate)-1) + right(convert(varchar(8),@fechaingreso,112),4)), @ceasedate) 
 
-	set @dia_vaca_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASVACA'),'N') = 'Y' then 
+	/*
+	  hm_ultra: XDIASVACA = dias 360 (ingreso→cese) − equivalente de vacaciones gozadas.
+	  En Ultra el derecho anual es 15 días → 15 gozados ≡ 360; 10 gozados ≡ 240; etc.
+	  Resto de clientes: tramo desde aniversario (+ años PR_Vacation sin consumir * 360).
+	*/
+	if DB_NAME() = 'hm_ultra'
+	begin
+		set @dias_vac_gozados = ISNULL((
+			select SUM(ISNULL(ConsumedDays, 0))
+			from PR_Vacation
+			where Company = @company and Person = @person
+		), 0)
 
-		isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASVACA'),0) 
+		set @dias_vac_anuales = ISNULL(NULLIF((
+			select MAX(AcquiredDays)
+			from PR_Vacation
+			where Company = @company and Person = @person and ISNULL(AcquiredDays, 0) > 0
+		), 0), 15)
 
-	else  
+		set @equiv_vac_gozada = case
+			when ISNULL(@dias_vac_anuales, 0) > 0
+				then (@dias_vac_gozados / @dias_vac_anuales) * 360.0
+			else 0
+		end
 
-		dbo.f_getDias360(
+		set @dia_vaca_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASVACA'),'N') = 'Y' then
+			isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASVACA'),0)
+		else
+			case when ISNULL(@dias_vaca_totales, 0) > ISNULL(@equiv_vac_gozada, 0)
+				then ISNULL(@dias_vaca_totales, 0) - ISNULL(@equiv_vac_gozada, 0)
+				else 0
+			end
+		end
+	end
+	else
+	begin
+		set @dia_vaca_trunca = case when isnull((select FlagApplyFormula from #conceptos where FormulaCode = 'XDIASVACA'),'N') = 'Y' then 
 
-			case when DATEDIFF(day,@fechaingreso,@ceasedate) <= 365 then convert(date,@fechaingreso) else 
+			isnull((select ConceptValue from #conceptos where FormulaCode = 'XDIASVACA'),0) 
 
-				case when DATEDIFF(day, convert(date,convert(varchar(4),year(@ceasedate)-1) + right(convert(varchar(8),@fechaingreso,112),4)), @ceasedate) <= 365 then convert(date,convert(varchar(4),year(@ceasedate)-1) + right(convert(varchar(8),@fechaingreso,112),4)) else convert(date,convert(varchar(4),year(@ceasedate)) + right(convert(varchar(8),@fechaingreso,112),4)) end end 
+		else  
 
-		,convert(date,@ceasedate) ) +
+			dbo.f_getDias360(
 
-		ISNULL((select count(*) from PR_Vacation where Company = @company and person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
+				case when DATEDIFF(day,@fechaingreso,@ceasedate) <= 365 then convert(date,@fechaingreso) else 
 
+					case when DATEDIFF(day, convert(date,convert(varchar(4),year(@ceasedate)-1) + right(convert(varchar(8),@fechaingreso,112),4)), @ceasedate) <= 365 then convert(date,convert(varchar(4),year(@ceasedate)-1) + right(convert(varchar(8),@fechaingreso,112),4)) else convert(date,convert(varchar(4),year(@ceasedate)) + right(convert(varchar(8),@fechaingreso,112),4)) end end 
+
+			,convert(date,@ceasedate) ) +
+
+			ISNULL((select count(*) from PR_Vacation where Company = @company and person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
+
+		end
 	end
 
 

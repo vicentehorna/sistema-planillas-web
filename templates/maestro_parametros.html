@@ -11,15 +11,15 @@
     }
 
     .pm-panel-izq {
-        flex: 0 0 42%;
-        max-width: 42%;
-        min-width: 280px;
+        flex: 0 0 48%;
+        max-width: 48%;
+        min-width: 320px;
         display: flex;
         flex-direction: column;
     }
 
     .pm-panel-der {
-        flex: 1 1 58%;
+        flex: 1 1 52%;
         min-width: 0;
     }
 
@@ -65,6 +65,11 @@
 
     .table-pm-lista tbody tr.pm-row.active {
         background: #cfe2ff;
+    }
+
+    .table-pm-lista .col-tipo {
+        min-width: 5.75rem;
+        width: 5.75rem;
     }
 
     .pm-form-card .form-label {
@@ -168,9 +173,9 @@
             <table class="table table-bordered table-sm table-hover table-pm-lista align-middle mb-0">
                 <thead>
                     <tr>
-                        <th style="min-width:8rem">Parámetro</th>
-                        <th style="min-width:12rem">Descripción</th>
-                        <th style="width:5.5rem">Tipo</th>
+                        <th style="min-width:7.5rem">Parámetro</th>
+                        <th style="min-width:11rem">Descripción</th>
+                        <th class="col-tipo">Tipo</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyParametros">
@@ -205,11 +210,6 @@
                     <input type="hidden" id="hidParameter" value="">
                     <input type="hidden" id="hidModo" value="I">
                     <input type="hidden" id="hidShortNameOrigen" value="">
-
-                    <div class="col-12 col-md-6">
-                        <label for="txtCiaForm" class="form-label fw-semibold text-muted">Compañía</label>
-                        <input type="text" id="txtCiaForm" class="form-control form-control-sm pm-campo-auditoria" readonly disabled>
-                    </div>
 
                     <div class="col-12 col-md-6">
                         <label for="txtShortName" class="form-label fw-semibold text-muted">Parámetro</label>
@@ -395,7 +395,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidModo').value = 'I';
         document.getElementById('hidShortNameOrigen').value = '';
         document.getElementById('frmParametro').reset();
-        document.getElementById('txtCiaForm').value = cboCia.value.trim();
         cboTipo.value = 'N';
         document.getElementById('txtXLastUser').value = '';
         document.getElementById('txtXLastDate').value = '';
@@ -408,7 +407,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidParameter').value = data.parameter || '';
         document.getElementById('hidModo').value = 'U';
         document.getElementById('hidShortNameOrigen').value = data.shortname || '';
-        document.getElementById('txtCiaForm').value = data.company || cboCia.value.trim();
         txtShortName.value = data.shortname || '';
         document.getElementById('txtDescription').value = data.description || '';
         cboTipo.value = String(data.parametertypevalue || 'N').toUpperCase() === 'T' ? 'T' : 'N';
@@ -465,7 +463,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             return `<tr class="pm-row ${activo ? 'active' : ''}" data-parameter="${escHtml(r.parameter || '')}">
                 <td title="${escHtml(r.shortname || '')}">${escHtml(r.shortname || '')}</td>
                 <td title="${escHtml(r.description || '')}">${escHtml(r.description || '')}</td>
-                <td>${escHtml(tipo)}</td>
+                <td class="col-tipo">${escHtml(tipo)}</td>
             </tr>`;
         }).join('');
 

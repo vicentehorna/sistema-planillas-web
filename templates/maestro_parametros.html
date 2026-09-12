@@ -1,0 +1,663 @@
+{% extends "layout.html" %}
+
+{% block title %}Parámetros{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pm-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+
+    .pm-panel-izq {
+        flex: 0 0 42%;
+        max-width: 42%;
+        min-width: 280px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .pm-panel-der {
+        flex: 1 1 58%;
+        min-width: 0;
+    }
+
+    .pm-grilla {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 5rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+
+    .table-pm-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-pm-lista th,
+    .table-pm-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-pm-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        color: #1a4b84;
+        font-weight: 700;
+    }
+
+    .table-pm-lista tbody tr.pm-row {
+        cursor: pointer;
+    }
+
+    .table-pm-lista tbody tr.pm-row:hover {
+        background: #f8f9fa;
+    }
+
+    .table-pm-lista tbody tr.pm-row.active {
+        background: #cfe2ff;
+    }
+
+    .pm-form-card .form-label {
+        font-size: 0.78rem;
+        margin-bottom: 0.15rem;
+    }
+
+    .pm-form-card .form-control-sm,
+    .pm-form-card .form-select-sm {
+        font-size: 0.82rem;
+    }
+
+    .campo-obligatorio.form-control,
+    .campo-obligatorio.form-select {
+        background-color: #d9edf7;
+        border-color: #b8daff;
+    }
+
+    .campo-obligatorio.form-control:focus,
+    .campo-obligatorio.form-select:focus {
+        background-color: #cce5f6;
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+
+    .pm-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 320px;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    .pm-msg-guardado {
+        margin-top: 0.75rem;
+        padding: 0.55rem 0.85rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #0f5132;
+        background-color: #d1e7dd;
+        border: 1px solid #badbcc;
+        border-radius: 0.375rem;
+    }
+
+    .pm-campo-auditoria {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+
+    @media (max-width: 991.98px) {
+        .pm-layout {
+            flex-direction: column;
+        }
+
+        .pm-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .pm-grilla {
+            max-height: 280px;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <form id="frmFiltrosParametros" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtLocalizar" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                <input type="search" id="txtLocalizar" class="form-control form-control-sm"
+                       placeholder="Parámetro o descripción..." autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Buscar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnNuevoParametro">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="pm-layout">
+    <aside class="pm-panel-izq">
+        <div class="pm-grilla">
+            <table class="table table-bordered table-sm table-hover table-pm-lista align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="min-width:8rem">Parámetro</th>
+                        <th style="min-width:12rem">Descripción</th>
+                        <th style="width:5.5rem">Tipo</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyParametros">
+                    <tr>
+                        <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="lblConteoParametros" class="small text-muted mt-2">No. de Registros : 0</div>
+    </aside>
+
+    <section class="pm-panel-der">
+        <div id="placeholderParametro" class="pm-placeholder">
+            <div>
+                <i class="bi bi-sliders fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione un parámetro de la lista o cree uno nuevo.
+            </div>
+        </div>
+
+        <div id="panelEdicionParametro" class="card border-0 shadow-sm pm-form-card d-none">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <span class="fw-semibold" id="tituloEdicionParametro">Nuevo parámetro</span>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary btn-sm" id="btnGuardarParametro">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+            <div class="card-body">
+                <form id="frmParametro" class="row g-3">
+                    <input type="hidden" id="hidParameter" value="">
+                    <input type="hidden" id="hidModo" value="I">
+                    <input type="hidden" id="hidShortNameOrigen" value="">
+
+                    <div class="col-12 col-md-6">
+                        <label for="txtCiaForm" class="form-label fw-semibold text-muted">Compañía</label>
+                        <input type="text" id="txtCiaForm" class="form-control form-control-sm pm-campo-auditoria" readonly disabled>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="txtShortName" class="form-label fw-semibold text-muted">Parámetro</label>
+                        <input type="text" id="txtShortName" class="form-control form-control-sm campo-obligatorio"
+                               maxlength="20" required autocomplete="off">
+                    </div>
+
+                    <div class="col-12">
+                        <label for="txtDescription" class="form-label fw-semibold text-muted">Descripción</label>
+                        <input type="text" id="txtDescription" class="form-control form-control-sm campo-obligatorio"
+                               maxlength="100" required autocomplete="off">
+                    </div>
+
+                    <div class="col-12 col-md-4">
+                        <label for="cboTipo" class="form-label fw-semibold text-muted">Tipo</label>
+                        <select id="cboTipo" class="form-select form-select-sm campo-obligatorio" required>
+                            <option value="N">Numérico</option>
+                            <option value="T">Texto</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 col-md-4" id="wrapValorTexto">
+                        <label for="txtValorTexto" class="form-label fw-semibold text-muted">Valor Texto</label>
+                        <input type="text" id="txtValorTexto" class="form-control form-control-sm"
+                               maxlength="100" autocomplete="off">
+                    </div>
+
+                    <div class="col-12 col-md-4" id="wrapValorNumero">
+                        <label for="txtValorNumero" class="form-label fw-semibold text-muted">Valor Numérico</label>
+                        <input type="number" id="txtValorNumero" class="form-control form-control-sm"
+                               step="0.0001" autocomplete="off">
+                    </div>
+
+                    <div class="col-12 col-md-6" id="wrapAuditoriaUser">
+                        <label for="txtXLastUser" class="form-label fw-semibold text-muted">Usuario</label>
+                        <input type="text" id="txtXLastUser" class="form-control form-control-sm pm-campo-auditoria" readonly disabled>
+                    </div>
+
+                    <div class="col-12 col-md-6" id="wrapAuditoriaDate">
+                        <label for="txtXLastDate" class="form-label fw-semibold text-muted">Fecha</label>
+                        <input type="text" id="txtXLastDate" class="form-control form-control-sm pm-campo-auditoria" readonly disabled>
+                    </div>
+                </form>
+                <div id="msgGuardadoParametro" class="pm-msg-guardado d-none" role="status"></div>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const DEFAULT_CIA = 'BGT';
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    async function poblarSelect(url, selectElement) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                throw new Error('Respuesta no válida del servidor.');
+            }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function formatearFecha(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})(?::(\d{2}))?/);
+        if (m) {
+            const seg = m[6] || '00';
+            return `${m[3]}-${m[2]}-${m[1]} ${m[4]}:${m[5]}:${seg}`;
+        }
+        return s;
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const tbody = document.getElementById('tbodyParametros');
+    const placeholder = document.getElementById('placeholderParametro');
+    const panelEdicion = document.getElementById('panelEdicionParametro');
+    const msgGuardado = document.getElementById('msgGuardadoParametro');
+    const cboTipo = document.getElementById('cboTipo');
+    const txtShortName = document.getElementById('txtShortName');
+    const txtValorTexto = document.getElementById('txtValorTexto');
+    const txtValorNumero = document.getElementById('txtValorNumero');
+
+    let parametrosCache = [];
+    let seleccionado = null;
+    let obtenerAbort = null;
+    let msgGuardadoTimer = null;
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function ocultarMensajeGuardado() {
+        if (msgGuardadoTimer) {
+            clearTimeout(msgGuardadoTimer);
+            msgGuardadoTimer = null;
+        }
+        if (msgGuardado) {
+            msgGuardado.textContent = '';
+            msgGuardado.classList.add('d-none');
+        }
+    }
+
+    function mostrarMensajeGuardado(texto) {
+        if (!msgGuardado) return;
+        ocultarMensajeGuardado();
+        msgGuardado.textContent = texto || 'Registro guardado correctamente.';
+        msgGuardado.classList.remove('d-none');
+        msgGuardadoTimer = setTimeout(ocultarMensajeGuardado, 6000);
+    }
+
+    function syncTipoValor() {
+        const esTexto = String(cboTipo.value || 'N').toUpperCase() === 'T';
+        txtValorTexto.disabled = !esTexto;
+        txtValorNumero.disabled = esTexto;
+        if (esTexto) {
+            txtValorNumero.value = '';
+        } else {
+            txtValorTexto.value = '';
+        }
+    }
+
+    function syncVisibilidadModo() {
+        const esNuevo = document.getElementById('hidModo').value === 'I';
+        document.getElementById('wrapAuditoriaUser').classList.toggle('d-none', esNuevo);
+        document.getElementById('wrapAuditoriaDate').classList.toggle('d-none', esNuevo);
+        txtShortName.readOnly = !esNuevo;
+        txtShortName.classList.toggle('pm-campo-auditoria', !esNuevo);
+        if (!esNuevo) {
+            txtShortName.setAttribute('disabled', 'disabled');
+        } else {
+            txtShortName.removeAttribute('disabled');
+        }
+    }
+
+    function limpiarFormulario() {
+        ocultarMensajeGuardado();
+        document.getElementById('hidParameter').value = '';
+        document.getElementById('hidModo').value = 'I';
+        document.getElementById('hidShortNameOrigen').value = '';
+        document.getElementById('frmParametro').reset();
+        document.getElementById('txtCiaForm').value = cboCia.value.trim();
+        cboTipo.value = 'N';
+        document.getElementById('txtXLastUser').value = '';
+        document.getElementById('txtXLastDate').value = '';
+        document.getElementById('tituloEdicionParametro').textContent = 'Nuevo parámetro';
+        syncVisibilidadModo();
+        syncTipoValor();
+    }
+
+    function cargarFormulario(data) {
+        document.getElementById('hidParameter').value = data.parameter || '';
+        document.getElementById('hidModo').value = 'U';
+        document.getElementById('hidShortNameOrigen').value = data.shortname || '';
+        document.getElementById('txtCiaForm').value = data.company || cboCia.value.trim();
+        txtShortName.value = data.shortname || '';
+        document.getElementById('txtDescription').value = data.description || '';
+        cboTipo.value = String(data.parametertypevalue || 'N').toUpperCase() === 'T' ? 'T' : 'N';
+        txtValorTexto.value = data.parametertextvalue || '';
+        txtValorNumero.value = data.parameternumbervalue != null && data.parameternumbervalue !== ''
+            ? data.parameternumbervalue
+            : '';
+        document.getElementById('txtXLastUser').value = data.xlastuser || '';
+        document.getElementById('txtXLastDate').value = formatearFecha(data.xlastdate);
+        document.getElementById('tituloEdicionParametro').textContent = data.shortname || 'Editar parámetro';
+        syncVisibilidadModo();
+        syncTipoValor();
+    }
+
+    function payloadFormulario() {
+        const tipo = String(cboTipo.value || 'N').toUpperCase() === 'T' ? 'T' : 'N';
+        const shortname = String(txtShortName.value || '').trim().toUpperCase();
+        let numberVal = null;
+        if (tipo === 'N') {
+            const raw = String(txtValorNumero.value || '').trim();
+            numberVal = raw === '' ? 0 : Number(raw);
+            if (Number.isNaN(numberVal)) numberVal = 0;
+        }
+        return {
+            cia: cboCia.value.trim(),
+            parameter: document.getElementById('hidParameter').value.trim(),
+            modo: document.getElementById('hidModo').value.trim() || 'I',
+            shortname,
+            shortname_origen: document.getElementById('hidShortNameOrigen').value.trim() || shortname,
+            description: document.getElementById('txtDescription').value.trim(),
+            parametertypevalue: tipo,
+            parametertextvalue: tipo === 'T' ? String(txtValorTexto.value || '').trim() : null,
+            parameternumbervalue: tipo === 'N' ? numberVal : null,
+        };
+    }
+
+    function updateRowHighlight() {
+        tbody.querySelectorAll('.pm-row').forEach((tr) => {
+            const id = tr.getAttribute('data-parameter');
+            tr.classList.toggle('active', !!(seleccionado && seleccionado.parameter === id));
+        });
+    }
+
+    function renderLista(rows) {
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin registros</td></tr>';
+            document.getElementById('lblConteoParametros').textContent = 'No. de Registros : 0';
+            return;
+        }
+
+        tbody.innerHTML = rows.map((r) => {
+            const activo = seleccionado && seleccionado.parameter === r.parameter;
+            const tipo = String(r.parametertypevalue || 'N').toUpperCase() === 'T' ? 'Texto' : 'Numérico';
+            return `<tr class="pm-row ${activo ? 'active' : ''}" data-parameter="${escHtml(r.parameter || '')}">
+                <td title="${escHtml(r.shortname || '')}">${escHtml(r.shortname || '')}</td>
+                <td title="${escHtml(r.description || '')}">${escHtml(r.description || '')}</td>
+                <td>${escHtml(tipo)}</td>
+            </tr>`;
+        }).join('');
+
+        document.getElementById('lblConteoParametros').textContent =
+            `No. de Registros : ${rows.length}`;
+
+        tbody.querySelectorAll('.pm-row').forEach((tr) => {
+            tr.addEventListener('click', () => {
+                const id = tr.getAttribute('data-parameter');
+                const row = parametrosCache.find((x) => x.parameter === id);
+                if (row) seleccionarParametro(row);
+            });
+        });
+    }
+
+    async function cargarListado() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td></tr>';
+            document.getElementById('lblConteoParametros').textContent = 'No. de Registros : 0';
+            return;
+        }
+        const res = await fetch('/api/parametros/listado', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cia,
+                busqueda: document.getElementById('txtLocalizar').value.trim(),
+            }),
+        });
+        const data = await leerJson(res);
+        parametrosCache = Array.isArray(data.rows) ? data.rows : [];
+        renderLista(parametrosCache);
+    }
+
+    async function seleccionarParametro(row) {
+        seleccionado = row;
+        updateRowHighlight();
+        if (obtenerAbort) obtenerAbort.abort();
+        obtenerAbort = new AbortController();
+        try {
+            const res = await fetch('/api/parametros/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    parameter: row.parameter,
+                }),
+                signal: obtenerAbort.signal,
+            });
+            const data = await leerJson(res);
+            cargarFormulario(data);
+            mostrarPanelEdicion(true);
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            hmError(err.message || 'No se pudo cargar el parámetro.');
+        }
+    }
+
+    async function replicarParametroEnCias(cia, shortname) {
+        const res = await fetch('/api/parametros/replicar-cias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, shortname }),
+        });
+        const data = await leerJson(res);
+        mostrarMensajeGuardado(data.mensaje || 'Replicación completada.');
+        return data;
+    }
+
+    async function actualizarParametroEnCias(payload) {
+        const res = await fetch('/api/parametros/guardar-cias', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await leerJson(res);
+        mostrarMensajeGuardado(data.mensaje || 'Actualización en las demás empresas completada.');
+        return data;
+    }
+
+    async function guardarParametro() {
+        const payload = payloadFormulario();
+        if (!payload.cia) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        if (!payload.shortname || !payload.description || !payload.parametertypevalue) {
+            hmAdvertencia('Complete parámetro, descripción y tipo.');
+            return;
+        }
+
+        const esNuevo = String(payload.modo || '').toUpperCase() === 'I';
+
+        try {
+            const res = await fetch('/api/parametros/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            await cargarListado();
+            const parameterId = data.parameter;
+            const row = parametrosCache.find((x) => x.parameter === parameterId);
+            if (row) {
+                await seleccionarParametro(row);
+            } else if (parameterId) {
+                await seleccionarParametro({ parameter: parameterId });
+            }
+            mostrarMensajeGuardado(data.mensaje || 'Registro actualizado correctamente.');
+
+            const modoRespuesta = String(data.modo || payload.modo || '').toUpperCase();
+            if (esNuevo || modoRespuesta === 'I') {
+                const etiqueta = payload.shortname || payload.description || 'nuevo parámetro';
+                const replicar = await hmConfirmar({
+                    titulo: 'Replicar parámetro',
+                    mensaje: `¿Desea replicar este parámetro (${etiqueta}) en las demás empresas?`,
+                    textoOk: 'Sí, replicar',
+                });
+                if (replicar) {
+                    try {
+                        await replicarParametroEnCias(payload.cia, payload.shortname);
+                    } catch (err) {
+                        hmError(err.message || 'No se pudo replicar el parámetro.');
+                    }
+                }
+            } else {
+                const etiqueta = payload.shortname || payload.description || 'parámetro';
+                const aplicar = await hmConfirmar({
+                    titulo: 'Actualizar en otras empresas',
+                    mensaje: `¿Desea aplicar los mismos cambios al parámetro (${etiqueta}) en todas las demás empresas?`,
+                    textoOk: 'Sí, aplicar',
+                });
+                if (aplicar) {
+                    try {
+                        await actualizarParametroEnCias(payload);
+                    } catch (err) {
+                        hmError(err.message || 'No se pudo actualizar en las demás empresas.');
+                    }
+                }
+            }
+        } catch (err) {
+            hmError(err.message || 'No se pudo guardar.');
+        }
+    }
+
+    document.getElementById('frmFiltrosParametros').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+            await cargarListado();
+        } catch (err) {
+            hmError(err.message);
+        }
+    });
+
+    document.getElementById('btnNuevoParametro').addEventListener('click', () => {
+        if (!cboCia.value.trim()) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        seleccionado = null;
+        updateRowHighlight();
+        limpiarFormulario();
+        mostrarPanelEdicion(true);
+        txtShortName.focus();
+    });
+
+    document.getElementById('btnGuardarParametro').addEventListener('click', () => {
+        guardarParametro();
+    });
+
+    cboTipo.addEventListener('change', syncTipoValor);
+
+    cboCia.addEventListener('change', async () => {
+        seleccionado = null;
+        mostrarPanelEdicion(false);
+        try {
+            await cargarListado();
+        } catch (err) {
+            hmError(err.message);
+        }
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    if (cboCia.value) {
+        try {
+            await cargarListado();
+        } catch (err) {
+            console.error(err);
+        }
+    }
+});
+</script>
+{% endblock %}

@@ -8770,6 +8770,12 @@ def cargos_page():
     return render_template('maestro_cargos.html')
 
 
+@app.route('/parametros')
+@login_required
+def parametros_page():
+    return render_template('maestro_parametros.html')
+
+
 @app.route('/usuarios')
 @login_required
 def usuarios_page():
@@ -14812,6 +14818,389 @@ def api_cargos_eliminar():
             if len(parts) > 1:
                 err = parts[-1].strip(" ()'\"")
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _parametro_lista_dict(r):
+    if not r:
+        return None
+    tipo = str(r.get('parametertypevalue') or 'N').strip().upper()[:1]
+    if tipo not in ('N', 'T'):
+        tipo = 'N'
+    return {
+        'parameter': _jsonable_value(r.get('parameter')),
+        'shortname': _jsonable_value(r.get('shortname')),
+        'description': _jsonable_value(r.get('description')),
+        'parametertypevalue': tipo,
+        'tipodescription': _jsonable_value(r.get('tipodescription')) or (
+            'Texto' if tipo == 'T' else 'Numérico'
+        ),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _parametro_detalle_dict(r):
+    if not r:
+        return None
+    tipo = str(r.get('parametertypevalue') or 'N').strip().upper()[:1]
+    if tipo not in ('N', 'T'):
+        tipo = 'N'
+    return {
+        'parameter': _jsonable_value(r.get('parameter')),
+        'company': _jsonable_value(r.get('company')),
+        'shortname': _jsonable_value(r.get('shortname')),
+        'description': _jsonable_value(r.get('description')),
+        'parametertypevalue': tipo,
+        'parametertextvalue': _jsonable_value(r.get('parametertextvalue')),
+        'parameternumbervalue': _jsonable_value(r.get('parameternumbervalue')),
+        'xlastuser': _jsonable_value(r.get('xlastuser')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _parametro_normalize_tipo(raw):
+    v = str(raw or 'N').strip().upper()[:1]
+    return 'T' if v == 'T' else 'N'
+
+
+def _parametro_normalize_number(raw):
+    if raw is None or raw == '':
+        return 0
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return 0
+
+
+@app.route('/api/parametros/listado', methods=['POST'])
+@login_required
+def api_parametros_listado():
+    """sp_pr_listarparametros_web: listado maestro de parámetros."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listarparametros_web @company=?, @busqueda=?",
+            (cia, busqueda or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_parametro_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_parametros_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/parametros/obtener', methods=['POST'])
+@login_required
+def api_parametros_obtener():
+    """sp_pr_obtenerparametro_web: detalle para edición."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    parameter = str(body.get('parameter') or '').strip()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not parameter:
+        return jsonify({"error": "Seleccione un parámetro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_obtenerparametro_web @company=?, @parameter=?",
+            (cia, parameter),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        detalle = _parametro_detalle_dict(rows[0] if rows else None)
+        if not detalle:
+            return jsonify({"error": "Parámetro no encontrado."}), 404
+        return jsonify(detalle)
+    except Exception as e:
+        logging.exception("api_parametros_obtener")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _parametro_guardar_ejecutar(cursor, body, company=None, parameter=None, modo=None):
+    body = body or {}
+    cia = str(company or body.get('cia') or body.get('company') or '').strip()
+    parameter = str(parameter if parameter is not None else (body.get('parameter') or '')).strip()
+    modo = str(modo or body.get('modo') or ('U' if parameter else 'I')).strip().upper()
+    shortname = str(body.get('shortname') or '').strip().upper()
+    description = str(body.get('description') or '').strip()
+    tipo = _parametro_normalize_tipo(body.get('parametertypevalue') or body.get('tipo'))
+    text_val = body.get('parametertextvalue')
+    if text_val is None:
+        text_val = body.get('valor_texto')
+    text_val = None if text_val is None else str(text_val).strip()
+    number_val = body.get('parameternumbervalue')
+    if number_val is None:
+        number_val = body.get('valor_numero')
+    number_val = _parametro_normalize_number(number_val) if tipo == 'N' else None
+    if tipo == 'T':
+        number_val = None
+        if text_val is None:
+            text_val = ''
+    else:
+        text_val = None
+        if number_val is None:
+            number_val = 0
+
+    cursor.execute(
+        "EXEC sp_pr_guardarparametro_web "
+        "@modo=?, @company=?, @parameter=?, @shortname=?, @description=?, "
+        "@parametertypevalue=?, @parametertextvalue=?, @parameternumbervalue=?, @xlastuser=?",
+        (
+            modo,
+            cia,
+            parameter or None,
+            shortname,
+            description,
+            tipo,
+            text_val,
+            number_val,
+            _xlastuser_id(),
+        ),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    _drain_pyodbc_cursor(cursor)
+    return rows[0] if rows else {}
+
+
+@app.route('/api/parametros/guardar', methods=['POST'])
+@login_required
+def api_parametros_guardar():
+    """sp_pr_guardarparametro_web: alta / edición de parámetro."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    shortname = str(body.get('shortname') or '').strip()
+    description = str(body.get('description') or '').strip()
+    tipo = _parametro_normalize_tipo(body.get('parametertypevalue') or body.get('tipo'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not shortname:
+        return jsonify({"error": "Indique el parámetro (ShortName)."}), 400
+    if not description:
+        return jsonify({"error": "Indique la descripción."}), 400
+    if tipo not in ('N', 'T'):
+        return jsonify({"error": "Tipo inválido. Use N o T."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        row = _parametro_guardar_ejecutar(cursor, body)
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "parameter": _jsonable_value(row.get('parameter')),
+            "shortname": _jsonable_value(row.get('shortname')) or shortname.upper(),
+            "modo": _jsonable_value(row.get('modo')),
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Registro guardado correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_parametros_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/parametros/guardar-cias', methods=['POST'])
+@login_required
+def api_parametros_guardar_cias():
+    """Aplica la misma edición de parámetro por ShortName en las demás empresas activas."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia') or body.get('company') or '').strip()
+    shortname = str(body.get('shortname') or '').strip().upper()
+    shortname_origen = str(
+        body.get('shortname_origen') or body.get('shortname_buscar') or shortname
+    ).strip().upper()
+    description = str(body.get('description') or '').strip()
+    tipo = _parametro_normalize_tipo(body.get('parametertypevalue') or body.get('tipo'))
+
+    if not cia_origen:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not shortname_origen or not shortname or not description:
+        return jsonify({"error": "Complete parámetro y descripción."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        destinos = _concepto_destinos_activos(cursor, cia_origen)
+
+        actualizados = []
+        no_existia = []
+        errores = []
+
+        for dest in destinos:
+            cursor.execute(
+                """
+                SELECT Parameter
+                FROM PR_Parameter (NOLOCK)
+                WHERE Company = ?
+                  AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = ?
+                """,
+                (dest, shortname_origen),
+            )
+            row = cursor.fetchone()
+            if not row:
+                no_existia.append(dest)
+                continue
+
+            parameter_dest = str(row[0]).strip()
+            try:
+                _parametro_guardar_ejecutar(
+                    cursor,
+                    body,
+                    company=dest,
+                    parameter=parameter_dest,
+                    modo='U',
+                )
+                conn.commit()
+                actualizados.append(dest)
+            except Exception as ex:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                errores.append({"company": dest, "error": _sp_error_message(ex)})
+
+        partes = []
+        if actualizados:
+            partes.append('Actualizado en todas las empresas.')
+        if no_existia:
+            partes.append(f"No existía en: {', '.join(no_existia)}.")
+        if errores:
+            det_err = '; '.join(
+                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+            )
+            if len(errores) > 5:
+                det_err += f" (+{len(errores) - 5} más)"
+            partes.append(f"No se pudo actualizar en {len(errores)} empresa(s): {det_err}")
+        if not partes:
+            partes.append('No hay otras empresas activas.')
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "shortname": shortname,
+            "shortname_origen": shortname_origen,
+            "actualizados": actualizados,
+            "no_existia": no_existia,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_parametros_guardar_cias")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/parametros/replicar-cias', methods=['POST'])
+@login_required
+def api_parametros_replicar_cias():
+    """Replica un parámetro por ShortName a las demás empresas activas."""
+    body = request.get_json(silent=True) or {}
+    cia_origen = str(body.get('cia') or body.get('company') or '').strip()
+    shortname = str(body.get('shortname') or '').strip().upper()
+
+    if not cia_origen or not shortname:
+        return jsonify({"error": "Indique compañía origen y ShortName."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        destinos = _concepto_destinos_activos(cursor, cia_origen)
+
+        creados = []
+        omitidos = []
+        errores = []
+        xlastuser = _xlastuser_id()
+
+        for dest in destinos:
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_replicar_parametro_cia "
+                    "@cia=?, @shortname=?, @cia_origen=?, @xlastuser=?",
+                    (dest, shortname, cia_origen, xlastuser),
+                )
+                rows = _dicts_first_nonempty_resultset(cursor)
+                _drain_pyodbc_cursor(cursor)
+                msg = str((rows[0] or {}).get('mensaje') or '').lower() if rows else ''
+                if 'ya existe' in msg:
+                    omitidos.append(dest)
+                else:
+                    creados.append(dest)
+            except Exception as ex:
+                errores.append({"company": dest, "error": _sp_error_message(ex)})
+
+        conn.commit()
+
+        partes = []
+        if creados:
+            partes.append('Replicado en todas las empresas.')
+        if omitidos:
+            partes.append(f"Ya existía en {len(omitidos)} empresa(s): {', '.join(omitidos)}.")
+        if errores:
+            det_err = '; '.join(
+                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+            )
+            if len(errores) > 5:
+                det_err += f" (+{len(errores) - 5} más)"
+            partes.append(f"{len(errores)} error(es): {det_err}.")
+        if not partes:
+            partes.append('No hay otras empresas activas.')
+
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia_origen,
+            "shortname": shortname,
+            "creados": creados,
+            "omitidos": omitidos,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_parametros_replicar_cias")
+        return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

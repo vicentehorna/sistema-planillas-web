@@ -27,6 +27,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('centros_costo', 'Centros de Costo', 'tablas', 230, 'centros_costo_page', '/centros-costo', 'A'),
 ('tipos_documento', 'Tipos de Documentos', 'tablas', 240, 'tipos_documento_page', '/tipos-documento', 'A'),
 ('unidades', 'Unidades', 'tablas', 250, 'unidades_page', '/unidades', 'A'),
+('parametros', 'Parametros', 'tablas', 255, 'parametros_page', '/parametros', 'A'),
 ('usuarios', 'Usuarios', 'tablas', 260, 'usuarios_page', '/usuarios', 'A'),
 
 ('trabajadores', 'Trabajadores', 'administracion', 310, 'trabajadores_page', '/trabajadores', 'A'),

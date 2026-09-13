@@ -8238,6 +8238,17 @@ def aperturar_periodos_page():
     return render_template('aperturar_periodos.html')
 
 
+@app.route('/aperturar-periodos-masivo')
+@login_required
+def aperturar_periodos_masivo_page():
+    """Apertura masiva de periodos — solo hm_alamo / hm_garc."""
+    from database import get_active_database
+    db = str(get_active_database() or '').strip().lower()
+    if db not in ('hm_alamo', 'hm_garc'):
+        abort(404)
+    return render_template('aperturar_periodos_masivo.html', cia_ref='BGT')
+
+
 @app.route('/asignacion-conceptos')
 @login_required
 def asignacion_conceptos_page():
@@ -29532,6 +29543,330 @@ def api_aperturar_periodos_cerrar():
                 pass
         logging.exception("api_aperturar_periodos_cerrar")
         return jsonify({"error": str(e) or "No se pudo cerrar el periodo."}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+# ==========================================
+# API Aperturar periodos MASIVO (hm_alamo / hm_garc)
+# ==========================================
+
+_APERTURAR_MASIVO_CIA_REF = 'BGT'
+_APERTURAR_MASIVO_DBS = frozenset({'hm_alamo', 'hm_garc'})
+
+
+def _es_bd_aperturar_periodos_masivo():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() in _APERTURAR_MASIVO_DBS
+    except Exception:
+        return False
+
+
+def _aperturar_masivo_descripciones_from_body(body, key_list=('proceso_descs', 'procesos', 'descriptions')):
+    raw = None
+    for k in key_list:
+        if k in (body or {}):
+            raw = body.get(k)
+            break
+    if raw is None:
+        raw = []
+    if isinstance(raw, str):
+        raw = [p.strip() for p in raw.split(',') if p.strip()]
+    if not isinstance(raw, (list, tuple)):
+        return []
+    seen = set()
+    out = []
+    for item in raw:
+        s = str(item or '').strip()
+        if s and s not in seen:
+            seen.add(s)
+            out.append(s)
+    return out
+
+
+def _resolve_payrolltype_by_description(cursor, cia, payroll_desc):
+    payroll_desc = (payroll_desc or '').strip()
+    if not payroll_desc:
+        return None
+    cursor.execute(
+        """
+        SELECT TOP 1 PayRollType
+        FROM PR_PayRollType (NOLOCK)
+        WHERE Company = ? AND LTRIM(RTRIM(Description)) = ?
+        """,
+        (cia, payroll_desc),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0]).strip()
+
+
+def _company_description(cursor, cia):
+    cursor.execute(
+        """
+        SELECT TOP 1 ISNULL(description, Company)
+        FROM SY_Company (NOLOCK)
+        WHERE Company = ?
+        """,
+        (cia,),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return cia
+    return str(row[0]).strip() or cia
+
+
+def _period_configured_for_payroll(cursor, cia, payrolltype, period):
+    cursor.execute(
+        """
+        SELECT TOP 1 1
+        FROM PR_Period (NOLOCK)
+        WHERE Company = ?
+          AND PayRollType = ?
+          AND LTRIM(RTRIM(PRPeriod)) = ?
+        """,
+        (cia, payrolltype, period),
+    )
+    return cursor.fetchone() is not None
+
+
+def _open_process_period(cursor, cia, payrolltype, processtype):
+    """Periodo actualmente abierto (A/G) del proceso, o ''."""
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(ISNULL(PRPeriod, '')))
+        FROM PR_ProcessControl (NOLOCK)
+        WHERE Company = ?
+          AND PayRollType = ?
+          AND ProcessType = ?
+          AND Status IN ('A', 'G')
+        ORDER BY PRPeriod DESC
+        """,
+        (cia, payrolltype, processtype),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return ''
+    return str(row[0]).strip()
+
+
+@app.route('/api/aperturar-periodos-masivo/listado', methods=['POST'])
+@login_required
+def api_aperturar_periodos_masivo_listado():
+    """Control de procesos de la compañía referencia (BGT)."""
+    if not _es_bd_aperturar_periodos_masivo():
+        return jsonify({"error": "Función no disponible en esta base de datos."}), 404
+
+    body = request.get_json(silent=True) or {}
+    cia_ref = str(body.get('cia_ref') or _APERTURAR_MASIVO_CIA_REF).strip() or _APERTURAR_MASIVO_CIA_REF
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype_desc') or '').strip()
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        if not payrolltype and payroll_desc:
+            payrolltype = _resolve_payrolltype_by_description(cursor, cia_ref, payroll_desc) or ''
+        if not payrolltype:
+            return jsonify({"error": "Seleccione tipo de planilla."}), 400
+
+        cursor.execute(
+            "EXEC sp_pr_listaprocesscontrol_apertura_web @cia=?, @payrolltype=?",
+            (cia_ref, payrolltype),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            prperiod_raw = r.get('prperiod')
+            prperiod = _normalize_pr_period(prperiod_raw) if prperiod_raw not in (None, '') else ''
+            resultado.append({
+                "processtype": _jsonable_value(r.get('processtype')),
+                "description": _jsonable_value(r.get('description')),
+                "company": _jsonable_value(r.get('company')),
+                "payrolltype": _jsonable_value(r.get('payrolltype')),
+                "prperiod": prperiod,
+                "prperiod_display": _format_prperiod_display(prperiod) if prperiod else '',
+                "processdate": _fecha_hora_tabla_json(r.get('processdate')),
+                "status": _jsonable_value(r.get('status')),
+                "statusdesc": _jsonable_value(r.get('statusdesc')),
+            })
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "cia_ref": cia_ref,
+        })
+    except Exception as e:
+        logging.exception("api_aperturar_periodos_masivo_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/aperturar-periodos-masivo/aperturar', methods=['POST'])
+@login_required
+def api_aperturar_periodos_masivo_aperturar():
+    """Apertura masiva: empresas × procesos (por descripción). Omite las que fallan."""
+    if not _es_bd_aperturar_periodos_masivo():
+        return jsonify({"error": "Función no disponible en esta base de datos."}), 404
+
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype_desc') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
+    companies = []
+    raw_cias = body.get('companies') or body.get('cias') or []
+    if isinstance(raw_cias, str):
+        raw_cias = [x.strip() for x in raw_cias.split(',') if x.strip()]
+    for c in raw_cias:
+        s = str(c or '').strip()
+        if s and s not in companies:
+            companies.append(s)
+    proceso_descs = _aperturar_masivo_descripciones_from_body(body)
+    xlastuser = str(getattr(current_user, 'username', '') or '')[:20]
+
+    if not payroll_desc:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+    if not period:
+        return jsonify({"error": "Seleccione el periodo a aperturar."}), 400
+    if not companies:
+        return jsonify({"error": "Seleccione al menos una empresa."}), 400
+    if not proceso_descs:
+        return jsonify({"error": "Seleccione al menos un tipo de proceso."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Restringir a empresas del usuario cuando aplique filtro UserCompany
+        cursor.execute("EXEC sp_pr_selectorcompanias_web")
+        rows_cia = cursor.fetchall()
+        rows_cia = _filtrar_rows_companias_por_usercompany(cursor, rows_cia)
+        allowed = {
+            str(getattr(r, 'Company', None) or (r[0] if r else '') or '').strip()
+            for r in (rows_cia or [])
+        }
+        if _filtro_companias_usercompany_habilitado():
+            companies = [c for c in companies if c in allowed]
+            if not companies:
+                return jsonify({"error": "No tiene empresas asignadas para aperturar."}), 400
+
+        ok_items = []
+        omitidas = []
+        aperturados = 0
+
+        for cia in companies:
+            cia_desc = _company_description(cursor, cia)
+            payrolltype = _resolve_payrolltype_by_description(cursor, cia, payroll_desc)
+            if not payrolltype:
+                for pd in proceso_descs:
+                    omitidas.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": pd,
+                        "estado": "SIN_PLANILLA",
+                        "mensaje": f'No existe la planilla "{payroll_desc}" en esta empresa.',
+                    })
+                continue
+
+            if not _period_configured_for_payroll(cursor, cia, payrolltype, period):
+                for pd in proceso_descs:
+                    omitidas.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": pd,
+                        "estado": "SIN_PERIODO",
+                        "mensaje": f"No existe el periodo {_format_prperiod_display(period)} en PR_Period.",
+                    })
+                continue
+
+            for proceso_desc in proceso_descs:
+                _pt, processtype = _resolve_payroll_process_by_description(
+                    cursor, cia, payroll_desc, proceso_desc,
+                )
+                if not processtype:
+                    omitidas.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": proceso_desc,
+                        "estado": "SIN_PROCESO",
+                        "mensaje": f'No existe el proceso "{proceso_desc}" en esta empresa.',
+                    })
+                    continue
+
+                open_period = _open_process_period(cursor, cia, payrolltype, processtype)
+                if open_period and _normalize_pr_period(open_period) == period:
+                    omitidas.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": proceso_desc,
+                        "estado": "YA_ABIERTO",
+                        "mensaje": f"El periodo {_format_prperiod_display(period)} ya está abierto.",
+                    })
+                    continue
+
+                try:
+                    cursor.execute(
+                        "EXEC sp_pr_aperturarperiodo_proceso_web "
+                        "@cia=?, @payrolltype=?, @processtype=?, @period=?, @xlastuser=?",
+                        (cia, payrolltype, processtype, period, xlastuser),
+                    )
+                    _drain_all_cursor_resultsets(cursor)
+                    aperturados += 1
+                    ok_items.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": proceso_desc,
+                        "payrolltype": payrolltype,
+                        "processtype": processtype,
+                    })
+                except Exception as ex:
+                    logging.exception(
+                        "aperturar_masivo cia=%s proceso=%s period=%s",
+                        cia, proceso_desc, period,
+                    )
+                    msg = str(ex)
+                    if '50001' in msg or 'RAISERROR' in msg.upper():
+                        msg = msg.split(']')[-1].strip() if ']' in msg else msg
+                    omitidas.append({
+                        "company": cia,
+                        "company_desc": cia_desc,
+                        "proceso_desc": proceso_desc,
+                        "estado": "ERROR",
+                        "mensaje": msg or "No se pudo aperturar.",
+                    })
+
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "message": (
+                f"Periodo {_format_prperiod_display(period)} aperturado en {aperturados} "
+                f"combinación(es). Omitidas: {len(omitidas)}."
+            ),
+            "aperturados": aperturados,
+            "ok_items": ok_items,
+            "omitidas": omitidas,
+            "period": period,
+            "period_display": _format_prperiod_display(period),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_aperturar_periodos_masivo_aperturar")
+        return jsonify({"error": str(e) or "No se pudo aperturar el periodo."}), 500
     finally:
         if conn:
             try:

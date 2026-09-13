@@ -779,8 +779,9 @@
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>
 
-                {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'procesar_planilla_page', 'procesar_planilla_masivo_page', 'reporte_log_calculo_page') %}
-                {% set show_calculos = can_menu('aperturar_periodos') or can_menu('procesar_planilla') or can_menu('procesar_planilla_masivo') or can_menu('log_calculo') %}
+                {% set es_multi_cia_apertura = (sql_database or '')|lower in ['hm_alamo', 'hm_garc'] %}
+                {% set calculos_active = request.endpoint in ('aperturar_periodos_page', 'aperturar_periodos_masivo_page', 'procesar_planilla_page', 'procesar_planilla_masivo_page', 'reporte_log_calculo_page') %}
+                {% set show_calculos = can_menu('aperturar_periodos') or can_menu('aperturar_periodos_masivo') or can_menu('procesar_planilla') or can_menu('procesar_planilla_masivo') or can_menu('log_calculo') %}
                 {% if show_calculos %}
                 <li class="sidebar-menu-parent {{ 'active' if calculos_active else '' }}">
                     <a href="#submenuCalculos"
@@ -797,6 +798,13 @@
                         <li class="{{ 'active' if request.endpoint == 'aperturar_periodos_page' else '' }}">
                             <a href="{{ url_for('aperturar_periodos_page') }}" title="Aperturar Periodos">
                                 <i class="bi bi-calendar2-check"></i><span class="sidebar-link-text">Aperturar Periodos</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_multi_cia_apertura and can_menu('aperturar_periodos_masivo') %}
+                        <li class="{{ 'active' if request.endpoint == 'aperturar_periodos_masivo_page' else '' }}">
+                            <a href="{{ url_for('aperturar_periodos_masivo_page') }}" title="Aperturar Periodos Masivo">
+                                <i class="bi bi-calendar2-range"></i><span class="sidebar-link-text">Aperturar Periodos Masivo</span>
                             </a>
                         </li>
                         {% endif %}

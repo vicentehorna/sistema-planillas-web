@@ -1,0 +1,533 @@
+{% extends "layout.html" %}
+
+{% block title %}Aperturar periodos masivo{% endblock %}
+
+{% block extra_css %}
+<style>
+    .masivo-panel-empresas {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+
+    .masivo-panel-empresas .list-group-item {
+        padding: 0.35rem 0.6rem;
+        font-size: 0.82rem;
+    }
+
+    .table-scroll-container {
+        max-height: 58vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-apertura-masivo {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-apertura-masivo th,
+    .table-apertura-masivo td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-apertura-masivo thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-apertura-masivo .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+
+    #cardEmpresasOmitidas ul,
+    #cardResumenApertura ul {
+        margin-bottom: 0;
+        padding-left: 1.2rem;
+        font-size: 0.85rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body pt-3">
+        <form id="frmAperturarMasivo" class="row g-3">
+            <div class="col-md-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+                <div class="form-text small">Referencia: empresa BGT</div>
+            </div>
+            <div class="col-md-3">
+                <label for="cboPeriodoApertura" class="form-label small fw-bold text-muted">Periodo a aperturar</label>
+                <select id="cboPeriodoApertura" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-6">
+                <label for="txtLocalizarEmpresa" class="form-label small fw-bold text-muted">Localizar empresa</label>
+                <input type="text" id="txtLocalizarEmpresa" class="form-control form-control-sm"
+                       placeholder="Filtrar lista de empresas" maxlength="80" autocomplete="off">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnAperturar" disabled>
+                    <i class="bi bi-unlock"></i> Aperturar periodo
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Empresas: <span id="lblEmpresasSel">0</span>
+                    · Procesos: <span id="lblProcesos">0</span>
+                    · Seleccionados: <span id="lblProcesosSel">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardEmpresasOmitidas">
+    <div class="card-body py-2">
+        <div class="alert alert-warning mb-0 py-2">
+            <strong>Empresas omitidas</strong>
+            <p class="mb-2 small">No se aperturó el periodo en estas empresas (sin planilla, sin proceso, sin periodo o ya abierto).</p>
+            <ul id="listaEmpresasOmitidas"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardResumenApertura">
+    <div class="card-body py-2">
+        <div class="alert alert-success mb-0 py-2">
+            <strong>Resultado de apertura</strong>
+            <p id="textoResumenApertura" class="mb-2 small"></p>
+            <ul id="listaResumenApertura" class="d-none"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-lg-4">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header py-2 d-flex align-items-center justify-content-between">
+                <span class="small fw-bold">Empresas</span>
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkTodasEmpresas" checked>
+                    <label class="form-check-label small" for="chkTodasEmpresas">Todas</label>
+                </div>
+            </div>
+            <div class="card-body p-2">
+                <div id="panelEmpresas" class="masivo-panel-empresas list-group list-group-flush">
+                    <div class="text-center text-muted small py-3">Cargando...</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-8">
+        <div class="card shadow-sm border-0 h-100">
+            <div class="card-header py-2">
+                <span class="small fw-bold">Control de procesos (referencia BGT)</span>
+            </div>
+            <div class="card-body pt-3">
+                <div class="table-scroll-container">
+                    <table class="table table-bordered table-sm table-hover table-apertura-masivo align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="text-center" style="width: 2.5rem;">
+                                    <input type="checkbox" id="checkAll" class="form-check-input" title="Marcar / desmarcar todos">
+                                </th>
+                                <th>Tipo de proceso</th>
+                                <th>Últ. periodo procesado</th>
+                                <th>Estado</th>
+                                <th>Fecha de proceso</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyProcesos">
+                            <tr>
+                                <td colspan="5" class="text-center text-muted py-4">Consulte para ver los procesos.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const CIA_REF = {{ (cia_ref or 'BGT') | tojson }};
+    const URL_PLANILLAS = {{ url_for('api_planillas') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_aperturar_periodos_periodos') | tojson }};
+    const URL_PERIODO_SUG = {{ url_for('api_aperturar_periodos_periodo_sugerido') | tojson }};
+    const URL_COMPANIAS = {{ url_for('api_procesar_planilla_masivo_companias') | tojson }};
+    const URL_LISTADO = {{ url_for('api_aperturar_periodos_masivo_listado') | tojson }};
+    const URL_APERTURAR = {{ url_for('api_aperturar_periodos_masivo_aperturar') | tojson }};
+
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboPer = document.getElementById('cboPeriodoApertura');
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodas = document.getElementById('chkTodasEmpresas');
+    const txtLocalizar = document.getElementById('txtLocalizarEmpresa');
+    const tbody = document.getElementById('tbodyProcesos');
+    const btnAperturar = document.getElementById('btnAperturar');
+
+    let empresasData = [];
+    let rowsData = [];
+    let payrollDesc = '';
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function selectedPayrollDesc() {
+        const opt = cboPt.options[cboPt.selectedIndex];
+        if (!opt || !opt.value) return '';
+        return String(opt.dataset.desc || opt.textContent || '').trim();
+    }
+
+    async function poblarPlanillas() {
+        const prev = cboPt.value;
+        cboPt.innerHTML = '<option value="">Seleccione...</option>';
+        try {
+            const res = await fetch(`${URL_PLANILLAS}?cia=${encodeURIComponent(CIA_REF)}`);
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text || item.id;
+                opt.dataset.desc = String(item.text || '').trim();
+                cboPt.appendChild(opt);
+            });
+            if (prev && optionExists(cboPt, prev)) cboPt.value = prev;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarPeriodos() {
+        const payroll = cboPt.value.trim();
+        cboPer.disabled = true;
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        if (!payroll) return;
+        try {
+            const res = await fetch(
+                `${URL_PERIODOS}?cia=${encodeURIComponent(CIA_REF)}&payrolltype=${encodeURIComponent(payroll)}`
+            );
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text || item.id;
+                cboPer.appendChild(opt);
+            });
+            cboPer.disabled = false;
+            let preferido = '';
+            try {
+                const r2 = await fetch(
+                    `${URL_PERIODO_SUG}?cia=${encodeURIComponent(CIA_REF)}&payrolltype=${encodeURIComponent(payroll)}`
+                );
+                const d2 = await r2.json();
+                preferido = d2 && d2.prperiod ? String(d2.prperiod).trim() : '';
+            } catch (e) {
+                console.error(e);
+            }
+            if (preferido && optionExists(cboPer, preferido)) cboPer.value = preferido;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function procesosSeleccionados() {
+        return Array.from(tbody.querySelectorAll('.check-proceso:checked'))
+            .map((el) => String(el.dataset.description || '').trim())
+            .filter(Boolean);
+    }
+
+    function actualizarContadores() {
+        const nEmp = empresasSeleccionadas().length;
+        const nProc = rowsData.length;
+        const nSel = procesosSeleccionados().length;
+        document.getElementById('lblEmpresasSel').textContent = String(nEmp);
+        document.getElementById('lblProcesos').textContent = String(nProc);
+        document.getElementById('lblProcesosSel').textContent = String(nSel);
+        btnAperturar.disabled = !(nEmp > 0 && nSel > 0 && cboPer.value.trim());
+    }
+
+    function sincronizarChkTodas() {
+        const visibles = Array.from(panelEmpresas.querySelectorAll('.chk-empresa'))
+            .filter((el) => el.closest('.list-group-item') && el.closest('.list-group-item').style.display !== 'none');
+        if (!visibles.length) {
+            chkTodas.checked = false;
+            chkTodas.indeterminate = false;
+            actualizarContadores();
+            return;
+        }
+        const marcados = visibles.filter((el) => el.checked).length;
+        chkTodas.checked = marcados === visibles.length;
+        chkTodas.indeterminate = marcados > 0 && marcados < visibles.length;
+        actualizarContadores();
+    }
+
+    function filtrarEmpresas() {
+        const q = String(txtLocalizar.value || '').trim().toLowerCase();
+        panelEmpresas.querySelectorAll('.list-group-item').forEach((li) => {
+            const txt = String(li.dataset.search || '').toLowerCase();
+            li.style.display = (!q || txt.includes(q)) ? '' : 'none';
+        });
+        sincronizarChkTodas();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-3">Sin empresas disponibles.</div>';
+            sincronizarChkTodas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || e.company || '').trim();
+            const text = String(e.text || e.description || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2" data-search="${esc(code + ' ' + text)}">
+                <input class="form-check-input flex-shrink-0 chk-empresa mt-1" type="checkbox" value="${esc(code)}" checked>
+                <span><span class="fw-semibold">${esc(code)}</span> — ${esc(text)}</span>
+            </label>`;
+        }).join('');
+        filtrarEmpresas();
+    }
+
+    function renderProcesos() {
+        if (!rowsData.length) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Sin procesos para la planilla seleccionada.</td></tr>';
+            document.getElementById('checkAll').checked = false;
+            actualizarContadores();
+            return;
+        }
+        tbody.innerHTML = rowsData.map((row) => {
+            const desc = String(row.description || row.processtype || '').trim();
+            return `<tr>
+                <td class="text-center">
+                    <input type="checkbox" class="form-check-input check-proceso"
+                           data-processtype="${esc(row.processtype)}"
+                           data-description="${esc(desc)}">
+                </td>
+                <td>${esc(desc)}</td>
+                <td>${esc(row.prperiod_display || '—')}</td>
+                <td>${esc(row.statusdesc || row.status || '—')}</td>
+                <td>${esc(row.processdate || '—')}</td>
+            </tr>`;
+        }).join('');
+        document.getElementById('checkAll').checked = false;
+        actualizarContadores();
+    }
+
+    function ocultarAlertas() {
+        document.getElementById('cardEmpresasOmitidas').classList.add('d-none');
+        document.getElementById('cardResumenApertura').classList.add('d-none');
+        document.getElementById('listaEmpresasOmitidas').innerHTML = '';
+        document.getElementById('listaResumenApertura').innerHTML = '';
+        document.getElementById('listaResumenApertura').classList.add('d-none');
+    }
+
+    function mostrarOmitidas(items) {
+        const card = document.getElementById('cardEmpresasOmitidas');
+        const ul = document.getElementById('listaEmpresasOmitidas');
+        if (!items || !items.length) {
+            card.classList.add('d-none');
+            ul.innerHTML = '';
+            return;
+        }
+        ul.innerHTML = items.map((x) => {
+            const cia = esc(x.company_desc || x.company || '');
+            const proc = esc(x.proceso_desc || '');
+            const msg = esc(x.mensaje || x.estado || '');
+            return `<li><strong>${cia}</strong>${proc ? ' / ' + proc : ''}: ${msg}</li>`;
+        }).join('');
+        card.classList.remove('d-none');
+    }
+
+    function mostrarResumen(data) {
+        const card = document.getElementById('cardResumenApertura');
+        const p = document.getElementById('textoResumenApertura');
+        const ul = document.getElementById('listaResumenApertura');
+        p.textContent = data.message || 'Apertura completada.';
+        const ok = data.ok_items || [];
+        if (ok.length && ok.length <= 40) {
+            ul.innerHTML = ok.map((x) => {
+                return `<li>${esc(x.company_desc || x.company)} / ${esc(x.proceso_desc)}: aperturado</li>`;
+            }).join('');
+            ul.classList.remove('d-none');
+        } else {
+            ul.innerHTML = '';
+            ul.classList.add('d-none');
+        }
+        card.classList.remove('d-none');
+    }
+
+    async function cargarEmpresas() {
+        try {
+            const res = await fetch(URL_COMPANIAS + (URL_COMPANIAS.includes('?') ? '&' : '?') + 'filtro_usuario=1');
+            const data = await res.json();
+            renderEmpresas(data || []);
+        } catch (e) {
+            console.error(e);
+            panelEmpresas.innerHTML = '<div class="text-center text-danger small py-3">Error al cargar empresas.</div>';
+        }
+    }
+
+    async function consultarListado() {
+        const payrolltype = cboPt.value.trim();
+        payrollDesc = selectedPayrollDesc();
+        if (!payrolltype || !payrollDesc) {
+            alert('Seleccione tipo de planilla.');
+            return;
+        }
+        ocultarAlertas();
+        const btn = document.getElementById('btnConsultar');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ payrolltype, payroll_desc: payrollDesc }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'No se pudo consultar el listado.');
+                return;
+            }
+            rowsData = data.rows || [];
+            renderProcesos();
+        } catch (e) {
+            console.error(e);
+            alert('Error al consultar.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function aperturarMasivo() {
+        const payroll_desc = selectedPayrollDesc();
+        const period = cboPer.value.trim();
+        const companies = empresasSeleccionadas();
+        const proceso_descs = procesosSeleccionados();
+        if (!payroll_desc || !period) {
+            alert('Seleccione tipo de planilla y periodo.');
+            return;
+        }
+        if (!companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
+        if (!proceso_descs.length) {
+            alert('Seleccione al menos un tipo de proceso.');
+            return;
+        }
+        if (!confirm(`¿Aperturar el periodo en ${companies.length} empresa(s) y ${proceso_descs.length} proceso(s)?`)) {
+            return;
+        }
+        btnAperturar.disabled = true;
+        ocultarAlertas();
+        try {
+            const res = await fetch(URL_APERTURAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payroll_desc,
+                    period,
+                    companies,
+                    proceso_descs,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'No se pudo aperturar.');
+                return;
+            }
+            mostrarOmitidas(data.omitidas || []);
+            mostrarResumen(data);
+            await consultarListado();
+        } catch (e) {
+            console.error(e);
+            alert('Error al aperturar.');
+        } finally {
+            actualizarContadores();
+        }
+    }
+
+    document.getElementById('frmAperturarMasivo').addEventListener('submit', function (e) {
+        e.preventDefault();
+        consultarListado();
+    });
+
+    cboPt.addEventListener('change', async function () {
+        rowsData = [];
+        renderProcesos();
+        await cargarPeriodos();
+        actualizarContadores();
+    });
+
+    cboPer.addEventListener('change', actualizarContadores);
+
+    chkTodas.addEventListener('change', function () {
+        const checked = chkTodas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+            const li = el.closest('.list-group-item');
+            if (li && li.style.display === 'none') return;
+            el.checked = checked;
+        });
+        sincronizarChkTodas();
+    });
+
+    panelEmpresas.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('chk-empresa')) sincronizarChkTodas();
+    });
+
+    txtLocalizar.addEventListener('input', filtrarEmpresas);
+
+    document.getElementById('checkAll').addEventListener('change', function () {
+        const checked = this.checked;
+        tbody.querySelectorAll('.check-proceso').forEach((cb) => { cb.checked = checked; });
+        actualizarContadores();
+    });
+
+    tbody.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('check-proceso')) actualizarContadores();
+    });
+
+    btnAperturar.addEventListener('click', aperturarMasivo);
+
+    await poblarPlanillas();
+    await cargarEmpresas();
+});
+</script>
+{% endblock %}

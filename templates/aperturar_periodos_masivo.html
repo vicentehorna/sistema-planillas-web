@@ -317,9 +317,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         panelEmpresas.innerHTML = empresasData.map((e) => {
             const code = String(e.id || e.company || '').trim();
             const text = String(e.text || e.description || code).trim();
-            return `<label class="list-group-item d-flex align-items-start gap-2" data-search="${esc(code + ' ' + text)}">
+            return `<label class="list-group-item d-flex align-items-start gap-2" data-search="${esc(text)} ${esc(code)}">
                 <input class="form-check-input flex-shrink-0 chk-empresa mt-1" type="checkbox" value="${esc(code)}" checked>
-                <span><span class="fw-semibold">${esc(code)}</span> — ${esc(text)}</span>
+                <span>${esc(text)}</span>
             </label>`;
         }).join('');
         filtrarEmpresas();

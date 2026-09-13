@@ -1,0 +1,315 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte de Préstamos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-prestamos-det {
+        --sticky-col1-w: 5.5rem;
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-prestamos-det th,
+    .table-prestamos-det td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-prestamos-det thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-prestamos-det .sticky-col-1 {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background-color: #fff;
+        min-width: var(--sticky-col1-w);
+        width: var(--sticky-col1-w);
+        max-width: var(--sticky-col1-w);
+        box-sizing: border-box;
+    }
+
+    .table-prestamos-det .sticky-col-2 {
+        position: sticky;
+        left: var(--sticky-col1-w);
+        z-index: 1;
+        background-color: #fff;
+        min-width: 14rem;
+        max-width: 18rem;
+        box-sizing: border-box;
+    }
+
+    .table-prestamos-det thead th.sticky-col-1,
+    .table-prestamos-det thead th.sticky-col-2 {
+        z-index: 3;
+        background-color: #f8f9fa;
+    }
+
+    .table-prestamos-det .col-num {
+        text-align: right;
+    }
+
+    .table-prestamos-det .col-center {
+        text-align: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmReportePrestamos" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="txtNombre" class="form-label small fw-bold text-muted">Nombre</label>
+                <input type="text" id="txtNombre" class="form-control form-control-sm"
+                       placeholder="Nombre, DNI o código" maxlength="100" autocomplete="off">
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboEstado" class="form-label small fw-bold text-muted">Estado</label>
+                <select id="cboEstado" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="P">Pendiente</option>
+                    <option value="A">Amortizado</option>
+                    <option value="N">Anulado</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h5 class="text-center fw-bold mb-3">Reporte de Préstamos - Detallado</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-prestamos-det align-middle">
+                <thead>
+                    <tr>
+                        <th class="sticky-col-1">Código</th>
+                        <th class="sticky-col-2">Trabajador</th>
+                        <th>Observación</th>
+                        <th class="col-center">Periodo</th>
+                        <th>Proceso</th>
+                        <th class="col-num">Importe</th>
+                        <th class="col-center">Estado</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyReporte"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_COMPANIAS = {{ url_for('api_companias') | tojson }};
+    const URL_PLANILLAS = {{ url_for('api_planillas') | tojson }};
+    const URL_REPORTE = {{ url_for('api_reporte_prestamos_detallado') | tojson }};
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const txtNombre = document.getElementById('txtNombre');
+    const cboEstado = document.getElementById('cboEstado');
+    const tbody = document.getElementById('tbodyReporte');
+    const card = document.getElementById('cardResultado');
+    const lblCount = document.getElementById('lblRowCount');
+    const btnExcel = document.getElementById('btnExportExcel');
+
+    let lastRows = [];
+    let lastCiaText = '';
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function fmtNum(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        return Array.from(select.options).some((o) => String(o.value) === String(value));
+    }
+
+    async function poblarSelect(url, select, keepFirst) {
+        const prev = select.value;
+        const firstHtml = keepFirst ? select.options[0].outerHTML : '<option value="">Seleccione...</option>';
+        select.innerHTML = firstHtml;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            (data || []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id;
+                opt.textContent = item.text || item.id;
+                select.appendChild(opt);
+            });
+            if (prev && optionExists(select, prev)) select.value = prev;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarPlanillas() {
+        const cia = cboCia.value.trim();
+        cboPt.disabled = true;
+        cboPt.innerHTML = '<option value="0">Todos</option>';
+        if (!cia) return;
+        await poblarSelect(`${URL_PLANILLAS}?cia=${encodeURIComponent(cia)}`, cboPt, true);
+        cboPt.disabled = false;
+    }
+
+    function renderRows(rows) {
+        lastRows = Array.isArray(rows) ? rows : [];
+        lblCount.textContent = String(lastRows.length);
+        btnExcel.disabled = lastRows.length === 0;
+        card.classList.toggle('d-none', lastRows.length === 0);
+        if (!lastRows.length) {
+            tbody.innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = lastRows.map((r) => {
+            return `<tr>
+                <td class="sticky-col-1">${esc(r.codigo)}</td>
+                <td class="sticky-col-2">${esc(r.trabajador)}</td>
+                <td>${esc(r.observacion)}</td>
+                <td class="col-center">${esc(r.periodo)}</td>
+                <td>${esc(r.proceso)}</td>
+                <td class="col-num">${fmtNum(r.importe)}</td>
+                <td class="col-center">${esc(r.estado)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    async function consultar() {
+        const cia = cboCia.value.trim();
+        if (!cia) {
+            alert('Seleccione compañía.');
+            return;
+        }
+        const payrolltype = cboPt.value.trim() || '0';
+        const nombre = txtNombre.value.trim();
+        const estado = cboEstado.value.trim() || 'T';
+        const btn = document.getElementById('btnConsultar');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, nombre, estado }),
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert(data.error || 'No se pudo consultar el reporte.');
+                return;
+            }
+            lastCiaText = (cboCia.options[cboCia.selectedIndex] || {}).textContent || cia;
+            renderRows(data.rows || []);
+            if (!(data.rows || []).length) {
+                card.classList.remove('d-none');
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-4">Sin registros.</td></tr>';
+                lblCount.textContent = '0';
+                btnExcel.disabled = true;
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error al consultar.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    async function exportarExcel() {
+        if (!lastRows.length || typeof ExcelJS === 'undefined') return;
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Prestamos detallado');
+        ws.columns = [
+            { header: 'Código', key: 'codigo', width: 14 },
+            { header: 'Trabajador', key: 'trabajador', width: 36 },
+            { header: 'Observación', key: 'observacion', width: 32 },
+            { header: 'Periodo', key: 'periodo', width: 12 },
+            { header: 'Proceso', key: 'proceso', width: 16 },
+            { header: 'Importe', key: 'importe', width: 12 },
+            { header: 'Estado', key: 'estado', width: 12 },
+        ];
+        ws.getRow(1).font = { bold: true };
+        lastRows.forEach((r) => {
+            ws.addRow({
+                codigo: r.codigo || '',
+                trabajador: r.trabajador || '',
+                observacion: r.observacion || '',
+                periodo: r.periodo || '',
+                proceso: r.proceso || '',
+                importe: Number(r.importe) || 0,
+                estado: r.estado || '',
+            });
+        });
+        ws.getColumn('importe').numFmt = '#,##0.00';
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        });
+        const a = document.createElement('a');
+        const stamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        a.href = URL.createObjectURL(blob);
+        a.download = `reporte_prestamos_detallado_${stamp}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('frmReportePrestamos').addEventListener('submit', function (e) {
+        e.preventDefault();
+        consultar();
+    });
+    cboCia.addEventListener('change', cargarPlanillas);
+    btnExcel.addEventListener('click', exportarExcel);
+
+    await poblarSelect(URL_COMPANIAS + (URL_COMPANIAS.includes('?') ? '&' : '?') + 'filtro_usuario=1', cboCia, false);
+    if (cboCia.value) await cargarPlanillas();
+});
+</script>
+{% endblock %}

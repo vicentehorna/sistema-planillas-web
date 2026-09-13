@@ -1227,8 +1227,8 @@
                 </li>
                 {% endif %}
 
-                {% set prestamos_active = request.endpoint in ('control_prestamos_page',) %}
-                {% set show_prestamos = can_menu('control_prestamos') %}
+                {% set prestamos_active = request.endpoint in ('control_prestamos_page', 'reporte_prestamos_page') %}
+                {% set show_prestamos = can_menu('control_prestamos') or can_menu('reporte_prestamos') %}
                 {% if show_prestamos %}
                 <li class="sidebar-menu-parent {{ 'active' if prestamos_active else '' }}">
                     <a href="#submenuPrestamos"
@@ -1245,6 +1245,13 @@
                         <li class="{{ 'active' if request.endpoint == 'control_prestamos_page' else '' }}">
                             <a href="{{ url_for('control_prestamos_page') }}" title="Control de Préstamos">
                                 <i class="bi bi-wallet2"></i><span class="sidebar-link-text">Control de Préstamos</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('reporte_prestamos') %}
+                        <li class="{{ 'active' if request.endpoint == 'reporte_prestamos_page' else '' }}">
+                            <a href="{{ url_for('reporte_prestamos_page') }}" title="Reporte de Préstamos">
+                                <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">Reporte de Préstamos</span>
                             </a>
                         </li>
                         {% endif %}

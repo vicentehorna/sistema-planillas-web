@@ -82,6 +82,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('generar_contratos', 'Generar Contratos', 'contratos', 1130, 'generar_contratos_page', '/generar-contratos', 'A'),
 
 ('control_prestamos', 'Control de Prestamos', 'prestamos', 1210, 'control_prestamos_page', '/control-prestamos', 'A'),
+('reporte_prestamos', 'Reporte de Prestamos', 'prestamos', 1220, 'reporte_prestamos_page', '/reporte-prestamos', 'A'),
 
 ('reporte_vacaciones_detalle', 'Detalle de Vacaciones', 'vacaciones_descansos', 1210, 'reporte_vacaciones_detalle_page', '/reporte-vacaciones-detalle', 'A'),
 ('reporte_saldo_vacaciones', 'Saldo de Vacaciones', 'vacaciones_descansos', 1220, 'reporte_saldo_vacaciones_page', '/reporte-saldo-vacaciones', 'A'),

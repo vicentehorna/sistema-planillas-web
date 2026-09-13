@@ -8267,6 +8267,12 @@ def control_prestamos_page():
     return render_template('control_prestamos.html')
 
 
+@app.route('/reporte-prestamos')
+@login_required
+def reporte_prestamos_page():
+    return render_template('reporte_prestamos.html')
+
+
 @app.route('/registro-descansos-medicos')
 @login_required
 def registro_descansos_medicos_page():
@@ -28504,6 +28510,61 @@ def api_prestamos_eliminar_cuota():
             if m:
                 err = m.group(1).strip()
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/prestamos-detallado', methods=['POST'])
+@login_required
+def api_reporte_prestamos_detallado():
+    """sp_pr_reporte_prestamos_detallado_web: cuotas de préstamos (detalle)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip()
+    if len(nombre) > 100:
+        nombre = nombre[:100]
+    estado = str(body.get('estado') or body.get('status') or 'T').strip().upper()[:1] or 'T'
+    if estado not in ('T', 'P', 'A', 'N'):
+        estado = 'T'
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reporte_prestamos_detallado_web "
+            "@company=?, @payrolltype=?, @nombre=?, @estado=?",
+            (cia, payrolltype, nombre, estado),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                "codigo": _jsonable_value(r.get('codigo')),
+                "trabajador": _jsonable_value(r.get('trabajador')),
+                "observacion": _jsonable_value(r.get('observacion')),
+                "periodo": _jsonable_value(r.get('periodo')),
+                "proceso": _jsonable_value(r.get('proceso')),
+                "importe": _jsonable_value(r.get('importe')),
+                "estado": _jsonable_value(r.get('estado')),
+                "estado_codigo": _jsonable_value(r.get('estado_codigo')),
+                "person": _jsonable_value(r.get('person')),
+                "company": _jsonable_value(r.get('company')),
+                "payrolltype": _jsonable_value(r.get('payrolltype')),
+                "tipoplanilla": _jsonable_value(r.get('tipoplanilla')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_reporte_prestamos_detallado")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn:
             try:

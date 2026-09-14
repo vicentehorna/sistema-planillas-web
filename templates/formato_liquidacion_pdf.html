@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Liquidación de Beneficios Sociales</title>
+    <title>{% if es_ultraseguros %}Liquidación de Beneficios Sociales para Micro y Pequeña Empresa{% else %}Liquidación de Beneficios Sociales{% endif %}</title>
     <style>
         @page { size: A4; margin: 9mm 12mm 10mm 12mm; }
         body {
@@ -429,7 +429,7 @@
             </div>
         </div>
 
-        <div class="titulo">Liquidación de Beneficios Sociales</div>
+        <div class="titulo">{% if es_ultraseguros %}Liquidación de Beneficios Sociales para Micro y Pequeña Empresa{% else %}Liquidación de Beneficios Sociales{% endif %}</div>
 
         <div class="cuerpo-doc">
         <div class="bloque-datos">
@@ -507,7 +507,7 @@
                     </tr>
                     {% if rc_cts_totales %}
                     <tr class="fila-total">
-                        <td class="concepto">R.C. CTS</td>
+                        <td class="concepto">{% if es_ultraseguros %}R.C.{% else %}R.C. CTS{% endif %}</td>
                         <td class="monto">{{ rc_cts_totales.cts }}</td>
                         <td class="monto">{{ rc_cts_totales.grati }}</td>
                         <td class="monto">{{ rc_cts_totales.vaca }}</td>

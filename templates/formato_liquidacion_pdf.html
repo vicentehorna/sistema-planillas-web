@@ -429,7 +429,7 @@
             </div>
         </div>
 
-        <div class="titulo">{% if es_ultraseguros %}Liquidación de Beneficios Sociales para Micro y Pequeña Empresa{% else %}Liquidación de Beneficios Sociales{% endif %}</div>
+        <div class="titulo">{% if es_ultraseguros %}Liquidación de Beneficios Sociales Ley Micro y Pequeña Empresa{% else %}Liquidación de Beneficios Sociales{% endif %}</div>
 
         <div class="cuerpo-doc">
         <div class="bloque-datos">
@@ -772,6 +772,7 @@
                 </thead>
                 <tbody>
                     {% for row in aportaciones_calc.filas %}
+                    {% if not (es_ultraseguros and row.formula_code == 'APORTE_EPS') %}
                     {% set oculta_eps = es_ngservicios and row.formula_code == 'APORTE_EPS' %}
                     <tr>
                         <td class="concepto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.label }}</td>
@@ -779,6 +780,7 @@
                         <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.base_fmt }}</td>
                         <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.importe_fmt }}</td>
                     </tr>
+                    {% endif %}
                     {% endfor %}
                 </tbody>
             </table>

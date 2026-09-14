@@ -367,7 +367,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
     const btnTrasladoTrab = document.getElementById('btnTrasladoTrabajador');
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
-    const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }};
+    // hm_alamo: Traslado también para activos. Fallback: botón "Buscar todos" solo existe en Alamo.
+    const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }}
+        || !!document.getElementById('btnBuscarTodosTrabajadores');
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 

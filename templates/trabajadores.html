@@ -210,7 +210,7 @@
                 <button type="button" class="btn btn-warning btn-sm px-4" id="btnReingresoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
                     <i class="bi bi-arrow-repeat"></i> Reingreso
                 </button>
-                <button type="button" class="btn btn-info btn-sm px-4" id="btnTrasladoTrabajador" disabled title="Seleccione un trabajador cesado en el listado">
+                <button type="button" class="btn btn-info btn-sm px-4" id="btnTrasladoTrabajador" disabled title="Seleccione un trabajador en el listado">
                     <i class="bi bi-building"></i> Traslado
                 </button>
                 <button type="button" class="btn btn-secondary btn-sm px-4" id="btnInactivarCesados" disabled title="Inactivar trabajadores cesados en un rango de periodos">
@@ -367,6 +367,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
     const btnTrasladoTrab = document.getElementById('btnTrasladoTrabajador');
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
+    const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }};
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 
@@ -392,14 +393,19 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function actualizarBotonTraslado() {
         if (!btnTrasladoTrab) return;
-        const ok = consultaHabilitada
+        const tieneSel = consultaHabilitada
             && trabajadorSeleccionado
-            && trabajadorSeleccionado.person
-            && trabajadorSeleccionado.cesado;
+            && trabajadorSeleccionado.person;
+        const ok = tieneSel && (ES_ALAMO || trabajadorSeleccionado.cesado);
         btnTrasladoTrab.disabled = !ok;
-        btnTrasladoTrab.title = ok
-            ? ('Trasladar a otra empresa: ' + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person))
-            : 'Seleccione un trabajador cesado en el listado';
+        if (ok) {
+            btnTrasladoTrab.title = 'Trasladar a otra empresa: '
+                + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person);
+        } else if (ES_ALAMO) {
+            btnTrasladoTrab.title = 'Seleccione un trabajador en el listado';
+        } else {
+            btnTrasladoTrab.title = 'Seleccione un trabajador cesado en el listado';
+        }
     }
 
     function seleccionarFilaTrabajador(tr) {
@@ -1140,10 +1146,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
         if (!trabajadorSeleccionado || !trabajadorSeleccionado.person) {
-            hmAdvertencia('Seleccione en el listado el trabajador cesado a trasladar.');
+            hmAdvertencia(ES_ALAMO
+                ? 'Seleccione en el listado el trabajador a trasladar.'
+                : 'Seleccione en el listado el trabajador cesado a trasladar.');
             return;
         }
-        if (!trabajadorSeleccionado.cesado) {
+        if (!ES_ALAMO && !trabajadorSeleccionado.cesado) {
             hmAdvertencia('Solo se puede trasladar un trabajador con fecha de cese.');
             return;
         }

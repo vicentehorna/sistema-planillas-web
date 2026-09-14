@@ -1,5 +1,5 @@
 /*
-    Traslado de trabajador cesado a otra empresa (misma BD).
+    Traslado de trabajador a otra empresa (misma BD).
 
     - Mantiene SY_Person (no modifica SY_Person.Company).
     - Crea nuevo PR_Employee en @cia_destino con EntryDate/ReEntryDate = @entrydate.
@@ -8,9 +8,9 @@
       mapeando concepto por FormulaCode y planilla por ShortName.
 
     Validaciones:
-      - Trabajador cesado en origen.
+      - Por defecto: trabajador cesado en origen y @entrydate > CeaseDate origen.
+      - hm_alamo: también permite traslado si sigue activo en origen (doble vínculo).
       - No existe PR_Employee en destino para el mismo Person.
-      - @entrydate > CeaseDate origen.
       - @cia_origen <> @cia_destino.
 
     Usado por: POST /api/trabajadores/trasladar
@@ -81,19 +81,21 @@ BEGIN
 
     DECLARE @entrydate_dt DATETIME = CONVERT(DATETIME, @entrydate, 120);
     DECLARE @cese_origen DATETIME = NULL;
+    DECLARE @permite_activo BIT = CASE WHEN LOWER(DB_NAME()) = 'hm_alamo' THEN 1 ELSE 0 END;
 
     SELECT @cese_origen = e.CeaseDate
     FROM PR_Employee e (NOLOCK)
     WHERE e.Company = @cia_origen
       AND e.Person = @person;
 
-    IF @cese_origen IS NULL
+    IF @cese_origen IS NULL AND @permite_activo = 0
     BEGIN
         RAISERROR('Solo se puede trasladar un trabajador cesado.', 16, 1);
         RETURN;
     END;
 
-    IF CONVERT(DATE, @entrydate_dt) <= CONVERT(DATE, @cese_origen)
+    IF @cese_origen IS NOT NULL
+       AND CONVERT(DATE, @entrydate_dt) <= CONVERT(DATE, @cese_origen)
     BEGIN
         RAISERROR('La fecha de ingreso en la nueva empresa debe ser posterior a la fecha de cese.', 16, 1);
         RETURN;

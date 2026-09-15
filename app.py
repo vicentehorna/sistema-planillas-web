@@ -3847,8 +3847,7 @@ def _require_hm_alamo_json(feature='Esta opción'):
 
 
 # BDs donde el selector de compañías se filtra por SY_UserCompany (idcompany).
-# hm_alamo se sumará cuando tengan asignaciones cargadas.
-_BDS_FILTRO_COMPANIAS_USERCOMPANY = frozenset({'hm_garc'})
+_BDS_FILTRO_COMPANIAS_USERCOMPANY = frozenset({'hm_garc', 'hm_alamo'})
 
 
 def _filtro_companias_usercompany_habilitado():
@@ -6959,7 +6958,7 @@ def _empleado_generales_desde_form(form):
         'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
         'documentnumber': str(form.get('documentnumber') or '').strip()[:15],
         'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
-        'userid': str(form.get('userid') or '').strip().lower()[:20],
+        'userid': str(form.get('userid') or '').strip()[:20],
     }
 
 

@@ -27,6 +27,7 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @nombre_completo VARCHAR(100);
+    DECLARE @userid_input    VARCHAR(20);
     DECLARE @userid_norm     VARCHAR(20);
     DECLARE @birthdate_dt    DATETIME;
     DECLARE @localite_norm   VARCHAR(20);
@@ -53,7 +54,10 @@ BEGIN
     SET @country_id = NULL;
     SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
-    SET @userid_norm = NULLIF(LOWER(LTRIM(RTRIM(ISNULL(@userid, '')))), '');
+    -- Conservar el UserID canónico de SY_User (sin forzar LOWER): el combo web
+    -- compara en forma exacta y usuarios como ARODRIGUEZ / Contador fallaban al reabrir.
+    SET @userid_input = NULLIF(LTRIM(RTRIM(ISNULL(@userid, ''))), '');
+    SET @userid_norm = NULL;
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @cia = '' OR @person = ''
@@ -151,13 +155,13 @@ BEGIN
         RETURN;
     END;
 
-    IF @userid_norm IS NOT NULL
+    IF @userid_input IS NOT NULL
     BEGIN
-        IF NOT EXISTS (
-            SELECT 1
-            FROM sy_user (NOLOCK)
-            WHERE userid = @userid_norm
-        )
+        SELECT TOP 1 @userid_norm = u.UserID
+        FROM sy_user u (NOLOCK)
+        WHERE u.UserID = @userid_input;
+
+        IF @userid_norm IS NULL
         BEGIN
             RAISERROR('El usuario indicado no existe en el sistema.', 16, 1);
             RETURN;

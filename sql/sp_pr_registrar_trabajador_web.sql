@@ -126,7 +126,20 @@ BEGIN
     SET @country_id = NULL;
     SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
-    SET @userid_norm = NULLIF(LOWER(LTRIM(RTRIM(ISNULL(@userid, '')))), '');
+    -- Conservar UserID canónico de SY_User (sin LOWER) para que el combo lo reabra seleccionado.
+    SET @userid_norm = NULL;
+    IF NULLIF(LTRIM(RTRIM(ISNULL(@userid, ''))), '') IS NOT NULL
+    BEGIN
+        SELECT TOP 1 @userid_norm = u.UserID
+        FROM SY_User u (NOLOCK)
+        WHERE u.UserID = LTRIM(RTRIM(@userid));
+
+        IF @userid_norm IS NULL
+        BEGIN
+            RAISERROR('El usuario indicado no existe en el sistema.', 16, 1);
+            RETURN;
+        END;
+    END;
     SET @employeetype = NULLIF(LTRIM(RTRIM(ISNULL(@employeetype, ''))), '');
     SET @employeecategory = NULLIF(LTRIM(RTRIM(ISNULL(@employeecategory, ''))), '');
     SET @entrydate = NULLIF(LTRIM(RTRIM(ISNULL(@entrydate, ''))), '');

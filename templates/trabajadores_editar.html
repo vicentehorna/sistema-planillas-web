@@ -458,7 +458,7 @@
                             <select id="cboUsuario" name="userid" class="form-select form-select-sm">
                                 <option value="">Sin usuario</option>
                                 {% for opt in usuarios %}
-                                <option value="{{ opt.id }}" {% if empleado.userid == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                <option value="{{ opt.id }}" {% if empleado.userid and (empleado.userid|lower) == (opt.id|lower) %}selected{% endif %}>{{ opt.text }}</option>
                                 {% endfor %}
                             </select>
                             <div class="form-text">Opcional. Si se asigna, debe ser único por trabajador.</div>

@@ -4466,9 +4466,12 @@ def _telecredito_campos_faltantes(conn, cia, lineas, currency='LO'):
     return faltantes
 
 
-def _telecredito_filename(period):
+def _telecredito_filename(period, empresa=None):
     periodo = re.sub(r'[^0-9]', '', str(period or ''))[:8]
     stamp = datetime.now().strftime('%Y%m%d%H%M')
+    empresa_token = _boleta_filename_token(empresa, fallback='')
+    if empresa_token:
+        return f'Telecredito_{periodo}_{empresa_token}_{stamp}.txt'
     return f'Telecredito_{periodo}_{stamp}.txt'
 
 
@@ -21021,7 +21024,8 @@ def api_pago_haberes_telecredito_generar_txt():
             }), 400
 
         contenido = '\r\n'.join(lineas) + '\r\n'
-        filename = _telecredito_filename(p['period'])
+        empresa_nombre = _company_description(cursor, p['cia'])
+        filename = _telecredito_filename(p['period'], empresa=empresa_nombre)
 
         resp = Response(
             contenido.encode('latin-1', errors='replace'),

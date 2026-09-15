@@ -990,8 +990,9 @@
                 </li>
                 {% endif %}
 
-                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page', 'pago_haberes_scotiabank_page') %}
-                {% set show_pago_haberes = can_menu('pago_telecredito') or can_menu('pago_interbank') or can_menu('pago_continental') or can_menu('pago_banbif') or can_menu('pago_scotiabank') %}
+                {% set pago_haberes_active = request.endpoint in ('pago_haberes_telecredito_page', 'pago_haberes_pago_unidad_page', 'pago_haberes_interbank_page', 'pago_haberes_bbva_page', 'pago_haberes_banbif_page', 'pago_haberes_scotiabank_page') %}
+                {% set show_pago_haberes = can_menu('pago_telecredito') or can_menu('pago_por_unidad') or can_menu('pago_interbank') or can_menu('pago_continental') or can_menu('pago_banbif') or can_menu('pago_scotiabank') %}
+                {% set es_alamo_pago = (sql_database or '')|lower == 'hm_alamo' %}
                 {% if show_pago_haberes %}
                 <li class="sidebar-menu-parent {{ 'active' if pago_haberes_active else '' }}">
                     <a href="#submenuPagoHaberes"
@@ -1008,6 +1009,13 @@
                         <li class="{{ 'active' if request.endpoint == 'pago_haberes_telecredito_page' else '' }}">
                             <a href="{{ url_for('pago_haberes_telecredito_page') }}" title="Archivo Telecrédito">
                                 <i class="bi bi-bank2"></i><span class="sidebar-link-text">Archivo Telecrédito</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_alamo_pago and can_menu('pago_por_unidad') %}
+                        <li class="{{ 'active' if request.endpoint == 'pago_haberes_pago_unidad_page' else '' }}">
+                            <a href="{{ url_for('pago_haberes_pago_unidad_page') }}" title="Pago por Unidad">
+                                <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Pago por Unidad</span>
                             </a>
                         </li>
                         {% endif %}

@@ -21040,6 +21040,334 @@ def api_pago_haberes_telecredito_generar_txt():
                 pass
 
 
+@app.route('/pago-haberes/pago-unidad')
+@login_required
+def pago_haberes_pago_unidad_page():
+    if not _es_cliente_alamo():
+        abort(404)
+    return render_template('pago_haberes_pago_unidad.html')
+
+
+def _pago_unidad_cargar_unidades_temp(cursor, unidades):
+    cursor.execute(
+        """
+        IF OBJECT_ID('tempdb..#PagoUnidadUnidades') IS NOT NULL
+            DROP TABLE #PagoUnidadUnidades;
+        CREATE TABLE #PagoUnidadUnidades (replicationunit VARCHAR(20) NOT NULL PRIMARY KEY);
+        """
+    )
+    units = []
+    for u in unidades or []:
+        code = str(u or '').strip()
+        if code and code not in units:
+            units.append(code[:20])
+    if not units:
+        return
+    batch_size = 200
+    for i in range(0, len(units), batch_size):
+        chunk = units[i:i + batch_size]
+        placeholders = ','.join(['(?)'] * len(chunk))
+        cursor.execute(
+            f"INSERT INTO #PagoUnidadUnidades (replicationunit) VALUES {placeholders}",
+            chunk,
+        )
+
+
+@app.route('/api/pago-haberes/pago-unidad/unidades', methods=['POST'])
+@login_required
+def api_pago_haberes_pago_unidad_unidades():
+    denied = _require_hm_alamo_json('Pago por Unidad')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_listar_unidades_bcp_pago_web")
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "replicationunit": _jsonable_value(r.get('replicationunit')),
+                    "name": _jsonable_value(r.get('name')),
+                    "bcpaccount": _jsonable_value(r.get('bcpaccount')),
+                }
+                for r in rows
+            ]
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_pago_unidad_unidades")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/pago-unidad/conceptos', methods=['GET'])
+@login_required
+def api_pago_haberes_pago_unidad_conceptos():
+    """Conceptos distintos por Description/FormulaCode (multi-compañía). Prioriza NETO."""
+    denied = _require_hm_alamo_json('Pago por Unidad')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                CASE
+                    WHEN NULLIF(LTRIM(RTRIM(ISNULL(pc.FormulaCode, ''))), '') IS NOT NULL
+                        THEN LTRIM(RTRIM(pc.FormulaCode))
+                    ELSE LTRIM(RTRIM(pc.Concept))
+                END AS id,
+                LTRIM(RTRIM(ISNULL(pc.Description, pc.Concept))) AS text,
+                CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(pc.FormulaCode, '')))) = 'NETO' THEN 0 ELSE 1 END AS ord_neto
+            FROM PR_Concept pc (NOLOCK)
+                INNER JOIN SY_Company sc (NOLOCK)
+                    ON sc.Company = pc.Company
+                   AND sc.Status = 'A'
+            WHERE NULLIF(LTRIM(RTRIM(ISNULL(pc.Concept, ''))), '') IS NOT NULL
+            ORDER BY ord_neto, text
+            """
+        )
+        seen = set()
+        data = []
+        for r in cursor.fetchall() or []:
+            item_id = str(r[0] or '').strip()
+            text = str(r[1] or item_id).strip()
+            if not item_id or item_id in seen:
+                continue
+            seen.add(item_id)
+            data.append({"id": item_id, "text": text})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_pago_haberes_pago_unidad_conceptos")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/pago-unidad/listado', methods=['POST'])
+@login_required
+def api_pago_haberes_pago_unidad_listado():
+    denied = _require_hm_alamo_json('Pago por Unidad')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype') or '').strip()
+    proceso_desc = str(body.get('proceso_desc') or body.get('processtype') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('par_period'))
+    concept = str(body.get('concept') or body.get('par_concept') or '').strip()
+    currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    paydate = _parse_report_date(body.get('paydate') or body.get('par_paydate'))
+    unidades_raw = body.get('unidades') or body.get('units') or []
+    if isinstance(unidades_raw, str):
+        unidades = [u.strip() for u in unidades_raw.split(',') if u.strip()]
+    elif isinstance(unidades_raw, list):
+        unidades = [str(u).strip() for u in unidades_raw if str(u).strip()]
+    else:
+        unidades = []
+
+    if not payroll_desc or not proceso_desc or not period or not concept:
+        return jsonify({"error": "Complete tipo planilla, proceso, periodo y concepto."}), 400
+    if currency not in ('LO', 'EX'):
+        return jsonify({"error": "Moneda inválida (use LO o EX)."}), 400
+    if not paydate:
+        return jsonify({"error": "Indique la fecha de pago."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _pago_unidad_cargar_unidades_temp(cursor, unidades)
+        cursor.execute(
+            "EXEC sp_pr_listapago_unidad_web "
+            "@payroll_desc=?, @proceso_desc=?, @par_period=?, @par_concept=?, "
+            "@par_currency=?, @cesados=?, @todos_bancos=?, @par_paydate=?",
+            (
+                payroll_desc, proceso_desc, period, concept,
+                currency, cesados, todos_bancos, paydate,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+
+        # Restringir empresas del usuario cuando aplique filtro UserCompany
+        if _filtro_companias_usercompany_habilitado():
+            allowed = _ids_companias_usercompany(cursor, _userid_sesion_actual())
+            if allowed:
+                rows = [
+                    r for r in rows
+                    if str(r.get('company') or '').strip() in allowed
+                ]
+            else:
+                rows = []
+
+        filas = []
+        for r in rows:
+            try:
+                neto = float(r.get('neto')) if r.get('neto') is not None else 0.0
+            except Exception:
+                neto = 0.0
+            filas.append({
+                "unidad": str(r.get('unidad') or '').strip(),
+                "empresa": str(r.get('empresa') or '').strip(),
+                "company": str(r.get('company') or '').strip(),
+                "neto": neto,
+                "codigo": str(r.get('codigo') or '').strip(),
+                "nombre": str(r.get('nombre') or '').strip(),
+                "person": str(r.get('person') or '').strip(),
+                "tipodoc": str(r.get('tipodoc') or '').strip(),
+                "banco": str(r.get('banco') or '').strip(),
+            })
+        return jsonify({
+            "rows": filas,
+            "meta": {
+                "total": len(filas),
+                "todos_bancos": todos_bancos == 'Y',
+                "paydate": paydate.strftime('%d/%m/%Y'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_pago_haberes_pago_unidad_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/pago-haberes/pago-unidad/generar-zip', methods=['POST'])
+@login_required
+def api_pago_haberes_pago_unidad_generar_zip():
+    """Genera un TXT Telecrédito por unidad seleccionada y los empaqueta en ZIP."""
+    denied = _require_hm_alamo_json('Pago por Unidad')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype') or '').strip()
+    proceso_desc = str(body.get('proceso_desc') or body.get('processtype') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('par_period'))
+    concept = str(body.get('concept') or body.get('par_concept') or '').strip()
+    currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    paydate = _parse_report_date(body.get('paydate') or body.get('par_paydate'))
+    referencia = _normalize_telecredito_referencia(
+        body.get('referencia') or body.get('par_referencia') or body.get('ref_cabecera')
+    )
+    trabajadores = body.get('trabajadores') or body.get('rows') or []
+    if not isinstance(trabajadores, list):
+        trabajadores = []
+
+    if not payroll_desc or not proceso_desc or not period or not concept:
+        return jsonify({"error": "Complete tipo planilla, proceso, periodo y concepto."}), 400
+    if currency not in ('LO', 'EX'):
+        return jsonify({"error": "Moneda inválida (use LO o EX)."}), 400
+    if not paydate:
+        return jsonify({"error": "Indique la fecha de pago."}), 400
+    if not trabajadores:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    # Agrupar por unidad (independiente)
+    por_unidad = {}
+    for item in trabajadores:
+        if not isinstance(item, dict):
+            continue
+        unidad = str(item.get('unidad') or '').strip()
+        person = str(item.get('person') or '').strip()
+        if not unidad or not person:
+            continue
+        por_unidad.setdefault(unidad, [])
+        if person not in por_unidad[unidad]:
+            por_unidad[unidad].append(person)
+
+    if not por_unidad:
+        return jsonify({"error": "No hay trabajadores válidos por unidad."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        archivos = []
+        omitidas = []
+
+        for unidad, persons in sorted(por_unidad.items(), key=lambda x: x[0]):
+            if not persons:
+                omitidas.append({"unidad": unidad, "motivo": "sin trabajadores"})
+                continue
+            _telecredito_cargar_personas_temp(cursor, persons)
+            cursor.execute(
+                "EXEC sp_pr_generar_pago_unidad_web "
+                "@par_replicationunit=?, @payroll_desc=?, @proceso_desc=?, "
+                "@par_period=?, @par_concept=?, @par_currency=?, @par_paydate=?, "
+                "@todos_bancos=?, @par_referencia=?",
+                (
+                    unidad, payroll_desc, proceso_desc, period, concept,
+                    currency, paydate, todos_bancos, referencia or None,
+                ),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            lineas = []
+            for r in rows:
+                txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+                if txt:
+                    lineas.append(txt)
+            if len(lineas) < 2:
+                omitidas.append({"unidad": unidad, "motivo": "sin líneas de detalle"})
+                continue
+            contenido = '\r\n'.join(lineas) + '\r\n'
+            safe_unit = re.sub(r'[^A-Za-z0-9_-]+', '_', unidad)[:20] or 'UNIDAD'
+            fname = f'Telecredito_{safe_unit}_{period}.txt'
+            archivos.append((fname, contenido.encode('latin-1', errors='replace')))
+
+        if not archivos:
+            detalle = '; '.join(
+                f"{x.get('unidad')}: {x.get('motivo')}" for x in omitidas[:10]
+            )
+            msg = 'No se generó ningún archivo TXT (unidades sin trabajadores o sin detalle).'
+            if detalle:
+                msg += ' ' + detalle
+            return jsonify({"error": msg, "omitidas": omitidas}), 400
+
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for fname, raw in archivos:
+                zf.writestr(fname, raw)
+        memory_file.seek(0)
+        zip_name = f'Telecredito_PorUnidad_{period}.zip'
+        resp = send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=zip_name,
+            as_attachment=True,
+        )
+        resp.headers['X-PagoUnidad-Generados'] = str(len(archivos))
+        if omitidas:
+            resp.headers['X-PagoUnidad-Omitidas'] = str(len(omitidas))
+        return resp
+    except Exception as e:
+        logging.exception("api_pago_haberes_pago_unidad_generar_zip")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/pago-haberes/interbank/listado', methods=['POST'])
 @login_required
 def api_pago_haberes_interbank_listado():

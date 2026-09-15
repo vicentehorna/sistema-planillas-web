@@ -1,0 +1,538 @@
+{% extends "layout.html" %}
+
+{% block title %}Pago por Unidad{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ppu-layout {
+        display: grid;
+        grid-template-columns: minmax(220px, 280px) 1fr;
+        gap: 0.75rem;
+        min-height: 55vh;
+    }
+    @media (max-width: 900px) {
+        .ppu-layout { grid-template-columns: 1fr; }
+    }
+    .ppu-panel {
+        border: 1px solid #dee2e6;
+        border-radius: 0.35rem;
+        background: #fff;
+        display: flex;
+        flex-direction: column;
+        max-height: 65vh;
+    }
+    .ppu-panel-h {
+        padding: 0.4rem 0.65rem;
+        border-bottom: 1px solid #dee2e6;
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #6c757d;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .ppu-scroll {
+        overflow: auto;
+        flex: 1;
+    }
+    .table-ppu {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-ppu th, .table-ppu td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+    .table-ppu thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .table-ppu .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+    .col-neto { text-align: right; min-width: 5rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body pt-3">
+        <form id="frmPagoUnidad" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboMoneda" class="form-label small fw-bold text-muted">Moneda</label>
+                <select id="cboMoneda" class="form-select form-select-sm" required>
+                    <option value="LO" selected>Soles (LO)</option>
+                    <option value="EX">Dólares (EX)</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2 d-flex align-items-end pb-1">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="chkTodosBancos">
+                    <label class="form-check-label small fw-bold text-muted" for="chkTodosBancos">Todos los Bancos</label>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboConcepto" class="form-label small fw-bold text-muted">Concepto</label>
+                <select id="cboConcepto" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtFechaPago" class="form-label small fw-bold text-muted">Fecha de pago</label>
+                <input type="date" id="txtFechaPago" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
+                <input type="text" id="txtReferencia" class="form-control form-control-sm"
+                       maxlength="40" placeholder="PLANILLA HABERES MENSUAL" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-2">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Buscar</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnSelUnidades">Seleccionar unidades</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDeselUnidades">Deseleccionar</button>
+                <label class="small text-muted mb-0 ms-1" for="txtLocalizar">Localizar</label>
+                <input type="search" id="txtLocalizar" class="form-control form-control-sm" style="max-width:12rem" placeholder="Código o nombre..." autocomplete="off">
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
+                    <i class="bi bi-file-earmark-zip"></i> Generar ZIP
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                    · Seleccionados: <span id="lblSeleccionados">0</span>
+                    · Neto: <span id="lblImporteTotal">0.00</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="ppu-layout d-none" id="panelResultados">
+    <div class="ppu-panel">
+        <div class="ppu-panel-h">
+            <input type="checkbox" class="form-check-input" id="chkAllUnidades" title="Marcar / desmarcar unidades" checked>
+            <span>Unidades (cuenta BCP)</span>
+            <span class="ms-auto fw-normal" id="lblUnidadesCount">0</span>
+        </div>
+        <div class="ppu-scroll">
+            <table class="table table-sm table-hover table-ppu mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:2rem"></th>
+                        <th>Unidad</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyUnidades"></tbody>
+            </table>
+        </div>
+    </div>
+    <div class="ppu-panel">
+        <div class="ppu-panel-h">
+            <input type="checkbox" class="form-check-input" id="chkAllTrab" title="Marcar / desmarcar trabajadores">
+            <span>Trabajadores</span>
+        </div>
+        <div class="ppu-scroll">
+            <table class="table table-bordered table-sm table-hover table-ppu align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th style="width:2rem"></th>
+                        <th>Unidad</th>
+                        <th>Empresa</th>
+                        <th class="col-neto">Neto</th>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTrabajadores"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
+    const URL_PROCESOS = {{ url_for('api_procesos_consolidada') | tojson }};
+    const URL_PERIODOS = {{ url_for('api_periodos_consolidada') | tojson }};
+    const URL_CONCEPTOS = {{ url_for('api_pago_haberes_pago_unidad_conceptos') | tojson }};
+    const URL_UNIDADES = {{ url_for('api_pago_haberes_pago_unidad_unidades') | tojson }};
+    const URL_LISTADO = {{ url_for('api_pago_haberes_pago_unidad_listado') | tojson }};
+    const URL_ZIP = {{ url_for('api_pago_haberes_pago_unidad_generar_zip') | tojson }};
+
+    let unidadesCatalogo = [];
+    let allRows = [];
+    let visibleRows = [];
+
+    function hoyIsoLocal() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatearImporte(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function poblarSelect(url, selectElement, { keepFirst } = {}) {
+        const prev = String(selectElement.value || '').trim();
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = 'Seleccione...';
+            selectElement.appendChild(def);
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : opt.value;
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+            if (prev && Array.from(selectElement.options).some((o) => o.value === prev)) {
+                selectElement.value = prev;
+            }
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    function unidadesSeleccionadas() {
+        return Array.from(document.querySelectorAll('.chk-unidad:checked'))
+            .map((cb) => String(cb.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function rowKey(r) {
+        return `${r.unidad || ''}|${r.company || ''}|${r.person || ''}`;
+    }
+
+    function trabajadoresSeleccionados() {
+        const mapa = new Map(visibleRows.map((r) => [rowKey(r), r]));
+        const out = [];
+        document.querySelectorAll('.chk-trab:checked').forEach((cb) => {
+            const row = mapa.get(cb.value);
+            if (row) out.push(row);
+        });
+        return out;
+    }
+
+    function actualizarContadores() {
+        const sel = trabajadoresSeleccionados();
+        const total = document.querySelectorAll('.chk-trab').length;
+        const neto = sel.reduce((s, r) => s + (Number.isFinite(Number(r.neto)) ? Number(r.neto) : 0), 0);
+        document.getElementById('lblRowCount').textContent = String(total);
+        document.getElementById('lblSeleccionados').textContent = String(sel.length);
+        document.getElementById('lblImporteTotal').textContent = formatearImporte(neto);
+        document.getElementById('btnGenerarZip').disabled = sel.length === 0;
+    }
+
+    function renderUnidades() {
+        const tbody = document.getElementById('tbodyUnidades');
+        if (!unidadesCatalogo.length) {
+            tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center py-3">Sin unidades con cuenta BCP</td></tr>';
+            document.getElementById('lblUnidadesCount').textContent = '0';
+            return;
+        }
+        tbody.innerHTML = unidadesCatalogo.map((u) => {
+            const id = escapeHtml(u.replicationunit);
+            const name = escapeHtml(u.name || u.replicationunit);
+            return `<tr>
+                <td class="text-center"><input type="checkbox" class="form-check-input chk-unidad" value="${id}" checked></td>
+                <td title="${escapeHtml(u.bcpaccount || '')}">${name}</td>
+            </tr>`;
+        }).join('');
+        document.getElementById('lblUnidadesCount').textContent = String(unidadesCatalogo.length);
+        tbody.querySelectorAll('.chk-unidad').forEach((cb) => {
+            cb.addEventListener('change', () => {
+                filtrarYRenderTrabajadores();
+                syncChkAllUnidades();
+            });
+        });
+        syncChkAllUnidades();
+    }
+
+    function syncChkAllUnidades() {
+        const all = document.querySelectorAll('.chk-unidad');
+        const chk = document.getElementById('chkAllUnidades');
+        if (!chk || !all.length) return;
+        let n = 0;
+        all.forEach((x) => { if (x.checked) n++; });
+        chk.checked = n === all.length;
+        chk.indeterminate = n > 0 && n < all.length;
+    }
+
+    function filtrarYRenderTrabajadores() {
+        const units = new Set(unidadesSeleccionadas());
+        const q = String(document.getElementById('txtLocalizar').value || '').trim().toLowerCase();
+        visibleRows = allRows.filter((r) => {
+            if (units.size && !units.has(String(r.unidad || '').trim())) return false;
+            if (!q) return true;
+            const blob = `${r.codigo || ''} ${r.nombre || ''} ${r.empresa || ''} ${r.unidad || ''}`.toLowerCase();
+            return blob.includes(q);
+        });
+        const tbody = document.getElementById('tbodyTrabajadores');
+        if (!visibleRows.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-muted text-center py-3">Sin trabajadores</td></tr>';
+            actualizarContadores();
+            return;
+        }
+        tbody.innerHTML = visibleRows.map((r) => {
+            const key = escapeHtml(rowKey(r));
+            return `<tr data-key="${key}">
+                <td class="text-center"><input type="checkbox" class="form-check-input chk-trab" value="${key}" checked></td>
+                <td>${escapeHtml(r.unidad)}</td>
+                <td title="${escapeHtml(r.company)}">${escapeHtml(r.empresa)}</td>
+                <td class="col-neto">${formatearImporte(r.neto)}</td>
+                <td>${escapeHtml(r.codigo)}</td>
+                <td>${escapeHtml(r.nombre)}</td>
+            </tr>`;
+        }).join('');
+        tbody.querySelectorAll('.chk-trab').forEach((cb) => {
+            cb.addEventListener('change', () => {
+                actualizarContadores();
+                syncChkAllTrab();
+            });
+        });
+        syncChkAllTrab();
+        actualizarContadores();
+    }
+
+    function syncChkAllTrab() {
+        const all = document.querySelectorAll('.chk-trab');
+        const chk = document.getElementById('chkAllTrab');
+        if (!chk || !all.length) return;
+        let n = 0;
+        all.forEach((x) => { if (x.checked) n++; });
+        chk.checked = n === all.length && n > 0;
+        chk.indeterminate = n > 0 && n < all.length;
+    }
+
+    async function cargarUnidadesCatalogo() {
+        const res = await fetch(URL_UNIDADES, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: '{}',
+        });
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || 'No se pudieron cargar unidades');
+        unidadesCatalogo = Array.isArray(data.rows) ? data.rows : [];
+        renderUnidades();
+    }
+
+    async function ejecutarBusqueda(ev) {
+        if (ev) ev.preventDefault();
+        const payroll_desc = document.getElementById('cboTipoPlanilla').value.trim();
+        const proceso_desc = document.getElementById('cboProceso').value.trim();
+        const period = document.getElementById('cboPeriodo').value.trim();
+        const concept = document.getElementById('cboConcepto').value.trim();
+        const currency = document.getElementById('cboMoneda').value.trim() || 'LO';
+        const paydate = document.getElementById('txtFechaPago').value.trim();
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const todosBancos = !!document.getElementById('chkTodosBancos').checked;
+        const unidades = unidadesSeleccionadas();
+
+        if (!payroll_desc || !proceso_desc || !period || !concept || !paydate) {
+            alert('Complete tipo planilla, proceso, periodo, concepto y fecha de pago.');
+            return;
+        }
+        if (!unidades.length) {
+            alert('Seleccione al menos una unidad con cuenta BCP.');
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    payroll_desc, proceso_desc, period, concept, currency, paydate, cesados,
+                    todos_bancos: todosBancos,
+                    unidades,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || data.error) {
+                alert(data.error || 'Error al listar.');
+                return;
+            }
+            allRows = Array.isArray(data.rows) ? data.rows : [];
+            document.getElementById('panelResultados').classList.remove('d-none');
+            filtrarYRenderTrabajadores();
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    const txtFecha = document.getElementById('txtFechaPago');
+    if (!txtFecha.value) txtFecha.value = hoyIsoLocal();
+
+    await poblarSelect(URL_PLANILLAS, document.getElementById('cboTipoPlanilla'));
+    await poblarSelect(URL_CONCEPTOS, document.getElementById('cboConcepto'));
+    // Prefer NETO if present
+    const cboConcepto = document.getElementById('cboConcepto');
+    const netoOpt = Array.from(cboConcepto.options).find((o) => String(o.value).toUpperCase() === 'NETO');
+    if (netoOpt) cboConcepto.value = netoOpt.value;
+
+    try {
+        await cargarUnidadesCatalogo();
+        document.getElementById('panelResultados').classList.remove('d-none');
+    } catch (e) {
+        console.error(e);
+        alert(e.message || 'Error cargando unidades');
+    }
+
+    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
+        const payroll = this.value.trim();
+        const cboProceso = document.getElementById('cboProceso');
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (payroll) {
+            await poblarSelect(`${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`, cboProceso);
+        } else {
+            cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+            cboProceso.disabled = true;
+        }
+    });
+
+    document.getElementById('cboProceso').addEventListener('change', async function () {
+        const payroll = document.getElementById('cboTipoPlanilla').value.trim();
+        const proceso = this.value.trim();
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        if (payroll && proceso) {
+            await poblarSelect(
+                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`,
+                cboPeriodo
+            );
+        } else {
+            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+            cboPeriodo.disabled = true;
+        }
+    });
+
+    document.getElementById('frmPagoUnidad').addEventListener('submit', ejecutarBusqueda);
+
+    document.getElementById('chkAllUnidades').addEventListener('change', function () {
+        document.querySelectorAll('.chk-unidad').forEach((cb) => { cb.checked = this.checked; });
+        filtrarYRenderTrabajadores();
+    });
+    document.getElementById('btnSelUnidades').addEventListener('click', () => {
+        document.querySelectorAll('.chk-unidad').forEach((cb) => { cb.checked = true; });
+        syncChkAllUnidades();
+        filtrarYRenderTrabajadores();
+    });
+    document.getElementById('btnDeselUnidades').addEventListener('click', () => {
+        document.querySelectorAll('.chk-unidad').forEach((cb) => { cb.checked = false; });
+        syncChkAllUnidades();
+        filtrarYRenderTrabajadores();
+    });
+    document.getElementById('chkAllTrab').addEventListener('change', function () {
+        document.querySelectorAll('.chk-trab').forEach((cb) => { cb.checked = this.checked; });
+        actualizarContadores();
+    });
+    document.getElementById('txtLocalizar').addEventListener('input', () => filtrarYRenderTrabajadores());
+
+    document.getElementById('btnGenerarZip').addEventListener('click', async function () {
+        const sel = trabajadoresSeleccionados();
+        if (!sel.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        const payload = {
+            payroll_desc: document.getElementById('cboTipoPlanilla').value.trim(),
+            proceso_desc: document.getElementById('cboProceso').value.trim(),
+            period: document.getElementById('cboPeriodo').value.trim(),
+            concept: document.getElementById('cboConcepto').value.trim(),
+            currency: document.getElementById('cboMoneda').value.trim() || 'LO',
+            paydate: document.getElementById('txtFechaPago').value.trim(),
+            cesados: document.getElementById('cboCesados').value.trim() || 'T',
+            todos_bancos: !!document.getElementById('chkTodosBancos').checked,
+            referencia: document.getElementById('txtReferencia').value.trim(),
+            trabajadores: sel.map((r) => ({
+                unidad: r.unidad,
+                person: r.person,
+                company: r.company,
+            })),
+        };
+        this.disabled = true;
+        try {
+            const res = await fetch(URL_ZIP, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
+            if (!res.ok || ctype.includes('application/json')) {
+                const data = await res.json().catch(() => ({}));
+                alert(data.error || 'No se pudo generar el ZIP.');
+                return;
+            }
+            const blob = await res.blob();
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(cd);
+            const filename = decodeURIComponent((m && (m[1] || m[2])) || `Telecredito_PorUnidad_${payload.period}.zip`);
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            actualizarContadores();
+        }
+    });
+});
+</script>
+{% endblock %}

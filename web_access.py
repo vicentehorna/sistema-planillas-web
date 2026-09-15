@@ -62,6 +62,7 @@ ENDPOINT_MENU_MAP = {
     'declaracion_afp_masivo_page': 'afpnet_masivo',
     'control_pagos_afp_page': 'control_pagos_afp',
     'pago_haberes_telecredito_page': 'pago_telecredito',
+    'pago_haberes_pago_unidad_page': 'pago_por_unidad',
     'pago_haberes_interbank_page': 'pago_interbank',
     'pago_haberes_bbva_page': 'pago_continental',
     'pago_haberes_banbif_page': 'pago_banbif',
@@ -226,6 +227,8 @@ PATH_PREFIX_MENU_MAP = {
     '/liquidaciones/mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
     '/pago-haberes/scotiabank': 'pago_scotiabank',
     '/api/pago-haberes/scotiabank': 'pago_scotiabank',
+    '/pago-haberes/pago-unidad': 'pago_por_unidad',
+    '/api/pago-haberes/pago-unidad': 'pago_por_unidad',
 }
 
 ALWAYS_ALLOWED_ENDPOINTS = {

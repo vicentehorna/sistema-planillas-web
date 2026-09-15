@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 
-{% block title %}Planilla Todas las Planillas{% endblock %}
+{% block title %}Consolidado de Planillas{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     function formatTitulo(proceso, periodValue) {
         const proc = formatoProcesoTitulo(proceso);
         const mesAnio = mesAnioLegible(periodValue);
-        return mesAnio ? `Planilla Todas - ${proc} ${mesAnio}` : `Planilla Todas - ${proc}`;
+        return mesAnio ? `Consolidado de Planillas - ${proc} ${mesAnio}` : `Consolidado de Planillas - ${proc}`;
     }
 
     function actualizarTitulo(proceso, periodValue) {
@@ -392,7 +392,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const alignCenter = { horizontal: 'center', vertical: 'middle' };
 
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Planilla todas', { views: [{ showGridLines: true }] });
+        const ws = wb.addWorksheet('Consolidado planillas', { views: [{ showGridLines: true }] });
 
         const tituloReporte = meta.titulo || formatTitulo(meta.proceso, meta.periodoValor || meta.periodo);
 
@@ -489,7 +489,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         a.href = url;
         const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
         const stamp = new Date().toISOString().slice(0, 10);
-        a.download = `planilla_todas_planillas_${safe(meta.compania)}_${stamp}.xlsx`;
+        a.download = `consolidado_de_planillas_${safe(meta.compania)}_${stamp}.xlsx`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

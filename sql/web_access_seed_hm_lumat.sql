@@ -91,7 +91,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('reporte_resumen_total', 'Resumen de Planilla Total', 'reportes_planillas', 1310, 'reporte_resumen_total', '/reporte-resumen-total', 'A'),
 ('reporte_planilla_vertical', 'Planilla Vertical', 'reportes_planillas', 1320, 'reporte_planilla_vertical_page', '/reporte-planilla-vertical', 'A'),
 ('reporte_planilla_consolidada', 'Planilla Consolidada', 'reportes_planillas', 1330, 'reporte_planilla_consolidada_page', '/reporte-planilla-consolidada', 'A'),
-('reporte_planilla_todas_planillas', 'Planilla Todas las Planillas', 'reportes_planillas', 1335, 'reporte_planilla_todas_planillas_page', '/reporte-planilla-todas-planillas', 'A'),
+('reporte_planilla_todas_planillas', 'Consolidado de Planillas', 'reportes_planillas', 1335, 'reporte_planilla_todas_planillas_page', '/reporte-planilla-todas-planillas', 'A'),
 ('reporte_listado_pagos', 'Listado de Pagos', 'reportes_planillas', 1340, 'reporte_listado_pagos_page', '/reporte-listado-pagos', 'A'),
 ('reporte_promedio_liquidaciones', 'Promedio de Liquidaciones', 'reportes_planillas', 1350, 'reporte_liquidaciones', '/reporte-liquidaciones', 'A'),
 ('reporte_planilla_por_conceptos', 'Planilla por Conceptos', 'reportes_planillas', 1360, 'reporte_planilla_por_conceptos_page', '/reporte-planilla-por-conceptos', 'A'),

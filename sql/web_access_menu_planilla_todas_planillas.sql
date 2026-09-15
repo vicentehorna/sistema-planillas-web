@@ -1,5 +1,5 @@
 /*
-    Alta de menú Planilla Todas las Planillas (bajo Reportes / Planillas).
+    Alta de menú Consolidado de Planillas (bajo Reportes / Planillas).
     Idempotente. Asigna a perfiles ADMIN y a los que ya tienen
     reporte_planilla_vertical o reporte_planilla_consolidada.
 */
@@ -12,13 +12,13 @@ BEGIN
         INSERT INTO dbo.WEB_MenuOption
             (MenuCode, Title, ParentCode, SortOrder, Endpoint, RoutePrefix, Status)
         VALUES
-            ('reporte_planilla_todas_planillas', 'Planilla Todas las Planillas', 'reportes_planillas', 1335,
+            ('reporte_planilla_todas_planillas', 'Consolidado de Planillas', 'reportes_planillas', 1335,
              'reporte_planilla_todas_planillas_page', '/reporte-planilla-todas-planillas', 'A');
     END
     ELSE
     BEGIN
         UPDATE dbo.WEB_MenuOption
-        SET Title = 'Planilla Todas las Planillas',
+        SET Title = 'Consolidado de Planillas',
             ParentCode = 'reportes_planillas',
             SortOrder = 1335,
             Endpoint = 'reporte_planilla_todas_planillas_page',

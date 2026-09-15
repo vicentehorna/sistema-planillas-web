@@ -16177,6 +16177,7 @@ def _replicationunit_detalle_dict(r):
     return {
         'replicationunit': _jsonable_value(r.get('replicationunit')),
         'name': _jsonable_value(r.get('name')),
+        'bcpaccount': _jsonable_value(r.get('bcpaccount')),
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -16253,6 +16254,7 @@ def api_unidades_guardar():
     replicationunit = str(body.get('replicationunit') or '').strip().upper()
     modo = str(body.get('modo') or ('U' if replicationunit else 'I')).strip().upper()
     name = str(body.get('name') or '').strip()
+    bcpaccount = str(body.get('bcpaccount') or '').strip()[:20]
     xlastuser = _xlastuser_id()
 
     if not replicationunit:
@@ -16268,11 +16270,12 @@ def api_unidades_guardar():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_guardarreplicationunit_web "
-            "@modo=?, @replicationunit=?, @name=?, @xlastuser=?",
+            "@modo=?, @replicationunit=?, @name=?, @bcpaccount=?, @xlastuser=?",
             (
                 modo,
                 replicationunit,
                 name,
+                bcpaccount or None,
                 xlastuser,
             ),
         )

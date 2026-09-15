@@ -225,6 +225,11 @@
                         <input type="text" id="txtName" class="form-control form-control-sm campo-obligatorio" maxlength="255" required>
                     </div>
 
+                    <div class="col-12 col-md-6">
+                        <label for="txtBcpAccount" class="form-label fw-semibold text-muted">Nro Cuenta BCP</label>
+                        <input type="text" id="txtBcpAccount" class="form-control form-control-sm" maxlength="20" autocomplete="off" placeholder="Opcional">
+                    </div>
+
                     <div class="col-12 col-md-6" id="wrapAuditoriaUser">
                         <label for="txtXLastUser" class="form-label fw-semibold text-muted">Último Usuario</label>
                         <input type="text" id="txtXLastUser" class="form-control form-control-sm un-campo-auditoria" readonly disabled>
@@ -342,6 +347,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('hidModo').value = 'U';
         txtReplicationUnit.value = data.replicationunit || '';
         document.getElementById('txtName').value = data.name || '';
+        document.getElementById('txtBcpAccount').value = data.bcpaccount || '';
         document.getElementById('txtXLastUser').value = data.xlastuser || '';
         document.getElementById('txtXLastDate').value = formatearFecha(data.xlastdate);
         const titulo = [data.replicationunit, data.name].filter(Boolean).join(' — ');
@@ -354,6 +360,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             replicationunit: normalizarCodigoUnidad(txtReplicationUnit.value),
             modo: document.getElementById('hidModo').value.trim() || 'I',
             name: document.getElementById('txtName').value.trim(),
+            bcpaccount: document.getElementById('txtBcpAccount').value.trim().slice(0, 20),
         };
     }
 

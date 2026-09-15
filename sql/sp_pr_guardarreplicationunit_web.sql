@@ -5,6 +5,7 @@
            U = actualizar registro existente (no modifica ReplicationUnit).
 
     Description se guarda como los primeros 40 caracteres de name.
+    bcpAccount (Nro Cuenta BCP) es opcional, máx. 20 caracteres.
 
     Usado por: POST /api/unidades/guardar
 */
@@ -12,6 +13,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarreplicationunit_web]
     @modo               CHAR(1),
     @replicationunit    VARCHAR(4),
     @name               VARCHAR(255),
+    @bcpaccount         VARCHAR(20) = NULL,
     @xlastuser          VARCHAR(20) = NULL
 AS
 BEGIN
@@ -20,6 +22,7 @@ BEGIN
     SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
     SET @name = LTRIM(RTRIM(ISNULL(@name, '')));
+    SET @bcpaccount = NULLIF(LTRIM(RTRIM(ISNULL(@bcpaccount, ''))), '');
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
 
     IF @modo NOT IN ('I', 'U')
@@ -62,6 +65,7 @@ BEGIN
             ReplicationUnit,
             name,
             Description,
+            bcpAccount,
             Status,
             XLastUser,
             XLastDate
@@ -70,6 +74,7 @@ BEGIN
             @replicationunit,
             @name,
             LEFT(@name, 40),
+            @bcpaccount,
             'A',
             @xlastuser,
             GETDATE()
@@ -94,6 +99,7 @@ BEGIN
     UPDATE SY_ReplicationUnit
     SET name = @name,
         Description = LEFT(@name, 40),
+        bcpAccount = @bcpaccount,
         XLastUser = @xlastuser,
         XLastDate = GETDATE()
     WHERE ReplicationUnit = @replicationunit;

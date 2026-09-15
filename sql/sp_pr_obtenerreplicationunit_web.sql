@@ -13,6 +13,7 @@ BEGIN
     SELECT
         ru.ReplicationUnit AS replicationunit,
         LTRIM(RTRIM(ISNULL(ru.name, ''))) AS name,
+        LTRIM(RTRIM(ISNULL(ru.bcpAccount, ''))) AS bcpaccount,
         ru.XLastUser AS xlastuser,
         ru.XLastDate AS xlastdate
     FROM SY_ReplicationUnit ru (NOLOCK)

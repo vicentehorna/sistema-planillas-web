@@ -7896,6 +7896,12 @@ def reporte_planilla_consolidada_page():
     return render_template('reporte_planilla_consolidada.html')
 
 
+@app.route('/reporte-planilla-todas-planillas')
+@login_required
+def reporte_planilla_todas_planillas_page():
+    return render_template('reporte_planilla_todas_planillas.html')
+
+
 @app.route('/reporte-vacaciones-detalle')
 @login_required
 def reporte_vacaciones_detalle_page():
@@ -24932,6 +24938,104 @@ def api_procesos_todos():
                 pass
 
 
+@app.route('/api/selectores/procesos-todas-planillas')
+@login_required
+def api_procesos_todas_planillas():
+    """
+    Procesos distintos (por Description) asociados a alguna planilla de la compañía.
+    id/text = Description (para cruzar ProcessType por planilla).
+    """
+    cia = (request.args.get('cia') or '').strip()
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                LTRIM(RTRIM(ISNULL(PT.Description, PT.ProcessType))) AS proceso
+            FROM PR_PayRollTypeProcess PTP (NOLOCK)
+            INNER JOIN PR_ProcessType PT (NOLOCK)
+                ON PT.Company = PTP.Company
+               AND PT.ProcessType = PTP.ProcessType
+            WHERE PTP.Company = ?
+              AND LTRIM(RTRIM(ISNULL(PT.Description, ''))) <> ''
+            ORDER BY 1
+            """,
+            (cia,),
+        )
+        rows = cursor.fetchall()
+        data = []
+        for row in rows:
+            desc = str(row[0] or '').strip()
+            if desc:
+                data.append({"id": desc, "text": desc})
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_procesos_todas_planillas")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/selectores/periodos-todas-planillas')
+@login_required
+def api_periodos_todas_planillas():
+    """
+    Periodos distintos de la compañía para un proceso (por Description),
+    en todas las planillas.
+    """
+    cia = (request.args.get('cia') or '').strip()
+    proceso_desc = (
+        request.args.get('proceso_desc')
+        or request.args.get('proceso')
+        or request.args.get('process_desc')
+        or ''
+    ).strip()
+    if not cia or not proceso_desc:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT DISTINCT
+                PC.PRPeriod AS period,
+                SUBSTRING(PC.PRPeriod, 1, 4) + '-'
+                    + SUBSTRING(PC.PRPeriod, 5, 2) + '-'
+                    + SUBSTRING(PC.PRPeriod, 7, 2) AS periodo
+            FROM PR_ProcessControl PC (NOLOCK)
+            INNER JOIN PR_ProcessType PT (NOLOCK)
+                ON PT.Company = PC.Company
+               AND PT.ProcessType = PC.ProcessType
+            WHERE PC.Company = ?
+              AND PC.Status IN ('A', 'C', 'G')
+              AND LTRIM(RTRIM(PT.Description)) = ?
+            ORDER BY PC.PRPeriod DESC
+            """,
+            (cia, proceso_desc),
+        )
+        rows = cursor.fetchall()
+        data = [{"id": str(r[0]).strip(), "text": str(r[1]).strip()} for r in rows if r and r[0]]
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_periodos_todas_planillas")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 def _configura5ta_filas_to_xml(filas):
     """Arma XML <rows><r .../></rows> para sp_pr_guardar_configura5ta_web."""
     import xml.etree.ElementTree as ET
@@ -26708,6 +26812,83 @@ def _period_exists_for_company_process(cursor, cia, payroll_type, processtype, p
     return cursor.fetchone() is not None
 
 
+def _list_payroll_types_for_company(cursor, cia):
+    """Lista (PayRollType, Description) de la compañía."""
+    cursor.execute(
+        """
+        SELECT
+            LTRIM(RTRIM(PayRollType)) AS payrolltype,
+            LTRIM(RTRIM(ISNULL(Description, PayRollType))) AS description
+        FROM PR_PayRollType (NOLOCK)
+        WHERE Company = ?
+        ORDER BY Description ASC, PayRollType ASC
+        """,
+        (cia,),
+    )
+    rows = cursor.fetchall()
+    out = []
+    for row in rows or []:
+        code = str(row[0] or '').strip()
+        name = str(row[1] or code).strip()
+        if code:
+            out.append((code, name))
+    return out
+
+
+def _resolve_process_type_by_description(cursor, cia, payroll_type, proceso_desc):
+    """ProcessType de una planilla cuyo PR_ProcessType.Description coincide."""
+    proceso_desc = (proceso_desc or '').strip()
+    payroll_type = (payroll_type or '').strip()
+    if not proceso_desc or not payroll_type:
+        return None
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(PTP.ProcessType))
+        FROM PR_PayRollTypeProcess PTP (NOLOCK)
+        INNER JOIN PR_ProcessType PT (NOLOCK)
+            ON PT.Company = PTP.Company
+           AND PT.ProcessType = PTP.ProcessType
+        WHERE PTP.Company = ?
+          AND PTP.PayRollType = ?
+          AND LTRIM(RTRIM(PT.Description)) = ?
+        """,
+        (cia, payroll_type, proceso_desc),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0]).strip()
+
+
+def _find_period_same_month_for_payroll(cursor, cia, payroll_type, process_type, period):
+    """
+    Periodo exacto si existe; si no, cualquier PRPeriod del mismo YYYYMM
+    para esa planilla/proceso (el SP vertical filtra por LEFT 6).
+    """
+    period = _normalize_pr_period(period) or str(period or '').strip()
+    if not period or not payroll_type or not process_type:
+        return None
+    if _period_exists_for_company_process(cursor, cia, payroll_type, process_type, period):
+        return period
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(PRPeriod))
+        FROM PR_ProcessControl (NOLOCK)
+        WHERE Company = ?
+          AND PayRollType = ?
+          AND ProcessType = ?
+          AND LEFT(PRPeriod, 6) = LEFT(?, 6)
+          AND Status IN ('A', 'C', 'G')
+        ORDER BY PRPeriod DESC
+        """,
+        (cia, payroll_type, process_type, period),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0]).strip()
+
+
 def _resolve_bank_id_by_name(cursor, cia, bank_name):
     bank_name = (bank_name or '').strip()
     if not bank_name:
@@ -26897,6 +27078,116 @@ def reporte_planilla_consolidada_post():
         return jsonify({"headers": headers, "data": resultado})
     except Exception as e:
         logging.exception("reporte_planilla_consolidada_post")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/reporte_planilla_todas_planillas', methods=['POST'])
+@login_required
+def reporte_planilla_todas_planillas_post():
+    """
+    Planilla vertical de todas las planillas de una compañía.
+    Filtros: cia, proceso (Description), periodo — sin tipo de planilla.
+    Misma estructura que vertical + columna Tipo Planilla al inicio.
+    """
+    body = request.get_json(silent=True) or {}
+    cia = (body.get('cia') or '').strip()
+    proceso_desc = (
+        body.get('proceso_desc')
+        or body.get('process_desc')
+        or body.get('process_description')
+        or body.get('proceso')
+        or body.get('process')
+        or ''
+    ).strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = (body.get('person') or '0').strip() or '0'
+    salarybank = str(
+        body.get('salarybank')
+        if body.get('salarybank') is not None
+        else body.get('salary_bank')
+        or ''
+    ).strip()
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not proceso_desc or not period:
+        return jsonify({"error": "Debe indicar proceso y periodo."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        payrolls = _list_payroll_types_for_company(cursor, cia)
+
+        global_concepts = {}
+        merged_rows = []
+
+        for payroll_type, payroll_name in payrolls:
+            process_type = _resolve_process_type_by_description(
+                cursor, cia, payroll_type, proceso_desc,
+            )
+            if not process_type:
+                continue
+            period_use = _find_period_same_month_for_payroll(
+                cursor, cia, payroll_type, process_type, period,
+            )
+            if not period_use:
+                continue
+
+            _, concept_reporden, filas_dict = _fetch_planilla_vertical_for_company(
+                cursor, cia, payroll_type, process_type, period_use, person, salarybank,
+                fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta,
+                repunit=repunit,
+                cesados=cesados,
+            )
+            if not filas_dict:
+                continue
+            for pt, rep in (concept_reporden or {}).items():
+                prev = global_concepts.get(pt)
+                if prev is None or rep < prev:
+                    global_concepts[pt] = rep
+            for item in filas_dict:
+                item['payroll_name'] = payroll_name or payroll_type
+                item['_sort_payroll'] = (payroll_name or payroll_type).strip().upper()
+                item['_sort_name'] = str(item.get('name') or '').strip().upper()
+                merged_rows.append(item)
+
+        concept_headers = sorted(
+            global_concepts.keys(),
+            key=lambda k: (global_concepts.get(k, 9999), k),
+        )
+        merged_rows.sort(key=lambda r: (r.get('_sort_payroll', ''), r.get('_sort_name', '')))
+
+        static_headers = ['Tipo Planilla'] + list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES)
+        headers = static_headers + concept_headers
+
+        resultado = []
+        for item in merged_rows:
+            fila = [item.get('payroll_name')]
+            for key in _PLANILLA_VERTICAL_STATIC_KEYS:
+                fila.append(item.get(key))
+            concepts = item.get('_concepts') or {}
+            for ch in concept_headers:
+                fila.append(concepts.get(ch))
+            resultado.append(fila)
+
+        return jsonify({"headers": headers, "data": resultado})
+    except Exception as e:
+        logging.exception("reporte_planilla_todas_planillas_post")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

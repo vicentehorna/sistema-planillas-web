@@ -7,6 +7,7 @@
     const STORAGE_KEY_PROMEDIO_LIQ = 'filtros_promedio_liq';
     const STORAGE_KEY_PLANILLA_VERTICAL = 'filtros_planilla_vertical';
     const STORAGE_KEY_PLANILLA_CONSOLIDADA = 'filtros_planilla_consolidada';
+    const STORAGE_KEY_PLANILLA_TODAS_PLANILLAS = 'filtros_planilla_todas_planillas';
     const STORAGE_KEY_VACACIONES_DETALLE = 'filtros_vacaciones_detalle';
     const STORAGE_KEY_SALDO_VACACIONES = 'filtros_saldo_vacaciones';
     const STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE = 'filtros_descansos_medicos_detalle';
@@ -575,6 +576,123 @@
                 const u = document.getElementById('cboUnidad');
                 if (u) u.addEventListener('change', guardar);
             }
+        }
+
+        return {
+            STORAGE_KEY: storageKey,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
+    /** Persistencia sin tipo de planilla: cia → proceso (desc) → periodo. */
+    function crearPersistenciaPlanillaTodasPlanillas() {
+        const storageKey = STORAGE_KEY_PLANILLA_TODAS_PLANILLAS;
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    proceso: val('cboProceso'),
+                    periodo: val('cboPeriodo'),
+                    person: val('cboTrabajador'),
+                    salarybank: val('cboBancoHaberes'),
+                    repunit: val('cboUnidad') || '0',
+                    cesados: val('cboCesados') || 'T',
+                    fechaIngresoActivo: !!document.getElementById('chkFechaIngreso')?.checked,
+                    fechaIngresoDesde: val('txtFechaIngresoDesde'),
+                    fechaIngresoHasta: val('txtFechaIngresoHasta'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(storageKey, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros planilla todas: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(storageKey);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+            const {
+                poblarSelect,
+                poblarBancosHaberes,
+                cargarUnidades,
+                cargarProcesosYPeriodos
+            } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            if (!cboCia || !optionExists(cboCia, String(filtros.cia).trim())) return false;
+            cboCia.value = String(filtros.cia).trim();
+            const cia = cboCia.value.trim();
+
+            if (typeof cargarUnidades === 'function') {
+                await cargarUnidades();
+                const cboUnidad = document.getElementById('cboUnidad');
+                if (cboUnidad) {
+                    const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                    cboUnidad.value = optionExists(cboUnidad, repunit) ? repunit : '0';
+                }
+            }
+
+            const cboCesados = document.getElementById('cboCesados');
+            if (cboCesados) {
+                const ces = filtros.cesados != null ? String(filtros.cesados).trim() : 'T';
+                if (optionExists(cboCesados, ces)) cboCesados.value = ces;
+            }
+
+            restaurarFechaIngresoDesdeFiltros(filtros);
+
+            if (typeof cargarProcesosYPeriodos === 'function') {
+                await cargarProcesosYPeriodos(
+                    cia,
+                    filtros.proceso != null ? String(filtros.proceso).trim() : '',
+                    filtros.periodo != null ? String(filtros.periodo).trim() : ''
+                );
+            }
+
+            const cboTrab = document.getElementById('cboTrabajador');
+            if (cboTrab) {
+                await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrab);
+                const person = filtros.person != null ? String(filtros.person).trim() : '';
+                if (person && optionExists(cboTrab, person)) cboTrab.value = person;
+                else cboTrab.value = '';
+            }
+
+            if (typeof poblarBancosHaberes === 'function') {
+                await poblarBancosHaberes(cia);
+                const cboBanco = document.getElementById('cboBancoHaberes');
+                if (cboBanco) {
+                    const bank = filtros.salarybank != null ? String(filtros.salarybank).trim() : '';
+                    if (bank && optionExists(cboBanco, bank)) cboBanco.value = bank;
+                }
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboProceso', 'cboPeriodo', 'cboTrabajador', 'cboBancoHaberes',
+             'cboUnidad', 'cboCesados', 'chkFechaIngreso',
+             'txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
         }
 
         return {
@@ -2930,6 +3048,9 @@
         },
         planillaConsolidada: function () {
             return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true, true);
+        },
+        planillaTodasPlanillas: function () {
+            return crearPersistenciaPlanillaTodasPlanillas();
         },
         vacacionesDetalle: function () {
             return crearPersistenciaVacacionesDetalle();

@@ -1411,8 +1411,8 @@
                 </li>
                 {% endif %}
 
-                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page', 'reporte_planilla_anual_concepto_page', 'reporte_trabajadores_page') %}
-                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') or can_menu('reporte_planilla_anual_concepto') or can_menu('reporte_trabajadores') %}
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_planilla_todas_planillas_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page', 'reporte_planilla_anual_concepto_page', 'reporte_trabajadores_page') %}
+                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_planilla_todas_planillas') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') or can_menu('reporte_planilla_anual_concepto') or can_menu('reporte_trabajadores') %}
                 {% if show_planillas_reportes %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
@@ -1443,6 +1443,13 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_consolidada_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_consolidada_page') }}" title="Planilla Consolidada">
                                 <i class="bi bi-layout-three-columns"></i><span class="sidebar-link-text">Planilla Consolidada</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('reporte_planilla_todas_planillas') %}
+                        <li class="{{ 'active' if request.endpoint == 'reporte_planilla_todas_planillas_page' else '' }}">
+                            <a href="{{ url_for('reporte_planilla_todas_planillas_page') }}" title="Planilla Todas las Planillas">
+                                <i class="bi bi-collection"></i><span class="sidebar-link-text">Planilla Todas las Planillas</span>
                             </a>
                         </li>
                         {% endif %}

@@ -3846,6 +3846,23 @@ def _require_hm_alamo_json(feature='Esta opción'):
     return None
 
 
+# BDs con modal "Buscar todos" (lista de trabajadores cross-empresa).
+_BDS_BUSCAR_TODOS_TRABAJADORES = frozenset({'hm_alamo', 'hm_garc'})
+
+
+def _require_buscar_todos_trabajadores_json(feature='Buscar todos'):
+    try:
+        from database import get_active_database
+        db = str(get_active_database() or '').strip().lower()
+    except Exception:
+        db = ''
+    if db not in _BDS_BUSCAR_TODOS_TRABAJADORES:
+        return jsonify({
+            'error': f'{feature} solo está disponible en hm_alamo / hm_garc.',
+        }), 403
+    return None
+
+
 # BDs donde el selector de compañías se filtra por SY_UserCompany (idcompany).
 _BDS_FILTRO_COMPANIAS_USERCOMPANY = frozenset({'hm_garc', 'hm_alamo'})
 
@@ -25818,8 +25835,8 @@ def api_trabajadores_listado():
 @app.route('/api/trabajadores/buscar-todas-empresas', methods=['POST'])
 @login_required
 def api_trabajadores_buscar_todas_empresas():
-    """sp_pr_selectorpersonas_todas_empresas_web: búsqueda cross-empresa (solo hm_alamo)."""
-    denied = _require_hm_alamo_json('Buscar todos')
+    """sp_pr_selectorpersonas_todas_empresas_web: búsqueda cross-empresa (hm_alamo / hm_garc)."""
+    denied = _require_buscar_todos_trabajadores_json('Buscar todos')
     if denied:
         return denied
 

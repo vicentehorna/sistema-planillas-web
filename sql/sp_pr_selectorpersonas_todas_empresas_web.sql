@@ -1,6 +1,6 @@
 /*
     Selector de trabajadores en TODAS las empresas (activos e inactivos).
-    Uso: modal "Buscar todos" en Lista de trabajadores (hm_alamo).
+    Uso: modal "Buscar todos" en Lista de trabajadores (hm_alamo / hm_garc).
 
     @filtro: texto (mín. 2 caracteres en API). Busca en documento, nombre y compañía.
     Devuelve una fila por (persona, empresa): documento, nombre, company, planilla, estado.

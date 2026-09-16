@@ -198,7 +198,7 @@
                 <button type="button" class="btn btn-primary btn-sm px-4" id="btnConsultarTrabajadores" disabled>
                     <i class="bi bi-search"></i> Consultar
                 </button>
-                {% if (sql_database or '')|lower == 'hm_alamo' %}
+                {% if (sql_database or '')|lower in ('hm_alamo', 'hm_garc') %}
                 <button type="button" class="btn btn-outline-primary btn-sm px-4" id="btnBuscarTodosTrabajadores"
                         title="Buscar trabajador en todas las empresas">
                     <i class="bi bi-people"></i> Buscar todos
@@ -286,7 +286,7 @@
     </div>
 </div>
 
-{% if (sql_database or '')|lower == 'hm_alamo' %}
+{% if (sql_database or '')|lower in ('hm_alamo', 'hm_garc') %}
 <div class="modal fade" id="modalBuscarTodosTrabajadores" tabindex="-1"
      aria-labelledby="modalBuscarTodosTrabajadoresLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
@@ -367,9 +367,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
     const btnTrasladoTrab = document.getElementById('btnTrasladoTrabajador');
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
-    // hm_alamo: Traslado también para activos. Fallback: botón "Buscar todos" solo existe en Alamo.
-    const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }}
-        || !!document.getElementById('btnBuscarTodosTrabajadores');
+    // hm_alamo: Traslado también para activos. (Buscar todos también existe en hm_garc.)
+    const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }};
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 
@@ -1398,7 +1397,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     });
 
-    // --- Buscar todos (solo hm_alamo) ---
+    // --- Buscar todos (hm_alamo / hm_garc) ---
     const btnBuscarTodos = document.getElementById('btnBuscarTodosTrabajadores');
     const modalBuscarTodosEl = document.getElementById('modalBuscarTodosTrabajadores');
     if (btnBuscarTodos && modalBuscarTodosEl) {

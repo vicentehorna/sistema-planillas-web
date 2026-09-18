@@ -4,15 +4,16 @@
     Usado por: POST /api/vacaciones/guardar-detalle (registro_vacaciones.html).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_vacaciones_guardar_detalle_web]
-    @company       VARCHAR(4),
-    @person        VARCHAR(20),
-    @line          INT,
-    @prperiod      VARCHAR(10),
-    @datebegin     DATETIME,
-    @dateend       DATETIME,
-    @days          INT = NULL,
-    @vacationtype  CHAR(1) = 'D',
-    @xlastuser     VARCHAR(20) = NULL
+    @company         VARCHAR(4),
+    @person          VARCHAR(20),
+    @line            INT,
+    @prperiod        VARCHAR(10),
+    @datebegin       DATETIME,
+    @dateend         DATETIME,
+    @days            INT = NULL,
+    @vacationtype    CHAR(1) = 'D',
+    @xlastuser       VARCHAR(20) = NULL,
+    @permitir_exceso CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -28,6 +29,9 @@ BEGIN
     DECLARE @dias_vacaciones DECIMAL(10, 2);
     DECLARE @inicio_provision DATE;
     DECLARE @inicio_derecho  DATE;
+
+    SET @permitir_exceso = UPPER(LTRIM(RTRIM(ISNULL(@permitir_exceso, 'N'))));
+    IF @permitir_exceso NOT IN ('Y', 'N') SET @permitir_exceso = 'N';
 
     IF @datebegin IS NULL OR @dateend IS NULL
     BEGIN
@@ -137,7 +141,8 @@ BEGIN
     IF @pendientes < 0
         SET @pendientes = 0;
 
-    IF (CAST(@consumeddays AS DECIMAL(10, 2)) + @dias_nuevos) > @adquiridos_ganados
+    IF @permitir_exceso <> 'Y'
+       AND (CAST(@consumeddays AS DECIMAL(10, 2)) + @dias_nuevos) > @adquiridos_ganados
     BEGIN
         RAISERROR('Los días solicitados superan el saldo pendiente del periodo.', 16, 1);
         RETURN;

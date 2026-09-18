@@ -595,7 +595,7 @@
                         <div class="alert alert-warning py-2 mb-0 mt-2 vac-alerta-dias" id="alertaDiasExcedidos" role="alert">
                             <i class="bi bi-exclamation-triangle me-1"></i>
                             Los días calculados superan el saldo pendiente del periodo seleccionado
-                            (<strong id="lblPendientesPeriodo">0</strong> día(s)).
+                            (<strong id="lblPendientesPeriodo">0</strong> día(s)). Al guardar se pedirá confirmación.
                         </div>
                     </form>
                 </div>
@@ -859,7 +859,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const incompleto = !consumo || !inicio || !fin || !periodoSeleccionado;
 
         alerta.classList.toggle('visible', excede);
-        btn.disabled = excede || incompleto || dias <= 0;
+        btn.disabled = incompleto || dias <= 0;
         programarAjusteAlturaGrilla();
     }
 
@@ -1156,7 +1156,29 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.getElementById('txtFechaInicio').value,
             document.getElementById('txtFechaFin').value
         );
-        if (!dias || dias > periodoSeleccionado.pendientes) return;
+        if (!dias || dias <= 0) return;
+
+        const pendientes = Number(periodoSeleccionado.pendientes || 0);
+        let permitirExceso = false;
+        if (dias > pendientes) {
+            const msg =
+                `Los días solicitados (${dias}) superan el saldo pendiente del periodo (${fmtDiasVac(pendientes)} día(s)).\n` +
+                '¿Desea continuar y grabar de todas formas?';
+            let ok = false;
+            if (window.HmUi && typeof HmUi.confirmar === 'function') {
+                ok = await HmUi.confirmar({
+                    titulo: 'Saldo insuficiente',
+                    mensaje: msg,
+                    textoOk: 'Continuar',
+                    textoCancelar: 'Cancelar',
+                    variant: 'warning',
+                });
+            } else {
+                ok = window.confirm(msg);
+            }
+            if (!ok) return;
+            permitirExceso = true;
+        }
 
         const btn = document.getElementById('btnGuardarVacaciones');
         btn.disabled = true;
@@ -1174,6 +1196,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     fecha_fin: document.getElementById('txtFechaFin').value,
                     dias,
                     vacationtype: document.getElementById('cboTipoVacacion').value,
+                    permitir_exceso: permitirExceso ? 'Y' : 'N',
                 }),
             });
             await leerJson(res);

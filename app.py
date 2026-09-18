@@ -29353,6 +29353,12 @@ def api_vacaciones_guardar_detalle():
         except Exception:
             return jsonify({"error": "Días calculados inválidos."}), 400
 
+    permitir_exceso = str(
+        body.get('permitir_exceso') or body.get('confirmar_exceso') or 'N'
+    ).strip().upper()[:1]
+    if permitir_exceso not in ('Y', 'N'):
+        permitir_exceso = 'N'
+
     conn = None
     try:
         conn = get_db_connection()
@@ -29360,10 +29366,10 @@ def api_vacaciones_guardar_detalle():
         cursor.execute(
             "EXEC sp_pr_vacaciones_guardar_detalle_web "
             "@company=?, @person=?, @line=?, @prperiod=?, @datebegin=?, @dateend=?, "
-            "@days=?, @vacationtype=?, @xlastuser=?",
+            "@days=?, @vacationtype=?, @xlastuser=?, @permitir_exceso=?",
             (
                 cia, person, line, prperiod, fecha_inicio, fecha_fin,
-                days_param, vacationtype, xlastuser,
+                days_param, vacationtype, xlastuser, permitir_exceso,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)

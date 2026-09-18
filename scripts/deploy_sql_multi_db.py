@@ -41,6 +41,7 @@ DEFAULT_CLIENT_DBS = [
     "hm_elclan",
     "hm_atilio",
     "hm_quimica",
+    "hm_sgp",
 ]
 
 DEFAULT_SERVER = "179.61.14.224,54982"

@@ -1,12 +1,15 @@
 /*
-    Carga / refresca PR_HistoricoFechas desde PR_EmployeePayRoll (proceso FIN_DE_MES).
+    Carga / refresca PR_HistoricoFechas desde PR_EmployeePayRoll.
 
-    Por Company + Person + CONVERT(DATE, EntryDate):
-      FechaInicio = EntryDate del voucher (ya es ISNULL(ReEntryDate, EntryDate) al calcular)
+    Ciclo = (Company, Person, CONVERT(DATE, EntryDate)):
+      FechaInicio = EntryDate del voucher (en reingreso el voucher ya trae la nueva fecha)
       FechaFin    = MAX(CeaseDate) de ese ciclo (NULL si sigue vigente)
 
-    Idempotente: elimina filas existentes y vuelve a insertar desde FIN_DE_MES.
-    Usado inicialmente en hm_ngservicios.
+    Fuente preferente: todos los procesos con EntryDate (incluye LIQUIDACION,
+    que es donde queda registrado el cese). Antes solo se usaba FIN_DE_MES
+    y se perdían ceses/reingresos visibles solo en liquidación.
+
+    Idempotente: elimina filas existentes y vuelve a insertar.
 */
 SET NOCOUNT ON;
 
@@ -16,7 +19,7 @@ BEGIN
     RETURN;
 END
 
-DECLARE @xuser VARCHAR(20) = 'CARGA_FINMES';
+DECLARE @xuser VARCHAR(20) = 'CARGA_EPR';
 DECLARE @ahora DATETIME = GETDATE();
 
 DELETE FROM dbo.PR_HistoricoFechas;
@@ -30,10 +33,7 @@ SELECT
     @xuser,
     @ahora
 FROM PR_EmployeePayRoll ep (NOLOCK)
-    INNER JOIN PR_ProcessType pt (NOLOCK)
-        ON pt.ProcessType = ep.ProcessType
-WHERE pt.ShortName = 'FIN_DE_MES'
-  AND ep.EntryDate IS NOT NULL
+WHERE ep.EntryDate IS NOT NULL
 GROUP BY
     ep.Company,
     ep.Person,
@@ -60,7 +60,7 @@ FROM dbo.PR_HistoricoFechas h
        )
 WHERE h.FechaFin IS NULL;
 
-PRINT CONCAT('PR_HistoricoFechas: ', @n, ' ciclo(s) cargados desde FIN_DE_MES.');
+PRINT CONCAT('PR_HistoricoFechas: ', @n, ' ciclo(s) cargados desde PR_EmployeePayRoll.');
 
 SELECT TOP 20
     Company,

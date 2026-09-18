@@ -5,8 +5,8 @@
     Devuelve 4 resultsets:
       1) Datos del empleado
       2) Resumen de saldo (acumulados, gozados, pendientes)
-      3) Periodos vacacionales (PR_Vacation)
-      4) Detalle de utilización (PR_VacationDetail)
+      3) Periodos vacacionales activos (PR_Vacation status='A')
+      4) Detalle de utilización de periodos activos
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_vacaciones_obtener_trabajador_web]
     @company VARCHAR(4),
@@ -99,9 +99,10 @@ BEGIN
     FROM PR_Vacation v
     WHERE v.company = @company
       AND v.person = @person
+      AND v.status = 'A'
     ORDER BY v.controlyear DESC;
 
-    /* 4) Detalle de utilización */
+    /* 4) Detalle de utilización — solo periodos activos */
     SELECT
         d.line,
         d.secuence,
@@ -125,6 +126,11 @@ BEGIN
         d.XLastUser AS usuario,
         d.XLastDate AS fecha_modificacion
     FROM PR_VacationDetail d
+        INNER JOIN PR_Vacation v
+            ON v.Company = d.Company
+           AND v.Person = d.Person
+           AND v.line = d.line
+           AND v.status = 'A'
     WHERE d.company = @company
       AND d.person = @person
     ORDER BY d.datebegin ASC;

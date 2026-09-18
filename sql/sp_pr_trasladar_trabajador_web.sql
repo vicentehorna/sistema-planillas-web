@@ -10,6 +10,7 @@
     Validaciones:
       - Por defecto: trabajador cesado en origen y @entrydate > CeaseDate origen.
       - hm_alamo: también permite traslado si sigue activo en origen (doble vínculo).
+      - hm_garc: no exige que @entrydate sea posterior al CeaseDate de origen.
       - No existe PR_Employee en destino para el mismo Person.
       - @cia_origen <> @cia_destino.
 
@@ -81,7 +82,9 @@ BEGIN
 
     DECLARE @entrydate_dt DATETIME = CONVERT(DATETIME, @entrydate, 120);
     DECLARE @cese_origen DATETIME = NULL;
-    DECLARE @permite_activo BIT = CASE WHEN LOWER(DB_NAME()) = 'hm_alamo' THEN 1 ELSE 0 END;
+    DECLARE @db_name VARCHAR(128) = LOWER(DB_NAME());
+    DECLARE @permite_activo BIT = CASE WHEN @db_name = 'hm_alamo' THEN 1 ELSE 0 END;
+    DECLARE @omite_validacion_cese BIT = CASE WHEN @db_name = 'hm_garc' THEN 1 ELSE 0 END;
 
     SELECT @cese_origen = e.CeaseDate
     FROM PR_Employee e (NOLOCK)
@@ -94,7 +97,8 @@ BEGIN
         RETURN;
     END;
 
-    IF @cese_origen IS NOT NULL
+    IF @omite_validacion_cese = 0
+       AND @cese_origen IS NOT NULL
        AND CONVERT(DATE, @entrydate_dt) <= CONVERT(DATE, @cese_origen)
     BEGIN
         RAISERROR('La fecha de ingreso en la nueva empresa debe ser posterior a la fecha de cese.', 16, 1);

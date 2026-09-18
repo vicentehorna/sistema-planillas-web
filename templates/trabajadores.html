@@ -369,6 +369,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
     // hm_alamo: Traslado también para activos. (Buscar todos también existe en hm_garc.)
     const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }};
+    // hm_garc: traslado permite fecha de ingreso anterior o igual al cese en origen.
+    const ES_GARC = {{ ((sql_database or '')|lower == 'hm_garc')|tojson }};
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 
@@ -1203,7 +1205,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             const fechaceseIso = fechaIsoDesdeValor(trabajadorSeleccionado.fechacese);
-            if (fechaceseIso && fechaIngreso && fechaIngreso <= fechaceseIso) {
+            if (!ES_GARC && fechaceseIso && fechaIngreso && fechaIngreso <= fechaceseIso) {
                 hmAdvertencia(
                     'La fecha de ingreso en la nueva empresa (' + formatearFechaDmY(fechaIngreso) +
                     ') debe ser posterior a la fecha de cese en la empresa actual (' +

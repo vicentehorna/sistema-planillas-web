@@ -106,16 +106,22 @@ BEGIN
         MAX(ep.ceasedate) AS ceasedate,
         MAX(ep.position) AS position,
         CASE
-            WHEN ISNULL((
-                SELECT TOP 1 description
-                FROM pr_afp
-                WHERE pr_afp.afp = MAX(ep.afp)
-            ), '') = '' THEN 'ONP'
-            ELSE (
-                SELECT TOP 1 description
-                FROM pr_afp
-                WHERE pr_afp.afp = MAX(ep.afp)
-            )
+            WHEN LTRIM(RTRIM(ISNULL(MAX(pt_pens.PDT), ''))) = '99'
+                 OR LTRIM(RTRIM(ISNULL(MAX(E.PensionType), ''))) = '' THEN 'SIN REGIMEN'
+            WHEN LTRIM(RTRIM(ISNULL(MAX(pt_pens.PDT), ''))) = '02' THEN 'ONP'
+            WHEN LTRIM(RTRIM(ISNULL(MAX(pt_pens.PDT), ''))) IN ('21', '22', '23', '24', '25') THEN
+                ISNULL((
+                    SELECT TOP 1 description
+                    FROM pr_afp
+                    WHERE pr_afp.afp = MAX(
+                        ISNULL(NULLIF(LTRIM(RTRIM(ep.AFP)), ''), E.AFP)
+                    )
+                ), ISNULL(MAX(pt_pens.Description), 'SIN REGIMEN'))
+            ELSE ISNULL((
+                    SELECT TOP 1 description
+                    FROM pr_afp
+                    WHERE pr_afp.afp = MAX(ep.AFP)
+                ), 'SIN REGIMEN')
         END,
         MAX(ep.costcenter) AS costcenter,
         CASE
@@ -137,6 +143,12 @@ BEGIN
         INNER JOIN pr_concepttype T ON c.concepttype = T.concepttype
         INNER JOIN pr_processtype PR ON epc.processtype = pr.processtype
         INNER JOIN SY_PERSON ON EPC.person = SY_Person.person
+        LEFT JOIN PR_PensionType pt_pens (NOLOCK)
+            ON pt_pens.PensionType = E.PensionType
+           AND (
+                LTRIM(RTRIM(ISNULL(pt_pens.Company, ''))) = ''
+                OR LTRIM(RTRIM(pt_pens.Company)) = E.Company
+           )
     WHERE EPC.company = @cia
       AND LEFT(EPC.prperiod, 6) = LEFT(@period, 6)
       AND ISNULL(c.reporden, 0) <> 0

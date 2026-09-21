@@ -26515,7 +26515,7 @@ _PLANILLA_VERTICAL_STATIC_HEADERS_ES = [
     'F.Ingreso',
     'F.Cese',
     'Cargo',
-    'AFP',
+    'AFP/ONP',
     'C.Costo',
     'Cod.Costo',
     'Unidad',

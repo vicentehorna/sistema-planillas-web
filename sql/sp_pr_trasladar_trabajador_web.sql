@@ -8,9 +8,13 @@
       mapeando concepto por FormulaCode y planilla por ShortName.
 
     Validaciones:
-      - Por defecto: trabajador cesado en origen y @entrydate > CeaseDate origen.
+      - Por defecto: basta CeaseDate en origen (cesado). No se exige Status = 'Y' (inactivo).
+      - @entrydate > CeaseDate origen (salvo hm_garc).
       - hm_alamo: también permite traslado si sigue activo en origen (doble vínculo).
-      - hm_garc: no exige que @entrydate sea posterior al CeaseDate de origen.
+      - hm_garc: no exige que @entrydate sea posterior al CeaseDate de origen;
+        además asigna permanentes AFP_COMISION_MIXTA (FormulaCode AFP_FLUJO)=1,
+        REM_BASICA=@rembasica y FLAG_ASIG_FAM (1/0 según FlagAsigFamiliar)
+        desde el periodo de ingreso en destino.
       - No existe PR_Employee en destino para el mismo Person.
       - @cia_origen <> @cia_destino.
 
@@ -91,9 +95,10 @@ BEGIN
     WHERE e.Company = @cia_origen
       AND e.Person = @person;
 
+    /* Basta CeaseDate (cesado). No se exige PR_Employee.Status = 'Y' (inactivo). */
     IF @cese_origen IS NULL AND @permite_activo = 0
     BEGIN
-        RAISERROR('Solo se puede trasladar un trabajador cesado.', 16, 1);
+        RAISERROR('Solo se puede trasladar un trabajador cesado (con fecha de cese). No es necesario que esté inactivo.', 16, 1);
         RETURN;
     END;
 
@@ -140,7 +145,11 @@ BEGIN
         @flagessaludvida        CHAR(1) = 'N',
         @period_start           VARCHAR(10) = NULL,
         @cc_asignacion          VARCHAR(20) = NULL,
-        @cc_code_asignacion     VARCHAR(20) = NULL;
+        @cc_code_asignacion     VARCHAR(20) = NULL,
+        @concept_afp_mixta      VARCHAR(20) = NULL,
+        @concept_rembasica      VARCHAR(20) = NULL,
+        @concept_flag_asig      VARCHAR(20) = NULL,
+        @val_flag_asig          NUMERIC(18, 4) = 0;
 
     SELECT
         @employeetype = NULLIF(LTRIM(RTRIM(e.EmployeeType)), ''),
@@ -611,6 +620,174 @@ BEGIN
                       AND ec2.FlagFrecuencyType = 'P'
                       AND ec2.PRPeriodEnd IS NULL
               );
+        END;
+
+        /* hm_garc: forzar permanentes de ingreso en destino (valores de la ficha nueva). */
+        IF @db_name = 'hm_garc'
+           AND @period_start IS NOT NULL
+           AND @payrolltype IS NOT NULL
+        BEGIN
+            SET @val_flag_asig = CASE WHEN @flagasigfamiliar = 'Y' THEN 1 ELSE 0 END;
+
+            /* Description AFP_COMISION_MIXTA → FormulaCode AFP_FLUJO en maestros GARC. */
+            SELECT TOP 1 @concept_afp_mixta = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia_destino
+              AND UPPER(ISNULL(c.Status, 'A')) = 'A'
+              AND (
+                    LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) IN ('AFP_COMISION_MIXTA', 'AFP_FLUJO')
+                 OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'AFP_COMISION_MIXTA'
+              )
+            ORDER BY
+                CASE LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))
+                    WHEN 'AFP_COMISION_MIXTA' THEN 0
+                    WHEN 'AFP_FLUJO' THEN 1
+                    ELSE 2
+                END,
+                c.Concept;
+
+            SELECT TOP 1 @concept_rembasica = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia_destino
+              AND c.FormulaCode = 'REM_BASICA'
+              AND UPPER(ISNULL(c.Status, 'A')) = 'A'
+            ORDER BY c.Concept;
+
+            SELECT TOP 1 @concept_flag_asig = c.Concept
+            FROM PR_Concept c (NOLOCK)
+            WHERE c.Company = @cia_destino
+              AND c.FormulaCode = 'FLAG_ASIG_FAM'
+              AND UPPER(ISNULL(c.Status, 'A')) = 'A'
+            ORDER BY c.Concept;
+
+            IF @concept_afp_mixta IS NOT NULL
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeConcept ec (NOLOCK)
+                    WHERE ec.Company = @cia_destino
+                      AND ec.Person = @person
+                      AND ec.Concept = @concept_afp_mixta
+                      AND ec.PayRollType = @payrolltype
+                      AND ec.FlagFrecuencyType = 'P'
+                      AND ec.PRPeriodEnd IS NULL
+                )
+                    UPDATE PR_EmployeeConcept
+                    SET ConceptValue = 1,
+                        ConceptValueLo = 1,
+                        PRPeriodStart = @period_start,
+                        CostCenter = @cc_asignacion,
+                        CostCenterCode = @cc_code_asignacion,
+                        XLastUser = @xlastuser,
+                        XLastDate = GETDATE()
+                    WHERE Company = @cia_destino
+                      AND Person = @person
+                      AND Concept = @concept_afp_mixta
+                      AND PayRollType = @payrolltype
+                      AND FlagFrecuencyType = 'P'
+                      AND PRPeriodEnd IS NULL;
+                ELSE
+                    INSERT INTO PR_EmployeeConcept (
+                        Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                        PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                        FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                        XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                        CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                    )
+                    VALUES (
+                        @person, @cia_destino, @concept_afp_mixta, @payrolltype, @period_start, @cc_asignacion,
+                        NULL, 1, NULL, 'LO', NULL,
+                        'N', 'P', @replicationunit,
+                        @xlastuser, GETDATE(), 1, 0, 0,
+                        @cc_code_asignacion, '', '', 'A', NULL
+                    );
+            END;
+
+            IF @concept_rembasica IS NOT NULL
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeConcept ec (NOLOCK)
+                    WHERE ec.Company = @cia_destino
+                      AND ec.Person = @person
+                      AND ec.Concept = @concept_rembasica
+                      AND ec.PayRollType = @payrolltype
+                      AND ec.FlagFrecuencyType = 'P'
+                      AND ec.PRPeriodEnd IS NULL
+                )
+                    UPDATE PR_EmployeeConcept
+                    SET ConceptValue = ISNULL(@rembasica, 0),
+                        ConceptValueLo = ISNULL(@rembasica, 0),
+                        PRPeriodStart = @period_start,
+                        CostCenter = @cc_asignacion,
+                        CostCenterCode = @cc_code_asignacion,
+                        XLastUser = @xlastuser,
+                        XLastDate = GETDATE()
+                    WHERE Company = @cia_destino
+                      AND Person = @person
+                      AND Concept = @concept_rembasica
+                      AND PayRollType = @payrolltype
+                      AND FlagFrecuencyType = 'P'
+                      AND PRPeriodEnd IS NULL;
+                ELSE
+                    INSERT INTO PR_EmployeeConcept (
+                        Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                        PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                        FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                        XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                        CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                    )
+                    VALUES (
+                        @person, @cia_destino, @concept_rembasica, @payrolltype, @period_start, @cc_asignacion,
+                        NULL, ISNULL(@rembasica, 0), NULL, 'LO', NULL,
+                        'N', 'P', @replicationunit,
+                        @xlastuser, GETDATE(), ISNULL(@rembasica, 0), 0, 0,
+                        @cc_code_asignacion, '', '', 'A', NULL
+                    );
+            END;
+
+            IF @concept_flag_asig IS NOT NULL
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeConcept ec (NOLOCK)
+                    WHERE ec.Company = @cia_destino
+                      AND ec.Person = @person
+                      AND ec.Concept = @concept_flag_asig
+                      AND ec.PayRollType = @payrolltype
+                      AND ec.FlagFrecuencyType = 'P'
+                      AND ec.PRPeriodEnd IS NULL
+                )
+                    UPDATE PR_EmployeeConcept
+                    SET ConceptValue = @val_flag_asig,
+                        ConceptValueLo = @val_flag_asig,
+                        PRPeriodStart = @period_start,
+                        CostCenter = @cc_asignacion,
+                        CostCenterCode = @cc_code_asignacion,
+                        XLastUser = @xlastuser,
+                        XLastDate = GETDATE()
+                    WHERE Company = @cia_destino
+                      AND Person = @person
+                      AND Concept = @concept_flag_asig
+                      AND PayRollType = @payrolltype
+                      AND FlagFrecuencyType = 'P'
+                      AND PRPeriodEnd IS NULL;
+                ELSE
+                    INSERT INTO PR_EmployeeConcept (
+                        Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                        PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                        FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                        XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                        CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                    )
+                    VALUES (
+                        @person, @cia_destino, @concept_flag_asig, @payrolltype, @period_start, @cc_asignacion,
+                        NULL, @val_flag_asig, NULL, 'LO', NULL,
+                        'N', 'P', @replicationunit,
+                        @xlastuser, GETDATE(), @val_flag_asig, 0, 0,
+                        @cc_code_asignacion, '', '', 'A', NULL
+                    );
+            END;
         END;
 
         COMMIT TRANSACTION;

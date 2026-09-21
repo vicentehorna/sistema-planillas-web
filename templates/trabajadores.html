@@ -1155,7 +1155,11 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
         if (!ES_ALAMO && !trabajadorSeleccionado.cesado) {
-            hmAdvertencia('Solo se puede trasladar un trabajador con fecha de cese.');
+            hmAdvertencia(
+                ES_GARC
+                    ? 'Solo se puede trasladar un trabajador cesado (con fecha de cese). No es necesario que esté Inactivo.'
+                    : 'Solo se puede trasladar un trabajador con fecha de cese.'
+            );
             return;
         }
         const lbl = document.getElementById('lblTrasladoTrabajadorNombre');

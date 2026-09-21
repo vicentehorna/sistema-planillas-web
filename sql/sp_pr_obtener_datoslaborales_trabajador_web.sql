@@ -71,7 +71,13 @@ BEGIN
             e.salary,
             0
         ) AS sueldo,
-        CASE WHEN LTRIM(RTRIM(ISNULL(e.flagasigfamiliar, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar
+        CASE WHEN LTRIM(RTRIM(ISNULL(e.flagasigfamiliar, 'N'))) = 'Y' THEN 'Y' ELSE 'N' END AS flagasigfamiliar,
+        CAST(
+            ISNULL(
+                NULLIF(e.DiasVacaciones, 0),
+                ISNULL(pt.DiasVacaciones, 30)
+            ) AS INT
+        ) AS diasvacaciones
     FROM pr_employee e
         INNER JOIN sy_person sp
             ON sp.person = e.person

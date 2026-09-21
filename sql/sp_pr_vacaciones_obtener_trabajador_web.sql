@@ -55,7 +55,9 @@ BEGIN
     DECLARE @fecha_hoy DATE = CAST(GETDATE() AS DATE);
     DECLARE @dias_vacaciones DECIMAL(10, 2);
 
-    SELECT @dias_vacaciones = CAST(ISNULL(pt.DiasVacaciones, 30) AS DECIMAL(10, 2))
+    SELECT @dias_vacaciones = CAST(
+        ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)) AS DECIMAL(10, 2)
+    )
     FROM PR_Employee e
         INNER JOIN PR_PayRollType pt
             ON pt.Company = e.Company

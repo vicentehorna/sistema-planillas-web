@@ -119,7 +119,7 @@ BEGIN
         e.Person,
         e.Company,
         e.PayRollType,
-        ISNULL(pt.DiasVacaciones, 30),
+        ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)),
         ing.entrydate,
         YEAR(ing.entrydate),
         CASE
@@ -137,7 +137,10 @@ BEGIN
                   END
         END,
         ISNULL(cambio.cambio_planilla, ing.entrydate),
-        ISNULL(anterior.dias_anteriores, ISNULL(pt.DiasVacaciones, 30)),
+        ISNULL(
+            anterior.dias_anteriores,
+            ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30))
+        ),
         LEFT(ISNULL(NULLIF(LTRIM(RTRIM(sp.ReplicationUnit)), ''), @company), 4),
         ISNULL(vmax.max_line, 0)
     FROM PR_Employee e (NOLOCK)

@@ -645,12 +645,20 @@
                                 {% endfor %}
                             </select>
                         </div>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label for="txtSueldo" class="form-label small fw-bold text-muted te-req">Sueldo básico</label>
                             <input type="number" id="txtSueldo" name="sueldo" class="form-control form-control-sm campo-obligatorio text-end"
                                    min="0" step="0.01" value="{{ empleado.sueldo or '' }}" autocomplete="off">
                         </div>
-                        <div class="col-md-6 d-flex align-items-end">
+                        <div class="col-md-4">
+                            <label for="txtDiasVacaciones" class="form-label small fw-bold text-muted">Días vacaciones</label>
+                            <input type="number" id="txtDiasVacaciones" name="diasvacaciones"
+                                   class="form-control form-control-sm text-end"
+                                   min="0" max="365" step="1"
+                                   value="{{ empleado.diasvacaciones if empleado.diasvacaciones is not none else 30 }}"
+                                   autocomplete="off" title="Días anuales de vacaciones del trabajador">
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="chkFlagAsigFamiliar" name="flagasigfamiliar" value="Y"
                                        {% if empleado.flagasigfamiliar == 'Y' %}checked{% endif %}>

@@ -23,6 +23,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @accountprofile     VARCHAR(20) = NULL,
     @sueldo             VARCHAR(20) = NULL,
     @flagasigfamiliar   VARCHAR(1) = 'N',
+    @diasvacaciones     VARCHAR(10) = NULL,
     @status             VARCHAR(1) = 'N',
     @xlastuser          VARCHAR(20) = NULL,
     @modo_reingreso     VARCHAR(1)  = 'N'
@@ -54,6 +55,7 @@ BEGIN
     DECLARE @reentry_actual DATETIME = NULL;
     DECLARE @cese_actual DATETIME = NULL;
     DECLARE @fecha_efectiva_anterior DATE = NULL;
+    DECLARE @dias_vac INT = NULL;
 
     SELECT
         @entry_actual = e.EntryDate,
@@ -137,6 +139,31 @@ BEGIN
         END
     END
 
+    IF RTRIM(ISNULL(@diasvacaciones, '')) <> ''
+    BEGIN
+        BEGIN TRY
+            SET @dias_vac = CONVERT(INT, REPLACE(@diasvacaciones, ',', ''));
+        END TRY
+        BEGIN CATCH
+            SET @dias_vac = NULL;
+        END CATCH
+        IF @dias_vac IS NULL OR @dias_vac < 0 OR @dias_vac > 365
+        BEGIN
+            RAISERROR('Los días de vacaciones deben ser un entero entre 0 y 365.', 16, 1);
+            RETURN;
+        END
+    END
+    ELSE
+    BEGIN
+        /* Si no envían valor, hereda del tipo de planilla (o 30). */
+        SELECT @dias_vac = ISNULL(pt.DiasVacaciones, 30)
+        FROM PR_PayRollType pt (NOLOCK)
+        WHERE pt.Company = @cia
+          AND pt.PayRollType = NULLIF(LTRIM(RTRIM(@payrolltype)), '');
+        IF @dias_vac IS NULL OR @dias_vac <= 0
+            SET @dias_vac = 30;
+    END
+
     IF NULLIF(LTRIM(RTRIM(ISNULL(@costcenter, ''))), '') IS NOT NULL
     BEGIN
         SELECT TOP 1 @costcentername = LTRIM(RTRIM(ISNULL(cc.Name, '')))
@@ -174,6 +201,7 @@ BEGIN
         rembasica = CASE WHEN @rembasica IS NULL THEN rembasica ELSE @rembasica END,
         salary = CASE WHEN @rembasica IS NULL THEN salary ELSE @rembasica END,
         flagasigfamiliar = @flagasigfamiliar,
+        DiasVacaciones = @dias_vac,
         xlastdate = GETDATE(),
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia

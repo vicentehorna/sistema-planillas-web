@@ -1,26 +1,28 @@
 /*
   ALTER SCHEMA WEB - columnas/tablas requeridas por SPs web
-  Generado: 2026-09-06 12:46
+  Generado: 2026-09-21 12:50
 
   Ejecutar PRIMERO sobre la BD destino (hm_alamo, hm_aci, ...)
   antes o como parte de deploy_planillas_web_completo.sql.
 
-  Archivos (15):
+  Archivos (18):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
+    - alter_pr_employee_add_diasvacaciones.sql
     - alter_pr_processtype_add_procedurename.sql
     - alter_pr_importconcept_xlastuser_20.sql
     - alter_sy_company_add_logoname_signaturename.sql
     - alter_sy_person_add_nacionalidad.sql
     - alter_pr_concept_add_flagafectoutilidad.sql
-    - alter_pr_concept_add_flagformatoliquidacion.sql
     - alter_pr_formuladetail_conceptlist.sql
     - alter_pr_formuladetail_divisor.sql
     - tables_pr_plame_sunat_web.sql
+    - alter_pr_concept_add_flagformatoliquidacion.sql
     - alter_pr_formuladetail_script_codigo.sql
     - alter_pr_position_add_status.sql
     - alter_pr_position_description_255.sql
     - alter_sy_company_add_branding_blobs.sql
+    - alter_sy_replicationunit_add_bcpaccount.sql
     - tables_pr_parametroformula_web.sql
 */
 
@@ -28,7 +30,7 @@ SET NOCOUNT ON;
 GO
 
 
--- [1/15] alter_pr_mapping_add_banbifbank.sql
+-- [1/18] alter_pr_mapping_add_banbifbank.sql
 
 /*
     Agrega la columna BanbifBank en PR_Mapping y la inicializa
@@ -63,7 +65,7 @@ GO
 
 
 
--- [2/15] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [2/18] alter_pr_payrolltype_add_diasvacaciones.sql
 
 /*
     Agrega dias anuales de vacaciones por tipo de planilla.
@@ -85,7 +87,25 @@ GO
 
 
 
--- [3/15] alter_pr_processtype_add_procedurename.sql
+-- [3/18] alter_pr_employee_add_diasvacaciones.sql
+
+/*
+    Agrega dias anuales de vacaciones por trabajador (PR_Employee).
+    Permite override respecto a PR_PayRollType.DiasVacaciones.
+*/
+IF OBJECT_ID(N'dbo.PR_Employee', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PR_Employee', 'DiasVacaciones') IS NULL
+BEGIN
+    EXEC('ALTER TABLE dbo.PR_Employee ADD DiasVacaciones INT NULL');
+END
+GO
+
+/* Si ya existe la columna, no fuerza valor: se rellena por cliente (p.ej. desde PayRollType). */
+GO
+
+
+
+-- [4/18] alter_pr_processtype_add_procedurename.sql
 
 /*
     Agrega la columna ProcedureName en PR_ProcessType y asigna el SP de cálculo
@@ -124,7 +144,7 @@ GO
 
 
 
--- [4/15] alter_pr_importconcept_xlastuser_20.sql
+-- [5/18] alter_pr_importconcept_xlastuser_20.sql
 
 /*
     Amplía XlastUser de VARCHAR(4) a VARCHAR(20) en plantillas de importación.
@@ -167,7 +187,7 @@ GO
 
 
 
--- [5/15] alter_sy_company_add_logoname_signaturename.sql
+-- [6/18] alter_sy_company_add_logoname_signaturename.sql
 
 /*
     Agrega columnas de logo y firma por compañía en SY_Company.
@@ -189,7 +209,7 @@ GO
 
 
 
--- [6/15] alter_sy_person_add_nacionalidad.sql
+-- [7/18] alter_sy_person_add_nacionalidad.sql
 
 /*
     Agrega campo de texto Nacionalidad en SY_Person.
@@ -204,7 +224,7 @@ GO
 
 
 
--- [7/16] alter_pr_concept_add_flagafectoutilidad.sql
+-- [8/18] alter_pr_concept_add_flagafectoutilidad.sql
 
 /*
     Agrega flag afecto a utilidades en PR_Concept (maestro Conceptos).
@@ -219,23 +239,7 @@ GO
 
 
 
--- [8/16] alter_pr_concept_add_flagformatoliquidacion.sql
-
-/*
-    Agrega flag Formato Liquidacion en PR_Concept (maestro Conceptos).
-    Usado por: sp_pr_guardarconcepto_web, sp_pr_obtenerconcepto_web,
-               formato de liquidación (ingresos configurables).
-*/
-IF OBJECT_ID(N'dbo.PR_Concept', N'U') IS NOT NULL
-   AND COL_LENGTH('dbo.PR_Concept', 'flagformatoliquidacion') IS NULL
-BEGIN
-    EXEC('ALTER TABLE dbo.PR_Concept ADD flagformatoliquidacion CHAR(1) NOT NULL CONSTRAINT DF_PR_Concept_flagformatoliquidacion DEFAULT (''N'')');
-END
-GO
-
-
-
--- [9/16] alter_pr_formuladetail_conceptlist.sql
+-- [9/18] alter_pr_formuladetail_conceptlist.sql
 
 /*
     Lista de conceptos para líneas SumaConc (tipo S).
@@ -251,7 +255,7 @@ GO
 
 
 
--- [9/15] alter_pr_formuladetail_divisor.sql
+-- [10/18] alter_pr_formuladetail_divisor.sql
 
 /*
     Divisor fijo para líneas Promedio Vac (tipo M), Promedio Grati (tipo H) y Promedio CTS (tipo U).
@@ -267,7 +271,7 @@ GO
 
 
 
--- [10/15] tables_pr_plame_sunat_web.sql
+-- [11/18] tables_pr_plame_sunat_web.sql
 
 /*
     Tablas para carga de archivos XML SUNAT (R01, R04, R5) — validación PLAME.
@@ -340,7 +344,23 @@ GO
 
 
 
--- [11/15] alter_pr_formuladetail_script_codigo.sql
+-- [12/18] alter_pr_concept_add_flagformatoliquidacion.sql
+
+/*
+    Agrega flag Formato Liquidacion en PR_Concept (maestro Conceptos).
+    Usado por: sp_pr_guardarconcepto_web, sp_pr_obtenerconcepto_web,
+               formato de liquidación (ingresos configurables).
+*/
+IF OBJECT_ID(N'dbo.PR_Concept', N'U') IS NOT NULL
+   AND COL_LENGTH('dbo.PR_Concept', 'flagformatoliquidacion') IS NULL
+BEGIN
+    EXEC('ALTER TABLE dbo.PR_Concept ADD flagformatoliquidacion CHAR(1) NOT NULL CONSTRAINT DF_PR_Concept_flagformatoliquidacion DEFAULT (''N'')');
+END
+GO
+
+
+
+-- [13/18] alter_pr_formuladetail_script_codigo.sql
 
 /*
     Soporte tipo K (Código condicional) en el formulador.
@@ -359,7 +379,7 @@ GO
 
 
 
--- [12/15] alter_pr_position_add_status.sql
+-- [14/18] alter_pr_position_add_status.sql
 
 /*
     Agrega PR_Position.Status (A = Activo, I = Inactivo).
@@ -386,7 +406,7 @@ GO
 
 
 
--- [13/15] alter_pr_position_description_255.sql
+-- [15/18] alter_pr_position_description_255.sql
 
 /*
     Amplía PR_Position.Description (antes varchar(50) truncaba cargos largos)
@@ -420,7 +440,7 @@ GO
 
 
 
--- [14/15] alter_sy_company_add_branding_blobs.sql
+-- [16/18] alter_sy_company_add_branding_blobs.sql
 
 /*
     Branding por compañía: logo y firma en VARBINARY (autoservicio web).
@@ -458,7 +478,22 @@ GO
 
 
 
--- [15/15] tables_pr_parametroformula_web.sql
+-- [17/18] alter_sy_replicationunit_add_bcpaccount.sql
+
+/*
+    Asegura columna bcpAccount en SY_ReplicationUnit (Nro Cuenta BCP).
+    Idempotente. Usado por maestro Unidades.
+*/
+IF OBJECT_ID('dbo.SY_ReplicationUnit', 'U') IS NOT NULL
+   AND COL_LENGTH('dbo.SY_ReplicationUnit', 'bcpAccount') IS NULL
+BEGIN
+    ALTER TABLE dbo.SY_ReplicationUnit ADD bcpAccount VARCHAR(20) NULL;
+END
+GO
+
+
+
+-- [18/18] tables_pr_parametroformula_web.sql
 
 /*
     Catálogo de parámetros de fórmula (validación tipo V).

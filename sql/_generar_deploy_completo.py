@@ -49,6 +49,7 @@ def _is_client_specific_calcular(name: str) -> bool:
 ALTER_FIRST = [
     "alter_pr_mapping_add_banbifbank.sql",
     "alter_pr_payrolltype_add_diasvacaciones.sql",
+    "alter_pr_employee_add_diasvacaciones.sql",
     "alter_pr_processtype_add_procedurename.sql",
     "alter_pr_importconcept_xlastuser_20.sql",
     "alter_sy_company_add_logoname_signaturename.sql",

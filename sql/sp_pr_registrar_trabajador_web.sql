@@ -52,6 +52,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
     @accountprofile         VARCHAR(20) = NULL,
     @sueldo                 VARCHAR(20) = NULL,
     @flagasigfamiliar       CHAR(1) = 'N',
+    @diasvacaciones         VARCHAR(10) = NULL,
     @pensiontype            VARCHAR(20) = NULL,
     @pensioninscriptiondate VARCHAR(10) = NULL,
     @regimehealth           VARCHAR(20) = NULL,
@@ -97,6 +98,7 @@ BEGIN
     DECLARE @concept_rembasica  VARCHAR(20);
     DECLARE @concept_afp_flujo  VARCHAR(20);
     DECLARE @concept_flag_asig  VARCHAR(20);
+    DECLARE @dias_vac_emp       INT = NULL;
     DECLARE @period_start       VARCHAR(10);
     DECLARE @cc_asignacion      VARCHAR(20);
     DECLARE @cc_code_asignacion VARCHAR(20);
@@ -152,6 +154,30 @@ BEGIN
     SET @accountprofile = NULLIF(LTRIM(RTRIM(ISNULL(@accountprofile, ''))), '');
     SET @sueldo = NULLIF(LTRIM(RTRIM(ISNULL(@sueldo, ''))), '');
     SET @flagasigfamiliar = CASE WHEN UPPER(ISNULL(@flagasigfamiliar, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @diasvacaciones = NULLIF(LTRIM(RTRIM(ISNULL(@diasvacaciones, ''))), '');
+    IF @diasvacaciones IS NOT NULL
+    BEGIN
+        BEGIN TRY
+            SET @dias_vac_emp = CONVERT(INT, REPLACE(@diasvacaciones, ',', ''));
+        END TRY
+        BEGIN CATCH
+            SET @dias_vac_emp = NULL;
+        END CATCH
+        IF @dias_vac_emp IS NULL OR @dias_vac_emp < 0 OR @dias_vac_emp > 365
+        BEGIN
+            SET @mensaje_out = 'Los días de vacaciones deben ser un entero entre 0 y 365.';
+            RETURN;
+        END
+    END
+    ELSE IF @payrolltype IS NOT NULL
+    BEGIN
+        SELECT @dias_vac_emp = ISNULL(pt.DiasVacaciones, 30)
+        FROM PR_PayRollType pt (NOLOCK)
+        WHERE pt.Company = @cia
+          AND pt.PayRollType = @payrolltype;
+    END
+    IF @dias_vac_emp IS NULL OR @dias_vac_emp <= 0
+        SET @dias_vac_emp = 30;
     SET @pensiontype = NULLIF(LTRIM(RTRIM(ISNULL(@pensiontype, ''))), '');
     SET @pensioninscriptiondate = NULLIF(LTRIM(RTRIM(ISNULL(@pensioninscriptiondate, ''))), '');
     SET @regimehealth = NULLIF(LTRIM(RTRIM(ISNULL(@regimehealth, ''))), '');
@@ -533,7 +559,7 @@ BEGIN
             CostCenter, Position, AccountProfile, PayRollType, EmployeeStatus,
             FlagEssaludVida, Status, XLastDate, XLastUser, ReplicationUnit,
             CostCenterName, FlagDistribution, ContractModality, ConsiderInCalc,
-            FlagParticipar, FlagAsigFamiliar,
+            FlagParticipar, FlagAsigFamiliar, DiasVacaciones,
             SpecialStatus, CollectionForm, Ocupation, RegimeHealth,
             RemBasica, Salary, AFPCard, FlagMixta, AFP,
             CTSBank, CTSAccount, CTSCurrency, SocialAssistanceNumber
@@ -545,7 +571,7 @@ BEGIN
             @costcenter, @position, @accountprofile, @payrolltype, @employee_status_id,
             'N', 'N', GETDATE(), @xlastuser, @replicationunit,
             NULLIF(@costcentername, ''), 'H', @contractmodality, 'Y',
-            'Y', @flagasigfamiliar,
+            'Y', @flagasigfamiliar, @dias_vac_emp,
             @specialstatus, @collectionform, @ocupation, @regimehealth,
             @rembasica, @rembasica, @cuspp, @flagmixta, @afp_id,
             @ctsbank, @ctsaccount, @ctscurrency, @cci

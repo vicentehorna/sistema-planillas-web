@@ -1130,7 +1130,7 @@
                     await opts.poblarTrabajadoresFiltro(cia, cboTrabajador);
                 } else {
                     await poblarSelect(
-                        `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                        `/api/asignacion-conceptos/trabajadores?cia=${encodeURIComponent(cia)}`,
                         cboTrabajador
                     );
                     if (typeof opts.etiquetaTrabajadorTodosPorDefecto === 'function') {

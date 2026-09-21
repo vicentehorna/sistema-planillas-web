@@ -27576,6 +27576,36 @@ def api_reporte_lista_trabajadores():
                 pass
 
 
+@app.route('/api/asignacion-conceptos/trabajadores')
+@login_required
+def api_asignacion_conceptos_trabajadores():
+    """Selector exclusivo de Asignación de Conceptos: activos + inactivos."""
+    cia = request.args.get('cia')
+    payrolltype = str(request.args.get('payrolltype') or request.args.get('payroll_type') or '0').strip() or '0'
+    if not cia:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_selectorpersonas_asignacion_web @cia=?, @payrolltype=?",
+            (cia, payrolltype),
+        )
+        rows = cursor.fetchall()
+        data = [{"id": r.Person, "text": r.Name} for r in rows]
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_asignacion_conceptos_trabajadores")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/asignacion-conceptos/listado', methods=['POST'])
 @login_required
 def api_asignacion_conceptos_listado():

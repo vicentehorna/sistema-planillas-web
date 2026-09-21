@@ -26192,9 +26192,20 @@ def api_trabajadores_eliminar():
 @app.route('/api/selectores/trabajadores')
 @login_required
 def api_trabajadores():
-    """sp_pr_selectorpersonas_web @cia, @payrolltype(opcional) → Person, Name"""
+    """sp_pr_selectorpersonas_web @cia, @payrolltype(opcional), @incluir_inactivos(opcional) → Person, Name"""
     cia = request.args.get('cia')
     payrolltype = str(request.args.get('payrolltype') or request.args.get('payroll_type') or '0').strip() or '0'
+    raw_inact = str(
+        request.args.get('incluir_inactivos')
+        or request.args.get('incluye_inactivos')
+        or 'N'
+    ).strip().lower()
+    if raw_inact in ('1', 'true', 'si', 'sí', 'y', 'yes'):
+        incluir_inactivos = 'Y'
+    elif raw_inact in ('0', 'false', 'no', 'n'):
+        incluir_inactivos = 'N'
+    else:
+        incluir_inactivos = 'Y' if raw_inact.upper()[:1] == 'Y' else 'N'
     if not cia:
         return jsonify([])
     conn = None
@@ -26202,8 +26213,8 @@ def api_trabajadores():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_selectorpersonas_web @cia=?, @payrolltype=?",
-            (cia, payrolltype),
+            "EXEC sp_pr_selectorpersonas_web @cia=?, @payrolltype=?, @incluir_inactivos=?",
+            (cia, payrolltype, incluir_inactivos),
         )
         rows = cursor.fetchall()
         data = [{"id": r.Person, "text": r.Name} for r in rows]

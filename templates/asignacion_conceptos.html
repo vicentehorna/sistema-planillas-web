@@ -643,7 +643,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cacheCombosModal.trabajadores = null;
             }
         }
-        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
+        // Incluye inactivos: se pueden consultar/editar asignaciones de cesados e inactivos.
+        let url = `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}&incluir_inactivos=Y`;
         if (payrolltype && payrolltype !== '0') {
             url += `&payrolltype=${encodeURIComponent(payrolltype)}`;
         }

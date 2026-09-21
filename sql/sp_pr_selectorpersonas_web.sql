@@ -1,13 +1,16 @@
 /*
-    Selector de personas/trabajadores activos por compañía.
+    Selector de personas/trabajadores por compañía.
     Usado por: GET /api/selectores/trabajadores
                (asignación de conceptos, filtros, etc.)
 
     @payrolltype opcional: '0'/vacío = todos; código, Description o ShortName de PR_PayRollType.
+    @incluir_inactivos: 'N' (default) = solo Status 'N' (activos);
+                        'Y' = incluye también inactivos (Status <> 'N').
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorpersonas_web]
-    @cia         VARCHAR(4),
-    @payrolltype VARCHAR(20) = '0'
+    @cia               VARCHAR(4),
+    @payrolltype       VARCHAR(20) = '0',
+    @incluir_inactivos CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -15,6 +18,8 @@ BEGIN
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @payrolltype = LTRIM(RTRIM(ISNULL(@payrolltype, '0')));
     IF @payrolltype = '' SET @payrolltype = '0';
+    SET @incluir_inactivos = UPPER(LEFT(LTRIM(RTRIM(ISNULL(@incluir_inactivos, 'N'))), 1));
+    IF @incluir_inactivos NOT IN ('Y', 'N') SET @incluir_inactivos = 'N';
 
     SELECT
         e.Person,
@@ -28,12 +33,17 @@ BEGIN
                     ISNULL(p.Name1, '') + ' ' +
                     ISNULL(p.Name2, '')
             END
-        )) AS Name
+        ))
+        + CASE WHEN e.Status <> 'N' THEN ' (Inactivo)' ELSE '' END
+        AS Name
     FROM PR_Employee e (NOLOCK)
     INNER JOIN SY_Person p (NOLOCK)
         ON p.Person = e.Person
     WHERE e.Company = @cia
-      AND e.Status = 'N'
+      AND (
+            @incluir_inactivos = 'Y'
+         OR e.Status = 'N'
+          )
       AND (
             @payrolltype = '0'
          OR e.PayRollType = @payrolltype
@@ -47,6 +57,9 @@ BEGIN
                   )
             )
           )
-    ORDER BY Name, e.Person;
+    ORDER BY
+        CASE WHEN e.Status = 'N' THEN 0 ELSE 1 END,
+        Name,
+        e.Person;
 END
 GO

@@ -207,6 +207,27 @@ BEGIN
     WHERE company = @cia
       AND person = @person;
 
+    /* Sincroniza periodos vacacionales abiertos (sin consumo) con el nuevo cupo anual. */
+    IF @dias_vac IS NOT NULL
+       AND OBJECT_ID(N'dbo.PR_Vacation', N'U') IS NOT NULL
+    BEGIN
+        UPDATE v
+        SET
+            v.Days = @dias_vac,
+            v.AcquiredDays = @dias_vac,
+            v.XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+            v.XLastDate = GETDATE()
+        FROM PR_Vacation v
+        WHERE v.Company = @cia
+          AND v.Person = @person
+          AND v.status = 'A'
+          AND ISNULL(v.ConsumedDays, 0) = 0
+          AND (
+                ISNULL(v.Days, 0) <> @dias_vac
+             OR ISNULL(v.AcquiredDays, 0) <> @dias_vac
+          );
+    END
+
     /* Al inactivar: permanentes → temporales con fin = periodo del cese */
     IF @modo_reingreso = 'N'
        AND @status = 'Y'

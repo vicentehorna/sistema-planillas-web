@@ -2,6 +2,8 @@
     Datos de vacaciones de un trabajador para Registro de Vacaciones.
     Usado por: POST /api/vacaciones/obtener (registro_vacaciones.html).
 
+    Días anuales: prioriza PR_Employee.DiasVacaciones; si no hay, PR_PayRollType.DiasVacaciones (default 30).
+
     Devuelve 4 resultsets:
       1) Datos del empleado
       2) Resumen de saldo (acumulados, gozados, pendientes)
@@ -14,6 +16,22 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_vacaciones_obtener_trabajador_web]
 AS
 BEGIN
     SET NOCOUNT ON;
+
+    DECLARE @fecha_hoy DATE = CAST(GETDATE() AS DATE);
+    DECLARE @dias_vacaciones DECIMAL(10, 2);
+
+    SELECT @dias_vacaciones = CAST(
+        ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)) AS DECIMAL(10, 2)
+    )
+    FROM PR_Employee e
+        LEFT JOIN PR_PayRollType pt
+            ON pt.Company = e.Company
+           AND pt.PayRollType = e.PayRollType
+    WHERE e.Company = @company
+      AND e.Person = @person;
+
+    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
+        SET @dias_vacaciones = 30;
 
     /* 1) Empleado */
     SELECT
@@ -28,7 +46,8 @@ BEGIN
         SY_PERSON.DOCUMENTNUMBER AS documento,
         ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) AS fechaingreso,
         PR_EMPLOYEE.PAYROLLTYPE AS payrolltype,
-        PR_PAYROLLTYPE.DESCRIPTION AS tipoplanilla
+        PR_PAYROLLTYPE.DESCRIPTION AS tipoplanilla,
+        CAST(@dias_vacaciones AS INT) AS diasvacaciones
     FROM PR_EMPLOYEE
         INNER JOIN SY_PERSON
             ON PR_EMPLOYEE.PERSON = SY_PERSON.PERSON
@@ -37,72 +56,102 @@ BEGIN
     WHERE PR_EMPLOYEE.COMPANY = @company
       AND PR_EMPLOYEE.PERSON = @person;
 
+    /* Periodos con días adquiridos calculados (misma lógica para resumen y grilla) */
+    ;WITH periodos AS (
+        SELECT
+            v.line,
+            v.controlyear,
+            CAST(v.controlyear AS VARCHAR(4)) + '-' + CAST(CAST(v.controlyear AS INT) + 1 AS VARCHAR(4)) AS periodo,
+            /* Sin consumo: muestra días del trabajador. Con consumo: conserva histórico del periodo. */
+            CASE
+                WHEN ISNULL(v.consumeddays, 0) = 0 THEN CAST(@dias_vacaciones AS INT)
+                ELSE CAST(ISNULL(v.days, @dias_vacaciones) AS INT)
+            END AS dias,
+            CASE
+                WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
+                WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN
+                    CASE
+                        WHEN ISNULL(v.consumeddays, 0) = 0 THEN @dias_vacaciones
+                        ELSE CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
+                    END
+                ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
+            END AS dias_adquiridos,
+            CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2)) AS consumidos,
+            ISNULL(v.payeddays, 0) AS pagados,
+            v.DateBeginProvision AS inicio_provision,
+            v.DateBeginRights AS inicio_derecho,
+            v.DateEndRights AS fin_derecho,
+            v.DateEndNormal AS limite_sin_indemnizacion,
+            v.status,
+            CASE v.status WHEN 'A' THEN 'Activo' WHEN 'I' THEN 'Inactivo' ELSE v.status END AS estado_texto,
+            v.XLastUser AS usuario,
+            v.XLastDate AS fecha_modificacion
+        FROM PR_Vacation v
+        WHERE v.company = @company
+          AND v.person = @person
+          AND v.status = 'A'
+    )
     /* 2) Resumen */
     SELECT
-        ISNULL(SUM(CASE WHEN v.status = 'A' THEN ISNULL(v.AcquiredDays, 0) ELSE 0 END), 0) AS dias_acumulados,
-        ISNULL(SUM(CASE WHEN v.status = 'A' THEN ISNULL(v.consumeddays, 0) ELSE 0 END), 0) AS dias_gozados,
-        ISNULL(SUM(
+        ISNULL(SUM(dias_adquiridos), 0) AS dias_acumulados,
+        ISNULL(SUM(consumidos), 0) AS dias_gozados,
+        ISNULL(SUM(dias_adquiridos - consumidos), 0) AS dias_pendientes
+    FROM periodos;
+
+    /* 3) Periodos */
+    ;WITH periodos AS (
+        SELECT
+            v.line,
+            v.controlyear,
+            CAST(v.controlyear AS VARCHAR(4)) + '-' + CAST(CAST(v.controlyear AS INT) + 1 AS VARCHAR(4)) AS periodo,
             CASE
-                WHEN v.status = 'A' THEN ABS(ISNULL(v.consumeddays, 0) - ISNULL(v.AcquiredDays, 0))
-                ELSE 0
-            END
-        ), 0) AS dias_pendientes
-    FROM PR_Vacation v
-    WHERE v.company = @company
-      AND v.person = @person;
-
-    /* 3) Periodos vacacionales — adquiridos = días ganados a la fecha (misma lógica que sp_pr_saldovacaciones_web) */
-    DECLARE @fecha_hoy DATE = CAST(GETDATE() AS DATE);
-    DECLARE @dias_vacaciones DECIMAL(10, 2);
-
-    SELECT @dias_vacaciones = CAST(
-        ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)) AS DECIMAL(10, 2)
+                WHEN ISNULL(v.consumeddays, 0) = 0 THEN CAST(@dias_vacaciones AS INT)
+                ELSE CAST(ISNULL(v.days, @dias_vacaciones) AS INT)
+            END AS dias,
+            CASE
+                WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
+                WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN
+                    CASE
+                        WHEN ISNULL(v.consumeddays, 0) = 0 THEN @dias_vacaciones
+                        ELSE CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
+                    END
+                ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
+            END AS dias_adquiridos,
+            CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2)) AS consumidos,
+            ISNULL(v.payeddays, 0) AS pagados,
+            v.DateBeginProvision AS inicio_provision,
+            v.DateBeginRights AS inicio_derecho,
+            v.DateEndRights AS fin_derecho,
+            v.DateEndNormal AS limite_sin_indemnizacion,
+            v.status,
+            CASE v.status WHEN 'A' THEN 'Activo' WHEN 'I' THEN 'Inactivo' ELSE v.status END AS estado_texto,
+            v.XLastUser AS usuario,
+            v.XLastDate AS fecha_modificacion
+        FROM PR_Vacation v
+        WHERE v.company = @company
+          AND v.person = @person
+          AND v.status = 'A'
     )
-    FROM PR_Employee e
-        INNER JOIN PR_PayRollType pt
-            ON pt.Company = e.Company
-           AND pt.PayRollType = e.PayRollType
-    WHERE e.Company = @company
-      AND e.Person = @person;
-
-    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
-        SET @dias_vacaciones = 30;
-
     SELECT
-        v.line,
-        v.controlyear,
-        CAST(v.controlyear AS VARCHAR(4)) + '-' + CAST(CAST(v.controlyear AS INT) + 1 AS VARCHAR(4)) AS periodo,
-        ISNULL(v.days, 0) AS dias,
-        CASE
-            WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
-            WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
-            ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
-        END AS dias_adquiridos,
-        CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2)) AS consumidos,
-        CASE
-            WHEN CAST(v.DateBeginProvision AS DATE) > @fecha_hoy THEN CAST(0 AS DECIMAL(10, 2))
-            ELSE
-                CASE
-                    WHEN CAST(v.DateBeginRights AS DATE) <= @fecha_hoy THEN CAST(ISNULL(v.AcquiredDays, 0) AS DECIMAL(10, 2))
-                    ELSE ROUND(dbo.f_getDias360(v.DateBeginProvision, @fecha_hoy) * @dias_vacaciones / 360.0, 2)
-                END
-                - CAST(ISNULL(v.consumeddays, 0) AS DECIMAL(10, 2))
-        END AS pendientes,
-        ISNULL(v.payeddays, 0) AS pagados,
-        ISNULL(v.AcquiredDays, 0) - ISNULL(v.payeddays, 0) AS por_pagar,
-        v.DateBeginProvision AS inicio_provision,
-        v.DateBeginRights AS inicio_derecho,
-        v.DateEndRights AS fin_derecho,
-        v.DateEndNormal AS limite_sin_indemnizacion,
-        v.status,
-        CASE v.status WHEN 'A' THEN 'Activo' WHEN 'I' THEN 'Inactivo' ELSE v.status END AS estado_texto,
-        v.XLastUser AS usuario,
-        v.XLastDate AS fecha_modificacion
-    FROM PR_Vacation v
-    WHERE v.company = @company
-      AND v.person = @person
-      AND v.status = 'A'
-    ORDER BY v.controlyear DESC;
+        line,
+        controlyear,
+        periodo,
+        dias,
+        dias_adquiridos,
+        consumidos,
+        dias_adquiridos - consumidos AS pendientes,
+        pagados,
+        dias - pagados AS por_pagar,
+        inicio_provision,
+        inicio_derecho,
+        fin_derecho,
+        limite_sin_indemnizacion,
+        status,
+        estado_texto,
+        usuario,
+        fecha_modificacion
+    FROM periodos
+    ORDER BY controlyear DESC;
 
     /* 4) Detalle de utilización — solo periodos activos */
     SELECT

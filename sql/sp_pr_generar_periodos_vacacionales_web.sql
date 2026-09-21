@@ -2,11 +2,11 @@
     Generación / actualización de periodos vacacionales (PR_Vacation).
 
     Basado en wf_calculate del sistema legacy (PowerBuilder), simplificado:
-      - Días anuales desde PR_PayRollType.DiasVacaciones (sin reglas especiales por empresa).
+      - Días anuales desde PR_Employee.DiasVacaciones (fallback PR_PayRollType.DiasVacaciones).
       - No usa f_pr_formula_countconcept ni recalcula AcquiredDays por meses trabajados.
       - Crea periodos faltantes por año de control (ControlYear).
-      - Actualiza Days y AcquiredDays en periodos futuros al cambio de tipo de planilla
-        cuando DiasVacaciones <> 30 y difieren del valor configurado.
+      - Actualiza Days y AcquiredDays en periodos activos sin consumo cuando difieren
+        del valor del trabajador.
 
     Parámetros:
       @company     — compañía (obligatorio).
@@ -375,8 +375,7 @@ BEGIN
                 ON v.Person = emp.person
                AND v.Company = emp.company
         WHERE v.status = 'A'
-          AND emp.dias_vacaciones <> 30
-          AND CONVERT(DATE, v.DateBeginProvision) >= CONVERT(DATE, emp.cambio_planilla)
+          AND ISNULL(v.ConsumedDays, 0) = 0
           AND (
                 ISNULL(v.Days, 0) <> emp.dias_vacaciones
              OR ISNULL(v.AcquiredDays, 0) <> emp.dias_vacaciones

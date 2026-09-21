@@ -2,7 +2,8 @@
     Saldo de vacaciones por trabajador y año de control.
     Usado por: POST /reporte_saldo_vacaciones (reporte_saldo_vacaciones.html).
 
-    Requiere: f_getDias360, PR_PayRollType.DiasVacaciones.
+    Requiere: f_getDias360.
+    Días anuales: PR_Employee.DiasVacaciones (fallback PR_PayRollType / 30).
     Solo tablas temporales (#): no usa xx_saldovacaciones ni actualiza PR_Vacation.
 
     Proporcional y descuentos: dias360 * DiasVacaciones / 360
@@ -19,21 +20,12 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @year NUMERIC(9, 0);
-    DECLARE @dias_vacaciones DECIMAL(10, 2);
 
     IF RTRIM(ISNULL(@person, '')) = '' SET @person = '0';
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
 
     SET @date = CAST(@date AS DATE);
     SET @year = YEAR(@date) + 1;
-
-    SELECT @dias_vacaciones = CAST(ISNULL(pt.DiasVacaciones, 30) AS DECIMAL(10, 2))
-    FROM PR_PayRollType pt (NOLOCK)
-    WHERE pt.Company = @company
-      AND pt.PayRollType = @payrolltype;
-
-    IF @dias_vacaciones IS NULL OR @dias_vacaciones <= 0
-        SET @dias_vacaciones = 30;
 
     IF OBJECT_ID('tempdb..#FutureVac') IS NOT NULL DROP TABLE #FutureVac;
     IF OBJECT_ID('tempdb..#VacSaldo') IS NOT NULL DROP TABLE #VacSaldo;
@@ -69,13 +61,19 @@ BEGIN
                             (v.consumeddays - ISNULL(fv.future_days, 0)) - v.acquireddays
                         )
                     ELSE
-                        ROUND(dbo.f_getDias360(v.DateBeginProvision, @date) * @dias_vacaciones / 360.0, 2)
+                        ROUND(
+                            dbo.f_getDias360(v.DateBeginProvision, @date)
+                            * CAST(ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)) AS DECIMAL(10, 2))
+                            / 360.0,
+                            2
+                        )
                         - (v.consumeddays - ISNULL(fv.future_days, 0))
                 END
             ELSE 0
         END AS porconsumir,
         v.DateBeginProvision AS inicioProvision,
-        v.DateBeginRights AS finProvision
+        v.DateBeginRights AS finProvision,
+        CAST(ISNULL(NULLIF(e.DiasVacaciones, 0), ISNULL(pt.DiasVacaciones, 30)) AS DECIMAL(10, 2)) AS dias_vacaciones
     INTO #VacSaldo
     FROM PR_Vacation v
         INNER JOIN PR_Employee e
@@ -83,6 +81,9 @@ BEGIN
            AND e.Status = 'N'
         INNER JOIN SY_Person sp
             ON e.Person = sp.Person
+        LEFT JOIN PR_PayRollType pt
+            ON pt.Company = e.Company
+           AND pt.PayRollType = e.PayRollType
         LEFT JOIN #FutureVac fv
             ON fv.Person = v.Person
            AND fv.Line = v.Line
@@ -249,11 +250,26 @@ BEGIN
         r.descansos,
         ROUND(
             r.saldo1 + r.saldo2 + r.saldo3 + r.saldo4 + r.saldo5
-            - ROUND(r.faltas * @dias_vacaciones / 360.0, 2)
-            - ROUND(r.licencias * @dias_vacaciones / 360.0, 2)
+            - ROUND(
+                r.faltas
+                * CAST(ISNULL(NULLIF(PR_Employee.DiasVacaciones, 0), ISNULL(PR_PayRollType.DiasVacaciones, 30)) AS DECIMAL(10, 2))
+                / 360.0,
+                2
+              )
+            - ROUND(
+                r.licencias
+                * CAST(ISNULL(NULLIF(PR_Employee.DiasVacaciones, 0), ISNULL(PR_PayRollType.DiasVacaciones, 30)) AS DECIMAL(10, 2))
+                / 360.0,
+                2
+              )
             - CASE
                 WHEN r.descansos >= 60
-                THEN ROUND(r.descansos * @dias_vacaciones / 360.0, 2)
+                THEN ROUND(
+                    r.descansos
+                    * CAST(ISNULL(NULLIF(PR_Employee.DiasVacaciones, 0), ISNULL(PR_PayRollType.DiasVacaciones, 30)) AS DECIMAL(10, 2))
+                    / 360.0,
+                    2
+                  )
                 ELSE 0
               END,
             2
@@ -261,6 +277,7 @@ BEGIN
     FROM #Result r
         INNER JOIN PR_PayRollType
             ON r.payrolltype = PR_PayRollType.PayRollType
+           AND PR_PayRollType.Company = r.company
         INNER JOIN PR_Employee
             ON r.person = PR_Employee.Person
            AND r.company = PR_Employee.Company

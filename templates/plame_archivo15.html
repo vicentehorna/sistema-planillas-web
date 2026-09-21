@@ -101,6 +101,7 @@
     Nombre del archivo: <code>0601AAAAmmRRRRRRRRRRR.snl</code>
     (<code>0601</code> = formulario PLAME, <code>AAAA</code> = año, <code>mm</code> = mes, RUC de 11 dígitos).
     Ejemplo de línea: <code>01|46741460|01|07|</code>
+    Si no hay registros, igual puede generar un <code>.snl</code> vacío.
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -167,6 +168,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_plame_archivo15_listado') | tojson }};
     const URL_GENERAR = {{ url_for('api_plame_archivo15_generar_txt') | tojson }};
     let lastRowsPlame15 = [];
+    let consultaOkPlame15 = false;
 
     function escapeHtml(s) {
         return String(s || '')
@@ -221,7 +223,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         const sel = obtenerSeleccionados().length;
         document.getElementById('lblRowCountPlame15').textContent = String(total);
         document.getElementById('lblSeleccionadosPlame15').textContent = String(sel);
-        document.getElementById('btnGenerarPlame15').disabled = sel === 0;
+        // Con registros: hace falta selección. Sin registros (consulta OK): TXT vacío permitido.
+        const permitirVacio = consultaOkPlame15 && lastRowsPlame15.length === 0;
+        document.getElementById('btnGenerarPlame15').disabled = sel === 0 && !permitirVacio;
     }
 
     function sincronizarCheckAll() {
@@ -326,6 +330,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         document.getElementById('lblRowCountPlame15').textContent = '0';
         document.getElementById('lblSeleccionadosPlame15').textContent = '0';
+        consultaOkPlame15 = false;
         document.getElementById('btnGenerarPlame15').disabled = true;
 
         try {
@@ -341,10 +346,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             lastRowsPlame15 = Array.isArray(payload.rows) ? payload.rows : [];
+            consultaOkPlame15 = true;
             renderizarTabla(lastRowsPlame15);
             document.getElementById('cardResultadoPlame15').classList.remove('d-none');
         } catch (err) {
             console.error(err);
+            consultaOkPlame15 = false;
             document.getElementById('cardResultadoPlame15').classList.add('d-none');
             alert('Error de red o del servidor.');
         }
@@ -358,7 +365,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Seleccione compañía y periodo tributario.');
             return;
         }
-        if (!seleccionados.length) {
+        // Sin data: generar .snl vacío. Con data: exigir al menos un seleccionado.
+        if (!seleccionados.length && lastRowsPlame15.length > 0) {
             alert('Seleccione al menos un registro.');
             return;
         }
@@ -367,7 +375,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_GENERAR, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, period, rows: seleccionados })
+                body: JSON.stringify({
+                    cia,
+                    period,
+                    rows: seleccionados,
+                    allow_empty: lastRowsPlame15.length === 0
+                })
             });
             if (!res.ok) {
                 let msg = 'No se pudo generar el archivo.';

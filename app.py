@@ -19987,7 +19987,11 @@ def api_plame_archivo15_listado():
 @app.route('/api/plame/archivo-15/generar-txt', methods=['POST'])
 @login_required
 def api_plame_archivo15_generar_txt():
-    """Genera TXT PLAME Archivo 15 (.snl, encoding latin-1)."""
+    """Genera TXT PLAME Archivo 15 (.snl, encoding latin-1).
+
+    Si no hay filas y allow_empty=true (consulta sin registros), genera archivo vacío
+    con el nombre correcto 0601AAAAmmRUC.snl — requerido por SUNAT/PLAME.
+    """
     body = request.get_json(silent=True) or {}
     p = _plame_params_from_json(body)
     err = _plame_validar_params(p)
@@ -19995,7 +19999,8 @@ def api_plame_archivo15_generar_txt():
         return jsonify({"error": err}), 400
 
     filas = _plame_rows_archivo15_from_json(body)
-    if not filas:
+    allow_empty = _truthy_param(body.get('allow_empty'))
+    if not filas and not allow_empty:
         return jsonify({"error": "Seleccione al menos un registro."}), 400
 
     conn = None

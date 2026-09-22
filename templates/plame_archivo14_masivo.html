@@ -115,25 +115,18 @@
                 <input type="text" id="txtLocalizar" class="form-control form-control-sm"
                        placeholder="Filtrar lista de empresas" maxlength="80" autocomplete="off">
             </div>
-            <div class="col-12 border-top pt-3 mt-1 toolbar-con-titulo">
-                <div class="toolbar-con-titulo__izq">
-                    <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
-                    <i class="bi bi-search"></i> Consultar
-                    </button>
-                    <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
-                    <i class="bi bi-file-earmark-zip"></i> Generar archivos PLAME (.jor)
-                    </button>
-                </div>
-                <div class="toolbar-con-titulo__centro">
-                    <span class="listado-opcion-titulo">PLAME Archivo 14 Masivo (.jor)</span>
-                </div>
-                <div class="toolbar-con-titulo__der">
-                    <span class="text-muted small fw-bold">
-                    Empresas: <span id="lblEmpresasSel">0</span>
-                    · Registros: <span id="lblRegistros">0</span>
-                    · Exportables: <span id="lblExportables">0</span>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
+                <i class="bi bi-file-earmark-zip"></i> Generar archivos PLAME (.jor)
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                Empresas: <span id="lblEmpresasSel">0</span>
+                · Registros: <span id="lblRegistros">0</span>
+                · Exportables: <span id="lblExportables">0</span>
                 </span>
-                </div>
             </div>
         </form>
     </div>

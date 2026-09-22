@@ -521,61 +521,6 @@
             background-color: #cff4fc;
             border-color: #b6effb;
         }
-
-        /* Titulo de opcion centrado en la fila de botones (botones izq / contadores der). */
-        .toolbar-con-titulo {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-            align-items: center;
-            column-gap: 0.75rem;
-            row-gap: 0.5rem;
-        }
-        .toolbar-con-titulo__izq,
-        .toolbar-con-titulo__der {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            gap: 0.5rem;
-            min-width: 0;
-        }
-        .toolbar-con-titulo__izq {
-            justify-content: flex-start;
-        }
-        .toolbar-con-titulo__der {
-            justify-content: flex-end;
-        }
-        .toolbar-con-titulo__centro {
-            justify-self: center;
-            text-align: center;
-            padding: 0 0.25rem;
-        }
-        .listado-opcion-titulo {
-            display: block;
-            margin: 0;
-            font-size: 1.5rem;
-            font-weight: 700;
-            line-height: 1.2;
-            color: #212529;
-            white-space: nowrap;
-            letter-spacing: 0.01em;
-        }
-        @media (max-width: 767.98px) {
-            .toolbar-con-titulo {
-                grid-template-columns: 1fr;
-            }
-            .toolbar-con-titulo__centro {
-                order: -1;
-                justify-self: stretch;
-                text-align: left;
-            }
-            .toolbar-con-titulo__der {
-                justify-content: flex-start;
-            }
-            .listado-opcion-titulo {
-                font-size: 1.25rem;
-                white-space: normal;
-            }
-        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

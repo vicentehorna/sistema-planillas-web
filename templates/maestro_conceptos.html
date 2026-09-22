@@ -583,6 +583,10 @@
                 <span class="conceptos-dw-title-text" id="tituloEdicionConcepto">Editar concepto</span>
                 <div id="msgGuardadoConcepto" class="conceptos-msg-guardado d-none" role="status" aria-live="polite"></div>
                 <div class="conceptos-titlebar-actions">
+                    <button type="button" class="btn btn-outline-primary btn-sm" id="btnReplicarConcepto"
+                            title="Crear o actualizar este concepto en las demás empresas" disabled>
+                        <i class="bi bi-files"></i> Replicar
+                    </button>
                     <button type="button" class="btn btn-success btn-sm conceptos-btn-guardar" id="btnGuardarConcepto" title="Ctrl+S">
                         <i class="bi bi-save"></i> Guardar
                     </button>
@@ -775,7 +779,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     const grillaScrollConceptos = document.getElementById('grillaScrollConceptos');
     const frmConcepto = document.getElementById('frmConcepto');
     const btnGuardarConcepto = document.getElementById('btnGuardarConcepto');
+    const btnReplicarConcepto = document.getElementById('btnReplicarConcepto');
 
+    function actualizarBtnReplicarConcepto() {
+        if (!btnReplicarConcepto) return;
+        const modo = String(document.getElementById('hidModo').value || '').trim().toUpperCase();
+        const concept = String(document.getElementById('hidConcept').value || '').trim();
+        const panelOk = panelEdicion && !panelEdicion.classList.contains('d-none');
+        btnReplicarConcepto.disabled = !(panelOk && modo === 'U' && !!concept);
+    }
     function serializarFormularioConcepto() {
         if (!frmConcepto) return '';
         const fd = new FormData(frmConcepto);
@@ -1149,6 +1161,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     function mostrarPanelEdicion(visible) {
         placeholder.classList.toggle('d-none', visible);
         panelEdicion.classList.toggle('d-none', !visible);
+        actualizarBtnReplicarConcepto();
         programarAjusteAlturaGrilla();
     }
 
@@ -1209,6 +1222,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('tituloEdicionConcepto').textContent = 'Nuevo concepto';
         syncMonedaPorValorMonetario();
         capturarSnapshotFormulario();
+        actualizarBtnReplicarConcepto();
     }
 
     function cargarFormulario(data) {
@@ -1236,6 +1250,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('tituloEdicionConcepto').textContent = data.description || 'Editar concepto';
         syncMonedaPorValorMonetario();
         capturarSnapshotFormulario();
+        actualizarBtnReplicarConcepto();
     }
 
     function payloadFormulario() {
@@ -1499,15 +1514,91 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function replicarConceptoEnCias(cia, formulacode) {
+    async function replicarConceptoEnCias(cia, formulacode, payloadExtra) {
+        const body = Object.assign(
+            { cia, formulacode },
+            payloadExtra && typeof payloadExtra === 'object' ? payloadExtra : {}
+        );
         const res = await fetch('/api/conceptos/replicar-cias', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cia, formulacode }),
+            body: JSON.stringify(body),
         });
         const data = await leerJson(res);
         mostrarMensajeGuardado(data.mensaje || 'Replicación completada.');
         return data;
+    }
+
+    async function replicarConceptoSeleccionado() {
+        const payload = payloadFormulario();
+        if (!payload.cia) {
+            hmAdvertencia('Seleccione una compañía.');
+            return;
+        }
+        if (!payload.concept || String(payload.modo || '').toUpperCase() !== 'U') {
+            hmAdvertencia('Seleccione un concepto guardado para replicar.');
+            return;
+        }
+        if (!payload.description || !payload.formulacode || !payload.concepttype) {
+            hmAdvertencia('Complete concepto, nemónico y tipo antes de replicar.');
+            return;
+        }
+
+        const etiqueta = payload.formulacode || payload.description || 'concepto';
+        const ok = await hmConfirmar({
+            titulo: 'Replicar concepto',
+            mensaje: (
+                `Se va a crear el concepto (${etiqueta}) en todas las demás empresas.\n\n` +
+                'Si no existe en una empresa, se crea. Si ya existe, se actualiza con los datos actuales.\n\n' +
+                '¿Desea continuar?'
+            ),
+            textoOk: 'Sí, replicar',
+            textoCancelar: 'Cancelar',
+            tipo: 'warning',
+        });
+        if (!ok) return;
+
+        if (btnReplicarConcepto) {
+            btnReplicarConcepto.disabled = true;
+            btnReplicarConcepto.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+        }
+        try {
+            // Asegura que la empresa origen tenga los datos del formulario.
+            const resGuardar = await fetch('/api/conceptos/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const dataGuardar = await leerJson(resGuardar);
+            if (dataGuardar.concept) {
+                document.getElementById('hidConcept').value = dataGuardar.concept;
+            }
+            document.getElementById('hidModo').value = 'U';
+            capturarSnapshotFormulario();
+
+            const formulacodeOrigen = String(
+                (conceptoSeleccionado && conceptoSeleccionado.formulacode) || payload.formulacode || ''
+            ).trim();
+            const data = await replicarConceptoEnCias(payload.cia, payload.formulacode, {
+                ...payload,
+                formulacode_origen: formulacodeOrigen,
+            });
+            if (data.errores && data.errores.length) {
+                hmAdvertencia(
+                    (data.mensaje || 'Replicación con observaciones.') +
+                    '\n' + data.errores.slice(0, 5).map((e) =>
+                        `• ${e.company}: ${e.error}`
+                    ).join('\n')
+                );
+            }
+        } catch (err) {
+            hmError(err.message || 'No se pudo replicar el concepto.');
+        } finally {
+            if (btnReplicarConcepto) {
+                btnReplicarConcepto.innerHTML = '<i class="bi bi-files"></i> Replicar';
+                actualizarBtnReplicarConcepto();
+            }
+        }
     }
 
     async function actualizarConceptoEnCias(payload) {
@@ -1711,7 +1802,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnNuevoConcepto').addEventListener('click', iniciarNuevoConcepto);
     document.getElementById('btnValidarConceptosCias').addEventListener('click', ejecutarValidacionConceptosCias);
     document.getElementById('btnGuardarConcepto').addEventListener('click', guardarConcepto);
+    if (btnReplicarConcepto) {
+        btnReplicarConcepto.addEventListener('click', replicarConceptoSeleccionado);
+    }
     document.getElementById('chkFlagIsMonetary').addEventListener('change', syncMonedaPorValorMonetario);
+    actualizarBtnReplicarConcepto();
 });
 </script>
 {% endblock %}

@@ -17680,6 +17680,54 @@ def api_formulas_replicar():
                 })
 
             try:
+                # Asegura líneas Tipo K (Código/parser) con CompiledExpr antes de replicar.
+                try:
+                    cursor.execute(
+                        """
+                        SELECT fd.line,
+                               LTRIM(RTRIM(ISNULL(fd.ScriptSource, ''))),
+                               LTRIM(RTRIM(ISNULL(fd.CompiledExpr, '')))
+                        FROM PR_FormulaDetail fd (NOLOCK)
+                        WHERE fd.FormulaHeader = ?
+                          AND UPPER(LTRIM(RTRIM(ISNULL(fd.Tipo, '')))) = 'K'
+                        ORDER BY fd.line
+                        """,
+                        (fh,),
+                    )
+                    lineas_k = cursor.fetchall() or []
+                except Exception:
+                    lineas_k = []
+
+                for ln_k in lineas_k:
+                    line_no = ln_k[0]
+                    src_k = str(ln_k[1] or '').strip()
+                    compiled_k = str(ln_k[2] or '').strip()
+                    if not src_k:
+                        raise ValueError(
+                            'Línea Código (K) sin ScriptSource. '
+                            'Guarde/valide el código antes de replicar.'
+                        )
+                    if compiled_k:
+                        continue
+                    detalle_tmp = [{'tipo': 'K', 'scriptsource': src_k}]
+                    _formulas_compile_codigo_lines(detalle_tmp, cursor, cia)
+                    nuevo_compiled = str(detalle_tmp[0].get('compiledexpr') or '').strip()
+                    nuevo_src = str(detalle_tmp[0].get('scriptsource') or src_k).strip()
+                    if not nuevo_compiled:
+                        raise ValueError('No se pudo compilar la línea Código (K).')
+                    cursor.execute(
+                        """
+                        UPDATE PR_FormulaDetail
+                        SET ScriptSource = ?,
+                            CompiledExpr = ?,
+                            XLastUser = ?,
+                            XLastDate = GETDATE()
+                        WHERE FormulaHeader = ?
+                          AND line = ?
+                        """,
+                        (nuevo_src, nuevo_compiled, _xlastuser_id(), fh, line_no),
+                    )
+
                 cursor.execute(
                     "EXEC sp_pr_replicar_formula_cia @cia=?, @formulacode=?, @formulaheader=?",
                     (cia, fc or None, fh),

@@ -120,21 +120,27 @@
                 <input type="text" id="txtReferencia" class="form-control form-control-sm"
                        maxlength="40" placeholder="PLANILLA HABERES MENSUAL" autocomplete="off" spellcheck="false">
             </div>
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-2 position-relative">
-                <span class="listado-opcion-titulo">Pago Haberes Pago por Unidad</span>
-                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Buscar</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnSelUnidades">Seleccionar unidades</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDeselUnidades">Deseleccionar</button>
-                <label class="small text-muted mb-0 ms-1" for="txtLocalizar">Localizar</label>
-                <input type="search" id="txtLocalizar" class="form-control form-control-sm" style="max-width:12rem" placeholder="Código o nombre..." autocomplete="off">
-                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
+            <div class="col-12 border-top pt-3 mt-1 toolbar-con-titulo">
+                <div class="toolbar-con-titulo__izq">
+                    <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Buscar</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnSelUnidades">Seleccionar unidades</button>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnDeselUnidades">Deseleccionar</button>
+                    <label class="small text-muted mb-0 ms-1" for="txtLocalizar">Localizar</label>
+                    <input type="search" id="txtLocalizar" class="form-control form-control-sm" style="max-width:12rem" placeholder="Código o nombre..." autocomplete="off">
+                    <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarZip" disabled>
                     <i class="bi bi-file-earmark-zip"></i> Generar ZIP
-                </button>
-                <span class="ms-auto text-muted small fw-bold">
+                    </button>
+                </div>
+                <div class="toolbar-con-titulo__centro">
+                    <span class="listado-opcion-titulo">Pago Haberes Pago por Unidad</span>
+                </div>
+                <div class="toolbar-con-titulo__der">
+                    <span class="text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCount">0</span>
                     · Seleccionados: <span id="lblSeleccionados">0</span>
                     · Neto: <span id="lblImporteTotal">0.00</span>
                 </span>
+                </div>
             </div>
         </form>
     </div>

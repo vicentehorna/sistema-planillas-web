@@ -157,17 +157,22 @@
                 <input type="file" class="form-control form-control-sm" id="fileR05" name="file_r05" accept=".xml,text/xml,application/xml">
             </div>
 
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1 position-relative">
-                <span class="listado-opcion-titulo">PLAME Validar</span>
-                <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnConsultarCarga">
+            <div class="col-12 border-top pt-3 mt-1 toolbar-con-titulo">
+                <div class="toolbar-con-titulo__izq">
+                    <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnConsultarCarga">
                     <i class="bi bi-arrow-repeat"></i> Consultar carga
-                </button>
-                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnSubirArchivos">
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-sm px-4" id="btnSubirArchivos">
                     <i class="bi bi-cloud-upload"></i> Cargar archivos SUNAT
-                </button>
-                <button type="button" class="btn btn-success btn-sm px-4" id="btnValidarPlame" disabled>
+                    </button>
+                    <button type="button" class="btn btn-success btn-sm px-4" id="btnValidarPlame" disabled>
                     <i class="bi bi-shield-check"></i> Validar
-                </button>
+                    </button>
+                </div>
+                <div class="toolbar-con-titulo__centro">
+                    <span class="listado-opcion-titulo">PLAME Validar</span>
+                </div>
+                <div class="toolbar-con-titulo__der"></div>
             </div>
         </form>
     </div>

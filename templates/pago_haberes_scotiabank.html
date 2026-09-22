@@ -123,17 +123,23 @@
                     </label>
                 </div>
             </div>
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3 position-relative">
-                <span class="listado-opcion-titulo">Pago Haberes Scotiabank</span>
-                <button type="button" class="btn btn-primary btn-sm px-4" id="btnListarScotiabank"><i class="bi bi-search"></i> Listar trabajadores</button>
-                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
+            <div class="col-12 border-top pt-3 mt-3 toolbar-con-titulo">
+                <div class="toolbar-con-titulo__izq">
+                    <button type="button" class="btn btn-primary btn-sm px-4" id="btnListarScotiabank"><i class="bi bi-search"></i> Listar trabajadores</button>
+                    <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
                     <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
-                </button>
-                <span class="ms-auto text-muted small fw-bold">
+                    </button>
+                </div>
+                <div class="toolbar-con-titulo__centro">
+                    <span class="listado-opcion-titulo">Pago Haberes Scotiabank</span>
+                </div>
+                <div class="toolbar-con-titulo__der">
+                    <span class="text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCountSco">0</span>
                     · Seleccionados: <span id="lblSeleccionadosSco">0</span>
                     · Importes totales: <span id="lblImporteTotalSco">0.00</span>
                 </span>
+                </div>
             </div>
         </form>
     </div>

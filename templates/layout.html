@@ -521,6 +521,24 @@
             background-color: #cff4fc;
             border-color: #b6effb;
         }
+
+        /* Titulo de opcion centrado en la fila de botones (botones a la izquierda). */
+        .listado-opcion-titulo {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            font-weight: 700;
+            white-space: nowrap;
+            pointer-events: none;
+            z-index: 1;
+            max-width: min(52%, 28rem);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            text-align: center;
+            line-height: 1.2;
+            color: #212529;
+        }
     </style>
     {% block extra_css %}{% endblock %}
 </head>

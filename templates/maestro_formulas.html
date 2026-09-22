@@ -716,6 +716,8 @@
     let formulasMarcadas = new Set();
     let formulaSeleccionada = null;
     let lineasDetalle = [];
+    /** Snapshot del detalle al cargar (para detectar borrados al guardar). */
+    let detalleOriginalCargado = [];
     let lineaSeleccionada = -1;
     let cacheConceptos = [];
     let multiPickerIdx = -1;
@@ -1858,8 +1860,47 @@
         syncTipoHeaderUI();
 
         lineasDetalle = (detalle || []).map((ln) => ({ ...ln }));
+        detalleOriginalCargado = (detalle || []).map((ln) => ({ ...ln }));
         lineaSeleccionada = lineasDetalle.length ? 0 : -1;
         renderDetalle();
+    }
+
+    function firmaLineaDetalle(ln) {
+        const n = (v) => (v == null || v === '' ? '' : String(v).trim());
+        const u = (v) => n(v).toUpperCase();
+        return [
+            u(ln && ln.tipo),
+            u(ln && ln.operador),
+            n(ln && ln.concept),
+            u(ln && ln.grupo),
+            n(ln && ln.valor),
+            n(ln && ln.parameter),
+            n(ln && ln.process),
+            n(ln && ln.periodoini),
+            n(ln && ln.periodofin),
+            n(ln && ln.numberini),
+            n(ln && ln.numberfin),
+            u(ln && ln.tipoliq),
+            n(ln && ln.divisor),
+            n(ln && ln.conceptlist),
+            n(ln && ln.scriptsource),
+        ].join('|');
+    }
+
+    function detectarLineasEliminadasDelDetalle() {
+        const restantes = (lineasDetalle || []).map((ln) => firmaLineaDetalle(ln));
+        const usadas = new Array(restantes.length).fill(false);
+        const eliminadas = [];
+        (detalleOriginalCargado || []).forEach((orig) => {
+            const firma = firmaLineaDetalle(orig);
+            const idx = restantes.findIndex((f, i) => !usadas[i] && f === firma);
+            if (idx >= 0) {
+                usadas[idx] = true;
+            } else {
+                eliminadas.push({ ...orig });
+            }
+        });
+        return eliminadas;
     }
 
     async function nuevaFormula() {
@@ -1886,6 +1927,7 @@
         document.getElementById('tituloEdicionFormula').textContent = 'Nueva fórmula';
         syncTipoHeaderUI();
         lineasDetalle = [];
+        detalleOriginalCargado = [];
         lineaSeleccionada = -1;
         renderDetalle();
         mostrarPanelEdicion(true);
@@ -2056,6 +2098,11 @@
             hmAdvertencia(errConstruccion);
             return;
         }
+
+        const lineasEliminadas = (payload.modo === 'U' && payload.formulaheader)
+            ? detectarLineasEliminadasDelDetalle()
+            : [];
+
         const btn = document.getElementById('btnGuardarFormula');
         const txt = btn.innerHTML;
         btn.disabled = true;
@@ -2069,10 +2116,45 @@
             const data = await leerJson(res);
             document.getElementById('hidFormulaHeader').value = data.formulaheader || '';
             document.getElementById('hidModo').value = 'U';
+
+            let msgTexto = data.mensaje || 'Guardado correctamente.';
+
+            if (lineasEliminadas.length > 0) {
+                const n = lineasEliminadas.length;
+                const okProp = await hmConfirmar({
+                    titulo: 'Eliminar en todas las empresas',
+                    mensaje:
+                        'Se eliminó ' + (n === 1 ? '1 línea' : (n + ' líneas')) +
+                        ' del detalle en esta empresa.\n\n' +
+                        '¿Desea eliminar el mismo registro de la misma fórmula en todas las empresas?',
+                    tipo: 'warning',
+                });
+                if (okProp) {
+                    try {
+                        const res2 = await fetch('/api/formulas/eliminar-lineas-todas-cias', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({
+                                cia: payload.cia,
+                                formulaheader: data.formulaheader || payload.formulaheader,
+                                lineas: lineasEliminadas,
+                            }),
+                        });
+                        const data2 = await leerJson(res2);
+                        msgTexto = (msgTexto + ' ' + (data2.mensaje || '')).trim();
+                    } catch (err2) {
+                        hmAdvertencia(
+                            'Guardado en esta empresa, pero no se pudo propagar el borrado: ' +
+                            (err2.message || 'error desconocido')
+                        );
+                    }
+                }
+            }
+
             const msg = document.getElementById('msgGuardadoFormula');
-            msg.textContent = data.mensaje || 'Guardado correctamente.';
+            msg.textContent = msgTexto;
             msg.classList.remove('d-none');
-            setTimeout(() => msg.classList.add('d-none'), 5000);
+            setTimeout(() => msg.classList.add('d-none'), 8000);
             await cargarListado();
             const row = formulasCache.find((x) => x.formulaheader === data.formulaheader);
             if (row) await seleccionarFormula(row);

@@ -17139,6 +17139,141 @@ def api_formulas_guardar():
                 pass
 
 
+def _formulas_lineas_eliminadas_to_xml(cursor, cia, lineas):
+    """Resuelve FormulaCode / shortnames y arma XML para sp_pr_eliminar_lineas_detalle_formula_todas_cias_web."""
+    root = ET.Element('root')
+    for ln in lineas or []:
+        if not isinstance(ln, dict):
+            continue
+        tipo = str(ln.get('tipo') or '').strip().upper()[:1] or None
+        operador = str(ln.get('operador') or '').strip().upper()[:1] or None
+        grupo = str(ln.get('grupo') or '').strip().upper()[:1] or None
+        tipoliq = str(ln.get('tipoliq') or '').strip().upper()[:1] or None
+
+        formulacode = str(ln.get('formulacode') or '').strip().upper() or None
+        concept = str(ln.get('concept') or '').strip() or None
+        if not formulacode and concept:
+            cursor.execute(
+                """
+                SELECT TOP 1 UPPER(LTRIM(RTRIM(ISNULL(FormulaCode, ''))))
+                FROM PR_Concept (NOLOCK)
+                WHERE Company = ? AND Concept = ?
+                """,
+                (cia, concept),
+            )
+            row = cursor.fetchone()
+            formulacode = (str(row[0]).strip().upper() if row and row[0] else None) or None
+
+        param_short = str(ln.get('param_short') or ln.get('parameter_shortname') or '').strip().upper() or None
+        parameter = str(ln.get('parameter') or '').strip() or None
+        if not param_short and parameter:
+            cursor.execute(
+                """
+                SELECT TOP 1 UPPER(LTRIM(RTRIM(ISNULL(ShortName, ''))))
+                FROM PR_Parameter (NOLOCK)
+                WHERE Company = ? AND Parameter = ?
+                """,
+                (cia, parameter),
+            )
+            row = cursor.fetchone()
+            param_short = (str(row[0]).strip().upper() if row and row[0] else None) or None
+
+        proc_short = str(ln.get('proc_short') or ln.get('process_shortname') or '').strip().upper() or None
+        process = str(ln.get('process') or '').strip() or None
+        if not proc_short and process:
+            cursor.execute(
+                """
+                SELECT TOP 1 UPPER(LTRIM(RTRIM(ISNULL(ShortName, ''))))
+                FROM PR_ProcessType (NOLOCK)
+                WHERE Company = ? AND ProcessType = ?
+                """,
+                (cia, process),
+            )
+            row = cursor.fetchone()
+            proc_short = (str(row[0]).strip().upper() if row and row[0] else None) or None
+
+        el = ET.SubElement(root, 'l')
+        fields = [
+            ('tipo', tipo),
+            ('operador', operador),
+            ('formulacode', formulacode),
+            ('grupo', grupo),
+            ('valor', ln.get('valor')),
+            ('param_short', param_short),
+            ('proc_short', proc_short),
+            ('periodoini', ln.get('periodoini')),
+            ('periodofin', ln.get('periodofin')),
+            ('numberini', ln.get('numberini')),
+            ('numberfin', ln.get('numberfin')),
+            ('tipoliq', tipoliq),
+            ('divisor', ln.get('divisor')),
+            ('scriptsource', ln.get('scriptsource')),
+        ]
+        for tag, val in fields:
+            if val is None:
+                continue
+            sval = str(val).strip() if tag != 'scriptsource' else str(val)
+            if tag != 'scriptsource' and sval == '':
+                continue
+            if tag == 'scriptsource' and not str(val or '').strip():
+                continue
+            child = ET.SubElement(el, tag)
+            child.text = str(val)
+    return ET.tostring(root, encoding='unicode')
+
+
+@app.route('/api/formulas/eliminar-lineas-todas-cias', methods=['POST'])
+@login_required
+def api_formulas_eliminar_lineas_todas_cias():
+    """Elimina las mismas líneas de detalle de la fórmula en el resto de empresas."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    formulaheader = str(body.get('formulaheader') or '').strip()
+    lineas = body.get('lineas') or body.get('detalle') or []
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not formulaheader:
+        return jsonify({"error": "Indique la fórmula."}), 400
+    if not isinstance(lineas, list) or not lineas:
+        return jsonify({"error": "No hay líneas eliminadas para propagar."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        lineas_xml = _formulas_lineas_eliminadas_to_xml(cursor, cia, lineas)
+        cursor.execute(
+            "EXEC sp_pr_eliminar_lineas_detalle_formula_todas_cias_web "
+            "@cia=?, @formulaheader=?, @lineas_xml=?, @xlastuser=?",
+            (cia, formulaheader, lineas_xml, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "empresas_afectadas": int(row.get('empresas_afectadas') or 0),
+            "lineas_eliminadas": int(row.get('lineas_eliminadas') or 0),
+            "mensaje": _jsonable_value(row.get('mensaje'))
+            or 'Proceso de eliminación en otras empresas finalizado.',
+        })
+    except Exception as e:
+        logging.exception("api_formulas_eliminar_lineas_todas_cias")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/formulas/eliminar', methods=['POST'])
 @login_required
 def api_formulas_eliminar():

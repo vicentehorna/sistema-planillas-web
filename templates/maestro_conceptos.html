@@ -584,7 +584,7 @@
                 <div id="msgGuardadoConcepto" class="conceptos-msg-guardado d-none" role="status" aria-live="polite"></div>
                 <div class="conceptos-titlebar-actions">
                     <button type="button" class="btn btn-outline-primary btn-sm" id="btnReplicarConcepto"
-                            title="Crear o actualizar este concepto en las demás empresas" disabled>
+                            title="Crear este concepto solo en empresas donde aún no existe" disabled>
                         <i class="bi bi-files"></i> Replicar
                     </button>
                     <button type="button" class="btn btn-success btn-sm conceptos-btn-guardar" id="btnGuardarConcepto" title="Ctrl+S">
@@ -1514,15 +1514,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function replicarConceptoEnCias(cia, formulacode, payloadExtra) {
-        const body = Object.assign(
-            { cia, formulacode },
-            payloadExtra && typeof payloadExtra === 'object' ? payloadExtra : {}
-        );
+    async function replicarConceptoEnCias(cia, formulacode) {
         const res = await fetch('/api/conceptos/replicar-cias', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+            body: JSON.stringify({ cia, formulacode }),
         });
         const data = await leerJson(res);
         mostrarMensajeGuardado(data.mensaje || 'Replicación completada.');
@@ -1539,17 +1535,21 @@ document.addEventListener('DOMContentLoaded', async function () {
             hmAdvertencia('Seleccione un concepto guardado para replicar.');
             return;
         }
-        if (!payload.description || !payload.formulacode || !payload.concepttype) {
-            hmAdvertencia('Complete concepto, nemónico y tipo antes de replicar.');
+        const formulacode = String(
+            payload.formulacode
+            || (conceptoSeleccionado && conceptoSeleccionado.formulacode)
+            || ''
+        ).trim();
+        if (!formulacode) {
+            hmAdvertencia('El concepto no tiene nemónico para replicar.');
             return;
         }
 
-        const etiqueta = payload.formulacode || payload.description || 'concepto';
         const ok = await hmConfirmar({
             titulo: 'Replicar concepto',
             mensaje: (
-                `Se va a crear el concepto (${etiqueta}) en todas las demás empresas.\n\n` +
-                'Si no existe en una empresa, se crea. Si ya existe, se actualiza con los datos actuales.\n\n' +
+                `Se va a crear el concepto (${formulacode}) en las demás empresas donde aún no exista.\n\n` +
+                'Si ya existe en una empresa, no se modifica.\n\n' +
                 '¿Desea continuar?'
             ),
             textoOk: 'Sí, replicar',
@@ -1563,26 +1563,21 @@ document.addEventListener('DOMContentLoaded', async function () {
             btnReplicarConcepto.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
         }
         try {
-            // Asegura que la empresa origen tenga los datos del formulario.
-            const resGuardar = await fetch('/api/conceptos/guardar', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload),
-            });
-            const dataGuardar = await leerJson(resGuardar);
-            if (dataGuardar.concept) {
-                document.getElementById('hidConcept').value = dataGuardar.concept;
+            if (formDirty) {
+                const resGuardar = await fetch('/api/conceptos/guardar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+                const dataGuardar = await leerJson(resGuardar);
+                if (dataGuardar.concept) {
+                    document.getElementById('hidConcept').value = dataGuardar.concept;
+                }
+                document.getElementById('hidModo').value = 'U';
+                capturarSnapshotFormulario();
             }
-            document.getElementById('hidModo').value = 'U';
-            capturarSnapshotFormulario();
 
-            const formulacodeOrigen = String(
-                (conceptoSeleccionado && conceptoSeleccionado.formulacode) || payload.formulacode || ''
-            ).trim();
-            const data = await replicarConceptoEnCias(payload.cia, payload.formulacode, {
-                ...payload,
-                formulacode_origen: formulacodeOrigen,
-            });
+            const data = await replicarConceptoEnCias(payload.cia, formulacode);
             if (data.errores && data.errores.length) {
                 hmAdvertencia(
                     (data.mensaje || 'Replicación con observaciones.') +

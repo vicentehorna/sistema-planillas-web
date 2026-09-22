@@ -18297,23 +18297,21 @@ def api_conceptos_validar_cias():
 @app.route('/api/conceptos/replicar-cias', methods=['POST'])
 @login_required
 def api_conceptos_replicar_cias():
-    """Replica un concepto a las demás empresas: crea si no existe, actualiza si ya existe.
+    """Replica un concepto por nemónico a las demás empresas activas.
 
-    Body mínimo: cia, formulacode.
-    Con payload completo (description, concepttype, flags…): tras crear/localizar
-    aplica la misma edición en destino.
+    Solo crea donde no existe. Si ya existe en destino, se omite (no actualiza).
+    Body: cia, formulacode.
     """
     body = request.get_json(silent=True) or {}
     cia_origen = str(body.get('cia') or body.get('company') or '').strip()
-    formulacode = str(body.get('formulacode') or '').strip()
-    formulacode_origen = str(
-        body.get('formulacode_origen') or body.get('formulacode_buscar') or formulacode
+    formulacode = str(
+        body.get('formulacode')
+        or body.get('formulacode_origen')
+        or body.get('formulacode_buscar')
+        or ''
     ).strip()
-    concepttype = str(body.get('concepttype') or '').strip()
-    description = str(body.get('description') or '').strip()
-    aplicar_datos = bool(description and formulacode and concepttype)
 
-    if not cia_origen or not formulacode_origen:
+    if not cia_origen or not formulacode:
         return jsonify({"error": "Indique compañía origen y nemónico."}), 400
 
     conn = None
@@ -18328,107 +18326,36 @@ def api_conceptos_replicar_cias():
             WHERE Company = ?
               AND LTRIM(RTRIM(FormulaCode)) = ?
             """,
-            (cia_origen, formulacode_origen),
+            (cia_origen, formulacode),
         )
         if not cursor.fetchone():
             return jsonify({
                 "error": (
-                    f"No existe el concepto {formulacode_origen} en la empresa origen {cia_origen}."
+                    f"No existe el concepto {formulacode} en la empresa origen {cia_origen}."
                 ),
             }), 400
 
         destinos = _concepto_destinos_activos(cursor, cia_origen)
         creados = []
-        actualizados = []
+        omitidos = []
         errores = []
 
         for dest in destinos:
             try:
                 cursor.execute(
-                    """
-                    SELECT Concept
-                    FROM PR_Concept (NOLOCK)
-                    WHERE Company = ?
-                      AND LTRIM(RTRIM(FormulaCode)) = ?
-                    """,
-                    (dest, formulacode_origen),
+                    "EXEC sp_pr_replicar_nuevo_concepto_nemonico "
+                    "@cia=?, @formulacode=?, @cia_origen=?",
+                    (dest, formulacode, cia_origen),
                 )
-                row = cursor.fetchone()
-                concept_dest = str(row[0]).strip() if row and row[0] else ''
-
-                if not concept_dest:
-                    cursor.execute(
-                        "EXEC sp_pr_replicar_nuevo_concepto_nemonico "
-                        "@cia=?, @formulacode=?, @cia_origen=?",
-                        (dest, formulacode_origen, cia_origen),
-                    )
-                    rows_rep = _dicts_first_nonempty_resultset(cursor)
-                    while cursor.nextset():
-                        pass
-                    msg_rep = str((rows_rep[0] or {}).get('mensaje') or '').lower() if rows_rep else ''
-                    if 'ya existe' in msg_rep:
-                        cursor.execute(
-                            """
-                            SELECT Concept
-                            FROM PR_Concept (NOLOCK)
-                            WHERE Company = ?
-                              AND LTRIM(RTRIM(FormulaCode)) = ?
-                            """,
-                            (dest, formulacode_origen),
-                        )
-                        row2 = cursor.fetchone()
-                        concept_dest = str(row2[0]).strip() if row2 and row2[0] else ''
-                    else:
-                        concept_dest = str(
-                            (rows_rep[0] or {}).get('concept') or ''
-                        ).strip() if rows_rep else ''
-                        if not concept_dest:
-                            cursor.execute(
-                                """
-                                SELECT Concept
-                                FROM PR_Concept (NOLOCK)
-                                WHERE Company = ?
-                                  AND LTRIM(RTRIM(FormulaCode)) = ?
-                                """,
-                                (dest, formulacode_origen),
-                            )
-                            row2 = cursor.fetchone()
-                            concept_dest = str(row2[0]).strip() if row2 and row2[0] else ''
-                        creados.append(dest)
-                        conn.commit()
-
-                if not concept_dest:
-                    errores.append({
-                        "company": dest,
-                        "error": "No se pudo crear ni localizar el concepto en destino.",
-                    })
-                    continue
-
-                if aplicar_datos:
-                    concepttype_dest = _concepto_resolve_type_for_company(
-                        cursor, cia_origen, concepttype, dest
-                    )
-                    if not concepttype_dest:
-                        errores.append({
-                            "company": dest,
-                            "error": "No se encontró el tipo de concepto equivalente.",
-                        })
-                        continue
-                    _concepto_guardar_ejecutar(
-                        cursor,
-                        body,
-                        company=dest,
-                        concept=concept_dest,
-                        modo='U',
-                        concepttype=concepttype_dest,
-                    )
-                    conn.commit()
-                    if dest not in creados:
-                        actualizados.append(dest)
-                elif dest not in creados:
-                    # Sin payload de edición: solo se informa que ya existía.
+                rows = _dicts_first_nonempty_resultset(cursor)
+                while cursor.nextset():
                     pass
-
+                msg = str((rows[0] or {}).get('mensaje') or '').lower() if rows else ''
+                if 'ya existe' in msg:
+                    omitidos.append(dest)
+                else:
+                    creados.append(dest)
+                conn.commit()
             except Exception as ex:
                 try:
                     conn.rollback()
@@ -18439,28 +18366,11 @@ def api_conceptos_replicar_cias():
                     "error": _concepto_error_sp_message(ex),
                 })
 
-        # Empresas donde ya existía y no se actualizó (solo create-mode sin payload)
-        omitidos = []
-        if not aplicar_datos:
-            for dest in destinos:
-                if dest in creados or any(e.get('company') == dest for e in errores):
-                    continue
-                omitidos.append(dest)
-
         partes = []
-        if creados and actualizados:
+        if creados:
             partes.append(
-                f"Creado en {len(creados)} empresa(s) y actualizado en {len(actualizados)}."
-            )
-        elif creados:
-            partes.append(
-                f"Concepto creado en {len(creados)} empresa(s): {', '.join(creados)}."
-                if len(creados) <= 8
-                else f"Concepto creado en {len(creados)} empresa(s)."
-            )
-        elif actualizados:
-            partes.append(
-                f"Concepto actualizado en {len(actualizados)} empresa(s)."
+                f"Concepto creado en {len(creados)} empresa(s)"
+                + (f": {', '.join(creados)}." if len(creados) <= 8 else '.')
             )
         if omitidos:
             partes.append(
@@ -18480,10 +18390,8 @@ def api_conceptos_replicar_cias():
         return jsonify({
             "ok": True,
             "cia_origen": cia_origen,
-            "formulacode": formulacode or formulacode_origen,
-            "formulacode_origen": formulacode_origen,
+            "formulacode": formulacode,
             "creados": creados,
-            "actualizados": actualizados,
             "omitidos": omitidos,
             "errores": errores,
             "mensaje": ' '.join(partes),

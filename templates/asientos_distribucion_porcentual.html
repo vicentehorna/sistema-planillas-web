@@ -82,10 +82,13 @@
                 <button type="button" class="btn btn-outline-primary btn-sm px-3" id="btnGuardar" disabled>
                     <i class="bi bi-save"></i> Guardar cambios
                 </button>
+                <button type="button" class="btn btn-outline-success btn-sm px-3" id="btnExportarExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+                </button>
                 {% if (sql_database or '')|lower == 'hm_divisa' %}
                 <input type="file" id="fileDistExcel" class="d-none" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet">
                 <button type="button" class="btn btn-outline-success btn-sm px-3" id="btnImportarExcel" disabled>
-                    <i class="bi bi-file-earmark-excel"></i> Importar Excel
+                    <i class="bi bi-upload"></i> Importar Excel
                 </button>
                 {% endif %}
                 <span id="lblConteo" class="small text-muted ms-auto">0 registros</span>
@@ -116,6 +119,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = 'BGT';
@@ -130,9 +134,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const msg = document.getElementById('msgDist');
     const btnAgregar = document.getElementById('btnAgregar');
     const btnGuardar = document.getElementById('btnGuardar');
+    const btnExportarExcel = document.getElementById('btnExportarExcel');
     const btnImportarExcel = document.getElementById('btnImportarExcel');
     const fileDistExcel = document.getElementById('fileDistExcel');
     const thCodigo = document.getElementById('thCodigo');
+    const colCodigoLabel = ES_HM_DIVISA ? 'C.Costo' : 'Código';
 
     let filas = [];
     let unidades = [];
@@ -205,8 +211,88 @@ document.addEventListener('DOMContentLoaded', async function () {
         const hayCambios = filas.some((fila) => fila.dirty);
         btnAgregar.disabled = !hayFiltros;
         btnGuardar.disabled = !hayFiltros || !hayCambios;
+        if (btnExportarExcel) btnExportarExcel.disabled = !filas.length;
         if (btnImportarExcel) btnImportarExcel.disabled = !hayFiltros;
         lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}`;
+    }
+
+    function textoUnidad(codigo) {
+        const id = String(codigo || '').trim();
+        if (!id) return '';
+        const u = unidades.find((x) => String(x.id || '').trim() === id);
+        if (!u) return id;
+        const text = String(u.text || '').trim();
+        return text && text !== id ? text : id;
+    }
+
+    function safeFileToken(value) {
+        return String(value || '')
+            .trim()
+            .replace(/[^\w\-]+/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '') || 'x';
+    }
+
+    async function exportarExcel() {
+        if (!filas.length) {
+            toastErr('No hay registros para exportar. Consulte primero.');
+            return;
+        }
+        if (typeof ExcelJS === 'undefined') {
+            toastErr('No se pudo cargar la librería Excel. Recargue la página.');
+            return;
+        }
+        const cia = cboCia.value.trim();
+        const period = cboPeriodo.value.trim();
+        const ciaText = (cboCia.options[cboCia.selectedIndex] || {}).textContent || cia;
+        const periodText = (cboPeriodo.options[cboPeriodo.selectedIndex] || {}).textContent || period;
+        const busqueda = txtLocalizar.value.trim();
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Distribución');
+        ws.addRow(['Distribución Porcentual']);
+        ws.addRow(['Compañía', ciaText]);
+        ws.addRow(['Periodo', periodText]);
+        if (busqueda) ws.addRow(['Filtro', busqueda]);
+        ws.addRow(['Registros', filas.length]);
+        ws.addRow([]);
+        const headerRowIdx = ws.rowCount + 1;
+        ws.addRow(['DNI', 'Nombres', colCodigoLabel, 'Descripción', 'Valor']);
+        filas.forEach((fila) => {
+            const codigo = String(fila.codigo || '').trim();
+            const valorRaw = String(fila.valor == null ? '' : fila.valor).trim().replace(',', '.');
+            const valorNum = Number(valorRaw);
+            ws.addRow([
+                String(fila.dni || '').trim(),
+                String(fila.nombre || '').trim(),
+                codigo,
+                textoUnidad(codigo),
+                Number.isFinite(valorNum) ? valorNum : (fila.valor === '' || fila.valor == null ? null : fila.valor)
+            ]);
+        });
+        ws.getRow(1).font = { bold: true, size: 14 };
+        ws.getRow(headerRowIdx).font = { bold: true };
+        ws.columns = [
+            { width: 14 },
+            { width: 40 },
+            { width: 16 },
+            { width: 36 },
+            { width: 10 }
+        ];
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `distribucion_porcentual_${safeFileToken(cia)}_${safeFileToken(period)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        toastOk(`Exportados ${filas.length} registro(s) a Excel.`);
     }
 
     function mapRows(rows) {
@@ -525,6 +611,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     btnAgregar.addEventListener('click', agregarFila);
     btnGuardar.addEventListener('click', guardarCambios);
+    if (btnExportarExcel) {
+        btnExportarExcel.addEventListener('click', async function () {
+            try {
+                await exportarExcel();
+            } catch (error) {
+                toastErr(error.message || 'No se pudo exportar el Excel.');
+            }
+        });
+    }
 
     async function confirmarImportacion(mensaje) {
         if (window.HmUi && typeof HmUi.confirmar === 'function') {

@@ -4705,6 +4705,35 @@ def _is_transient_sql_error(err):
     return _is_comm_link_failure(err) or ("hyt00" in s) or ("timeout expired" in s)
 
 
+def _is_sql_cursor_already_exists_error(err):
+    """Cursor GLOBAL del SP de cálculo quedó abierto (p.ej. 16915 BucleAuxiliares)."""
+    s = str(err or "").lower()
+    return ("16915" in s) or ("already exists" in s and "cursor" in s)
+
+
+def _reset_payroll_calc_connection(conn, database=None):
+    """Cierra y abre conexión limpia para el cálculo persona-a-persona."""
+    try:
+        if conn is not None:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                conn.close()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    if database:
+        new_conn = get_db_connection(database=database)
+    else:
+        new_conn = get_db_connection()
+    cursor = new_conn.cursor()
+    _set_cursor_timeout_payroll(cursor)
+    return new_conn, cursor
+
+
 def _sql_call_timeout_seconds():
     raw = str(os.getenv("SQL_CALL_TIMEOUT_SEC", "35")).strip()
     try:
@@ -26145,6 +26174,12 @@ def api_trabajadores_trasladar():
     cia_destino = str(body.get('cia_destino') or body.get('cia_dest') or '').strip()
     person = str(body.get('person') or '').strip()
     entrydate = _parse_optional_date(body.get('entrydate') or body.get('fecha_ingreso'))
+    costcenter = str(
+        body.get('costcenter')
+        or body.get('costcenter_destino')
+        or body.get('centro_costo')
+        or ''
+    ).strip()
 
     if not cia_origen:
         return jsonify({"error": "Seleccione la compañía origen."}), 400
@@ -26156,6 +26191,8 @@ def api_trabajadores_trasladar():
         return jsonify({"error": "La empresa destino debe ser distinta a la actual."}), 400
     if not entrydate:
         return jsonify({"error": "Indique la fecha de ingreso en la nueva empresa."}), 400
+    if not costcenter:
+        return jsonify({"error": "Seleccione el centro de costo en la empresa destino."}), 400
 
     conn = None
     try:
@@ -26165,7 +26202,7 @@ def api_trabajadores_trasladar():
             'DECLARE @mensaje_out VARCHAR(500); '
             'EXEC sp_pr_trasladar_trabajador_web '
             '@cia_origen=?, @cia_destino=?, @person=?, @entrydate=?, @xlastuser=?, '
-            '@mensaje_out=@mensaje_out OUTPUT; '
+            '@costcenter_destino=?, @mensaje_out=@mensaje_out OUTPUT; '
             'SELECT @mensaje_out AS mensaje;',
             (
                 cia_origen,
@@ -26173,6 +26210,7 @@ def api_trabajadores_trasladar():
                 person,
                 _sql_date_str_param(entrydate),
                 _xlastuser_id(),
+                costcenter,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -26188,6 +26226,7 @@ def api_trabajadores_trasladar():
             "cia_origen": cia_origen,
             "cia_destino": cia_destino,
             "person": person,
+            "costcenter": costcenter,
             "mensaje": mensaje,
         })
     except Exception as e:
@@ -31468,13 +31507,7 @@ def ejecutar_calculo_planilla():
                         pid,
                     )
                     try:
-                        try:
-                            conn.close()
-                        except Exception:
-                            pass
-                        conn = get_db_connection()
-                        cursor = conn.cursor()
-                        _set_cursor_timeout_payroll(cursor)
+                        conn, cursor = _reset_payroll_calc_connection(conn)
                         cursor.execute(
                             call_sql,
                             (cia, payroll_type, processtype, period, pid, user_id, tc),
@@ -31494,6 +31527,10 @@ def ejecutar_calculo_planilla():
                             pid,
                             e_retry,
                         )
+                        try:
+                            conn, cursor = _reset_payroll_calc_connection(conn)
+                        except Exception:
+                            pass
                 else:
                     try:
                         conn.rollback()
@@ -31501,6 +31538,13 @@ def ejecutar_calculo_planilla():
                         pass
                     errores.append(f'Error en {pid}: {e_individual}')
                     logging.warning('ejecutar_calculo_planilla persona %s: %s', pid, e_individual)
+                    try:
+                        conn, cursor = _reset_payroll_calc_connection(conn)
+                    except Exception:
+                        logging.warning(
+                            'ejecutar_calculo_planilla: no se pudo renovar conexión tras error en %s',
+                            pid,
+                        )
 
         validaciones = []
         if exitos > 0:
@@ -31647,13 +31691,7 @@ def ejecutar_calculo_streaming():
                             pid,
                         )
                         try:
-                            try:
-                                conn.close()
-                            except Exception:
-                                pass
-                            conn = get_db_connection(database=client_db)
-                            cursor = conn.cursor()
-                            _set_cursor_timeout_payroll(cursor)
+                            conn, cursor = _reset_payroll_calc_connection(conn, database=client_db)
                             cursor.execute(
                                 call_sql,
                                 (cia, payroll_type, processtype, period, pid, user_id, tc),
@@ -31685,6 +31723,11 @@ def ejecutar_calculo_streaming():
                                 'detalle': msg,
                                 'person': pid,
                             }
+                            # Renovar conexión: cursores GLOBAL del SP pueden quedar abiertos.
+                            try:
+                                conn, cursor = _reset_payroll_calc_connection(conn, database=client_db)
+                            except Exception:
+                                pass
                     else:
                         try:
                             conn.rollback()
@@ -31700,6 +31743,14 @@ def ejecutar_calculo_streaming():
                             'detalle': msg,
                             'person': pid,
                         }
+                        # Tras cualquier fallo, conexión limpia para el siguiente trabajador.
+                        try:
+                            conn, cursor = _reset_payroll_calc_connection(conn, database=client_db)
+                        except Exception:
+                            logging.warning(
+                                'ejecutar_calculo_streaming: no se pudo renovar conexión tras error en %s',
+                                pid,
+                            )
 
                 yield f'data: {json.dumps(evento)}\n\n'
 

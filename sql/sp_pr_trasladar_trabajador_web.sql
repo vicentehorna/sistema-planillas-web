@@ -21,12 +21,13 @@
     Usado por: POST /api/trabajadores/trasladar
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_trasladar_trabajador_web]
-    @cia_origen     VARCHAR(10),
-    @cia_destino    VARCHAR(10),
-    @person         VARCHAR(20),
-    @entrydate      VARCHAR(10),
-    @xlastuser      VARCHAR(20) = NULL,
-    @mensaje_out    VARCHAR(500) = NULL OUTPUT
+    @cia_origen          VARCHAR(10),
+    @cia_destino         VARCHAR(10),
+    @person              VARCHAR(20),
+    @entrydate           VARCHAR(10),
+    @xlastuser           VARCHAR(20) = NULL,
+    @costcenter_destino  VARCHAR(20) = NULL,
+    @mensaje_out         VARCHAR(500) = NULL OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -36,6 +37,7 @@ BEGIN
     SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
     SET @entrydate = NULLIF(LTRIM(RTRIM(ISNULL(@entrydate, ''))), '');
     SET @xlastuser = NULLIF(LTRIM(RTRIM(ISNULL(@xlastuser, ''))), '');
+    SET @costcenter_destino = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter_destino, ''))), '');
     SET @mensaje_out = NULL;
 
     IF @cia_origen = '' OR @cia_destino = '' OR @person = ''
@@ -294,7 +296,32 @@ BEGIN
             p2.Position;
     END;
 
-    IF @costcenter IS NOT NULL
+    IF @costcenter_destino IS NOT NULL
+    BEGIN
+        /* Centro de costo elegido en UI (empresa destino). */
+        SET @costcenter = NULL;
+        SET @costcentername = NULL;
+        SELECT TOP 1
+            @costcenter = cc.CostCenter,
+            @costcentername = COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(cc.Name, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(cc.Description, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(cc.Abbrev, ''))), ''),
+                cc.CostCenter
+            )
+        FROM AC_CostCenter cc (NOLOCK)
+        WHERE cc.Company = @cia_destino
+          AND LTRIM(RTRIM(cc.CostCenter)) = @costcenter_destino
+          AND UPPER(LTRIM(RTRIM(ISNULL(cc.Status, 'A')))) IN ('A', '')
+        ORDER BY cc.CostCenter;
+
+        IF @costcenter IS NULL
+        BEGIN
+            RAISERROR('El centro de costo seleccionado no existe o no está activo en la empresa destino.', 16, 1);
+            RETURN;
+        END;
+    END
+    ELSE IF @costcenter IS NOT NULL
     BEGIN
         SELECT TOP 1
             @costcenter = cc2.CostCenter,

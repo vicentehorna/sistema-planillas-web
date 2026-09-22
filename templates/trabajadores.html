@@ -248,6 +248,12 @@
                     <label for="cboTrasladoEmpresaDestino" class="form-label small fw-bold text-muted mb-1">Empresa destino</label>
                     <select id="cboTrasladoEmpresaDestino" class="form-select form-select-sm"></select>
                 </div>
+                <div class="mb-2">
+                    <label for="cboTrasladoCentroCosto" class="form-label small fw-bold text-muted mb-1">Centro de costo</label>
+                    <select id="cboTrasladoCentroCosto" class="form-select form-select-sm" disabled>
+                        <option value="">Seleccione empresa destino...</option>
+                    </select>
+                </div>
                 <div class="mb-1">
                     <label for="txtTrasladoFechaIngreso" class="form-label small fw-bold text-muted mb-1">Fecha de ingreso</label>
                     <input type="date" id="txtTrasladoFechaIngreso" class="form-control form-control-sm">
@@ -1142,6 +1148,64 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function poblarCentrosCostoTraslado(ciaDestino) {
+        const cbo = document.getElementById('cboTrasladoCentroCosto');
+        if (!cbo) return;
+        cbo.innerHTML = '';
+        const cia = String(ciaDestino || '').trim();
+        if (!cia) {
+            cbo.disabled = true;
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Seleccione empresa destino...';
+            cbo.appendChild(opt);
+            return;
+        }
+        cbo.disabled = true;
+        const optCarga = document.createElement('option');
+        optCarga.value = '';
+        optCarga.textContent = 'Cargando...';
+        cbo.appendChild(optCarga);
+        try {
+            const res = await fetch('/api/selectores/costcenter?cia=' + encodeURIComponent(cia));
+            const items = await res.json();
+            const rows = Array.isArray(items) ? items : [];
+            cbo.innerHTML = '';
+            if (!rows.length) {
+                const opt = document.createElement('option');
+                opt.value = '';
+                opt.textContent = 'Sin centros de costo activos';
+                cbo.appendChild(opt);
+                cbo.disabled = true;
+                return;
+            }
+            const optEmpty = document.createElement('option');
+            optEmpty.value = '';
+            optEmpty.textContent = 'Seleccione...';
+            cbo.appendChild(optEmpty);
+            rows.forEach(function (item) {
+                const id = String(item.id || '').trim();
+                if (!id) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = String(item.text || id).trim();
+                cbo.appendChild(opt);
+            });
+            cbo.disabled = false;
+            if (rows.length === 1) {
+                cbo.value = String(rows[0].id || '').trim();
+            }
+        } catch (e) {
+            console.error(e);
+            cbo.innerHTML = '';
+            const opt = document.createElement('option');
+            opt.value = '';
+            opt.textContent = 'Error al cargar centros de costo';
+            cbo.appendChild(opt);
+            cbo.disabled = true;
+        }
+    }
+
     async function mostrarModalTrasladoTrabajador() {
         const cia = document.getElementById('cboCompania').value.trim();
         if (!cia) {
@@ -1175,9 +1239,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             hmAdvertencia('No hay otra empresa disponible para el traslado.');
             return;
         }
+        await poblarCentrosCostoTraslado(cboDest.value);
         const modalEl = document.getElementById('modalTrasladoTrabajador');
         if (!modalEl || !window.bootstrap) return;
         bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+
+    const cboTrasladoEmpresaDestino = document.getElementById('cboTrasladoEmpresaDestino');
+    if (cboTrasladoEmpresaDestino) {
+        cboTrasladoEmpresaDestino.addEventListener('change', async function () {
+            await poblarCentrosCostoTraslado(this.value);
+        });
     }
 
     if (btnTrasladoTrab) {
@@ -1193,11 +1265,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             const ciaOrigen = document.getElementById('cboCompania').value.trim();
             const cboDest = document.getElementById('cboTrasladoEmpresaDestino');
             const ciaDestino = cboDest ? String(cboDest.value || '').trim() : '';
+            const cboCc = document.getElementById('cboTrasladoCentroCosto');
+            const costcenter = cboCc ? String(cboCc.value || '').trim() : '';
             const fechaIngreso = document.getElementById('txtTrasladoFechaIngreso')
                 ? String(document.getElementById('txtTrasladoFechaIngreso').value || '').trim()
                 : '';
             if (!ciaOrigen || !ciaDestino) {
                 hmAdvertencia('Seleccione la empresa destino.');
+                return;
+            }
+            if (!costcenter) {
+                hmAdvertencia('Seleccione el centro de costo en la empresa destino.');
                 return;
             }
             if (!fechaIngreso) {
@@ -1217,11 +1295,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                 );
                 return;
             }
+            const ccTxt = cboCc && cboCc.selectedIndex >= 0
+                ? String(cboCc.options[cboCc.selectedIndex].text || costcenter).trim()
+                : costcenter;
             const ok = await hmConfirmar({
                 titulo: 'Confirmar traslado',
                 mensaje:
                     '¿Trasladar a ' + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person) +
                     ' a la empresa ' + (cboDest.options[cboDest.selectedIndex]?.text || ciaDestino) +
+                    ' (centro de costo: ' + ccTxt + ')' +
                     ' con fecha de ingreso ' + formatearFechaDmY(fechaIngreso) + '?',
                 tipo: 'warning',
             });
@@ -1237,6 +1319,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                         cia_destino: ciaDestino,
                         person: trabajadorSeleccionado.person,
                         entrydate: fechaIngreso,
+                        costcenter: costcenter,
                     }),
                 });
                 const data = await res.json().catch(function () { return {}; });

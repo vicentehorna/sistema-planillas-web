@@ -17277,11 +17277,21 @@ def api_formulas_eliminar_lineas_todas_cias():
 @app.route('/api/formulas/eliminar', methods=['POST'])
 @login_required
 def api_formulas_eliminar():
-    """sp_pr_eliminarformula_web: elimina fórmula(s) completa(s) (cabecera + detalle)."""
+    """Elimina fórmula(s) completa(s) (cabecera + detalle).
+
+    Body:
+      cia, formulaheaders[], opcional todas_cias (bool): si True, borra la misma
+      fórmula (FormulaCode + planilla + proceso) en todas las empresas activas.
+    """
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     formulaheader = str(body.get('formulaheader') or '').strip()
     formulaheaders = body.get('formulaheaders') or []
+    todas_cias = body.get('todas_cias', body.get('todas_empresas', False))
+    if isinstance(todas_cias, str):
+        todas_cias = todas_cias.strip().lower() in ('1', 'true', 's', 'y', 'yes', 'si', 'sí')
+    else:
+        todas_cias = bool(todas_cias)
 
     if not formulaheaders and formulaheader:
         formulaheaders = [formulaheader]
@@ -17302,17 +17312,26 @@ def api_formulas_eliminar():
         cursor = conn.cursor()
         eliminadas = []
         errores = []
+        empresas_afectadas_total = 0
         for fh in formulaheaders:
             try:
-                cursor.execute(
-                    "EXEC sp_pr_eliminarformula_web @company=?, @formulaheader=?",
-                    (cia, fh),
-                )
+                if todas_cias:
+                    cursor.execute(
+                        "EXEC sp_pr_eliminarformula_todas_cias_web "
+                        "@cia=?, @formulaheader=?, @xlastuser=?",
+                        (cia, fh, _xlastuser_id()),
+                    )
+                else:
+                    cursor.execute(
+                        "EXEC sp_pr_eliminarformula_web @company=?, @formulaheader=?",
+                        (cia, fh),
+                    )
                 rows = _dicts_first_nonempty_resultset(cursor)
                 while cursor.nextset():
                     pass
                 row = rows[0] if rows else {}
                 eliminadas.append(_jsonable_value(row.get('formulaheader')) or fh)
+                empresas_afectadas_total += int(row.get('empresas_afectadas') or (1 if not todas_cias else 0))
             except Exception as ex:
                 errores.append({"formulaheader": fh, "error": str(ex)})
 
@@ -17327,11 +17346,21 @@ def api_formulas_eliminar():
                 "error": errores[0]['error'] if errores else "No se pudo eliminar.",
             }), 400
 
-        mensaje = (
-            f"Se eliminó 1 fórmula correctamente."
-            if n_ok == 1 and n_err == 0
-            else f"Se eliminaron {n_ok} fórmula(s) correctamente."
-        )
+        if todas_cias:
+            mensaje = (
+                f"Se eliminó 1 fórmula en {empresas_afectadas_total} empresa(s)."
+                if n_ok == 1 and n_err == 0
+                else (
+                    f"Se eliminaron {n_ok} fórmula(s) en total en "
+                    f"{empresas_afectadas_total} empresa(s) afectadas."
+                )
+            )
+        else:
+            mensaje = (
+                f"Se eliminó 1 fórmula correctamente."
+                if n_ok == 1 and n_err == 0
+                else f"Se eliminaron {n_ok} fórmula(s) correctamente."
+            )
         if n_err:
             mensaje += f" {n_err} con error."
 
@@ -17339,6 +17368,8 @@ def api_formulas_eliminar():
             "ok": True,
             "eliminadas": eliminadas,
             "errores": errores,
+            "todas_cias": todas_cias,
+            "empresas_afectadas": empresas_afectadas_total,
             "mensaje": mensaje,
         })
     except Exception as e:

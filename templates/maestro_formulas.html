@@ -1737,7 +1737,27 @@
         const msg = n === 1
             ? `¿Eliminar la fórmula seleccionada?\n\n${lista}\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`
             : `¿Eliminar las ${n} fórmulas seleccionadas?\n\n${lista}${extra}\n\nSe borrará la cabecera y todo el detalle. Esta acción no se puede deshacer.`;
-        if (!confirm(msg)) return;
+        const okEliminar = await hmConfirmar({
+            titulo: 'Eliminar fórmula',
+            mensaje: msg,
+            textoOk: 'Sí, eliminar',
+            textoCancelar: 'Cancelar',
+            tipo: 'warning',
+        });
+        if (!okEliminar) return;
+
+        const okTodas = await hmConfirmar({
+            titulo: 'Eliminar en todas las empresas',
+            mensaje: (
+                n === 1
+                    ? '¿Desea borrar también la misma fórmula (cabecera y detalle) en todas las demás empresas?'
+                    : `¿Desea borrar también las ${n} fórmulas (cabecera y detalle) en todas las demás empresas?`
+            ) + '\n\nSe identifica por el mismo concepto (FormulaCode), tipo de planilla y proceso.',
+            textoOk: 'Sí, en todas',
+            textoCancelar: 'Solo esta empresa',
+            tipo: 'warning',
+        });
+        const todasCias = !!okTodas;
 
         const btn = document.getElementById('btnEliminarFormulas');
         const txt = btn.innerHTML;
@@ -1751,6 +1771,7 @@
                 body: JSON.stringify({
                     cia,
                     formulaheaders: seleccionadas.map((r) => r.formulaheader),
+                    todas_cias: todasCias,
                 }),
             });
             const data = await leerJson(res);

@@ -1,5 +1,9 @@
 /*
-    Replica una fórmula (FormulaHeader) de @cia hacia el resto de compañías.
+    Replica una fórmula (FormulaHeader) de @cia hacia otras compañías.
+
+    @cia_destino (opcional):
+      - NULL / ''  → replica a todas las empresas activas (comportamiento histórico).
+      - Código CIA → replica solo a esa empresa destino.
 
     Incluye detalle Tipo K (Código/parser): copia ScriptSource + CompiledExpr
     tal cual están en origen (el parser se ejecuta al Guardar en la UI;
@@ -15,7 +19,8 @@
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_replicar_formula_cia]
     @cia           VARCHAR(4),
     @formulacode   VARCHAR(50),
-    @formulaheader VARCHAR(20)
+    @formulaheader VARCHAR(20),
+    @cia_destino   VARCHAR(4) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -25,6 +30,26 @@ BEGIN
     DECLARE @planilla   VARCHAR(50);
     DECLARE @proceso    VARCHAR(50);
     DECLARE @idformula  VARCHAR(20);
+
+    SET @cia_destino = NULLIF(LTRIM(RTRIM(ISNULL(@cia_destino, ''))), '');
+
+    IF @cia_destino IS NOT NULL AND @cia_destino = LTRIM(RTRIM(ISNULL(@cia, '')))
+    BEGIN
+        RAISERROR('La empresa destino debe ser distinta a la de origen.', 16, 1);
+        RETURN;
+    END;
+
+    IF @cia_destino IS NOT NULL
+       AND NOT EXISTS (
+            SELECT 1
+            FROM SY_Company
+            WHERE LTRIM(RTRIM(Company)) = @cia_destino
+              AND ISNULL(status, 'A') = 'A'
+       )
+    BEGIN
+        RAISERROR('La empresa destino no existe o no está activa.', 16, 1);
+        RETURN;
+    END;
 
     SELECT
         @planilla = PR_PayRollType.ShortName,
@@ -62,7 +87,11 @@ BEGIN
         SELECT Company
         FROM SY_Company
         WHERE Company <> @cia
-          AND ISNULL(status, 'A') = 'A';
+          AND ISNULL(status, 'A') = 'A'
+          AND (
+                @cia_destino IS NULL
+             OR LTRIM(RTRIM(Company)) = @cia_destino
+          );
 
     OPEN empresas;
     FETCH NEXT FROM empresas INTO @company;

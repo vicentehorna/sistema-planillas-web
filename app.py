@@ -17566,15 +17566,19 @@ def api_formulas_copiar_planilla():
 @app.route('/api/formulas/replicar', methods=['POST'])
 @login_required
 def api_formulas_replicar():
-    """Replica fórmulas de cia(+planilla+proceso) a las demás empresas activas.
+    """Replica fórmulas de cia(+planilla+proceso) a empresas activas.
 
     Body:
       cia (origen), formulas[{formulaheader, formulacode}], opcional:
       payrolltype, processtype (si formulas vacío, carga el listado del filtro),
       crear_conceptos (bool, default True): crea nemónicos faltantes en destino.
+      cia_destino (opcional, solo hm_garc): replica únicamente a esa empresa.
     """
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
+    cia_destino = str(
+        body.get('cia_destino') or body.get('company_destino') or body.get('destino') or ''
+    ).strip()
     payrolltype = str(body.get('payrolltype') or '').strip()
     processtype = str(
         body.get('processtype') or body.get('proccestype') or ''
@@ -17586,6 +17590,16 @@ def api_formulas_replicar():
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía origen."}), 400
+
+    if cia_destino:
+        from database import get_active_database
+        db_activa = str(get_active_database() or '').strip().lower()
+        if db_activa != 'hm_garc':
+            return jsonify({
+                "error": "Replicar a empresa específica solo está disponible en hm_garc.",
+            }), 403
+        if cia_destino == cia:
+            return jsonify({"error": "La empresa destino debe ser distinta a la de origen."}), 400
 
     conn = None
     try:
@@ -17629,21 +17643,41 @@ def api_formulas_replicar():
         advertencias = []
         conceptos_creados = 0
 
-        cursor.execute(
-            """
-            SELECT LTRIM(RTRIM(Company)) AS company
-            FROM SY_Company (NOLOCK)
-            WHERE ISNULL(status, 'A') = 'A'
-              AND LTRIM(RTRIM(Company)) <> ?
-            ORDER BY Company
-            """,
-            (cia,),
-        )
-        destinos = [
-            str(r[0]).strip()
-            for r in cursor.fetchall()
-            if r and r[0]
-        ]
+        if cia_destino:
+            cursor.execute(
+                """
+                SELECT LTRIM(RTRIM(Company)) AS company
+                FROM SY_Company (NOLOCK)
+                WHERE ISNULL(status, 'A') = 'A'
+                  AND LTRIM(RTRIM(Company)) = ?
+                """,
+                (cia_destino,),
+            )
+            destinos = [
+                str(r[0]).strip()
+                for r in cursor.fetchall()
+                if r and r[0]
+            ]
+            if not destinos:
+                return jsonify({
+                    "error": f"La empresa destino {cia_destino} no existe o no está activa.",
+                }), 400
+        else:
+            cursor.execute(
+                """
+                SELECT LTRIM(RTRIM(Company)) AS company
+                FROM SY_Company (NOLOCK)
+                WHERE ISNULL(status, 'A') = 'A'
+                  AND LTRIM(RTRIM(Company)) <> ?
+                ORDER BY Company
+                """,
+                (cia,),
+            )
+            destinos = [
+                str(r[0]).strip()
+                for r in cursor.fetchall()
+                if r and r[0]
+            ]
 
         for item in formulas:
             fh = str((item or {}).get('formulaheader') or '').strip()
@@ -17788,10 +17822,18 @@ def api_formulas_replicar():
                         (nuevo_src, nuevo_compiled, _xlastuser_id(), fh, line_no),
                     )
 
-                cursor.execute(
-                    "EXEC sp_pr_replicar_formula_cia @cia=?, @formulacode=?, @formulaheader=?",
-                    (cia, fc or None, fh),
-                )
+                if cia_destino:
+                    cursor.execute(
+                        "EXEC sp_pr_replicar_formula_cia "
+                        "@cia=?, @formulacode=?, @formulaheader=?, @cia_destino=?",
+                        (cia, fc or None, fh, cia_destino),
+                    )
+                else:
+                    cursor.execute(
+                        "EXEC sp_pr_replicar_formula_cia "
+                        "@cia=?, @formulacode=?, @formulaheader=?",
+                        (cia, fc or None, fh),
+                    )
                 while cursor.nextset():
                     pass
                 ok += 1
@@ -17805,10 +17847,15 @@ def api_formulas_replicar():
 
         conn.commit()
         n = len([i for i in formulas if str((i or {}).get('formulaheader') or '').strip()])
-        partes = [
-            f"Se replicaron {ok} fórmula(s) desde {cia} hacia "
-            f"{len(destinos)} empresa(s)."
-        ]
+        if cia_destino:
+            partes = [
+                f"Se replicaron {ok} fórmula(s) desde {cia} hacia {cia_destino}."
+            ]
+        else:
+            partes = [
+                f"Se replicaron {ok} fórmula(s) desde {cia} hacia "
+                f"{len(destinos)} empresa(s)."
+            ]
         if errores:
             partes.append(f"{len(errores)} con error.")
         if conceptos_creados:
@@ -17817,6 +17864,7 @@ def api_formulas_replicar():
             "ok": True,
             "replicadas": ok,
             "procesadas": n,
+            "cia_destino": cia_destino or None,
             "empresas_destino": len(destinos),
             "conceptos_creados": conceptos_creados,
             "advertencias": advertencias,

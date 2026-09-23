@@ -479,6 +479,12 @@
                             title="Replica las fórmulas marcadas (check) a las demás empresas activas">
                         <i class="bi bi-buildings"></i> Replicar
                     </button>
+                    {% if (sql_database or '')|lower == 'hm_garc' %}
+                    <button type="button" class="btn btn-outline-info btn-sm" id="btnReplicarFormulasEmpresa" disabled
+                            title="Replica las fórmulas marcadas a una empresa específica">
+                        <i class="bi bi-building"></i> Replicar a empresa
+                    </button>
+                    {% endif %}
                     <button type="button" class="btn btn-outline-danger btn-sm" id="btnEliminarFormulas" disabled>
                         <i class="bi bi-trash"></i> Eliminar
                     </button>
@@ -643,6 +649,38 @@
     </div>
 </div>
 
+{% if (sql_database or '')|lower == 'hm_garc' %}
+<div class="modal fade" id="modalReplicarEmpresa" tabindex="-1" aria-labelledby="modalReplicarEmpresaLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalReplicarEmpresaLabel">Replicar fórmulas a empresa</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="small text-muted mb-2" id="lblReplicarEmpresaResumen"></p>
+                <label for="txtFiltroEmpresaDestino" class="form-label small fw-bold mb-1">Buscar empresa</label>
+                <input type="search" id="txtFiltroEmpresaDestino" class="form-control form-control-sm mb-2"
+                       placeholder="Código o nombre…" autocomplete="off">
+                <label for="cboEmpresaDestinoReplica" class="form-label small fw-bold mb-1">Empresa destino</label>
+                <select id="cboEmpresaDestinoReplica" class="form-select form-select-sm" size="10">
+                    <option value="">Seleccione...</option>
+                </select>
+                <p class="small text-muted mt-2 mb-0">
+                    Se replicarán solo a la empresa elegida. Si ya existen, se reemplazan. Los conceptos faltantes se crean automáticamente.
+                </p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-info btn-sm" id="btnConfirmarReplicarEmpresa">
+                    <i class="bi bi-building"></i> Replicar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+
 <div class="modal fade" id="modalConceptosMulti" tabindex="-1" aria-labelledby="modalConceptosMultiLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-scrollable">
         <div class="modal-content">
@@ -701,7 +739,7 @@
 
 {% block extra_js %}
 <script>
-(function () {
+    const ES_GARC = {{ 'true' if (sql_database or '')|lower == 'hm_garc' else 'false' }};
     const STORAGE_KEY = 'filtros_formulas_maestro';
 
     const cboCia = document.getElementById('cboCompania');
@@ -725,6 +763,8 @@
     let modalConceptosMulti = null;
     let modalCodigoFormula = null;
     let modalCopiarPlanilla = null;
+    let modalReplicarEmpresa = null;
+    let empresasDestinoCache = [];
     let codigoCompiladoTemp = '';
     let multiPickerSeleccion = new Set();
     let cacheProcesos = [];
@@ -1401,9 +1441,11 @@
     function actualizarBotonesLista() {
         const n = formulasMarcadas.size;
         const btnRep = document.getElementById('btnReplicarFormulas');
+        const btnRepEmp = document.getElementById('btnReplicarFormulasEmpresa');
         const btnDel = document.getElementById('btnEliminarFormulas');
         const btnCop = document.getElementById('btnCopiarFormulasPlanilla');
         if (btnRep) btnRep.disabled = n === 0;
+        if (btnRepEmp) btnRepEmp.disabled = n === 0;
         if (btnDel) btnDel.disabled = n === 0;
         if (btnCop) btnCop.disabled = n === 0;
     }
@@ -1714,6 +1756,179 @@
             hmError(err.message || 'No se pudo replicar.');
         } finally {
             btn.innerHTML = txt;
+            actualizarBotonesLista();
+        }
+    }
+
+    function renderOpcionesEmpresaDestino(filtro) {
+        const cbo = document.getElementById('cboEmpresaDestinoReplica');
+        if (!cbo) return;
+        const q = String(filtro || '').trim().toLowerCase();
+        const prev = String(cbo.value || '').trim();
+        const rows = !q
+            ? empresasDestinoCache
+            : empresasDestinoCache.filter((r) => {
+                const id = String(r.id || '').toLowerCase();
+                const txt = String(r.text || '').toLowerCase();
+                return id.includes(q) || txt.includes(q);
+            });
+        cbo.innerHTML = '';
+        const optEmpty = document.createElement('option');
+        optEmpty.value = '';
+        optEmpty.textContent = rows.length ? 'Seleccione...' : 'Sin coincidencias';
+        cbo.appendChild(optEmpty);
+        rows.forEach((item) => {
+            const id = String(item.id || '').trim();
+            if (!id) return;
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = String(item.text || id).trim();
+            cbo.appendChild(opt);
+        });
+        if (prev && Array.from(cbo.options).some((o) => o.value === prev)) {
+            cbo.value = prev;
+        }
+    }
+
+    async function abrirModalReplicarEmpresa() {
+        if (!ES_GARC) return;
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        const processtype = cboProceso.value.trim();
+        if (!cia || !payrolltype || !processtype) {
+            hmAdvertencia('Seleccione compañía, tipo de planilla y proceso, luego busque.');
+            return;
+        }
+        const aReplicar = obtenerFormulasSeleccionadas();
+        if (!aReplicar.length) {
+            hmAdvertencia('Marque con check las fórmulas que desea replicar.');
+            return;
+        }
+
+        const lbl = document.getElementById('lblReplicarEmpresaResumen');
+        if (lbl) {
+            lbl.textContent =
+                `${aReplicar.length} fórmula(s) desde ${cia} · ` +
+                `${etiquetaSelect(cboPlanilla) || payrolltype} · ` +
+                `${etiquetaSelect(cboProceso) || processtype}`;
+        }
+
+        const txtFiltro = document.getElementById('txtFiltroEmpresaDestino');
+        if (txtFiltro) txtFiltro.value = '';
+
+        try {
+            const res = await fetch('/api/selectores/companias?filtro_usuario=1');
+            const data = await res.json();
+            const items = Array.isArray(data) ? data : [];
+            empresasDestinoCache = items
+                .map((it) => ({
+                    id: String(it.id || '').trim(),
+                    text: String(it.text || it.id || '').trim(),
+                }))
+                .filter((it) => it.id && it.id !== cia);
+            renderOpcionesEmpresaDestino('');
+        } catch (e) {
+            console.error(e);
+            hmError('No se pudo cargar el listado de empresas.');
+            return;
+        }
+
+        if (!modalReplicarEmpresa) {
+            const el = document.getElementById('modalReplicarEmpresa');
+            if (!el || !window.bootstrap) return;
+            modalReplicarEmpresa = new bootstrap.Modal(el);
+        }
+        modalReplicarEmpresa.show();
+    }
+
+    async function confirmarReplicarEmpresa() {
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPlanilla.value.trim();
+        const processtype = cboProceso.value.trim();
+        const cboDest = document.getElementById('cboEmpresaDestinoReplica');
+        const ciaDestino = cboDest ? String(cboDest.value || '').trim() : '';
+        const aReplicar = obtenerFormulasSeleccionadas();
+
+        if (!ciaDestino) {
+            hmAdvertencia('Seleccione la empresa destino.');
+            return;
+        }
+        if (!aReplicar.length) {
+            hmAdvertencia('Marque con check las fórmulas que desea replicar.');
+            return;
+        }
+
+        const destTxt = cboDest && cboDest.selectedIndex >= 0
+            ? String(cboDest.options[cboDest.selectedIndex].text || ciaDestino).trim()
+            : ciaDestino;
+
+        const ok = await hmConfirmar({
+            titulo: 'Replicar a empresa',
+            mensaje: (
+                `¿Replicar ${aReplicar.length} fórmula(s) desde ${cia} hacia ${destTxt}?\n\n` +
+                'Si ya existen en destino, se reemplazarán. Los conceptos faltantes se crearán automáticamente.'
+            ),
+            textoOk: 'Sí, replicar',
+            textoCancelar: 'Cancelar',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        const btn = document.getElementById('btnConfirmarReplicarEmpresa');
+        const btnLista = document.getElementById('btnReplicarFormulasEmpresa');
+        const txt = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Replicando…';
+        }
+        if (btnLista) btnLista.disabled = true;
+
+        try {
+            const res = await fetch('/api/formulas/replicar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia,
+                    cia_destino: ciaDestino,
+                    payrolltype,
+                    processtype,
+                    crear_conceptos: true,
+                    formulas: aReplicar.map((r) => ({
+                        formulaheader: r.formulaheader,
+                        formulacode: r.formulacode || null,
+                        concept: r.concept || null,
+                    })),
+                }),
+            });
+            const data = await leerJson(res);
+            let texto = data.mensaje || `Se replicaron ${data.replicadas || 0} fórmula(s) a ${ciaDestino}.`;
+            if (data.conceptos_creados) {
+                texto += `\nConceptos creados en destino: ${data.conceptos_creados}.`;
+            }
+            if (data.advertencias && data.advertencias.length) {
+                const det = data.advertencias.slice(0, 8).map((a) =>
+                    `• ${a.concepto || a.formulacode || a.formulaheader}: ${a.mensaje || a.error || ''}`
+                ).join('\n');
+                texto += `\n\nAdvertencias (${data.advertencias.length}):\n${det}`;
+                if (data.advertencias.length > 8) texto += '\n…';
+            }
+            if (data.errores && data.errores.length) {
+                const det = data.errores.slice(0, 8).map((e) =>
+                    `• ${e.concepto || e.formulacode || e.formulaheader || ''}: ${e.error || ''}`
+                ).join('\n');
+                texto += `\n\nErrores (${data.errores.length}):\n${det}`;
+                if (data.errores.length > 8) texto += '\n…';
+            }
+            if (modalReplicarEmpresa) modalReplicarEmpresa.hide();
+            if (data.errores && data.errores.length) hmError(texto);
+            else hmAdvertencia(texto);
+        } catch (err) {
+            hmError(err.message || 'No se pudo replicar a la empresa.');
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = txt;
+            }
             actualizarBotonesLista();
         }
     }
@@ -2228,6 +2443,20 @@
     document.getElementById('btnConfirmarCopiarPlanilla').addEventListener('click', confirmarCopiarPlanilla);
     document.getElementById('btnGuardarFormula').addEventListener('click', guardarFormula);
     document.getElementById('btnReplicarFormulas').addEventListener('click', replicarFormulasSeleccionadas);
+    const btnReplicarEmpresa = document.getElementById('btnReplicarFormulasEmpresa');
+    if (btnReplicarEmpresa) {
+        btnReplicarEmpresa.addEventListener('click', abrirModalReplicarEmpresa);
+    }
+    const btnConfirmarReplicarEmpresa = document.getElementById('btnConfirmarReplicarEmpresa');
+    if (btnConfirmarReplicarEmpresa) {
+        btnConfirmarReplicarEmpresa.addEventListener('click', confirmarReplicarEmpresa);
+    }
+    const txtFiltroEmpresaDestino = document.getElementById('txtFiltroEmpresaDestino');
+    if (txtFiltroEmpresaDestino) {
+        txtFiltroEmpresaDestino.addEventListener('input', function () {
+            renderOpcionesEmpresaDestino(this.value);
+        });
+    }
     document.getElementById('btnEliminarFormulas').addEventListener('click', eliminarFormulasSeleccionadas);
     document.getElementById('chkSelTodasFormulas').addEventListener('change', function () {
         if (this.checked) {

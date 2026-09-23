@@ -1,0 +1,469 @@
+{% extends "layout.html" %}
+
+{% block title %}Reporte Envío de Boletas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-envio-boletas {
+        --sticky-col1-w: 5.75rem;
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-envio-boletas th,
+    .table-envio-boletas td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-envio-boletas thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-envio-boletas .sticky-col-1 {
+        position: sticky;
+        left: 0;
+        z-index: 1;
+        background-color: #fff;
+        min-width: var(--sticky-col1-w);
+        width: var(--sticky-col1-w);
+        max-width: var(--sticky-col1-w);
+        box-sizing: border-box;
+    }
+
+    .table-envio-boletas .sticky-col-2 {
+        position: sticky;
+        left: var(--sticky-col1-w);
+        z-index: 1;
+        background-color: #fff;
+        min-width: 13rem;
+        max-width: 18rem;
+        box-sizing: border-box;
+    }
+
+    .table-envio-boletas thead th.sticky-col-1,
+    .table-envio-boletas thead th.sticky-col-2 {
+        z-index: 3;
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmEnvioBoletas" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Trabajador</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-3">REPORTE ENVÍO DE BOLETAS</h4>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-envio-boletas align-middle">
+                <thead>
+                    <tr>
+                        <th class="sticky-col-1">DNI</th>
+                        <th class="sticky-col-2">Nombre trabajador</th>
+                        <th>Email</th>
+                        <th>Tipo planilla</th>
+                        <th>Periodo</th>
+                        <th>Nombre archivo</th>
+                        <th>Fecha Envío</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-reporte"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.envioBoletas
+        ? window.FiltrosPlanillasReportes.envioBoletas()
+        : null;
+
+    const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
+    const URL_REPORTE = {{ url_for('api_reporte_envio_boletas') | tojson }};
+    const HEADERS = ['DNI', 'Nombre trabajador', 'Email', 'Tipo planilla', 'Periodo', 'Nombre archivo', 'Fecha Envío'];
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboProc = document.getElementById('cboProceso');
+    const cboPer = document.getElementById('cboPeriodo');
+    const cboTra = document.getElementById('cboTrabajador');
+    const frm = document.getElementById('frmEnvioBoletas');
+    const card = document.getElementById('cardResultado');
+    const tbody = document.getElementById('tbody-reporte');
+    const lblCount = document.getElementById('lblRowCount');
+    const btnExcel = document.getElementById('btnExportExcel');
+
+    let lastExport = null;
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarInsensitive(select, codigo) {
+        const want = String(codigo || '').trim().toUpperCase();
+        if (!want || !select) return false;
+        const opt = Array.from(select.options).find(
+            (o) => String(o.value || '').trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function soloTodos(selectElement, texto) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = '0';
+        opt.textContent = texto || 'Todos';
+        selectElement.appendChild(opt);
+        selectElement.value = '0';
+        selectElement.disabled = false;
+    }
+
+    async function poblarSelect(url, selectElement, opciones) {
+        const incluyeTodos = !!(opciones && opciones.incluyeTodos);
+        const valorTodos = (opciones && opciones.valorTodos != null) ? String(opciones.valorTodos) : '0';
+        const textoTodos = (opciones && opciones.textoTodos != null) ? String(opciones.textoTodos) : 'Todos';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = '';
+            if (incluyeTodos) {
+                const optTodos = document.createElement('option');
+                optTodos.value = valorTodos;
+                optTodos.textContent = textoTodos;
+                selectElement.appendChild(optTodos);
+            } else {
+                const def = document.createElement('option');
+                def.value = '';
+                def.textContent = 'Seleccione...';
+                selectElement.appendChild(def);
+            }
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarTrabajadores(cia) {
+        if (!cia) {
+            soloTodos(cboTra, 'Todos');
+            cboTra.disabled = true;
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+            cboTra,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    async function cargarPlanillas(cia) {
+        if (!cia) {
+            soloTodos(cboPt, 'Todos');
+            soloTodos(cboProc, 'Todos');
+            soloTodos(cboPer, 'Todos');
+            cboPt.disabled = true;
+            cboProc.disabled = true;
+            cboPer.disabled = true;
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            cboPt,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    async function cargarProcesos(cia, payroll) {
+        if (!cia || !payroll || payroll === '0') {
+            soloTodos(cboProc, 'Todos');
+            soloTodos(cboPer, 'Todos');
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+            cboProc,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+        soloTodos(cboPer, 'Todos');
+    }
+
+    async function cargarPeriodos(cia, payroll, proceso) {
+        if (!cia || !payroll || payroll === '0' || !proceso || proceso === '0') {
+            soloTodos(cboPer, 'Todos');
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
+            cboPer,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+        if (window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.obtenerPeriodoActivo) {
+            const activo = await window.FiltrosPlanillasReportes.obtenerPeriodoActivo(cia, payroll, proceso);
+            if (activo && optionExists(cboPer, activo)) {
+                cboPer.value = activo;
+            }
+        }
+    }
+
+    function fmtFechaEnvio(valor) {
+        const s = String(valor || '').trim();
+        if (!s) return '';
+        // Esperado: yyyy-mm-dd HH:mm (CONVERT 120 truncado a 16)
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+        return s;
+    }
+
+    function renderizarTabla(rows) {
+        tbody.innerHTML = '';
+        (rows || []).forEach((row) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="sticky-col-1">${escapeHtml(row.dni)}</td>
+                <td class="sticky-col-2">${escapeHtml(row.nombre)}</td>
+                <td>${escapeHtml(row.email)}</td>
+                <td>${escapeHtml(row.tipo_planilla)}</td>
+                <td>${escapeHtml(row.periodo)}</td>
+                <td>${escapeHtml(row.nombre_archivo)}</td>
+                <td>${escapeHtml(fmtFechaEnvio(row.fecha_envio))}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        lblCount.textContent = String((rows || []).length);
+    }
+
+    async function exportExcel(payload) {
+        if (!payload || !window.ExcelJS) return;
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Envío de Boletas');
+        ws.addRow(HEADERS);
+        (payload.rows || []).forEach((row) => {
+            ws.addRow([
+                row.dni || '',
+                row.nombre || '',
+                row.email || '',
+                row.tipo_planilla || '',
+                row.periodo || '',
+                row.nombre_archivo || '',
+                fmtFechaEnvio(row.fecha_envio)
+            ]);
+        });
+        ws.getRow(1).font = { bold: true };
+        ws.columns.forEach((col) => { col.width = 18; });
+        const buf = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `reporte_envio_boletas_${payload.meta?.cia || 'cia'}_${payload.meta?.periodo || 'todos'}.xlsx`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+
+    async function ejecutarConsulta() {
+        lastExport = null;
+        btnExcel.disabled = true;
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        const cia = cboCia.value.trim();
+        const payrolltype = cboPt.value.trim() || '0';
+        const processtype = cboProc.value.trim() || '0';
+        const period = cboPer.value.trim() || '0';
+        const person = cboTra.value.trim() || '0';
+
+        if (!cia) {
+            alert('Seleccione una compañía.');
+            return;
+        }
+
+        lblCount.textContent = '0';
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payrolltype, processtype, period, person })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                card.classList.add('d-none');
+                btnExcel.disabled = true;
+                alert(payload.error || 'Error al consultar el reporte.');
+                return;
+            }
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            if (!rows.length) {
+                card.classList.add('d-none');
+                btnExcel.disabled = true;
+                alert('No se encontraron registros para los filtros seleccionados.');
+                return;
+            }
+            renderizarTabla(rows);
+            card.classList.remove('d-none');
+            lastExport = {
+                rows,
+                meta: {
+                    cia,
+                    periodo: period === '0' ? 'todos' : period,
+                    planilla: payrolltype === '0' ? 'todos' : payrolltype
+                }
+            };
+            btnExcel.disabled = false;
+        } catch (e) {
+            console.error(e);
+            card.classList.add('d-none');
+            btnExcel.disabled = true;
+            alert('Error de comunicación al consultar el reporte.');
+        }
+    }
+
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+
+    let restaurado = false;
+    if (filtrosPersist) {
+        restaurado = await filtrosPersist.aplicarRestauracionCascada({
+            poblarSelect,
+            cargarPlanillas,
+            cargarProcesos,
+            cargarPeriodos,
+            cargarTrabajadores
+        });
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    if (!restaurado) {
+        const ciaInicial = DEFAULT_CIA;
+        if (ciaInicial && optionExists(cboCia, ciaInicial)) {
+            seleccionarInsensitive(cboCia, ciaInicial);
+        } else if (cboCia.options.length > 1) {
+            cboCia.selectedIndex = 1;
+        }
+        const cia = cboCia.value.trim();
+        if (cia) {
+            await cargarPlanillas(cia);
+            await cargarProcesos(cia, '0');
+            await cargarPeriodos(cia, '0', '0');
+            await cargarTrabajadores(cia);
+        }
+    }
+
+    cboCia.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        await cargarPlanillas(cia);
+        await cargarProcesos(cia, '0');
+        await cargarPeriodos(cia, '0', '0');
+        await cargarTrabajadores(cia);
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    cboPt.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const payroll = cboPt.value.trim() || '0';
+        await cargarProcesos(cia, payroll);
+        await cargarPeriodos(cia, payroll, '0');
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    cboProc.addEventListener('change', async function () {
+        const cia = cboCia.value.trim();
+        const payroll = cboPt.value.trim() || '0';
+        const proceso = cboProc.value.trim() || '0';
+        await cargarPeriodos(cia, payroll, proceso);
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    cboPer.addEventListener('change', function () {
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    cboTra.addEventListener('change', function () {
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+
+    frm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarConsulta();
+    });
+
+    btnExcel.addEventListener('click', async function () {
+        if (!lastExport) return;
+        await exportExcel(lastExport);
+    });
+});
+</script>
+{% endblock %}

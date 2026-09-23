@@ -32,6 +32,7 @@
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
     const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
     const STORAGE_KEY_PLANILLA_POR_CONCEPTOS = 'filtros_planilla_por_conceptos';
+    const STORAGE_KEY_ENVIO_BOLETAS = 'filtros_envio_boletas';
 
     function val(id) {
         const el = document.getElementById(id);
@@ -3006,6 +3007,137 @@
         };
     }
 
+    function crearPersistenciaEnvioBoletas() {
+        function guardar() {
+            try {
+                localStorage.setItem(STORAGE_KEY_ENVIO_BOLETAS, JSON.stringify({
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla') || '0',
+                    proceso: val('cboProceso') || '0',
+                    periodo: val('cboPeriodo') || '0',
+                    person: val('cboTrabajador') || '0',
+                    timestamp: Date.now()
+                }));
+            } catch (e) {
+                console.warn('filtros envio boletas: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY_ENVIO_BOLETAS);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function aplicarRestauracionCascada(opts) {
+            if (!opts || typeof opts.poblarSelect !== 'function') return false;
+            const {
+                poblarSelect,
+                cargarPlanillas,
+                cargarProcesos,
+                cargarPeriodos,
+                cargarTrabajadores
+            } = opts;
+            const filtros = leer();
+            if (!filtros || !filtros.cia) return false;
+
+            const cboCia = document.getElementById('cboCompania');
+            const cboPt = document.getElementById('cboTipoPlanilla');
+            const cboProc = document.getElementById('cboProceso');
+            const cboPer = document.getElementById('cboPeriodo');
+            const cboTra = document.getElementById('cboTrabajador');
+            if (!cboCia || !cboPt || !cboProc || !cboPer) return false;
+
+            const cia = String(filtros.cia).trim();
+            if (!optionExists(cboCia, cia)) return false;
+            cboCia.value = cia;
+
+            if (typeof cargarPlanillas === 'function') {
+                await cargarPlanillas(cia);
+            } else {
+                await poblarSelect(
+                    `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+                    cboPt,
+                    { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+                );
+            }
+
+            const payroll = filtros.payroll != null ? String(filtros.payroll).trim() : '0';
+            if (optionExists(cboPt, payroll)) {
+                cboPt.value = payroll;
+            } else if (optionExists(cboPt, '0')) {
+                cboPt.value = '0';
+            }
+
+            const payrollSel = val('cboTipoPlanilla') || '0';
+            if (typeof cargarProcesos === 'function') {
+                await cargarProcesos(cia, payrollSel);
+            }
+
+            const proceso = filtros.proceso != null ? String(filtros.proceso).trim() : '0';
+            if (optionExists(cboProc, proceso)) {
+                cboProc.value = proceso;
+            } else if (optionExists(cboProc, '0')) {
+                cboProc.value = '0';
+            }
+
+            const procesoSel = val('cboProceso') || '0';
+            if (typeof cargarPeriodos === 'function') {
+                await cargarPeriodos(cia, payrollSel, procesoSel);
+            }
+
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '0';
+            if (optionExists(cboPer, periodo)) {
+                cboPer.value = periodo;
+            } else if (optionExists(cboPer, '0')) {
+                cboPer.value = '0';
+            }
+
+            if (typeof cargarTrabajadores === 'function') {
+                await cargarTrabajadores(cia);
+            } else if (cboTra) {
+                await poblarSelect(
+                    `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                    cboTra,
+                    { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+                );
+            }
+
+            if (cboTra) {
+                const person = filtros.person != null ? String(filtros.person).trim() : '0';
+                if (person && optionExists(cboTra, person)) {
+                    cboTra.value = person;
+                } else if (optionExists(cboTra, '0')) {
+                    cboTra.value = '0';
+                }
+            }
+
+            guardar();
+            return true;
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboProceso', 'cboPeriodo', 'cboTrabajador'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY: STORAGE_KEY_ENVIO_BOLETAS,
+            guardar,
+            leer,
+            aplicarRestauracionCascada,
+            registrarGuardadoEnCambio
+        };
+    }
+
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
@@ -3031,6 +3163,7 @@
         STORAGE_KEY_FORMATO_LIQUIDACION,
         STORAGE_KEY_FORMATO_UTILIDADES,
         STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
+        STORAGE_KEY_ENVIO_BOLETAS,
         /** Misma lógica que optionExists interno (valor y option.value con trim). */
         optionExistsTrim: optionExists,
         obtenerPeriodoActivo,
@@ -3069,6 +3202,9 @@
         },
         trabajadores: function () {
             return crearPersistenciaTrabajadores();
+        },
+        envioBoletas: function () {
+            return crearPersistenciaEnvioBoletas();
         },
         telecredito: function () {
             return crearPersistenciaPagoHaberes(STORAGE_KEY_TELECREDITO, true);

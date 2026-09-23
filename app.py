@@ -8172,6 +8172,12 @@ def reporte_trabajadores_page():
     return render_template('reporte_trabajadores.html')
 
 
+@app.route('/reporte-envio-boletas')
+@login_required
+def reporte_envio_boletas_page():
+    return render_template('reporte_envio_boletas.html')
+
+
 @app.route('/procesar_planilla')
 @login_required
 def procesar_planilla_page():
@@ -27924,6 +27930,53 @@ def api_reporte_lista_trabajadores():
         })
     except Exception as e:
         logging.exception("api_reporte_lista_trabajadores")
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/envio-boletas', methods=['POST'])
+@login_required
+def api_reporte_envio_boletas():
+    """sp_pr_reporteenvioboletas_web: envíos de boletas (PR_DocumentPerson.FechaEnvio)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    processtype = str(body.get('processtype') or body.get('process_type') or '0').strip() or '0'
+    period = str(body.get('period') or body.get('periodo') or '0').strip() or '0'
+    person = str(body.get('person') or body.get('trabajador') or '0').strip() or '0'
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reporteenvioboletas_web "
+            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?",
+            (cia, payrolltype, processtype, period, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        for r in rows:
+            resultado.append({
+                "dni": _jsonable_value(r.get('dni')),
+                "nombre": _jsonable_value(r.get('nombre')),
+                "email": _jsonable_value(r.get('email')),
+                "tipo_planilla": _jsonable_value(r.get('tipo_planilla')),
+                "periodo": _jsonable_value(r.get('periodo')),
+                "nombre_archivo": _jsonable_value(r.get('nombre_archivo')),
+                "fecha_envio": _jsonable_value(r.get('fecha_envio')),
+            })
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_reporte_envio_boletas")
         return jsonify({"error": _reporte_sql_error_message(e)}), 500
     finally:
         if conn:

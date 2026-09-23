@@ -21155,12 +21155,12 @@ def api_pago_haberes_telecredito_listado():
     costcenter = _normalize_replicationunit_asig(
         body.get('costcenter') or body.get('centrocosto')
     )
-    if _es_cliente_ngservicios() or _es_cliente_ultraseguros():
+    if _es_cliente_ngservicios() or _es_cliente_ultraseguros() or _es_cliente_alamo():
         costcenter = '0'
     accountprofile = str(
         body.get('accountprofile') or body.get('perfil_contable') or ''
     ).strip()
-    if _es_cliente_ngservicios() or _es_cliente_ultraseguros():
+    if _es_cliente_ngservicios() or _es_cliente_ultraseguros() or _es_cliente_alamo():
         accountprofile = ''
     if accountprofile in ('0', '*'):
         accountprofile = ''

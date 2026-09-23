@@ -58,6 +58,7 @@
 {% endblock %}
 
 {% block content %}
+<h4 class="text-center fw-bold mb-3">HABERES - TELECREDITO</h4>
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
         <form id="frmTelecredito" class="row g-3">
@@ -124,7 +125,7 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
-            {% if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra'] %}
+            {% if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra', 'hm_alamo'] %}
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
                 <input type="text" id="txtReferencia" class="form-control form-control-sm"
@@ -175,7 +176,7 @@
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const ES_TELECREDITO_REFERENCIA = {{ 'true' if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra'] else 'false' }};
+    const ES_TELECREDITO_REFERENCIA = {{ 'true' if (sql_database or '')|lower in ['hm_ngservicios', 'hm_ultra', 'hm_alamo'] else 'false' }};
     const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.telecredito
         ? window.FiltrosPlanillasReportes.telecredito()
         : null;

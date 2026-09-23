@@ -739,6 +739,7 @@
 
 {% block extra_js %}
 <script>
+(function () {
     const ES_GARC = {{ 'true' if (sql_database or '')|lower == 'hm_garc' else 'false' }};
     const STORAGE_KEY = 'filtros_formulas_maestro';
 

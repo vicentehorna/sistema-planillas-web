@@ -153,6 +153,7 @@
                 <span class="ms-2 small text-muted">Días Falta: {{ vaca_calc.dias_falta_txt }} {{ fc(vaca_calc.dias_falta_fc) }}</span>
             </div>
             <table class="table table-sm table-bordered mapa-table mb-0">
+                {% if vaca_calc.mostrar_anios_meses %}
                 <tr>
                     <td class="lbl">Cálculo</td>
                     <td>
@@ -171,8 +172,9 @@
                     </td>
                     <td class="text-end">{{ celda_monto(vaca_calc.x_mes_fmt, vaca_calc.x_mes_fc) }}</td>
                 </tr>
+                {% endif %}
                 <tr>
-                    <td class="lbl"></td>
+                    <td class="lbl">{% if not vaca_calc.mostrar_anios_meses %}Cálculo{% endif %}</td>
                     <td>
                         {{ vaca_calc.formula_dias }} × {{ vaca_calc.dias_label }}
                         {{ fc(vaca_calc.formula_dias_fc) }}

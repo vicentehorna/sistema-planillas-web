@@ -609,6 +609,7 @@
                         <td class="cts-eq"></td>
                         <td class="cts-res"></td>
                     </tr>
+                    {% if vaca_calc.mostrar_anios_meses %}
                     <tr class="cts-detalle">
                         <td class="cts-lbl">Cálculo:</td>
                         <td class="cts-formula">{{ vaca_calc.formula_anios }}</td>
@@ -625,8 +626,9 @@
                         <td class="cts-eq">=</td>
                         <td class="cts-res">{{ vaca_calc.x_mes_fmt }}</td>
                     </tr>
+                    {% endif %}
                     <tr class="cts-detalle">
-                        <td class="cts-lbl"></td>
+                        <td class="cts-lbl">{% if not vaca_calc.mostrar_anios_meses %}Cálculo:{% endif %}</td>
                         <td class="cts-formula">{{ vaca_calc.formula_dias }}</td>
                         <td class="cts-op">X</td>
                         <td class="cts-cant">{{ vaca_calc.dias_label }}</td>

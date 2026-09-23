@@ -1201,6 +1201,15 @@ def _es_cliente_alamo():
         return False
 
 
+def _es_cliente_garc():
+    """True cuando la BD activa es hm_garc (vacaciones truncas solo por días en liquidación)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_garc'
+    except Exception:
+        return False
+
+
 _MESES_ES_A_NUM = {
     'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
     'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
@@ -6416,7 +6425,8 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
     x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
-    total = x_anio + x_mes + x_dia
+    solo_dias_vaca = _es_cliente_garc()
+    total = x_dia if solo_dias_vaca else (x_anio + x_mes + x_dia)
 
     base_fmt = _formato_liquidacion_moneda(base)
     anios_txt = _formato_liquidacion_cantidad(anios)
@@ -6438,6 +6448,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
 
     return {
         'base_fmt': base_fmt,
+        'mostrar_anios_meses': not solo_dias_vaca,
         'anios_label': f'{anios_txt} AÑOS',
         'meses_label': f'{meses_txt} MESES',
         'dias_label': f'{dias_txt} DIAS',
@@ -6469,7 +6480,7 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
         'x_anio_fc': 'VACACIONANIO',
         'x_mes_fc': 'VACXMES',
         'x_dia_fc': 'VACXDIA',
-        'total_fc': 'VACACIONANIO + VACXMES + VACXDIA',
+        'total_fc': 'VACXDIA' if solo_dias_vaca else 'VACACIONANIO + VACXMES + VACXDIA',
         'devolucion_quinta_fc': 'DEVOLUCION_QUINTA',
         'otros_ingresos_afectos_fc': 'LIQINGRESOAFECTO',
         'indemnizacion_despido_fc': 'INDEMNIZACION_DESPID',

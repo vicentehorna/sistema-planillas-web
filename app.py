@@ -3886,6 +3886,16 @@ def _filtro_companias_usercompany_habilitado():
         return False
 
 
+def _userid_para_filtro_usercompany():
+    """
+    UserID de sesión si la BD filtra por SY_UserCompany; None si no aplica filtro.
+    Si el filtro está activo pero no hay userid → '' (los SP deben devolver vacío).
+    """
+    if not _filtro_companias_usercompany_habilitado():
+        return None
+    return _userid_sesion_actual() or ''
+
+
 def _userid_sesion_actual():
     uid = ''
     try:
@@ -25682,7 +25692,14 @@ def api_planillas_consolidada():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorplanillas_consolidada_web")
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorplanillas_consolidada_web @userid=?",
+                (userid,),
+            )
+        else:
+            cursor.execute("EXEC sp_pr_selectorplanillas_consolidada_web")
         rows = cursor.fetchall()
         data = []
         for r in rows:
@@ -25713,7 +25730,17 @@ def api_procesos_consolidada():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorprocesos_consolidada_web @payroll_desc=?", (payroll_desc,))
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorprocesos_consolidada_web @payroll_desc=?, @userid=?",
+                (payroll_desc, userid),
+            )
+        else:
+            cursor.execute(
+                "EXEC sp_pr_selectorprocesos_consolidada_web @payroll_desc=?",
+                (payroll_desc,),
+            )
         rows = cursor.fetchall()
         data = []
         for r in rows:
@@ -25745,10 +25772,18 @@ def api_periodos_consolidada():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            "EXEC sp_pr_selectorperiodos_consolidada_web @payroll_desc=?, @proceso_desc=?",
-            (payroll_desc, proceso_desc),
-        )
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorperiodos_consolidada_web "
+                "@payroll_desc=?, @proceso_desc=?, @userid=?",
+                (payroll_desc, proceso_desc, userid),
+            )
+        else:
+            cursor.execute(
+                "EXEC sp_pr_selectorperiodos_consolidada_web @payroll_desc=?, @proceso_desc=?",
+                (payroll_desc, proceso_desc),
+            )
         rows = cursor.fetchall()
         data = [{"id": r.period, "text": r.periodo} for r in rows]
         return jsonify(data)
@@ -25771,7 +25806,14 @@ def api_bancos_consolidada():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorbancos_consolidada_web")
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorbancos_consolidada_web @userid=?",
+                (userid,),
+            )
+        else:
+            cursor.execute("EXEC sp_pr_selectorbancos_consolidada_web")
         rows = cursor.fetchall()
         data = []
         for r in rows:
@@ -25799,7 +25841,14 @@ def api_trabajadores_consolidada():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute("EXEC sp_pr_selectorpersonas_consolidada_web")
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorpersonas_consolidada_web @userid=?",
+                (userid,),
+            )
+        else:
+            cursor.execute("EXEC sp_pr_selectorpersonas_consolidada_web")
         rows = cursor.fetchall()
         data = [{"id": r.person if hasattr(r, 'person') else r[0],
                  "text": r.name if hasattr(r, 'name') else r[1]} for r in rows]
@@ -27134,6 +27183,7 @@ def _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc='N
 
 
 def _list_active_companies(cursor):
+    """Compañías activas; en BD con UserCompany (hm_alamo/hm_garc) solo las del usuario."""
     cursor.execute("EXEC sp_pr_selectorcompanias_web")
     col_names = [str(c[0]).strip() for c in (cursor.description or [])]
     rows = cursor.fetchall()
@@ -27148,6 +27198,13 @@ def _list_active_companies(cursor):
             name = str(row[1]).strip() if len(row) > 1 else code
         if code:
             companies.append((code, name))
+
+    if _filtro_companias_usercompany_habilitado():
+        allowed = _ids_companias_usercompany(cursor, _userid_sesion_actual())
+        if not allowed:
+            return []
+        companies = [(c, n) for c, n in companies if c in allowed]
+
     return companies
 
 
@@ -27373,7 +27430,8 @@ def reporte_planilla_vertical_post():
 def reporte_planilla_consolidada_post():
     """
     Planilla vertical consolidada: mismas columnas que vertical con Empresa al inicio.
-    Filtros por Description de planilla y proceso (sin compañía).
+    Filtros por Description de planilla y proceso (sin selector de compañía).
+    En BD con SY_UserCompany (hm_alamo/hm_garc) solo incluye empresas del usuario.
     """
     body = request.get_json(silent=True) or {}
     payroll_desc = (

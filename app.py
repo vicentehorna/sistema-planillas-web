@@ -267,6 +267,8 @@ def inject_now():
     from web_access import session_can_menu
 
     es_vhornac = bool(is_receta_only_user()) if current_user.is_authenticated else False
+    sql_db = get_active_database()
+    sql_db_l = str(sql_db or '').strip().lower()
 
     def can_menu(code):
         if not current_user.is_authenticated:
@@ -275,7 +277,8 @@ def inject_now():
 
     return {
         'now': datetime.now(),
-        'sql_database': get_active_database(),
+        'sql_database': sql_db,
+        'es_multi_cia_apertura': sql_db_l in _APERTURAR_MASIVO_DBS,
         'receta_only': es_vhornac,
         'mostrar_menu_receta': es_vhornac,
         'web_admin': bool(session.get('web_admin')) if current_user.is_authenticated else False,
@@ -3871,6 +3874,9 @@ def _require_buscar_todos_trabajadores_json(feature='Buscar todos'):
         }), 403
     return None
 
+
+# BDs multi-compañía con Aperturar Periodos Masivo (referencia BGT).
+_APERTURAR_MASIVO_DBS = frozenset({'hm_alamo', 'hm_garc'})
 
 # BDs donde el selector de compañías se filtra por SY_UserCompany (idcompany).
 _BDS_FILTRO_COMPANIAS_USERCOMPANY = frozenset({'hm_garc', 'hm_alamo'})
@@ -8336,10 +8342,8 @@ def aperturar_periodos_page():
 @app.route('/aperturar-periodos-masivo')
 @login_required
 def aperturar_periodos_masivo_page():
-    """Apertura masiva de periodos — solo hm_alamo / hm_garc."""
-    from database import get_active_database
-    db = str(get_active_database() or '').strip().lower()
-    if db not in ('hm_alamo', 'hm_garc'):
+    """Apertura masiva de periodos — hm_alamo y hm_garc."""
+    if not _es_bd_aperturar_periodos_masivo():
         abort(404)
     return render_template('aperturar_periodos_masivo.html', cia_ref='BGT')
 
@@ -30774,7 +30778,6 @@ def api_aperturar_periodos_cerrar():
 # ==========================================
 
 _APERTURAR_MASIVO_CIA_REF = 'BGT'
-_APERTURAR_MASIVO_DBS = frozenset({'hm_alamo', 'hm_garc'})
 
 
 def _es_bd_aperturar_periodos_masivo():

@@ -11,7 +11,6 @@
     const STORAGE_KEY_VACACIONES_DETALLE = 'filtros_vacaciones_detalle';
     const STORAGE_KEY_SALDO_VACACIONES = 'filtros_saldo_vacaciones';
     const STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE = 'filtros_descansos_medicos_detalle';
-    const STORAGE_KEY_PROCESAR_PLANILLA = 'filtros_procesar_planilla';
     const STORAGE_KEY_LOG_CALCULO = 'filtros_log_calculo';
     const STORAGE_KEY_TRABAJADORES = 'filtros_trabajadores';
     const STORAGE_KEY_TELECREDITO = 'filtros_pago_haberes_telecredito';
@@ -701,72 +700,6 @@
             guardar,
             leer,
             aplicarRestauracionCascada,
-            registrarGuardadoEnCambio
-        };
-    }
-
-    function valHidden(id) {
-        const el = document.getElementById(id);
-        return el && el.value != null ? String(el.value).trim() : '';
-    }
-
-    function crearPersistenciaProcesarPlanilla() {
-        function guardar() {
-            try {
-                const seleccionPersonas = [];
-                document.querySelectorAll('.check-trabajador:checked').forEach((c) => {
-                    seleccionPersonas.push(String(c.value).trim());
-                });
-                const estado = {
-                    cia: val('cboCompania'),
-                    payroll: val('cboTipoPlanilla'),
-                    proceso: val('cboProcesoCalculo'),
-                    cesados: val('cboCesados'),
-                    repunit: val('cboUnidad'),
-                    accountprofile: val('cboAccountProfile'),
-                    tc: val('txtTipoCambio'),
-                    periodo: valHidden('hidPeriodoCalculo'),
-                    seleccionPersonas: seleccionPersonas,
-                    timestamp: Date.now()
-                };
-                localStorage.setItem(STORAGE_KEY_PROCESAR_PLANILLA, JSON.stringify(estado));
-            } catch (e) {
-                console.warn('filtros procesar planilla: no se pudo guardar', e);
-            }
-        }
-
-        function leer() {
-            try {
-                const raw = localStorage.getItem(STORAGE_KEY_PROCESAR_PLANILLA);
-                if (!raw) return null;
-                const o = JSON.parse(raw);
-                if (!o || typeof o !== 'object') return null;
-                return o;
-            } catch (e) {
-                return null;
-            }
-        }
-
-        function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboProcesoCalculo', 'cboCesados', 'cboUnidad', 'cboAccountProfile', 'txtTipoCambio'].forEach((id) => {
-                const el = document.getElementById(id);
-                if (el) el.addEventListener('change', guardar);
-            });
-            const chkAll = document.getElementById('checkAll');
-            if (chkAll) chkAll.addEventListener('change', guardar);
-            const tbody = document.getElementById('tbodyTrabajadores');
-            if (tbody) {
-                tbody.addEventListener('change', function (e) {
-                    const t = e.target;
-                    if (t && t.classList && t.classList.contains('check-trabajador')) guardar();
-                });
-            }
-        }
-
-        return {
-            STORAGE_KEY: STORAGE_KEY_PROCESAR_PLANILLA,
-            guardar,
-            leer,
             registrarGuardadoEnCambio
         };
     }
@@ -3145,7 +3078,6 @@
         STORAGE_KEY_VACACIONES_DETALLE,
         STORAGE_KEY_SALDO_VACACIONES,
         STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE,
-        STORAGE_KEY_PROCESAR_PLANILLA,
         STORAGE_KEY_LOG_CALCULO,
         STORAGE_KEY_TRABAJADORES,
         STORAGE_KEY_TELECREDITO,
@@ -3193,9 +3125,6 @@
         },
         descansosMedicosDetalle: function () {
             return crearPersistenciaDescansosMedicosDetalle();
-        },
-        procesarPlanilla: function () {
-            return crearPersistenciaProcesarPlanilla();
         },
         logCalculo: function () {
             return crearPersistenciaReporte(STORAGE_KEY_LOG_CALCULO, true);

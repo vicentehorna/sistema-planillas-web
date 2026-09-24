@@ -328,13 +328,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.procesarPlanilla
-        ? window.FiltrosPlanillasReportes.procesarPlanilla()
-        : null;
-
     const URL_PROCESOS = {{ url_for('api_procesar_planilla_procesos') | tojson }};
     const URL_PERIODOS = {{ url_for('api_procesar_planilla_periodos_list') | tojson }};
     const URL_UNIDADES = {{ url_for('api_unidades') | tojson }};
@@ -673,7 +668,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     function toggleAll(source) {
         document.querySelectorAll('.check-trabajador').forEach((x) => { x.checked = source.checked; });
         actualizarContadores();
-        if (filtrosPersist) filtrosPersist.guardar();
     }
 
     document.getElementById('checkAll').addEventListener('change', function () {
@@ -952,7 +946,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             sincronizarCheckAll();
             actualizarContadores();
-            if (filtrosPersist) filtrosPersist.guardar();
             await consultarValidacionesPreCalculo();
             moverCursorLocalizadorPlanilla();
         } catch (e) {
@@ -1422,7 +1415,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (t && t.classList && t.classList.contains('check-trabajador')) {
             sincronizarCheckAll();
             actualizarContadores();
-            if (filtrosPersist) filtrosPersist.guardar();
         }
     });
 
@@ -1431,49 +1423,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     await cargarUnidades();
     await cargarPerfilesContables();
 
-    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
-    const optEx = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.optionExistsTrim;
-
-    let restaurado = false;
-    if (guardado && guardado.cia && optEx && optEx(cboCia, guardado.cia)) {
-        cboCia.value = String(guardado.cia).trim();
-        await cargarPerfilesContables(guardado.accountprofile || '');
-        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
-        const payroll = guardado.payroll != null ? String(guardado.payroll).trim() : '';
-        if (payroll && optEx(cboPt, payroll)) {
-            cboPt.value = payroll;
-            await cargarProcesos();
-            const proceso = guardado.proceso != null ? String(guardado.proceso).trim() : '';
-            if (proceso && optEx(cboProc, proceso)) {
-                cboProc.value = proceso;
-                const ces = guardado.cesados != null ? String(guardado.cesados).trim().toUpperCase() : '';
-                if (ces && ['T', 'Y', 'N'].includes(ces) && cboCesados) {
-                    cboCesados.value = ces;
-                }
-                aplicarReglaCesadosPorProceso();
-                const ru = guardado.repunit != null ? String(guardado.repunit).trim() : '';
-                if (ru !== '' && cboUnidad && optEx && optEx(cboUnidad, ru)) {
-                    cboUnidad.value = ru;
-                }
-                const ap = guardado.accountprofile != null ? String(guardado.accountprofile).trim() : '';
-                if (ap && cboAccountProfile && optEx && optEx(cboAccountProfile, ap)) {
-                    cboAccountProfile.value = ap;
-                }
-                if (txtTipoCambio && guardado.tc != null && String(guardado.tc).trim() !== '') {
-                    txtTipoCambio.value = String(guardado.tc).trim();
-                }
-                const perSaved = guardado.periodo != null ? String(guardado.periodo).trim() : '';
-                await cargarPeriodo(perSaved || undefined);
-                const hid = document.getElementById('hidPeriodoCalculo').value.trim();
-                if (hid) {
-                    await listarTrabajadores({ seleccionPersonas: guardado.seleccionPersonas || [] });
-                    restaurado = true;
-                }
-            }
-        }
-    }
-
-    if (!restaurado && !String(cboCia.value || '').trim()) {
+    if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
             await cargarPerfilesContables();
             await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
@@ -1511,7 +1461,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (seq !== filtrosLoadSeq) return;
         aplicarReglaCesadosPorProceso();
-        if (filtrosPersist) filtrosPersist.guardar();
     });
 
     document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
@@ -1531,8 +1480,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (cboProc.value.trim()) {
             await cargarPeriodo(undefined, seq);
         }
-        if (seq !== filtrosLoadSeq) return;
-        if (filtrosPersist) filtrosPersist.guardar();
     });
 
     document.getElementById('cboProcesoCalculo').addEventListener('change', async function () {
@@ -1542,8 +1489,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         ocultarValidacionesCalculo();
         aplicarReglaCesadosPorProceso();
         await cargarPeriodo(undefined, seq);
-        if (seq !== filtrosLoadSeq) return;
-        if (filtrosPersist) filtrosPersist.guardar();
     });
 
     if (txtBuscarTrabajador) {
@@ -1554,33 +1499,22 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('cboCesados').addEventListener('change', function () {
         limpiarTablaTrabajadores();
-        if (filtrosPersist) filtrosPersist.guardar();
     });
 
     document.getElementById('cboUnidad').addEventListener('change', function () {
         limpiarTablaTrabajadores();
-        if (filtrosPersist) filtrosPersist.guardar();
     });
 
     if (cboAccountProfile) {
         cboAccountProfile.addEventListener('change', function () {
             limpiarTablaTrabajadores();
-            if (filtrosPersist) filtrosPersist.guardar();
         });
     }
 
     if (txtTipoCambio) {
-        txtTipoCambio.addEventListener('change', function () {
-            if (filtrosPersist) filtrosPersist.guardar();
-        });
         txtTipoCambio.addEventListener('blur', function () {
             txtTipoCambio.value = String(leerTipoCambio());
-            if (filtrosPersist) filtrosPersist.guardar();
         });
-    }
-
-    if (filtrosPersist) {
-        filtrosPersist.registrarGuardadoEnCambio();
     }
 });
 </script>

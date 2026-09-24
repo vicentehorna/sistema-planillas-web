@@ -5,7 +5,6 @@
 (function (global) {
     const STORAGE_KEY_RESUMEN_TOTAL = 'filtros_resumen_total';
     const STORAGE_KEY_PROMEDIO_LIQ = 'filtros_promedio_liq';
-    const STORAGE_KEY_PLANILLA_VERTICAL = 'filtros_planilla_vertical';
     const STORAGE_KEY_PLANILLA_CONSOLIDADA = 'filtros_planilla_consolidada';
     const STORAGE_KEY_PLANILLA_TODAS_PLANILLAS = 'filtros_planilla_todas_planillas';
     const STORAGE_KEY_VACACIONES_DETALLE = 'filtros_vacaciones_detalle';
@@ -3074,7 +3073,6 @@
     global.FiltrosPlanillasReportes = {
         STORAGE_KEY_RESUMEN_TOTAL,
         STORAGE_KEY_PROMEDIO_LIQ,
-        STORAGE_KEY_PLANILLA_VERTICAL,
         STORAGE_KEY_VACACIONES_DETALLE,
         STORAGE_KEY_SALDO_VACACIONES,
         STORAGE_KEY_DESCANSOS_MEDICOS_DETALLE,
@@ -3107,9 +3105,6 @@
         },
         promedioLiquidaciones: function () {
             return crearPersistenciaReporte(STORAGE_KEY_PROMEDIO_LIQ, true);
-        },
-        planillaVertical: function () {
-            return crearPersistenciaReporte(STORAGE_KEY_PLANILLA_VERTICAL, true, true, true, true, true);
         },
         planillaConsolidada: function () {
             return crearPersistenciaReporteConsolidada(STORAGE_KEY_PLANILLA_CONSOLIDADA, true, true, true, true);

@@ -209,14 +209,9 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.planillaVertical
-        ? window.FiltrosPlanillasReportes.planillaVertical()
-        : null;
-
     let lastVerticalExport = null;
 
     function escapeHtml(s) {
@@ -636,7 +631,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function ejecutarConsultaVertical() {
         lastVerticalExport = null;
         document.getElementById('btnExportExcel').disabled = true;
-        if (filtrosPersist) filtrosPersist.guardar();
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
         const process = document.getElementById('cboProceso').value.trim();
@@ -818,13 +812,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     limpiarValorComboSiObsoleto(cboCia);
     await cargarUnidades();
 
-    const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
-    const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
-    if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes, cargarUnidades });
-        etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-    }
-
     limpiarValorComboSiObsoleto(cboCia);
     if (!String(cboCia.value || '').trim()) {
         if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
@@ -838,16 +825,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         const ciaInicial = cboCia.value.trim();
         if (ciaInicial) {
             await poblarBancosHaberes(ciaInicial);
-        }
-    }
-
-    {
-        const cia = cboCia.value.trim();
-        const pt = document.getElementById('cboTipoPlanilla').value.trim();
-        const proc = document.getElementById('cboProceso').value.trim();
-        const period = document.getElementById('cboPeriodo').value.trim();
-        if (cia && pt && proc && period) {
-            await ejecutarConsultaVertical();
         }
     }
 
@@ -914,20 +891,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     actualizarFiltroFechaIngreso();
     document.getElementById('chkFechaIngreso').addEventListener('change', function () {
         actualizarFiltroFechaIngreso(this.checked);
-        if (filtrosPersist) filtrosPersist.guardar();
     });
-    ['txtFechaIngresoDesde', 'txtFechaIngresoHasta'].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) {
-            el.addEventListener('change', function () {
-                if (filtrosPersist) filtrosPersist.guardar();
-            });
-        }
-    });
-
-    if (filtrosPersist) {
-        filtrosPersist.registrarGuardadoEnCambio();
-    }
 
     document.getElementById('frmPlanillaVertical').addEventListener('submit', async function (e) {
         e.preventDefault();

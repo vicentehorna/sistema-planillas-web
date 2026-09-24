@@ -1,5 +1,3 @@
-
-
 /*
 select * from PR_FormulaHeader	order by XLastDate
 select * from PR_FormulaDetail where FormulaHeader = 'LIMABGT 000000000722'
@@ -161,7 +159,7 @@ Begin
 
 
 
-	Declare formula Cursor For
+	Declare formula Cursor Local Fast_Forward For
 		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.TipoLiq, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor, PR_FormulaDetail.CompiledExpr
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.FormulaHeader = @formulaid
@@ -721,7 +719,7 @@ Begin
 		/*SOLO EN CASO DE CONDICION ELSE*/
 		set @query2 = ''
 
-		Declare formula2 Cursor For
+		Declare formula2 Cursor Local Fast_Forward For
 		select PR_FormulaDetail.Tipo,Operador,PR_FormulaDetail.Concept,grupo, valor, parameter,PR_FormulaDetail.process, periodoini, periodofin,numberini, numberfin, PR_FormulaDetail.ConceptList, PR_FormulaDetail.Divisor, PR_FormulaDetail.CompiledExpr
 		from PR_FormulaHeader inner join PR_FormulaDetail on (PR_FormulaHeader.FormulaHeader = PR_FormulaDetail.FormulaHeader) 
 		where PR_FormulaHeader.Concept = @concept and PR_FormulaHeader.Payrolltype = @payrolltype and PR_FormulaHeader.Proccestype = @processtype

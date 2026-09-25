@@ -1287,6 +1287,13 @@ def _tipo_doc_retiro_cts(type_pdt):
     return 'CE' if str(type_pdt or '').strip() == '04' else 'DNI'
 
 
+def _quitar_simbolo_num_doc_retiro_cts(texto):
+    """Elimina N°, NÂ° etc. y deja solo tipo + número (ej. DNI 42742062)."""
+    limpio = str(texto or '').strip()
+    limpio = re.sub(r'N[°ºÂ]+', ' ', limpio, flags=re.IGNORECASE)
+    return re.sub(r'\s+', ' ', limpio).strip()
+
+
 def _ciudad_retiro_cts(cert):
     """Ciudad para el membrete (Localite / district)."""
     cert = cert or {}
@@ -1345,9 +1352,7 @@ def _texto_intro_retiro_cts(cert):
     ruc = str(cert.get('company_ruc') or '').strip()
     address = str(cert.get('company_address') or '').strip()
     rep = str(cert.get('representative') or '').strip()
-    rep_doc = str(cert.get('company_representative_numdoc') or '').strip()
-    # "DNI N°42742062" (sin espacio antes del número, como el PDF de referencia)
-    rep_doc = re.sub(r'\s*N[°º]\s*', ' N°', rep_doc, count=1).strip()
+    rep_doc = _quitar_simbolo_num_doc_retiro_cts(cert.get('company_representative_numdoc'))
     cargo = str(cert.get('rep_position') or 'Apoderado').strip() or 'Apoderado'
     cargo_lbl = cargo[:1].upper() + cargo[1:].lower() if cargo else 'Apoderado'
 
@@ -1374,11 +1379,10 @@ def _texto_autorizacion_retiro_cts(cert):
     cert = cert or {}
     tratamiento = _tratamiento_retiro_cts(cert.get('sex'))
     tipo_doc = _tipo_doc_retiro_cts(cert.get('type_pdt'))
-    tipo_doc_lbl = str(cert.get('person_document_type') or '').strip() or tipo_doc
     fecha_cese = _fecha_emision_retiro_cts(cert, prefer_cese=True)
     texto = (
         f"Nos es grato dirigirnos a Ustedes, para comunicarles que {tratamiento}"
-        f"{str(cert.get('person_name') or '').strip()}, con {tipo_doc_lbl} N° "
+        f"{str(cert.get('person_name') or '').strip()}, con {tipo_doc} "
         f"{str(cert.get('person_document') or '').strip()}, ha dejado de laborar en nuestra "
         f"empresa a partir del día {fecha_cese}, por lo que solicitamos se haga "
         f"entrega del total de la Compensación por Tiempo de Servicios (CTS) depositada en "

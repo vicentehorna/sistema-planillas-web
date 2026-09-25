@@ -1279,33 +1279,138 @@ def _certificado_retiro_cts_pdf_filename(person, period_raw):
 
 
 def _tratamiento_retiro_cts(sex):
-    """PowerBuilder dw r063: sex = '1' → al Sr., caso contrario a la Sra."""
-    return 'al Sr. ' if str(sex or '').strip() == '1' else 'a la Sra '
+    """PowerBuilder dw r063: sex = '1' → el Sr., caso contrario la Sra."""
+    return 'el Sr. ' if str(sex or '').strip() == '1' else 'la Sra. '
 
 
 def _tipo_doc_retiro_cts(type_pdt):
-    return ' CE' if str(type_pdt or '').strip() == '04' else ' DNI'
+    return 'CE' if str(type_pdt or '').strip() == '04' else 'DNI'
+
+
+def _ciudad_retiro_cts(cert):
+    """Ciudad para el membrete (Localite / district)."""
+    cert = cert or {}
+    ciudad = str(cert.get('district') or cert.get('city') or '').strip()
+    if ciudad:
+        return ciudad.title() if ciudad.isupper() else ciudad
+    address = str(cert.get('company_address') or '').strip()
+    if '-' in address:
+        cola = address.rsplit('-', 1)[-1].strip()
+        if cola:
+            return cola.title() if cola.isupper() else cola
+    return 'Lima'
+
+
+def _fecha_emision_retiro_cts(cert, prefer_cese=False):
+    """Fecha en formato: 15 de Julio del 2026."""
+    cert = cert or {}
+    if prefer_cese and cert.get('fecha_cese_day') and cert.get('fecha_cese_year'):
+        dia, mes, anio = cert.get('fecha_cese_day'), cert.get('fecha_cese_month'), cert.get('fecha_cese_year')
+    elif cert.get('day_print') and cert.get('year_print'):
+        dia, mes, anio = cert.get('day_print'), cert.get('month_print'), cert.get('year_print')
+    elif cert.get('fecha_cese_day') and cert.get('fecha_cese_year'):
+        dia, mes, anio = cert.get('fecha_cese_day'), cert.get('fecha_cese_month'), cert.get('fecha_cese_year')
+    else:
+        return ''
+    try:
+        dia_i = int(dia or 0)
+    except (TypeError, ValueError):
+        dia_i = 0
+    mes_txt = str(mes or '').strip()
+    if mes_txt:
+        mes_txt = mes_txt[:1].upper() + mes_txt[1:].lower()
+    try:
+        anio_i = int(anio or 0)
+    except (TypeError, ValueError):
+        anio_i = 0
+    if not (dia_i and mes_txt and anio_i):
+        return ''
+    return f'{dia_i} de {mes_txt} del {anio_i}'
+
+
+def _fecha_membrete_retiro_cts(cert):
+    ciudad = _ciudad_retiro_cts(cert)
+    fecha = _fecha_emision_retiro_cts(cert, prefer_cese=False)
+    if ciudad and fecha:
+        return f'{ciudad}, {fecha}'
+    return fecha or ciudad or ''
+
+
+def _texto_intro_retiro_cts(cert):
+    """Párrafo 1: empresa, RUC, domicilio y apoderado (formato Ultrasegur / carta)."""
+    cert = cert or {}
+    company = str(cert.get('company_name') or '').strip()
+    ruc = str(cert.get('company_ruc') or '').strip()
+    address = str(cert.get('company_address') or '').strip()
+    rep = str(cert.get('representative') or '').strip()
+    rep_doc = str(cert.get('company_representative_numdoc') or '').strip()
+    # "DNI N°42742062" (sin espacio antes del número, como el PDF de referencia)
+    rep_doc = re.sub(r'\s*N[°º]\s*', ' N°', rep_doc, count=1).strip()
+    cargo = str(cert.get('rep_position') or 'Apoderado').strip() or 'Apoderado'
+    cargo_lbl = cargo[:1].upper() + cargo[1:].lower() if cargo else 'Apoderado'
+
+    partes = [f'{company} con RUC N° {ruc}']
+    if address:
+        partes.append(f'; domiciliado en {address}')
+    if rep:
+        partes.append(f', y debidamente representada por su {cargo_lbl}, {rep}')
+        if rep_doc:
+            if rep_doc.lower().startswith('identificado'):
+                partes.append(f', {rep_doc}')
+            else:
+                partes.append(f', identificado con {rep_doc}')
+    texto = ''.join(partes).replace('  ', ' ').strip()
+    while '  ' in texto:
+        texto = texto.replace('  ', ' ')
+    if texto and not texto.endswith('.'):
+        texto += '.'
+    return texto
 
 
 def _texto_autorizacion_retiro_cts(cert):
+    """Párrafo 2: cese del trabajador y solicitud de entrega de CTS."""
     cert = cert or {}
     tratamiento = _tratamiento_retiro_cts(cert.get('sex'))
     tipo_doc = _tipo_doc_retiro_cts(cert.get('type_pdt'))
-    try:
-        dia = int(cert.get('fecha_cese_day') or 0)
-    except (TypeError, ValueError):
-        dia = 0
-    mes = str(cert.get('fecha_cese_month') or '').strip()
-    fecha_cese = f'desde el {dia} de {mes}' if dia and mes else ''
-    return (
-        f"{str(cert.get('company_name') or '').strip()} con RUC N° "
-        f"{str(cert.get('company_ruc') or '').strip()}, por medio de la presente autorizamos "
-        f"{tratamiento}{str(cert.get('person_name') or '').strip()}, con{tipo_doc} Nº "
-        f"{str(cert.get('person_document') or '').strip()} retirar el íntegro de su depósito "
-        f"de Compensación de Tiempo de Servicio (CTS), de la cuenta "
-        f"{str(cert.get('cts_account') or '').strip()}, ya que ha dejado de laborar en nuestra "
-        f"empresa {fecha_cese}.".replace('  ', ' ').strip()
+    tipo_doc_lbl = str(cert.get('person_document_type') or '').strip() or tipo_doc
+    fecha_cese = _fecha_emision_retiro_cts(cert, prefer_cese=True)
+    texto = (
+        f"Nos es grato dirigirnos a Ustedes, para comunicarles que {tratamiento}"
+        f"{str(cert.get('person_name') or '').strip()}, con {tipo_doc_lbl} N° "
+        f"{str(cert.get('person_document') or '').strip()}, ha dejado de laborar en nuestra "
+        f"empresa a partir del día {fecha_cese}, por lo que solicitamos se haga "
+        f"entrega del total de la Compensación por Tiempo de Servicios (CTS) depositada en "
+        f"la Cuenta {str(cert.get('cts_account') or '').strip()} de vuestra entidad."
     )
+    while '  ' in texto:
+        texto = texto.replace('  ', ' ')
+    return texto.strip()
+
+
+def _pie_retiro_cts(cert):
+    """Líneas de pie de página (dirección / teléfono / correo / web)."""
+    cert = cert or {}
+    address = str(cert.get('company_address') or '').strip()
+    phone = str(cert.get('company_telephone') or '').strip()
+    email = str(cert.get('company_email') or '').strip()
+    web = str(cert.get('company_web') or '').strip()
+    if _es_cliente_ultraseguros():
+        phone = phone or '044-202018'
+        email = email or 'rr.hh@ultrasegur.com'
+        web = web or 'www.ultrasegur.com'
+    lineas = []
+    linea1_parts = []
+    if address:
+        linea1_parts.append(address)
+    if phone:
+        linea1_parts.append(f'Teléfono: {phone}')
+    if linea1_parts:
+        lineas.append(' - '.join(linea1_parts))
+    if email:
+        lineas.append(f'Correo: {email}')
+    if web:
+        lineas.append(web)
+    return lineas
 
 
 def _texto_intro_retiro_cts_ng(cert):
@@ -5775,7 +5880,10 @@ def generar_pdf_certificado_retiro_cts(params):
             cert=cert,
             logo_src=logo_src,
             firma_src=firma_src,
+            texto_intro_empresa=_texto_intro_retiro_cts(cert),
             texto_autorizacion=_texto_autorizacion_retiro_cts(cert),
+            fecha_emision_texto=_fecha_membrete_retiro_cts(cert),
+            pie_lineas=_pie_retiro_cts(cert),
         )
 
     if WEASYPRINT_AVAILABLE:

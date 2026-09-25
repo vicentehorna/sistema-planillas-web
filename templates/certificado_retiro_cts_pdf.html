@@ -4,98 +4,74 @@
     <meta charset="UTF-8">
     <title>Certificado Retiro CTS</title>
     <style>
-        @page { size: A4; margin: 12mm 14mm; }
+        @page { size: A4; margin: 14mm 18mm 18mm; }
         body {
-            font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+            font-family: Arial, Helvetica, sans-serif;
             font-size: 12px;
-            color: #333;
+            color: #222;
             margin: 0;
             padding: 0;
-            line-height: 1.55;
+            line-height: 1.45;
         }
         .documento {
-            border: 1px solid #1a4b84;
-            padding: 18px 22px 24px;
-            min-height: 255mm;
+            min-height: 260mm;
             box-sizing: border-box;
             position: relative;
+            padding-bottom: 28mm;
         }
         .encabezado {
             display: table;
             width: 100%;
-            margin-bottom: 6px;
-            padding-bottom: 6px;
+            margin-bottom: 28px;
         }
-        .encabezado .logo-cell,
-        .encabezado .empresa-cell {
+        .logo-cell,
+        .fecha-cell {
             display: table-cell;
             vertical-align: top;
         }
-        .encabezado .logo-cell { width: 34%; }
-        .encabezado .empresa-cell {
-            width: 66%;
+        .logo-cell { width: 55%; }
+        .fecha-cell {
+            width: 45%;
             text-align: right;
-            font-size: 9px;
-            color: #555;
-            padding-top: 2px;
-            font-family: Arial, Helvetica, sans-serif;
-        }
-        .empresa-nombre {
-            font-size: 11px;
-            font-weight: bold;
-            color: #1a4b84;
-            text-transform: uppercase;
-            margin-bottom: 2px;
+            padding-top: 8px;
+            font-size: 12px;
         }
         .logo-img {
-            max-height: 72px;
-            max-width: 240px;
+            max-height: 56px;
+            max-width: 220px;
             width: auto;
             height: auto;
             object-fit: contain;
             object-position: left top;
             display: block;
         }
-        .cuerpo {
-            padding-top: 20px;
-        }
-        .titulo-principal {
-            text-align: center;
-            font-size: 14px;
-            font-weight: bold;
-            color: #1a4b84;
-            letter-spacing: 0.5px;
-            margin: 0 0 36px;
-            text-transform: uppercase;
-        }
-        .bloque-destino { margin: 0 0 26px; }
-        .bloque-destino p { margin: 0 0 8px; font-size: 12px; }
+        .bloque-destino { margin: 0 0 18px; }
+        .bloque-destino p { margin: 0 0 4px; font-size: 12px; }
         .banco-nombre {
             font-weight: bold;
             text-transform: uppercase;
-            margin: 6px 0 8px;
+            margin: 2px 0 6px;
         }
         .presente {
             text-decoration: underline;
             margin: 0;
         }
-        .saludo { margin: 0 0 26px; font-size: 12px; }
+        .saludo { margin: 0 0 16px; font-size: 12px; }
         .parrafo {
             text-align: justify;
-            margin: 0 0 28px;
+            margin: 0 0 14px;
             font-size: 12px;
-            line-height: 1.72;
+            line-height: 1.55;
         }
-        .cierre { margin: 0 0 26px; font-size: 12px; line-height: 1.72; }
-        .atentamente { margin: 0 0 72px; font-size: 12px; }
+        .cierre { margin: 18px 0 22px; font-size: 12px; }
+        .atentamente { margin: 0 0 36px; font-size: 12px; }
         .firma-block {
             text-align: center;
-            margin-top: 28px;
-            font-family: Arial, Helvetica, sans-serif;
+            margin-top: 8px;
         }
         .firma-img {
-            max-height: 88px;
-            max-width: 260px;
+            max-height: 110px;
+            max-width: 280px;
             width: auto;
             height: auto;
             object-fit: contain;
@@ -104,15 +80,15 @@
             margin: 0 auto 4px;
         }
         .linea-firma {
-            border-top: 1.5px solid #000;
-            width: 300px;
-            margin: 0 auto 8px;
+            border-top: 1px solid #000;
+            width: 260px;
+            margin: 48px auto 8px;
         }
         .rep-nombre {
-            font-size: 10px;
+            font-size: 11px;
             font-weight: bold;
             text-transform: uppercase;
-            margin: 0 0 4px;
+            margin: 0 0 2px;
         }
         .rep-cargo {
             font-size: 10px;
@@ -120,6 +96,17 @@
             text-transform: uppercase;
             margin: 0;
         }
+        .pie {
+            position: absolute;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            text-align: center;
+            font-size: 10px;
+            color: #333;
+            line-height: 1.35;
+        }
+        .pie div { margin: 0; }
     </style>
 </head>
 <body>
@@ -130,37 +117,40 @@
                 <img src="{{ logo_src }}" alt="Logo" class="logo-img">
                 {% endif %}
             </div>
-            <div class="empresa-cell">
-                <div class="empresa-nombre">{{ cert.company_name or '' }}</div>
-                <div>RUC: {{ cert.company_ruc or '' }}</div>
-                <div>{{ cert.company_address or '' }}</div>
-            </div>
+            <div class="fecha-cell">{{ fecha_emision_texto }}</div>
         </div>
 
-        <div class="cuerpo">
-        <div class="titulo-principal">Certificado de Retiro de CTS</div>
         <div class="bloque-destino">
             <p>Señores</p>
             <p class="banco-nombre">{{ cert.banco or '' }}</p>
             <p class="presente">Presente.-</p>
         </div>
 
-        <p class="saludo">Estimados señores:</p>
+        <p class="saludo">De nuestra consideración</p>
 
+        <p class="parrafo">{{ texto_intro_empresa }}</p>
         <p class="parrafo">{{ texto_autorizacion }}</p>
 
-        <p class="cierre">Sin otro particular y agradeciendo su amable atención, quedamos de ustedes.</p>
+        <p class="cierre">Sin otro particular, quedamos de ustedes.</p>
         <p class="atentamente">Atentamente,</p>
 
         <div class="firma-block">
             {% if firma_src %}
             <img src="{{ firma_src }}" alt="Firma" class="firma-img">
-            {% endif %}
+            {% else %}
             <div class="linea-firma"></div>
             <p class="rep-nombre">{{ cert.representative or '' }}</p>
             <p class="rep-cargo">{{ cert.rep_position or 'REPRESENTANTE LEGAL' }}</p>
+            {% endif %}
         </div>
+
+        {% if pie_lineas %}
+        <div class="pie">
+            {% for linea in pie_lineas %}
+            <div>{{ linea }}</div>
+            {% endfor %}
         </div>
+        {% endif %}
     </div>
 </body>
 </html>

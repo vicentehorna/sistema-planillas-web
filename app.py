@@ -21035,10 +21035,11 @@ def api_declaracion_afp_generar_xlsx():
         )
         filas, validaciones = _declaracion_afp_validaciones_completas(cursor, filas, p)
 
-        ruc = _obtener_ruc_compania(cursor, p['cia']) or '00000000000'
+        empresa_nombre = _company_description(cursor, p['cia'])
+        empresa_token = _boleta_filename_token(empresa_nombre, fallback=p['cia'] or 'EMPRESA')
 
         buf = _declaracion_afp_generar_xlsx_bytes(filas)
-        filename = f'AFPNET_{p["period"]}_{ruc}.xlsx'
+        filename = f'AFPNET_{p["period"]}_{empresa_token}.xlsx'
         tiene_diferencias = _declaracion_afp_resumen_tiene_diferencias(resumen)
         return jsonify({
             'filename': filename,
@@ -21162,10 +21163,9 @@ def api_declaracion_afp_masivo_generar_zip():
                         'mensaje': 'Sin registros AFPnet para el periodo.',
                     })
                     continue
-                ruc = _obtener_ruc_compania(cursor, cia) or '00000000000'
                 buf = _declaracion_afp_generar_xlsx_bytes(filas)
                 empresa_token = _boleta_filename_token(company_desc, fallback=cia or 'EMPRESA')
-                filename = f'AFPNET_{period_yyyymm}_{ruc}_{empresa_token}.xlsx'
+                filename = f'AFPNET_{period_yyyymm}_{empresa_token}.xlsx'
                 archivos.append((filename, buf.getvalue(), company_desc))
             except Exception as exc:
                 logging.exception('api_declaracion_afp_masivo_generar_zip cia=%s', cia)

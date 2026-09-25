@@ -1304,7 +1304,9 @@ def _ciudad_retiro_cts(cert):
 def _fecha_emision_retiro_cts(cert, prefer_cese=False):
     """Fecha en formato: 15 de Julio del 2026."""
     cert = cert or {}
-    if prefer_cese and cert.get('fecha_cese_day') and cert.get('fecha_cese_year'):
+    if prefer_cese:
+        if not (cert.get('fecha_cese_day') and cert.get('fecha_cese_year')):
+            return ''
         dia, mes, anio = cert.get('fecha_cese_day'), cert.get('fecha_cese_month'), cert.get('fecha_cese_year')
     elif cert.get('day_print') and cert.get('year_print'):
         dia, mes, anio = cert.get('day_print'), cert.get('month_print'), cert.get('year_print')
@@ -1330,7 +1332,7 @@ def _fecha_emision_retiro_cts(cert, prefer_cese=False):
 
 def _fecha_membrete_retiro_cts(cert):
     ciudad = _ciudad_retiro_cts(cert)
-    fecha = _fecha_emision_retiro_cts(cert, prefer_cese=False)
+    fecha = _fecha_emision_retiro_cts(cert, prefer_cese=True)
     if ciudad and fecha:
         return f'{ciudad}, {fecha}'
     return fecha or ciudad or ''

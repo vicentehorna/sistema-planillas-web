@@ -557,8 +557,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         a.href = url;
         const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
         const stamp = new Date().toISOString().slice(0, 10);
+        const periodoRaw = String(meta.periodoValor || meta.periodo || '')
+            .replace(/[^0-9]/g, '')
+            .slice(0, 8) || 'periodo';
         const sufijo = modoAgrupadoActivo ? '_agrupado_cc' : '';
-        a.download = `planilla_vertical${sufijo}_${safe(meta.compania)}_${stamp}.xlsx`;
+        a.download = `planilla_${safe(meta.compania)}_${periodoRaw}${sufijo}_${stamp}.xlsx`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

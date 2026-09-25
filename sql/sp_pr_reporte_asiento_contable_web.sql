@@ -3,18 +3,13 @@
     Equivalente al query legacy de PowerBuilder.
 
     Resultset 1: detalle cuenta/concepto (debe/haber)
+                 Con @aplicar_distribucion='Y' prorratea por PR_DistribucionVoucher
+                 (tipo CC en hm_divisa / OT en el resto) y agrega codigo + porcentaje.
     Resultset 2: problemas de configuración que explican descuadres
-                 - concepto I/A/D sin cuenta
-                 - ingreso solo en HABER / descuento solo en DEBE
-                 - devolución (o Debe 4017xx) solo en DEBE sin HABER
-                 - aporte con un solo lado
-    Resultset 3: personas que explican el descuadre (neto teórico / asiento por trabajador)
-                 - ingresos I, descuentos D, neto teórico (I−D), FormulaCode NETO
-                 - Debe/Haber/diff del asiento de esa persona
-                 - top descuentos y causa textual
-                 - se listan si |asiento_diff|>=0.005 o neto teórico < 0 sin NETO
+    Resultset 3: personas que explican el descuadre
 
     @person: opcional. Vacío/NULL = Todos; con valor = solo ese trabajador (Person).
+    @aplicar_distribucion: 'N' (default) = asiento normal; 'Y' = prorrateo %.
 
     Usado por: POST /api/asientos/reporte-contable
 */
@@ -24,7 +19,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporte_asiento_contable_web]
     @processtype VARCHAR(20),
     @period VARCHAR(20),
     @currency VARCHAR(2) = 'LO',
-    @person VARCHAR(20) = NULL  /* vacío / NULL = Todos */
+    @person VARCHAR(20) = NULL,  /* vacío / NULL = Todos */
+    @aplicar_distribucion CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -35,103 +31,233 @@ BEGIN
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
     SET @currency = UPPER(LTRIM(RTRIM(ISNULL(@currency, 'LO'))));
     SET @person = LTRIM(RTRIM(ISNULL(@person, '')));
+    SET @aplicar_distribucion = UPPER(LEFT(LTRIM(RTRIM(ISNULL(@aplicar_distribucion, 'N'))), 1));
+    IF @aplicar_distribucion NOT IN ('Y', 'N') SET @aplicar_distribucion = 'N';
     IF @currency NOT IN ('LO', 'EX')
         SET @currency = 'LO';
 
-    /* -------- Resultset 1: asiento por cuenta/concepto -------- */
-    SELECT
-        PR.Description AS processname,
-        P.Description AS payrolltypename,
-        AC.Code AS account,
-        AC.Name AS accountname,
-        C.Description AS conceptname,
-        SUM(
-            CASE
-                WHEN AC.Account = A.DebitAccount THEN
-                    CASE
-                        WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
-                        ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
-                    END
-                ELSE 0
-            END
-        ) AS conceptvaluedebe,
-        SUM(
-            CASE
-                WHEN AC.Account = A.CreditAccount THEN
-                    CASE
-                        WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
-                        ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
-                    END
-                ELSE 0
-            END
-        ) AS conceptvaluehaber
-    FROM PR_EmployeePayRollConcept EPC (NOLOCK)
-    INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
-        ON EPC.Company = EP.Company
-       AND EPC.PayRollType = EP.PayRollType
-       AND EPC.ProcessType = EP.ProcessType
-       AND EPC.PRPeriod = EP.PRPeriod
-       AND EPC.Person = EP.Person
-    INNER JOIN PR_PayRollType P (NOLOCK)
-        ON P.PayRollType = EPC.PayRollType
-    INNER JOIN PR_Concept C (NOLOCK)
-        ON C.Concept = EPC.Concept
-    INNER JOIN PR_Concepttype T (NOLOCK)
-        ON T.Concepttype = C.Concepttype
-    INNER JOIN PR_AccountProfileDetail A (NOLOCK)
-        ON A.AccountProfile = EP.AccountProfile
-       AND A.Concept = EPC.Concept
-       AND A.ProcessType = EPC.ProcessType
-    INNER JOIN PR_Employee E (NOLOCK)
-        ON E.Company = @company
-       AND E.Person = EPC.Person
-    INNER JOIN AC_Account AC (NOLOCK)
-        ON AC.Account = A.DebitAccount
-        OR AC.Account = A.CreditAccount
-    INNER JOIN PR_ProcessType PR (NOLOCK)
-        ON PR.ProcessType = EPC.ProcessType
-    INNER JOIN SY_Person (NOLOCK)
-        ON EPC.Person = SY_Person.Person
-    WHERE EPC.Company = @company
-      AND EPC.PRPeriod = @period
-      AND EPC.PayRollType = @payrolltype
-      AND EPC.ProcessType = @processtype
-      AND (@person = '' OR EPC.Person = @person)
-      AND EPC.FlagIsMonetary = 'Y'
-      AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
-    GROUP BY
-        PR.Description,
-        P.Description,
-        AC.Code,
-        AC.Name,
-        C.Description
-    HAVING
-        SUM(
-            CASE
-                WHEN AC.Account = A.DebitAccount THEN
-                    CASE
-                        WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
-                        ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
-                    END
-                ELSE 0
-            END
-        ) <> 0
-        OR SUM(
-            CASE
-                WHEN AC.Account = A.CreditAccount THEN
-                    CASE
-                        WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
-                        ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
-                    END
-                ELSE 0
-            END
-        ) <> 0
-    ORDER BY
-        PR.Description,
-        AC.Name,
-        P.Description,
-        AC.Code,
-        C.Description;
+    DECLARE @tipo_dist VARCHAR(2) = 'OT';
+    IF @aplicar_distribucion = 'Y'
+       AND EXISTS (
+            SELECT 1
+            FROM PR_DistribucionVoucher d (NOLOCK)
+            WHERE d.company = @company
+              AND (
+                    d.period = @period
+                 OR LEFT(LTRIM(RTRIM(ISNULL(d.period, ''))), 6) = LEFT(@period, 6)
+              )
+              AND LTRIM(RTRIM(ISNULL(d.tipo, ''))) = 'CC'
+       )
+        SET @tipo_dist = 'CC';
+
+    /* -------- Resultset 1: asiento por cuenta/concepto (+ dist opcional) -------- */
+    IF @aplicar_distribucion = 'Y'
+    BEGIN
+        SELECT
+            PR.Description AS processname,
+            P.Description AS payrolltypename,
+            AC.Code AS account,
+            AC.Name AS accountname,
+            C.Description AS conceptname,
+            ISNULL(NULLIF(LTRIM(RTRIM(d.codigo)), ''), '') AS codigo,
+            CAST(ROUND(ISNULL(d.valor, 100), 2) AS DECIMAL(18, 2)) AS porcentaje,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.DebitAccount THEN md.monto_dist
+                    ELSE 0
+                END
+            ) AS conceptvaluedebe,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.CreditAccount THEN md.monto_dist
+                    ELSE 0
+                END
+            ) AS conceptvaluehaber
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+            ON EPC.Company = EP.Company
+           AND EPC.PayRollType = EP.PayRollType
+           AND EPC.ProcessType = EP.ProcessType
+           AND EPC.PRPeriod = EP.PRPeriod
+           AND EPC.Person = EP.Person
+        INNER JOIN PR_PayRollType P (NOLOCK)
+            ON P.PayRollType = EPC.PayRollType
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = EPC.Concept
+        INNER JOIN PR_Concepttype T (NOLOCK)
+            ON T.Concepttype = C.Concepttype
+        INNER JOIN PR_AccountProfileDetail A (NOLOCK)
+            ON A.AccountProfile = EP.AccountProfile
+           AND A.Concept = EPC.Concept
+           AND A.ProcessType = EPC.ProcessType
+        INNER JOIN PR_Employee E (NOLOCK)
+            ON E.Company = @company
+           AND E.Person = EPC.Person
+        INNER JOIN AC_Account AC (NOLOCK)
+            ON AC.Account = A.DebitAccount
+            OR AC.Account = A.CreditAccount
+        INNER JOIN PR_ProcessType PR (NOLOCK)
+            ON PR.ProcessType = EPC.ProcessType
+        INNER JOIN SY_Person (NOLOCK)
+            ON EPC.Person = SY_Person.Person
+        CROSS APPLY (
+            SELECT
+                CASE
+                    WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                    ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                END AS monto_base
+        ) mb
+        LEFT JOIN PR_DistribucionVoucher d (NOLOCK)
+            ON d.dni = EPC.Person
+           AND d.company = @company
+           AND LTRIM(RTRIM(ISNULL(d.tipo, CASE WHEN @tipo_dist = 'CC' THEN 'CC' ELSE 'OT' END))) = @tipo_dist
+           AND (
+                    d.period = @period
+                 OR (
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM PR_DistribucionVoucher dx (NOLOCK)
+                            WHERE dx.dni = EPC.Person
+                              AND dx.company = @company
+                              AND dx.period = @period
+                              AND LTRIM(RTRIM(ISNULL(dx.tipo, ''))) = @tipo_dist
+                        )
+                    AND LEFT(LTRIM(RTRIM(ISNULL(d.period, ''))), 6) = LEFT(@period, 6)
+                 )
+               )
+        CROSS APPLY (
+            SELECT CONVERT(DECIMAL(18, 2),
+                ROUND(
+                    mb.monto_base
+                    * (ISNULL(d.valor, CONVERT(DECIMAL(18, 4), 100)) / CONVERT(DECIMAL(18, 4), 100)),
+                    2
+                )
+            ) AS monto_dist
+        ) md
+        WHERE EPC.Company = @company
+          AND EPC.PRPeriod = @period
+          AND EPC.PayRollType = @payrolltype
+          AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
+          AND EPC.FlagIsMonetary = 'Y'
+          AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
+        GROUP BY
+            PR.Description,
+            P.Description,
+            AC.Code,
+            AC.Name,
+            C.Description,
+            ISNULL(NULLIF(LTRIM(RTRIM(d.codigo)), ''), ''),
+            CAST(ROUND(ISNULL(d.valor, 100), 2) AS DECIMAL(18, 2))
+        HAVING
+            SUM(CASE WHEN AC.Account = A.DebitAccount THEN md.monto_dist ELSE 0 END) <> 0
+            OR SUM(CASE WHEN AC.Account = A.CreditAccount THEN md.monto_dist ELSE 0 END) <> 0
+        ORDER BY
+            PR.Description,
+            AC.Name,
+            P.Description,
+            AC.Code,
+            C.Description,
+            codigo;
+    END
+    ELSE
+    BEGIN
+        SELECT
+            PR.Description AS processname,
+            P.Description AS payrolltypename,
+            AC.Code AS account,
+            AC.Name AS accountname,
+            C.Description AS conceptname,
+            CAST('' AS VARCHAR(50)) AS codigo,
+            CAST(NULL AS DECIMAL(18, 2)) AS porcentaje,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.DebitAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) AS conceptvaluedebe,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.CreditAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) AS conceptvaluehaber
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+            ON EPC.Company = EP.Company
+           AND EPC.PayRollType = EP.PayRollType
+           AND EPC.ProcessType = EP.ProcessType
+           AND EPC.PRPeriod = EP.PRPeriod
+           AND EPC.Person = EP.Person
+        INNER JOIN PR_PayRollType P (NOLOCK)
+            ON P.PayRollType = EPC.PayRollType
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = EPC.Concept
+        INNER JOIN PR_Concepttype T (NOLOCK)
+            ON T.Concepttype = C.Concepttype
+        INNER JOIN PR_AccountProfileDetail A (NOLOCK)
+            ON A.AccountProfile = EP.AccountProfile
+           AND A.Concept = EPC.Concept
+           AND A.ProcessType = EPC.ProcessType
+        INNER JOIN PR_Employee E (NOLOCK)
+            ON E.Company = @company
+           AND E.Person = EPC.Person
+        INNER JOIN AC_Account AC (NOLOCK)
+            ON AC.Account = A.DebitAccount
+            OR AC.Account = A.CreditAccount
+        INNER JOIN PR_ProcessType PR (NOLOCK)
+            ON PR.ProcessType = EPC.ProcessType
+        INNER JOIN SY_Person (NOLOCK)
+            ON EPC.Person = SY_Person.Person
+        WHERE EPC.Company = @company
+          AND EPC.PRPeriod = @period
+          AND EPC.PayRollType = @payrolltype
+          AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
+          AND EPC.FlagIsMonetary = 'Y'
+          AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
+        GROUP BY
+            PR.Description,
+            P.Description,
+            AC.Code,
+            AC.Name,
+            C.Description
+        HAVING
+            SUM(
+                CASE
+                    WHEN AC.Account = A.DebitAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) <> 0
+            OR SUM(
+                CASE
+                    WHEN AC.Account = A.CreditAccount THEN
+                        CASE
+                            WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                            ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                        END
+                    ELSE 0
+                END
+            ) <> 0
+        ORDER BY
+            PR.Description,
+            AC.Name,
+            P.Description,
+            AC.Code,
+            C.Description;
+    END
 
     /* -------- Resultset 2: motivos de diferencia / config -------- */
     ;WITH base AS (

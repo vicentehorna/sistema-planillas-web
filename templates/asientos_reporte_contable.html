@@ -145,6 +145,13 @@
                     <option value="">Todos</option>
                 </select>
             </div>
+            <div class="col-md-2">
+                <label for="cboDistribucionPct" class="form-label small fw-bold text-muted mb-1">Dist. porcentual</label>
+                <select id="cboDistribucionPct" class="form-select form-select-sm" title="Prorratea el asiento según Distribución Porcentual">
+                    <option value="N" selected>No</option>
+                    <option value="Y">Sí</option>
+                </select>
+            </div>
             <div class="col-12 d-flex flex-wrap align-items-center gap-2 border-top pt-2 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
                     <span class="btn-consultar-label"><i class="bi bi-search"></i> Consultar</span>
@@ -172,10 +179,12 @@
         <div class="table-scroll-container" id="scrollReporte">
             <table class="table table-bordered table-sm table-hover table-asiento-contable align-middle">
                 <thead>
-                    <tr>
+                    <tr id="theadAsientoContable">
                         <th>Cuenta</th>
                         <th>Cuenta - Descripción</th>
                         <th>Concepto</th>
+                        <th class="col-dist d-none">Código</th>
+                        <th class="col-dist d-none">%</th>
                         <th class="col-importe">Debe</th>
                         <th class="col-importe">Haber</th>
                     </tr>
@@ -183,12 +192,12 @@
                 <tbody id="tbodyReporte"></tbody>
                 <tfoot>
                     <tr class="reporte-fila-totales">
-                        <td colspan="3" class="text-end">Total</td>
+                        <td id="tdColspanTotal" colspan="3" class="text-end">Total</td>
                         <td class="col-importe" id="lblTotalDebe">0.00</td>
                         <td class="col-importe" id="lblTotalHaber">0.00</td>
                     </tr>
                     <tr>
-                        <td colspan="3" class="text-end fw-semibold">Diferencia</td>
+                        <td id="tdColspanDiff" colspan="3" class="text-end fw-semibold">Diferencia</td>
                         <td colspan="2" class="text-end" id="lblDiferencia">0.00</td>
                     </tr>
                 </tfoot>
@@ -209,6 +218,7 @@
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const cboTrabajador = document.getElementById('cboTrabajador');
+    const cboDistribucionPct = document.getElementById('cboDistribucionPct');
     const btnConsultar = document.getElementById('btnConsultar');
     const btnExport = document.getElementById('btnExportExcel');
     const cardResultado = document.getElementById('cardResultado');
@@ -348,7 +358,7 @@
     }
 
     function setBusy(busy, msg) {
-        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador].forEach(el => {
+        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador, cboDistribucionPct].forEach(el => {
             if (el) el.disabled = !!busy;
         });
         if (busy) {
@@ -515,18 +525,34 @@
         });
 
         const tbody = document.getElementById('tbodyReporte');
+        const conDist = String(meta.aplicar_distribucion || 'N').toUpperCase() === 'Y';
+        document.querySelectorAll('.col-dist').forEach((el) => {
+            el.classList.toggle('d-none', !conDist);
+        });
+        const colspanBase = conDist ? 5 : 3;
+        const tdTotal = document.getElementById('tdColspanTotal');
+        const tdDiff = document.getElementById('tdColspanDiff');
+        if (tdTotal) tdTotal.colSpan = colspanBase;
+        if (tdDiff) tdDiff.colSpan = colspanBase;
+
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin registros</td></tr>';
+            tbody.innerHTML = `<tr><td colspan="${colspanBase + 2}" class="text-center text-muted py-3">Sin registros</td></tr>`;
         } else {
-            tbody.innerHTML = rows.map(r => `
+            tbody.innerHTML = rows.map(r => {
+                const colsDist = conDist
+                    ? `<td>${escHtml(r.codigo || '')}</td>`
+                        + `<td class="text-end">${r.porcentaje != null && r.porcentaje !== '' ? fmtNum(r.porcentaje) : ''}</td>`
+                    : '';
+                return `
                 <tr>
                     <td>${escHtml(r.account || '')}</td>
                     <td>${escHtml(r.accountname || '')}</td>
                     <td>${escHtml(r.conceptname || '')}</td>
+                    ${colsDist}
                     <td class="col-importe">${fmtNum(r.conceptvaluedebe)}</td>
                     <td class="col-importe">${fmtNum(r.conceptvaluehaber)}</td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
         }
 
         const tDebe = num(meta.total_debe);
@@ -550,19 +576,34 @@
         const ws = wb.addWorksheet('Asiento contable');
         ws.addRow([armarTitulo(meta)]);
         ws.addRow([]);
-        ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Debe', 'Haber']);
-        rows.forEach(r => {
-            ws.addRow([r.account, r.accountname, r.conceptname, num(r.conceptvaluedebe), num(r.conceptvaluehaber)]);
-        });
-        ws.addRow(['', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
-        ws.addRow(['', '', 'Diferencia', num(meta.diferencia), '']);
+        const conDist = String(meta.aplicar_distribucion || 'N').toUpperCase() === 'Y';
+        if (conDist) {
+            ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Código', '%', 'Debe', 'Haber']);
+            rows.forEach(r => {
+                ws.addRow([
+                    r.account, r.accountname, r.conceptname, r.codigo || '',
+                    r.porcentaje != null ? num(r.porcentaje) : '',
+                    num(r.conceptvaluedebe), num(r.conceptvaluehaber),
+                ]);
+            });
+            ws.addRow(['', '', '', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
+            ws.addRow(['', '', '', '', 'Diferencia', num(meta.diferencia), '']);
+        } else {
+            ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Debe', 'Haber']);
+            rows.forEach(r => {
+                ws.addRow([r.account, r.accountname, r.conceptname, num(r.conceptvaluedebe), num(r.conceptvaluehaber)]);
+            });
+            ws.addRow(['', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
+            ws.addRow(['', '', 'Diferencia', num(meta.diferencia), '']);
+        }
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
         const sufijo = meta.person ? `_${meta.person}` : '';
-        a.download = `asiento_contable_${meta.period || 'reporte'}${sufijo}.xlsx`;
+        const sufijoDist = conDist ? '_dist' : '';
+        a.download = `asiento_contable_${meta.period || 'reporte'}${sufijoDist}${sufijo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -580,7 +621,8 @@
             period: cboPeriodo.value,
             currency: 'LO',
             person: person,
-            person_name: person && optTrab ? String(optTrab.textContent || '').trim() : ''
+            person_name: person && optTrab ? String(optTrab.textContent || '').trim() : '',
+            aplicar_distribucion: (cboDistribucionPct && cboDistribucionPct.value) || 'N',
         };
         if (!body.cia || !body.payrolltype || !body.processtype || !body.period) {
             if (window.HmUi) HmUi.advertencia('Complete compañía, planilla, proceso y periodo.');

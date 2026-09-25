@@ -14547,6 +14547,16 @@ def api_asientos_reporte_contable():
     period = str(body.get('period') or body.get('periodo') or '').strip()
     currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
     person = str(body.get('person') or body.get('trabajador') or body.get('dni') or '').strip()
+    aplicar_dist = str(
+        body.get('aplicar_distribucion')
+        or body.get('distribucion_porcentual')
+        or body.get('distribucion')
+        or 'N'
+    ).strip().upper()[:1] or 'N'
+    if aplicar_dist not in ('Y', 'N'):
+        aplicar_dist = 'Y' if str(
+            body.get('aplicar_distribucion') or body.get('distribucion_porcentual') or ''
+        ).strip().lower() in ('1', 'true', 'si', 'sí', 'yes') else 'N'
 
     if not cia or not payrolltype or not processtype or not period:
         return jsonify({"error": "Complete compañía, planilla, proceso y periodo."}), 400
@@ -14558,8 +14568,9 @@ def api_asientos_reporte_contable():
         _set_cursor_timeout_report(cursor)
         cursor.execute(
             "EXEC sp_pr_reporte_asiento_contable_web "
-            "@company=?, @payrolltype=?, @processtype=?, @period=?, @currency=?, @person=?",
-            (cia, payrolltype, processtype, period, currency, person or None),
+            "@company=?, @payrolltype=?, @processtype=?, @period=?, @currency=?, "
+            "@person=?, @aplicar_distribucion=?",
+            (cia, payrolltype, processtype, period, currency, person or None, aplicar_dist),
         )
 
         # Resultset 1: detalle; 2: problemas config; 3: descuadre por persona
@@ -14592,6 +14603,11 @@ def api_asientos_reporte_contable():
                 'account': str(rd.get('account') or '').strip(),
                 'accountname': str(rd.get('accountname') or '').strip(),
                 'conceptname': str(rd.get('conceptname') or '').strip(),
+                'codigo': str(rd.get('codigo') or '').strip(),
+                'porcentaje': (
+                    _float_sp_cell(rd.get('porcentaje'))
+                    if rd.get('porcentaje') is not None else None
+                ),
                 'conceptvaluedebe': debe,
                 'conceptvaluehaber': haber,
             })
@@ -14712,6 +14728,7 @@ def api_asientos_reporte_contable():
                 'periodo_fmt': periodo_fmt,
                 'person': person,
                 'person_name': person_name,
+                'aplicar_distribucion': aplicar_dist,
                 'total_debe': round(total_debe, 2),
                 'total_haber': round(total_haber, 2),
                 'diferencia': diferencia,

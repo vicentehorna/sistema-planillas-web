@@ -4788,6 +4788,22 @@ def _sql_call_timeout_report_seconds():
     return max(30, min(n, 300))
 
 
+def _sql_call_timeout_bulk_seconds(item_count=1):
+    """Timeout para operaciones multi-empresa (conceptos, parámetros, etc.)."""
+    try:
+        n_items = max(1, int(item_count or 1))
+    except Exception:
+        n_items = 1
+    raw = str(os.getenv("SQL_CALL_TIMEOUT_BULK_SEC", "")).strip()
+    if raw:
+        try:
+            return max(120, min(int(raw), 900))
+        except Exception:
+            pass
+    # ~2 s por empresa destino + base; hm_garc puede tener 380+ compañías.
+    return max(180, min(90 + n_items * 2, 900))
+
+
 def _set_cursor_timeout(cursor):
     """Timeout por ejecución de SP (segundos) para evitar cuelgues largos."""
     try:
@@ -4817,6 +4833,68 @@ def _set_cursor_timeout_report(cursor):
         cursor.timeout = _sql_call_timeout_report_seconds()
     except Exception:
         logging.debug("No se pudo fijar timeout reporte en cursor", exc_info=True)
+
+
+def _set_cursor_timeout_bulk(cursor, item_count=1):
+    """Timeout ampliado para bucles multi-empresa en una sola petición HTTP."""
+    seconds = _sql_call_timeout_bulk_seconds(item_count)
+    try:
+        cursor.timeout = seconds
+    except Exception:
+        logging.debug("No se pudo fijar timeout bulk en cursor", exc_info=True)
+    try:
+        conn = getattr(cursor, "connection", None)
+        if conn is not None:
+            conn.timeout = seconds
+    except Exception:
+        logging.debug("No se pudo fijar timeout bulk en connection", exc_info=True)
+
+
+def _concepto_mensaje_resultado_cias(
+    *,
+    actualizados=None,
+    no_existia=None,
+    errores=None,
+    creados=None,
+    omitidos=None,
+    eliminados=None,
+    verbo_ok="Actualizado",
+):
+    actualizados = actualizados or []
+    no_existia = no_existia or []
+    errores = errores or []
+    creados = creados or []
+    omitidos = omitidos or []
+    eliminados = eliminados or []
+    partes = []
+    if eliminados:
+        partes.append(f"Eliminado en {len(eliminados)} empresa(s).")
+    elif creados:
+        partes.append(
+            f"Concepto creado en {len(creados)} empresa(s)"
+            + (f": {', '.join(creados)}." if len(creados) <= 8 else ".")
+        )
+    elif actualizados:
+        partes.append(f"{verbo_ok} en {len(actualizados)} empresa(s).")
+    if omitidos:
+        partes.append(
+            f"Ya existía en {len(omitidos)} empresa(s)"
+            + (f": {', '.join(omitidos)}." if len(omitidos) <= 8 else ".")
+        )
+    if no_existia:
+        muestra = no_existia[:12]
+        extra = f" (+{len(no_existia) - 12} más)" if len(no_existia) > 12 else ""
+        partes.append(f"No existía en {len(no_existia)} empresa(s): {', '.join(muestra)}{extra}.")
+    if errores:
+        det_err = "; ".join(
+            f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
+        )
+        if len(errores) > 5:
+            det_err += f" (+{len(errores) - 5} más)"
+        partes.append(f"No se pudo completar en {len(errores)} empresa(s): {det_err}")
+    if not partes:
+        partes.append("No hay otras empresas activas.")
+    return " ".join(partes)
 
 
 def _reporte_sql_error_message(err):
@@ -18124,30 +18202,23 @@ def api_conceptos_guardar_cias():
                     pass
                 errores.append({"company": dest, "error": _concepto_error_sp_message(ex)})
 
-        partes = []
-        if actualizados:
-            partes.append('Actualizado en todas las empresas.')
-        if no_existia:
-            partes.append(f"No existía en: {', '.join(no_existia)}.")
-        if errores:
-            det_err = '; '.join(
-                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
-            )
-            if len(errores) > 5:
-                det_err += f" (+{len(errores) - 5} más)"
-            partes.append(f"No se pudo actualizar en {len(errores)} empresa(s): {det_err}")
-        if not partes:
-            partes.append('No hay otras empresas activas.')
+        mensaje = _concepto_mensaje_resultado_cias(
+            actualizados=actualizados,
+            no_existia=no_existia,
+            errores=errores,
+            verbo_ok="Actualizado",
+        )
 
         return jsonify({
             "ok": True,
             "cia_origen": cia_origen,
             "formulacode": formulacode,
             "formulacode_origen": formulacode_origen,
+            "total_destinos": len(destinos),
             "actualizados": actualizados,
             "no_existia": no_existia,
             "errores": errores,
-            "mensaje": ' '.join(partes),
+            "mensaje": mensaje,
         })
     except Exception as e:
         logging.exception("api_conceptos_guardar_cias")
@@ -18245,6 +18316,7 @@ def api_conceptos_eliminar_cias():
             for r in cursor.fetchall()
             if r and r[0]
         ]
+        _set_cursor_timeout_bulk(cursor, len(destinos))
 
         eliminados = []
         no_existia = []
@@ -18286,29 +18358,21 @@ def api_conceptos_eliminar_cias():
                         err = parts[-1].strip(" ()'\"")
                 errores.append({"company": dest, "error": err})
 
-        partes = []
-        if eliminados:
-            partes.append('Eliminado en todas las empresas.')
-        if no_existia:
-            partes.append(f"No existía en: {', '.join(no_existia)}.")
-        if errores:
-            det_err = '; '.join(
-                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
-            )
-            if len(errores) > 5:
-                det_err += f" (+{len(errores) - 5} más)"
-            partes.append(f"No se pudo eliminar en {len(errores)} empresa(s): {det_err}")
-        if not partes:
-            partes.append('No hay otras empresas activas.')
+        mensaje = _concepto_mensaje_resultado_cias(
+            eliminados=eliminados,
+            no_existia=no_existia,
+            errores=errores,
+        )
 
         return jsonify({
             "ok": True,
             "cia_origen": cia_origen,
             "formulacode": formulacode,
+            "total_destinos": len(destinos),
             "eliminados": eliminados,
             "no_existia": no_existia,
             "errores": errores,
-            "mensaje": ' '.join(partes),
+            "mensaje": mensaje,
         })
     except Exception as e:
         logging.exception("api_conceptos_eliminar_cias")
@@ -18461,6 +18525,7 @@ def api_conceptos_replicar_cias():
             }), 400
 
         destinos = _concepto_destinos_activos(cursor, cia_origen)
+        _set_cursor_timeout_bulk(cursor, len(destinos))
         creados = []
         omitidos = []
         errores = []
@@ -18491,35 +18556,21 @@ def api_conceptos_replicar_cias():
                     "error": _concepto_error_sp_message(ex),
                 })
 
-        partes = []
-        if creados:
-            partes.append(
-                f"Concepto creado en {len(creados)} empresa(s)"
-                + (f": {', '.join(creados)}." if len(creados) <= 8 else '.')
-            )
-        if omitidos:
-            partes.append(
-                f"Ya existía en {len(omitidos)} empresa(s)"
-                + (f": {', '.join(omitidos)}." if len(omitidos) <= 8 else '.')
-            )
-        if errores:
-            det_err = '; '.join(
-                f"{e.get('company')}: {e.get('error')}" for e in errores[:5]
-            )
-            if len(errores) > 5:
-                det_err += f" (+{len(errores) - 5} más)"
-            partes.append(f"{len(errores)} error(es): {det_err}.")
-        if not partes:
-            partes.append('No hay otras empresas activas para replicar.')
+        mensaje = _concepto_mensaje_resultado_cias(
+            creados=creados,
+            omitidos=omitidos,
+            errores=errores,
+        )
 
         return jsonify({
             "ok": True,
             "cia_origen": cia_origen,
             "formulacode": formulacode,
+            "total_destinos": len(destinos),
             "creados": creados,
             "omitidos": omitidos,
             "errores": errores,
-            "mensaje": ' '.join(partes),
+            "mensaje": mensaje,
         })
     except Exception as e:
         logging.exception("api_conceptos_replicar_cias")

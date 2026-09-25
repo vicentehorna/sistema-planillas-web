@@ -218,6 +218,28 @@
         font-size: 0.75rem;
     }
 
+    .conceptos-overlay-cias {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: rgba(255, 255, 255, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .conceptos-overlay-cias-card {
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 0.75rem;
+        box-shadow: 0 0.75rem 2rem rgba(15, 23, 42, 0.12);
+        padding: 1.1rem 1.25rem;
+        min-width: 18rem;
+        max-width: 28rem;
+        text-align: center;
+    }
+
     .conceptos-dw-body {
         background: #fff;
         padding: 0.7rem 0.75rem 0.85rem;
@@ -1207,6 +1229,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         return confirm(msg);
     }
 
+    let overlayCiasEl = null;
+
+    function mostrarEsperaCias(mensaje) {
+        if (!overlayCiasEl) {
+            overlayCiasEl = document.createElement('div');
+            overlayCiasEl.className = 'conceptos-overlay-cias';
+            overlayCiasEl.innerHTML = (
+                '<div class="conceptos-overlay-cias-card" role="status" aria-live="polite">' +
+                '<div class="spinner-border text-primary mb-2" role="status" aria-hidden="true"></div>' +
+                '<div class="fw-semibold" data-role="texto">Procesando…</div>' +
+                '<div class="text-muted small mt-1">Puede tardar varios minutos si hay muchas empresas.</div>' +
+                '</div>'
+            );
+            document.body.appendChild(overlayCiasEl);
+        }
+        const txt = overlayCiasEl.querySelector('[data-role="texto"]');
+        if (txt) txt.textContent = mensaje || 'Actualizando en las demás empresas…';
+        overlayCiasEl.classList.remove('d-none');
+        if (btnGuardarConcepto) btnGuardarConcepto.disabled = true;
+        if (btnReplicarConcepto) btnReplicarConcepto.disabled = true;
+    }
+
+    function ocultarEsperaCias() {
+        if (overlayCiasEl) overlayCiasEl.classList.add('d-none');
+        if (btnGuardarConcepto) btnGuardarConcepto.disabled = false;
+        actualizarBtnReplicarConcepto();
+    }
+
+    function mostrarResultadoOperacionCias(data, fallback) {
+        const mensaje = (data && data.mensaje) || fallback || 'Operación completada.';
+        const errores = (data && data.errores) || [];
+        const actualizados = (data && (data.actualizados || data.creados || data.eliminados)) || [];
+        const noExistia = (data && data.no_existia) || [];
+        if (errores.length || (noExistia.length && !actualizados.length)) {
+            mostrarMensajeGuardado(mensaje, 'warning');
+            if (errores.length) {
+                hmAdvertencia(
+                    mensaje + '\n' + errores.slice(0, 5).map((e) => `• ${e.company}: ${e.error}`).join('\n')
+                );
+            } else if (noExistia.length) {
+                hmAdvertencia(mensaje);
+            }
+            return;
+        }
+        mostrarMensajeGuardado(mensaje, 'success');
+    }
+
     function limpiarFormulario() {
         ocultarMensajeGuardado();
         document.getElementById('hidConcept').value = '';
@@ -1494,16 +1563,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
                 if (eliminarEnCias) {
                     try {
-                        const resCias = await fetch('/api/conceptos/eliminar-cias', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                cia: cboCia.value.trim(),
-                                formulacode,
-                            }),
-                        });
-                        const dataCias = await leerJson(resCias);
-                        mostrarMensajeGuardado(dataCias.mensaje || 'Eliminación en las demás empresas completada.');
+                        await eliminarConceptoEnCias(cboCia.value.trim(), formulacode);
                     } catch (err) {
                         hmError(err.message || 'No se pudo eliminar el concepto en las demás empresas.');
                     }
@@ -1515,14 +1575,19 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function replicarConceptoEnCias(cia, formulacode) {
-        const res = await fetch('/api/conceptos/replicar-cias', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cia, formulacode }),
-        });
-        const data = await leerJson(res);
-        mostrarMensajeGuardado(data.mensaje || 'Replicación completada.');
-        return data;
+        mostrarEsperaCias('Replicando concepto en las demás empresas…');
+        try {
+            const res = await fetch('/api/conceptos/replicar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, formulacode }),
+            });
+            const data = await leerJson(res);
+            mostrarResultadoOperacionCias(data, 'Replicación completada.');
+            return data;
+        } finally {
+            ocultarEsperaCias();
+        }
     }
 
     async function replicarConceptoSeleccionado() {
@@ -1597,14 +1662,36 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function actualizarConceptoEnCias(payload) {
-        const res = await fetch('/api/conceptos/guardar-cias', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        const data = await leerJson(res);
-        mostrarMensajeGuardado(data.mensaje || 'Actualización en las demás empresas completada.');
-        return data;
+        const etiqueta = payload.formulacode || payload.description || 'concepto';
+        mostrarEsperaCias(`Actualizando ${etiqueta} en las demás empresas…`);
+        try {
+            const res = await fetch('/api/conceptos/guardar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            mostrarResultadoOperacionCias(data, 'Actualización en las demás empresas completada.');
+            return data;
+        } finally {
+            ocultarEsperaCias();
+        }
+    }
+
+    async function eliminarConceptoEnCias(cia, formulacode) {
+        mostrarEsperaCias('Eliminando concepto en las demás empresas…');
+        try {
+            const res = await fetch('/api/conceptos/eliminar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, formulacode }),
+            });
+            const data = await leerJson(res);
+            mostrarResultadoOperacionCias(data, 'Eliminación en las demás empresas completada.');
+            return data;
+        } finally {
+            ocultarEsperaCias();
+        }
     }
 
     async function guardarConcepto() {

@@ -239,7 +239,7 @@ BEGIN
           AND FormulaCode IN (
                 'DIASTRABAJADOS', 'C_HORASTRABAJADAS', 'CANT_HORAS_25', 'CANT_HORAS_35',
                 'CANT_HORAS_NOC', 'DIAS_DESC_SUBSI_INAF', 'DIAS_PATERNIDAD', 'H_FERIADOS_TRAB',
-                'CANT_DIAS_AUSENCIA', 'DIASUSPENSION', 'DIAS_LICENCIA_GOCE', 'DIASLICSGOCE',
+                'CANT_DIAS_AUSENCIA', 'DIASUSPENSION', 'DIAS_LICENCIA_GOCE', 'DIAS_LIC_SINGOCE',
                 'DIAS_DESCANSO_EMPRES', 'DIAS_DESC_SUBSI_AFEC'
           );
 
@@ -264,7 +264,7 @@ BEGIN
                 ('CANT_DIAS_AUSENCIA', A.faltas),
                 ('DIASUSPENSION', A.suspen),
                 ('DIAS_LICENCIA_GOCE', A.lcg),
-                ('DIASLICSGOCE', A.lsg),
+                ('DIAS_LIC_SINGOCE', A.lsg),
                 ('DIAS_DESCANSO_EMPRES', A.dm),
                 ('DIAS_DESC_SUBSI_AFEC', A.sub)
         ) V (FormulaCode, ConceptValue)

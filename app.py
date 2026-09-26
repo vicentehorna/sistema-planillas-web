@@ -1338,7 +1338,8 @@ def _fecha_emision_retiro_cts(cert, prefer_cese=False):
 
 
 def _fecha_membrete_retiro_cts(cert):
-    ciudad = _ciudad_retiro_cts(cert)
+    # hm_ultra (Ultrasegur): siempre Lima en el membrete, no la localidad de la compañía.
+    ciudad = 'Lima' if _es_cliente_ultraseguros() else _ciudad_retiro_cts(cert)
     fecha = _fecha_emision_retiro_cts(cert, prefer_cese=True)
     if ciudad and fecha:
         return f'{ciudad}, {fecha}'
@@ -16733,6 +16734,280 @@ def _concepto_destinos_activos(cursor, cia_origen):
     ]
 
 
+# Campos del maestro Conceptos que se pueden propagar con un UPDATE masivo
+# por FormulaCode (misma columna en todas las compañías).
+_CONCEPTO_CAMPOS_BULK = {
+    'description': 'Description',
+    'printtext': 'PrintText',
+    'formulacode': 'FormulaCode',
+    'conceptcurrency': 'ConceptCurrency',
+    'flagismonetary': 'FlagIsMonetary',
+    'flagassign': 'Flagassign',
+    'conceptorder': 'ConceptOrder',
+    'status': 'Status',
+    'flagcontract': 'FLAGCONTRACT',
+    'flagpayrollticket': 'FlagPayrollTicket',
+    'pdt': 'pdt',
+    'flagconceptdeclare': 'flagconceptdeclare',
+    'reporden': 'reporden',
+    'flaginsertar': 'flaginsertar',
+    'flagafectoafp': 'flagafectoAFP',
+    'flagafecto5ta': 'flagafecto5ta',
+    'flagafectoutilidad': 'flagafectoUtilidad',
+    'flagformatoliquidacion': 'flagformatoliquidacion',
+}
+
+
+def _concepto_normalizar_campos_bulk(campos):
+    """Lista de campos a actualizar; vacío = todos los replicables (sin ConceptType)."""
+    if not campos:
+        return list(_CONCEPTO_CAMPOS_BULK.keys())
+    out = []
+    seen = set()
+    for raw in campos:
+        key = str(raw or '').strip().lower()
+        if key in ('concepttype', 'tipo'):
+            key = 'concepttype'
+        if key == 'concepttype':
+            if key not in seen:
+                out.append(key)
+                seen.add(key)
+            continue
+        if key in _CONCEPTO_CAMPOS_BULK and key not in seen:
+            out.append(key)
+            seen.add(key)
+    return out or list(_CONCEPTO_CAMPOS_BULK.keys())
+
+
+def _concepto_valor_bulk(campo, body):
+    """Normaliza el valor de un campo del formulario para UPDATE masivo."""
+    if campo == 'description':
+        return str(body.get('description') or '').strip()
+    if campo == 'printtext':
+        desc = str(body.get('description') or '').strip()
+        return str(body.get('printtext') or desc).strip()
+    if campo == 'formulacode':
+        return str(body.get('formulacode') or '').strip().upper()
+    if campo == 'conceptcurrency':
+        mon = str(body.get('conceptcurrency') or 'LO').strip().upper()[:2]
+        if _normalize_flag_yn(body.get('flagismonetary'), 'Y') == 'N':
+            return 'LO'
+        return mon if mon in ('LO', 'EX') else 'LO'
+    if campo == 'flagismonetary':
+        return _normalize_flag_yn(body.get('flagismonetary'), 'Y')
+    if campo == 'flagassign':
+        return _normalize_flag_yn(body.get('flagassign'))
+    if campo == 'conceptorder':
+        raw = body.get('conceptorder')
+        try:
+            return int(raw) if raw not in (None, '') else None
+        except Exception:
+            return None
+    if campo == 'status':
+        st = str(body.get('status') or 'A').strip().upper()[:1]
+        return st if st in ('A', 'I') else 'A'
+    if campo == 'flagcontract':
+        return _normalize_flag_yn(body.get('flagcontract'))
+    if campo == 'flagpayrollticket':
+        return _normalize_flag_yn(body.get('flagpayrollticket'))
+    if campo == 'pdt':
+        return str(body.get('pdt') or '').strip() or None
+    if campo == 'flagconceptdeclare':
+        return _normalize_flag_yn(body.get('flagconceptdeclare'))
+    if campo == 'reporden':
+        raw = body.get('reporden')
+        try:
+            if raw not in (None, ''):
+                return int(raw)
+        except Exception:
+            pass
+        raw_ord = body.get('conceptorder')
+        try:
+            return int(raw_ord) if raw_ord not in (None, '') else 0
+        except Exception:
+            return 0
+    if campo == 'flaginsertar':
+        v = str(body.get('flaginsertar') or 'N').strip().upper()[:1] or 'N'
+        return v
+    if campo == 'flagafectoafp':
+        return _normalize_flag_yn(body.get('flagafectoafp'))
+    if campo == 'flagafecto5ta':
+        return _normalize_flag_yn(body.get('flagafecto5ta'))
+    if campo == 'flagafectoutilidad':
+        return _normalize_flag_yn(body.get('flagafectoutilidad'))
+    if campo == 'flagformatoliquidacion':
+        return _normalize_flag_yn(body.get('flagformatoliquidacion'))
+    return None
+
+
+def _concepto_actualizar_cias_bulk(cursor, body, *, cia_origen, formulacode_origen, campos):
+    """
+    Aplica cambios de concepto en las demás empresas con UPDATE masivo por FormulaCode.
+    Mucho más rápido que sp_pr_guardarconcepto_web empresa por empresa (hm_garc ~380 cias).
+    """
+    cia_origen = str(cia_origen or '').strip()
+    formulacode_origen = str(formulacode_origen or '').strip()
+    campos_norm = _concepto_normalizar_campos_bulk(campos)
+    campos_cols = [c for c in campos_norm if c in _CONCEPTO_CAMPOS_BULK]
+    actualizar_tipo = 'concepttype' in campos_norm
+
+    destinos = _concepto_destinos_activos(cursor, cia_origen)
+    if not destinos:
+        return {
+            'destinos': [],
+            'actualizados': [],
+            'no_existia': [],
+            'errores': [],
+            'campos': campos_norm,
+            'filas': 0,
+        }
+
+    cursor.execute(
+        """
+        SELECT LTRIM(RTRIM(Company))
+        FROM PR_Concept (NOLOCK)
+        WHERE LTRIM(RTRIM(FormulaCode)) = ?
+          AND LTRIM(RTRIM(Company)) <> ?
+        """,
+        (formulacode_origen, cia_origen),
+    )
+    existentes = sorted(
+        {
+            str(r[0]).strip()
+            for r in cursor.fetchall()
+            if r and r[0]
+        }
+    )
+    no_existia = [d for d in destinos if d not in set(existentes)]
+    errores = []
+    filas = 0
+
+    if not existentes:
+        return {
+            'destinos': destinos,
+            'actualizados': [],
+            'no_existia': no_existia,
+            'errores': errores,
+            'campos': campos_norm,
+            'filas': 0,
+        }
+
+    set_parts = []
+    params = []
+    for campo in campos_cols:
+        col = _CONCEPTO_CAMPOS_BULK[campo]
+        set_parts.append(f'{col} = ?')
+        params.append(_concepto_valor_bulk(campo, body))
+
+    if actualizar_tipo:
+        concepttype_origen = str(body.get('concepttype') or '').strip()
+        if not concepttype_origen:
+            errores.append({
+                'company': '*',
+                'error': 'Indique el tipo de concepto para propagarlo.',
+            })
+        else:
+            # Mapea ConceptType por ShortName (IDs distintos por compañía).
+            cursor.execute(
+                """
+                UPDATE c
+                SET c.ConceptType = map.ConceptTypeDest,
+                    c.ConceptGroup = ISNULL((
+                        SELECT TOP 1 c2.ConceptGroup
+                        FROM PR_Concept c2 (NOLOCK)
+                        WHERE c2.Company = c.Company
+                          AND c2.ConceptType = map.ConceptTypeDest
+                        ORDER BY c2.Concept
+                    ), c.ConceptGroup),
+                    c.XLastUser = ?,
+                    c.XLastDate = GETDATE()
+                FROM PR_Concept c
+                INNER JOIN (
+                    SELECT
+                        dest.Company AS Company,
+                        dest.ConceptType AS ConceptTypeDest
+                    FROM PR_ConceptType origen (NOLOCK)
+                    INNER JOIN PR_ConceptType dest (NOLOCK)
+                        ON LTRIM(RTRIM(ISNULL(dest.ShortName, '')))
+                         = LTRIM(RTRIM(ISNULL(origen.ShortName, '')))
+                    WHERE origen.ConceptType = ?
+                      AND (
+                            origen.Company = ?
+                         OR LTRIM(RTRIM(ISNULL(origen.Company, ''))) = ''
+                      )
+                      AND dest.Company <> ?
+                      AND LTRIM(RTRIM(ISNULL(dest.Company, ''))) <> ''
+                ) map ON map.Company = c.Company
+                WHERE LTRIM(RTRIM(c.FormulaCode)) = ?
+                  AND c.Company <> ?
+                """,
+                (
+                    _xlastuser_id(),
+                    concepttype_origen,
+                    cia_origen,
+                    cia_origen,
+                    formulacode_origen,
+                    cia_origen,
+                ),
+            )
+            filas += int(cursor.rowcount or 0)
+
+            cursor.execute(
+                """
+                SELECT LTRIM(RTRIM(c.Company))
+                FROM PR_Concept c (NOLOCK)
+                WHERE LTRIM(RTRIM(c.FormulaCode)) = ?
+                  AND c.Company <> ?
+                  AND NOT EXISTS (
+                      SELECT 1
+                      FROM PR_ConceptType origen (NOLOCK)
+                      INNER JOIN PR_ConceptType dest (NOLOCK)
+                          ON LTRIM(RTRIM(ISNULL(dest.ShortName, '')))
+                           = LTRIM(RTRIM(ISNULL(origen.ShortName, '')))
+                         AND dest.Company = c.Company
+                      WHERE origen.ConceptType = ?
+                        AND (
+                              origen.Company = ?
+                           OR LTRIM(RTRIM(ISNULL(origen.Company, ''))) = ''
+                        )
+                  )
+                """,
+                (formulacode_origen, cia_origen, concepttype_origen, cia_origen),
+            )
+            for r in cursor.fetchall() or []:
+                cia_err = str(r[0]).strip() if r and r[0] else ''
+                if cia_err:
+                    errores.append({
+                        'company': cia_err,
+                        'error': 'No se encontró el tipo de concepto equivalente.',
+                    })
+
+    if set_parts:
+        set_parts.append('XLastUser = ?')
+        params.append(_xlastuser_id())
+        set_parts.append('XLastDate = GETDATE()')
+        sql = (
+            f"UPDATE PR_Concept SET {', '.join(set_parts)} "
+            "WHERE LTRIM(RTRIM(FormulaCode)) = ? AND Company <> ?"
+        )
+        params.extend([formulacode_origen, cia_origen])
+        cursor.execute(sql, tuple(params))
+        filas += int(cursor.rowcount or 0)
+
+    # Si solo se actualizó tipo, las empresas sin mapeo no cuentan como actualizadas.
+    err_cias = {e.get('company') for e in errores if e.get('company') and e.get('company') != '*'}
+    actualizados = [c for c in existentes if c not in err_cias]
+
+    return {
+        'destinos': destinos,
+        'actualizados': actualizados,
+        'no_existia': no_existia,
+        'errores': errores,
+        'campos': campos_norm,
+        'filas': filas,
+    }
+
+
 def _concepto_resolve_type_for_company(cursor, cia_origen, concepttype_origen, cia_dest):
     concepttype_origen = str(concepttype_origen or '').strip()
     cia_origen = str(cia_origen or '').strip()
@@ -18247,91 +18522,72 @@ def api_conceptos_guardar():
 @app.route('/api/conceptos/guardar-cias', methods=['POST'])
 @login_required
 def api_conceptos_guardar_cias():
-    """Aplica la misma edición de concepto por nemónico en las demás empresas activas."""
+    """Aplica cambios de concepto por FormulaCode en las demás empresas (UPDATE masivo)."""
     body = request.get_json(silent=True) or {}
     cia_origen = str(body.get('cia') or body.get('company') or '').strip()
     formulacode = str(body.get('formulacode') or '').strip()
     formulacode_origen = str(
         body.get('formulacode_origen') or body.get('formulacode_buscar') or formulacode
     ).strip()
-    concepttype = str(body.get('concepttype') or '').strip()
     description = str(body.get('description') or '').strip()
+    campos_raw = body.get('campos')
+    if isinstance(campos_raw, str):
+        campos_raw = [x.strip() for x in campos_raw.split(',') if x.strip()]
+    elif not isinstance(campos_raw, (list, tuple)):
+        campos_raw = None
 
     if not cia_origen:
         return jsonify({"error": "Seleccione una compañía."}), 400
-    if not formulacode_origen or not formulacode or not concepttype or not description:
-        return jsonify({"error": "Complete concepto, nemónico y tipo."}), 400
+    if not formulacode_origen:
+        return jsonify({"error": "Indique el nemónico (FormulaCode) del concepto."}), 400
+
+    # Si envían campos concretos no exigimos description/tipo (ej. solo flaginsertar).
+    campos_norm = _concepto_normalizar_campos_bulk(campos_raw)
+    requiere_completo = not campos_raw
+    if requiere_completo:
+        concepttype = str(body.get('concepttype') or '').strip()
+        if not formulacode or not concepttype or not description:
+            return jsonify({"error": "Complete concepto, nemónico y tipo."}), 400
+        if 'concepttype' not in campos_norm:
+            campos_norm.append('concepttype')
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        destinos = _concepto_destinos_activos(cursor, cia_origen)
+        destinos_prev = _concepto_destinos_activos(cursor, cia_origen)
+        _set_cursor_timeout_bulk(cursor, max(1, len(destinos_prev)))
 
-        actualizados = []
-        no_existia = []
-        errores = []
-
-        for dest in destinos:
-            cursor.execute(
-                """
-                SELECT Concept
-                FROM PR_Concept (NOLOCK)
-                WHERE Company = ?
-                  AND LTRIM(RTRIM(FormulaCode)) = ?
-                """,
-                (dest, formulacode_origen),
-            )
-            row = cursor.fetchone()
-            if not row:
-                no_existia.append(dest)
-                continue
-
-            concept_dest = str(row[0]).strip()
-            concepttype_dest = _concepto_resolve_type_for_company(
-                cursor, cia_origen, concepttype, dest
-            )
-            if not concepttype_dest:
-                errores.append({
-                    "company": dest,
-                    "error": "No se encontró el tipo de concepto equivalente en la empresa.",
-                })
-                continue
-
-            try:
-                _concepto_guardar_ejecutar(
-                    cursor,
-                    body,
-                    company=dest,
-                    concept=concept_dest,
-                    modo='U',
-                    concepttype=concepttype_dest,
-                )
-                conn.commit()
-                actualizados.append(dest)
-            except Exception as ex:
-                try:
-                    conn.rollback()
-                except Exception:
-                    pass
-                errores.append({"company": dest, "error": _concepto_error_sp_message(ex)})
+        result = _concepto_actualizar_cias_bulk(
+            cursor,
+            body,
+            cia_origen=cia_origen,
+            formulacode_origen=formulacode_origen,
+            campos=campos_norm,
+        )
+        conn.commit()
 
         mensaje = _concepto_mensaje_resultado_cias(
-            actualizados=actualizados,
-            no_existia=no_existia,
-            errores=errores,
+            actualizados=result.get('actualizados'),
+            no_existia=result.get('no_existia'),
+            errores=result.get('errores'),
             verbo_ok="Actualizado",
         )
+        campos_txt = ', '.join(result.get('campos') or [])
+        if campos_txt and result.get('actualizados'):
+            mensaje = f"{mensaje} Campos: {campos_txt}."
 
         return jsonify({
             "ok": True,
             "cia_origen": cia_origen,
-            "formulacode": formulacode,
+            "formulacode": formulacode or formulacode_origen,
             "formulacode_origen": formulacode_origen,
-            "total_destinos": len(destinos),
-            "actualizados": actualizados,
-            "no_existia": no_existia,
-            "errores": errores,
+            "total_destinos": len(result.get('destinos') or []),
+            "actualizados": result.get('actualizados') or [],
+            "no_existia": result.get('no_existia') or [],
+            "errores": result.get('errores') or [],
+            "campos": result.get('campos') or [],
+            "filas": int(result.get('filas') or 0),
             "mensaje": mensaje,
         })
     except Exception as e:

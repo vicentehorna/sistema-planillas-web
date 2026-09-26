@@ -787,6 +787,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     let obtenerAbort = null;
     let idxConceptoActivo = -1;
     let snapshotFormulario = '';
+    let payloadSnapshotObj = null;
     let formDirty = false;
     let resizeObsGrilla = null;
     let ciaAnterior = '';
@@ -830,7 +831,29 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function capturarSnapshotFormulario() {
         snapshotFormulario = serializarFormularioConcepto();
+        try {
+            payloadSnapshotObj = payloadFormulario();
+        } catch (e) {
+            payloadSnapshotObj = null;
+        }
         formDirty = false;
+    }
+
+    function camposCambiadosConcepto(payload) {
+        const prev = payloadSnapshotObj || {};
+        const keys = [
+            'description', 'printtext', 'formulacode', 'concepttype', 'conceptcurrency',
+            'flagismonetary', 'flagassign', 'conceptorder', 'flagpayrollticket', 'reporden',
+            'flagconceptdeclare', 'pdt', 'flagcontract', 'status', 'flaginsertar',
+            'flagafecto5ta', 'flagafectoafp', 'flagafectoutilidad', 'flagformatoliquidacion',
+        ];
+        const changed = [];
+        keys.forEach((k) => {
+            const a = String(prev[k] == null ? '' : prev[k]).trim();
+            const b = String((payload || {})[k] == null ? '' : payload[k]).trim();
+            if (a !== b) changed.push(k);
+        });
+        return changed;
     }
 
     function marcarFormDirty() {
@@ -1663,7 +1686,11 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function actualizarConceptoEnCias(payload) {
         const etiqueta = payload.formulacode || payload.description || 'concepto';
-        mostrarEsperaCias(`Actualizando ${etiqueta} en las demás empresas…`);
+        const campos = Array.isArray(payload.campos) ? payload.campos : [];
+        const detalleCampos = campos.length
+            ? ` (${campos.join(', ')})`
+            : '';
+        mostrarEsperaCias(`Actualizando ${etiqueta}${detalleCampos} en las demás empresas…`);
         try {
             const res = await fetch('/api/conceptos/guardar-cias', {
                 method: 'POST',
@@ -1709,6 +1736,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const formulacodeOrigen = String(
             (conceptoSeleccionado && conceptoSeleccionado.formulacode) || payload.formulacode || ''
         ).trim();
+        // Diff antes de guardar: el snapshot se refresca tras el POST.
+        const camposCamb = esNuevo ? [] : camposCambiadosConcepto(payload);
 
         try {
             const res = await fetch('/api/conceptos/guardar', {
@@ -1745,9 +1774,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }
             } else {
                 const etiqueta = payload.formulacode || payload.description || 'concepto';
+                const detalle = camposCamb.length
+                    ? `\nCampos a propagar: ${camposCamb.join(', ')}.`
+                    : '\nSe propagarán todos los campos del concepto.';
                 const aplicar = await hmConfirmar({
                     titulo: 'Actualizar en otras empresas',
-                    mensaje: `¿Desea aplicar los mismos cambios al concepto (${etiqueta}) en todas las demás empresas?`,
+                    mensaje: `¿Desea aplicar los mismos cambios al concepto (${etiqueta}) en todas las demás empresas?${detalle}`,
                     textoOk: 'Sí, aplicar',
                 });
                 if (aplicar) {
@@ -1755,6 +1787,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                         await actualizarConceptoEnCias({
                             ...payload,
                             formulacode_origen: formulacodeOrigen,
+                            campos: camposCamb,
                         });
                     } catch (err) {
                         hmError(err.message || 'No se pudo actualizar el concepto en las demás empresas.');

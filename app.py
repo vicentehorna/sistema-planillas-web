@@ -14802,7 +14802,12 @@ def api_asientos_reporte_contable():
                 'account': str(rd.get('account') or '').strip(),
                 'accountname': str(rd.get('accountname') or '').strip(),
                 'conceptname': str(rd.get('conceptname') or '').strip(),
-                'codigo': str(rd.get('codigo') or '').strip(),
+                'costcentername': str(rd.get('costcentername') or rd.get('codigo') or '').strip(),
+                'person': str(rd.get('person') or '').strip(),
+                'trabajador': str(rd.get('trabajador') or '').strip(),
+                'status': str(rd.get('status') or '').strip(),
+                'ceasedate': str(rd.get('ceasedate') or '').strip(),
+                'codigo': str(rd.get('codigo') or rd.get('costcentername') or '').strip(),
                 'porcentaje': (
                     _float_sp_cell(rd.get('porcentaje'))
                     if rd.get('porcentaje') is not None else None

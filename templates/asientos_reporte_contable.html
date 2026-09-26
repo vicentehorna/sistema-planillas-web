@@ -181,10 +181,13 @@
                 <thead>
                     <tr id="theadAsientoContable">
                         <th>Cuenta</th>
-                        <th>Cuenta - Descripción</th>
+                        <th class="col-sin-dist">Cuenta - Descripción</th>
                         <th>Concepto</th>
+                        <th class="col-dist d-none">Centro Costo</th>
                         <th class="col-dist d-none">Código</th>
-                        <th class="col-dist d-none">%</th>
+                        <th class="col-dist d-none">Trabajador</th>
+                        <th class="col-dist d-none">Estado</th>
+                        <th class="col-dist d-none">F.Cese</th>
                         <th class="col-importe">Debe</th>
                         <th class="col-importe">Haber</th>
                     </tr>
@@ -404,7 +407,9 @@
             const nom = String(meta.person_name || '').trim();
             partes.push(nom ? `${meta.person} - ${nom}` : String(meta.person));
         }
-        return partes.join(' - ') || '—';
+        const base = partes.join(' - ') || '—';
+        const conDist = String(meta.aplicar_distribucion || 'N').toUpperCase() === 'Y';
+        return conDist ? (`Asiento - ${base}`) : base;
     }
 
     function escHtml(s) {
@@ -529,7 +534,10 @@
         document.querySelectorAll('.col-dist').forEach((el) => {
             el.classList.toggle('d-none', !conDist);
         });
-        const colspanBase = conDist ? 5 : 3;
+        document.querySelectorAll('.col-sin-dist').forEach((el) => {
+            el.classList.toggle('d-none', conDist);
+        });
+        const colspanBase = conDist ? 7 : 3;
         const tdTotal = document.getElementById('tdColspanTotal');
         const tdDiff = document.getElementById('tdColspanDiff');
         if (tdTotal) tdTotal.colSpan = colspanBase;
@@ -537,22 +545,28 @@
 
         if (!rows.length) {
             tbody.innerHTML = `<tr><td colspan="${colspanBase + 2}" class="text-center text-muted py-3">Sin registros</td></tr>`;
+        } else if (conDist) {
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td>${escHtml(r.account || '')}</td>
+                    <td>${escHtml(r.conceptname || '')}</td>
+                    <td>${escHtml(r.costcentername || '')}</td>
+                    <td>${escHtml(r.person || '')}</td>
+                    <td>${escHtml(r.trabajador || '')}</td>
+                    <td>${escHtml(r.status || '')}</td>
+                    <td>${escHtml(r.ceasedate || '00-00-0000')}</td>
+                    <td class="col-importe">${fmtNum(r.conceptvaluedebe)}</td>
+                    <td class="col-importe">${fmtNum(r.conceptvaluehaber)}</td>
+                </tr>`).join('');
         } else {
-            tbody.innerHTML = rows.map(r => {
-                const colsDist = conDist
-                    ? `<td>${escHtml(r.codigo || '')}</td>`
-                        + `<td class="text-end">${r.porcentaje != null && r.porcentaje !== '' ? fmtNum(r.porcentaje) : ''}</td>`
-                    : '';
-                return `
+            tbody.innerHTML = rows.map(r => `
                 <tr>
                     <td>${escHtml(r.account || '')}</td>
                     <td>${escHtml(r.accountname || '')}</td>
                     <td>${escHtml(r.conceptname || '')}</td>
-                    ${colsDist}
                     <td class="col-importe">${fmtNum(r.conceptvaluedebe)}</td>
                     <td class="col-importe">${fmtNum(r.conceptvaluehaber)}</td>
-                </tr>`;
-            }).join('');
+                </tr>`).join('');
         }
 
         const tDebe = num(meta.total_debe);
@@ -578,16 +592,19 @@
         ws.addRow([]);
         const conDist = String(meta.aplicar_distribucion || 'N').toUpperCase() === 'Y';
         if (conDist) {
-            ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Código', '%', 'Debe', 'Haber']);
+            ws.addRow([
+                'Cuenta', 'Concepto', 'Centro Costo', 'Código', 'Trabajador',
+                'Estado', 'F.Cese', 'Debe', 'Haber',
+            ]);
             rows.forEach(r => {
                 ws.addRow([
-                    r.account, r.accountname, r.conceptname, r.codigo || '',
-                    r.porcentaje != null ? num(r.porcentaje) : '',
+                    r.account, r.conceptname, r.costcentername || '', r.person || '',
+                    r.trabajador || '', r.status || '', r.ceasedate || '00-00-0000',
                     num(r.conceptvaluedebe), num(r.conceptvaluehaber),
                 ]);
             });
-            ws.addRow(['', '', '', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
-            ws.addRow(['', '', '', '', 'Diferencia', num(meta.diferencia), '']);
+            ws.addRow(['', '', '', '', '', '', 'Total', num(meta.total_debe), num(meta.total_haber)]);
+            ws.addRow(['', '', '', '', '', '', 'Diferencia', num(meta.diferencia), '']);
         } else {
             ws.addRow(['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Debe', 'Haber']);
             rows.forEach(r => {

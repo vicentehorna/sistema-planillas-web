@@ -3,8 +3,10 @@
     Equivalente al query legacy de PowerBuilder.
 
     Resultset 1: detalle cuenta/concepto (debe/haber)
-                 Con @aplicar_distribucion='Y' prorratea por PR_DistribucionVoucher
-                 (tipo CC en hm_divisa / OT en el resto) y agrega codigo + porcentaje.
+                 Con @aplicar_distribucion='Y' usa lógica legacy sp_pr_asiento_distribuido:
+                 detalle por trabajador + centro de costo (FlagSumType T → PR_DistribucionVoucher;
+                 resto → CC del trabajador). Columnas: Cuenta, Concepto, Centro Costo, Código,
+                 Trabajador, Estado, F.Cese, Debe, Haber.
     Resultset 2: problemas de configuración que explican descuadres
     Resultset 3: personas que explican el descuadre
 
@@ -53,14 +55,119 @@ BEGIN
     /* -------- Resultset 1: asiento por cuenta/concepto (+ dist opcional) -------- */
     IF @aplicar_distribucion = 'Y'
     BEGIN
+        /*
+            Formato legacy sp_pr_asiento_distribuido:
+            Cuenta | Concepto | Centro Costo | Código | Trabajador | Estado | F.Cese | Debe | Haber
+            - FlagSumType <> 'T': importe íntegro al CC del trabajador (AC_CostCenter.Abbrev)
+            - FlagSumType  = 'T': prorrateo por PR_DistribucionVoucher (tipo CC/OT)
+        */
         SELECT
             PR.Description AS processname,
             P.Description AS payrolltypename,
             AC.Code AS account,
             AC.Name AS accountname,
             C.Description AS conceptname,
-            ISNULL(NULLIF(LTRIM(RTRIM(d.codigo)), ''), '') AS codigo,
-            CAST(ROUND(ISNULL(d.valor, 100), 2) AS DECIMAL(18, 2)) AS porcentaje,
+            ISNULL(NULLIF(LTRIM(RTRIM(CC.Abbrev)), ''), ISNULL(NULLIF(LTRIM(RTRIM(CC.Name)), ''), '')) AS costcentername,
+            EPC.Person AS person,
+            SY_Person.Name AS trabajador,
+            CASE
+                WHEN E.CeaseDate IS NOT NULL THEN 'Cesado'
+                ELSE 'Activo'
+            END AS status,
+            CASE
+                WHEN E.CeaseDate IS NULL THEN '00-00-0000'
+                ELSE CONVERT(VARCHAR(10), E.CeaseDate, 105)
+            END AS ceasedate,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.DebitAccount THEN mb.monto_base
+                    ELSE 0
+                END
+            ) AS conceptvaluedebe,
+            SUM(
+                CASE
+                    WHEN AC.Account = A.CreditAccount THEN mb.monto_base
+                    ELSE 0
+                END
+            ) AS conceptvaluehaber
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+            ON EPC.Company = EP.Company
+           AND EPC.PayRollType = EP.PayRollType
+           AND EPC.ProcessType = EP.ProcessType
+           AND EPC.PRPeriod = EP.PRPeriod
+           AND EPC.Person = EP.Person
+        INNER JOIN AC_CostCenter CC (NOLOCK)
+            ON EP.CostCenter = CC.CostCenter
+        INNER JOIN PR_PayRollType P (NOLOCK)
+            ON P.PayRollType = EPC.PayRollType
+        INNER JOIN PR_Concept C (NOLOCK)
+            ON C.Concept = EPC.Concept
+        INNER JOIN PR_Concepttype T (NOLOCK)
+            ON T.Concepttype = C.Concepttype
+        INNER JOIN PR_AccountProfileDetail A (NOLOCK)
+            ON A.AccountProfile = EP.AccountProfile
+           AND A.Concept = EPC.Concept
+           AND A.ProcessType = EPC.ProcessType
+        INNER JOIN PR_Employee E (NOLOCK)
+            ON E.Company = @company
+           AND E.Person = EPC.Person
+        INNER JOIN AC_Account AC (NOLOCK)
+            ON AC.Account = A.DebitAccount
+            OR AC.Account = A.CreditAccount
+        INNER JOIN PR_ProcessType PR (NOLOCK)
+            ON PR.ProcessType = EPC.ProcessType
+        INNER JOIN SY_Person (NOLOCK)
+            ON EPC.Person = SY_Person.Person
+        CROSS APPLY (
+            SELECT
+                CASE
+                    WHEN @currency = 'EX' THEN ROUND(ISNULL(EPC.ConceptValueEx, 0), 2)
+                    ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
+                END AS monto_base
+        ) mb
+        WHERE EPC.Company = @company
+          AND EPC.PRPeriod = @period
+          AND EPC.PayRollType = @payrolltype
+          AND EPC.ProcessType = @processtype
+          AND (@person = '' OR EPC.Person = @person)
+          AND EPC.FlagIsMonetary = 'Y'
+          AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
+          AND LTRIM(RTRIM(ISNULL(A.FlagSumType, ''))) <> 'T'
+        GROUP BY
+            PR.Description,
+            P.Description,
+            AC.Code,
+            AC.Name,
+            C.Description,
+            ISNULL(NULLIF(LTRIM(RTRIM(CC.Abbrev)), ''), ISNULL(NULLIF(LTRIM(RTRIM(CC.Name)), ''), '')),
+            EPC.Person,
+            SY_Person.Name,
+            E.Status,
+            E.CeaseDate
+        HAVING
+            SUM(CASE WHEN AC.Account = A.DebitAccount THEN mb.monto_base ELSE 0 END) <> 0
+            OR SUM(CASE WHEN AC.Account = A.CreditAccount THEN mb.monto_base ELSE 0 END) <> 0
+
+        UNION ALL
+
+        SELECT
+            PR.Description AS processname,
+            P.Description AS payrolltypename,
+            AC.Code AS account,
+            AC.Name AS accountname,
+            C.Description AS conceptname,
+            ISNULL(NULLIF(LTRIM(RTRIM(D.codigo)), ''), '') AS costcentername,
+            EPC.Person AS person,
+            SY_Person.Name AS trabajador,
+            CASE
+                WHEN E.CeaseDate IS NOT NULL THEN 'Cesado'
+                ELSE 'Activo'
+            END AS status,
+            CASE
+                WHEN E.CeaseDate IS NULL THEN '00-00-0000'
+                ELSE CONVERT(VARCHAR(10), E.CeaseDate, 105)
+            END AS ceasedate,
             SUM(
                 CASE
                     WHEN AC.Account = A.DebitAccount THEN md.monto_dist
@@ -74,6 +181,24 @@ BEGIN
                 END
             ) AS conceptvaluehaber
         FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+        INNER JOIN PR_DistribucionVoucher D (NOLOCK)
+            ON D.dni = EPC.Person
+           AND D.company = EPC.Company
+           AND LTRIM(RTRIM(ISNULL(D.tipo, @tipo_dist))) = @tipo_dist
+           AND (
+                    D.period = @period
+                 OR (
+                        NOT EXISTS (
+                            SELECT 1
+                            FROM PR_DistribucionVoucher dx (NOLOCK)
+                            WHERE dx.dni = EPC.Person
+                              AND dx.company = EPC.Company
+                              AND dx.period = @period
+                              AND LTRIM(RTRIM(ISNULL(dx.tipo, ''))) = @tipo_dist
+                        )
+                    AND LEFT(LTRIM(RTRIM(ISNULL(D.period, ''))), 6) = LEFT(@period, 6)
+                 )
+               )
         INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
             ON EPC.Company = EP.Company
            AND EPC.PayRollType = EP.PayRollType
@@ -107,29 +232,11 @@ BEGIN
                     ELSE ROUND(ISNULL(EPC.ConceptValueLo, ISNULL(EPC.ConceptValue, 0)), 2)
                 END AS monto_base
         ) mb
-        LEFT JOIN PR_DistribucionVoucher d (NOLOCK)
-            ON d.dni = EPC.Person
-           AND d.company = @company
-           AND LTRIM(RTRIM(ISNULL(d.tipo, CASE WHEN @tipo_dist = 'CC' THEN 'CC' ELSE 'OT' END))) = @tipo_dist
-           AND (
-                    d.period = @period
-                 OR (
-                        NOT EXISTS (
-                            SELECT 1
-                            FROM PR_DistribucionVoucher dx (NOLOCK)
-                            WHERE dx.dni = EPC.Person
-                              AND dx.company = @company
-                              AND dx.period = @period
-                              AND LTRIM(RTRIM(ISNULL(dx.tipo, ''))) = @tipo_dist
-                        )
-                    AND LEFT(LTRIM(RTRIM(ISNULL(d.period, ''))), 6) = LEFT(@period, 6)
-                 )
-               )
         CROSS APPLY (
             SELECT CONVERT(DECIMAL(18, 2),
                 ROUND(
                     mb.monto_base
-                    * (ISNULL(d.valor, CONVERT(DECIMAL(18, 4), 100)) / CONVERT(DECIMAL(18, 4), 100)),
+                    * (ISNULL(D.valor, CONVERT(DECIMAL(18, 4), 100)) / CONVERT(DECIMAL(18, 4), 100)),
                     2
                 )
             ) AS monto_dist
@@ -141,24 +248,27 @@ BEGIN
           AND (@person = '' OR EPC.Person = @person)
           AND EPC.FlagIsMonetary = 'Y'
           AND LTRIM(RTRIM(T.ShortName)) IN ('I', 'D', 'A', 'T', 'G', 'X')
+          AND LTRIM(RTRIM(ISNULL(A.FlagSumType, ''))) = 'T'
         GROUP BY
             PR.Description,
             P.Description,
             AC.Code,
             AC.Name,
             C.Description,
-            ISNULL(NULLIF(LTRIM(RTRIM(d.codigo)), ''), ''),
-            CAST(ROUND(ISNULL(d.valor, 100), 2) AS DECIMAL(18, 2))
+            ISNULL(NULLIF(LTRIM(RTRIM(D.codigo)), ''), ''),
+            EPC.Person,
+            SY_Person.Name,
+            E.Status,
+            E.CeaseDate
         HAVING
             SUM(CASE WHEN AC.Account = A.DebitAccount THEN md.monto_dist ELSE 0 END) <> 0
             OR SUM(CASE WHEN AC.Account = A.CreditAccount THEN md.monto_dist ELSE 0 END) <> 0
         ORDER BY
-            PR.Description,
-            AC.Name,
-            P.Description,
-            AC.Code,
-            C.Description,
-            codigo;
+            processname,
+            trabajador,
+            account,
+            conceptname,
+            costcentername;
     END
     ELSE
     BEGIN
@@ -168,8 +278,11 @@ BEGIN
             AC.Code AS account,
             AC.Name AS accountname,
             C.Description AS conceptname,
-            CAST('' AS VARCHAR(50)) AS codigo,
-            CAST(NULL AS DECIMAL(18, 2)) AS porcentaje,
+            CAST('' AS VARCHAR(50)) AS costcentername,
+            CAST('' AS VARCHAR(20)) AS person,
+            CAST('' AS VARCHAR(120)) AS trabajador,
+            CAST('' AS VARCHAR(20)) AS status,
+            CAST('' AS VARCHAR(10)) AS ceasedate,
             SUM(
                 CASE
                     WHEN AC.Account = A.DebitAccount THEN

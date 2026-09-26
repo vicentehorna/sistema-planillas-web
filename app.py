@@ -1338,8 +1338,7 @@ def _fecha_emision_retiro_cts(cert, prefer_cese=False):
 
 
 def _fecha_membrete_retiro_cts(cert):
-    # hm_ultra (Ultrasegur): siempre Lima en el membrete, no la localidad de la compañía.
-    ciudad = 'Lima' if _es_cliente_ultraseguros() else _ciudad_retiro_cts(cert)
+    ciudad = _ciudad_retiro_cts(cert)
     fecha = _fecha_emision_retiro_cts(cert, prefer_cese=True)
     if ciudad and fecha:
         return f'{ciudad}, {fecha}'

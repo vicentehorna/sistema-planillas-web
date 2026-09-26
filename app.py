@@ -1263,13 +1263,20 @@ def _tratamiento_certificado_trabajo(sex):
 
 
 def _fecha_emision_certificado_trabajo(cert):
-    """Línea de fecha del certificado: Lima, día de mes del año (fecha de cese)."""
+    """Línea de fecha: Ciudad, día de mes del año (fecha de cese). Ciudad desde Localite."""
     cert = cert or {}
-    return _fecha_emision_lima(
-        cert.get('ceasedate_day'),
-        cert.get('ceasedate_month'),
-        cert.get('ceasedate_year'),
+    ciudad = _ciudad_retiro_cts(cert)
+    fecha = _fecha_emision_retiro_cts(
+        {
+            'fecha_cese_day': cert.get('ceasedate_day'),
+            'fecha_cese_month': cert.get('ceasedate_month'),
+            'fecha_cese_year': cert.get('ceasedate_year'),
+        },
+        prefer_cese=True,
     )
+    if ciudad and fecha:
+        return f'{ciudad}, {fecha}'
+    return fecha or ciudad or ''
 
 
 def _certificado_retiro_cts_pdf_filename(person, period_raw):

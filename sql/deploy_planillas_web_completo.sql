@@ -8912,7 +8912,12 @@ BEGIN
         YEAR(ISNULL(pe.ReEntryDate, pe.EntryDate)) AS fecha_entry_year,
         sp.LastName1 AS lastname1,
         sp.Sex AS sex,
-        cc.Description AS centrocosto
+        cc.Description AS centrocosto,
+        (
+            SELECT sl.Name
+            FROM SY_Localite sl (NOLOCK)
+            WHERE sl.Localite = sc.Localite
+        ) AS district
     FROM PR_Employee pe
         INNER JOIN SY_Person sp ON pe.Person = sp.Person
         LEFT JOIN PR_Position pp ON pe.Position = pp.Position

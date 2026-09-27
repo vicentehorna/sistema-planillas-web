@@ -18242,18 +18242,18 @@ def api_formulas_replicar():
 
             faltantes = []
             if fc:
-                for dest in destinos:
-                    cursor.execute(
-                        """
-                        SELECT 1
-                        FROM PR_Concept (NOLOCK)
-                        WHERE Company = ?
-                          AND LTRIM(RTRIM(FormulaCode)) = ?
-                        """,
-                        (dest, fc),
-                    )
-                    if not cursor.fetchone():
-                        faltantes.append(dest)
+                cursor.execute(
+                    """
+                    SELECT DISTINCT LTRIM(RTRIM(Company))
+                    FROM PR_Concept (NOLOCK)
+                    WHERE LTRIM(RTRIM(FormulaCode)) = ?
+                    """,
+                    (fc,),
+                )
+                con_concepto = {
+                    str(r[0]).strip() for r in cursor.fetchall() if r and r[0]
+                }
+                faltantes = [d for d in destinos if d not in con_concepto]
 
             if faltantes and crear_conceptos and fc:
                 creados_ok = []
@@ -18376,7 +18376,20 @@ def api_formulas_replicar():
                     "error": str(ex),
                 })
 
-        conn.commit()
+            try:
+                conn.commit()
+            except Exception as ex_commit:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                errores.append({
+                    "formulaheader": fh,
+                    "formulacode": fc,
+                    "concepto": concepto_desc,
+                    "error": f"No se pudo confirmar la réplica: {ex_commit}",
+                })
+
         n = len([i for i in formulas if str((i or {}).get('formulaheader') or '').strip()])
         if cia_destino:
             partes = [

@@ -144,6 +144,25 @@
         min-width: 7rem;
     }
 
+    .table-conceptos-lista .col-fecha {
+        min-width: 7.5rem;
+    }
+
+    .table-conceptos-lista thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-conceptos-lista thead th.th-sort:hover {
+        background: #e4eaf2;
+    }
+
+    .table-conceptos-lista thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+        font-size: 10px;
+    }
+
     .table-conceptos-lista .col-acciones {
         width: 2.5rem;
         text-align: center;
@@ -541,15 +560,16 @@
                 <table class="table table-sm table-hover table-conceptos-lista align-middle mb-0">
                     <thead>
                         <tr>
-                            <th class="col-nombre">Concepto</th>
-                            <th class="col-pdt">PDT</th>
-                            <th class="col-tipo">Tipo</th>
-                            <th class="col-codigo">Código</th>
+                            <th class="col-nombre th-sort" data-sort="description">Concepto<span class="sort-ind"></span></th>
+                            <th class="col-pdt th-sort" data-sort="pdt">PDT<span class="sort-ind"></span></th>
+                            <th class="col-tipo th-sort" data-sort="tiposhortname">Tipo<span class="sort-ind"></span></th>
+                            <th class="col-codigo th-sort" data-sort="formulacode">Código<span class="sort-ind"></span></th>
+                            <th class="col-fecha th-sort" data-sort="xlastdate">Últ. cambio<span class="sort-ind"></span></th>
                             <th class="col-acciones" title="Acciones"> </th>
                         </tr>
                     </thead>
                     <tbody id="tbodyConceptos">
-                        <tr><td colspan="5" class="text-center text-muted py-3">Seleccione una compañía</td></tr>
+                        <tr><td colspan="6" class="text-center text-muted py-3">Seleccione una compañía</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -1411,9 +1431,60 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (row) await seleccionarConcepto(row);
     }
 
+    const ordenLista = { col: null, dir: 1 };
+
+    function claveOrdenConcepto(r, col) {
+        const v = r[col];
+        if (col === 'xlastdate') {
+            const m = String(v || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+            if (!m) return '';
+            return `${m[3]}${m[2]}${m[1]}${m[4] || '00'}${m[5] || '00'}${m[6] || '00'}`;
+        }
+        return String(v || '');
+    }
+
+    function ordenarFilasConceptos(rows) {
+        if (!ordenLista.col) return rows;
+        const col = ordenLista.col;
+        const dir = ordenLista.dir;
+        return rows.slice().sort((a, b) =>
+            claveOrdenConcepto(a, col).localeCompare(claveOrdenConcepto(b, col), 'es', { numeric: true, sensitivity: 'base' }) * dir
+        );
+    }
+
+    function actualizarIndicadoresOrden() {
+        document.querySelectorAll('.table-conceptos-lista th.th-sort').forEach((th) => {
+            const ind = th.querySelector('.sort-ind');
+            const activo = th.getAttribute('data-sort') === ordenLista.col;
+            ind.textContent = activo ? (ordenLista.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLista.dir === 1 ? 'Orden ascendente (clic: descendente)' : 'Orden descendente (clic: orden original)')
+                : 'Clic para ordenar';
+        });
+    }
+
+    document.querySelectorAll('.table-conceptos-lista th.th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (ordenLista.col !== col) {
+                ordenLista.col = col;
+                ordenLista.dir = 1;
+            } else if (ordenLista.dir === 1) {
+                ordenLista.dir = -1;
+            } else {
+                ordenLista.col = null;
+                ordenLista.dir = 1;
+            }
+            actualizarIndicadoresOrden();
+            renderListaConceptos(conceptosCache);
+        });
+    });
+    actualizarIndicadoresOrden();
+
     function renderListaConceptos(rows) {
+        rows = ordenarFilasConceptos(rows || []);
         if (!rows.length) {
-            tbodyConceptos.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Sin registros</td></tr>';
+            tbodyConceptos.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoConceptos').textContent = '0 registros';
             idxConceptoActivo = -1;
             programarAjusteAlturaGrilla();
@@ -1432,6 +1503,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-pdt">${escHtml(r.pdt)}</td>
                 <td class="col-tipo">${escHtml(r.tiposhortname)}</td>
                 <td class="col-codigo">${escHtml(r.formulacode)}</td>
+                <td class="col-fecha">${escHtml(r.xlastdate || '')}</td>
                 <td class="col-acciones">${accionesHtml}</td>
             </tr>`;
         }).join('');
@@ -1480,7 +1552,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         if (filtrosPersist) filtrosPersist.guardar();
 
-        tbodyConceptos.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3">Cargando...</td></tr>';
+        tbodyConceptos.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">Cargando...</td></tr>';
 
         try {
             const res = await fetch('/api/conceptos/listado', {
@@ -1499,7 +1571,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(err);
             conceptosCacheServidor = [];
             conceptosCache = [];
-            tbodyConceptos.innerHTML = `<tr><td colspan="5" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+            tbodyConceptos.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
         }
     }
 

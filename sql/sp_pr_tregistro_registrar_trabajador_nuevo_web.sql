@@ -819,7 +819,7 @@ BEGIN
             @entrydate_dt, @entrydate_dt, @pension_type_id, @pensiondate_dt,
             @salary_bank_id, @salaryaccounttype_id, 'LO', NULLIF(@nro_cuenta, ''),
             @costcenter_id, @position_id, @accountprofile_id, @payroll_type_id, @employee_status_id,
-            'N', 'N', GETDATE(), @xlastuser, @replicationunit,
+            CASE WHEN LOWER(DB_NAME()) = 'hm_ultra' THEN 'Y' ELSE 'N' END, 'N', GETDATE(), @xlastuser, @replicationunit,
             @costcentername, 'H', @contract_modality_id, 'Y',
             'Y', @regimen_labour_id, @sctr_health_id, @sctr_pension_id,
             '0', '0', '0',

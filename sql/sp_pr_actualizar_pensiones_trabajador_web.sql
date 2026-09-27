@@ -11,7 +11,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_pensiones_trabajador_web]
     @regimehealth               VARCHAR(20),
     @flagmixta                  VARCHAR(1) = 'N',
     @cuspp                      VARCHAR(20) = NULL,
-    @xlastuser                  VARCHAR(20) = NULL
+    @xlastuser                  VARCHAR(20) = NULL,
+    @flagessaludvida            VARCHAR(1) = NULL  /* NULL = no modificar */
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -26,6 +27,8 @@ BEGIN
     END
 
     IF RTRIM(ISNULL(@flagmixta, '')) NOT IN ('Y', 'N') SET @flagmixta = 'N';
+    SET @flagessaludvida = UPPER(NULLIF(LTRIM(RTRIM(@flagessaludvida)), ''));
+    IF @flagessaludvida IS NOT NULL AND @flagessaludvida NOT IN ('Y', 'N') SET @flagessaludvida = 'N';
 
     DECLARE @fecha_inscripcion DATETIME = NULL;
     DECLARE @afp_id VARCHAR(20) = NULL;
@@ -72,6 +75,7 @@ BEGIN
         pensioninscriptiondate = @fecha_inscripcion,
         regimehealth = NULLIF(LTRIM(RTRIM(@regimehealth)), ''),
         flagmixta = @flagmixta,
+        flagessaludvida = ISNULL(@flagessaludvida, flagessaludvida),
         afpcard = NULLIF(LTRIM(RTRIM(@cuspp)), ''),
         afp = @afp_id,
         xlastdate = GETDATE(),

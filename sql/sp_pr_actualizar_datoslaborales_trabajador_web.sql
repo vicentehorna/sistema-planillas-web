@@ -187,6 +187,11 @@ BEGIN
             WHEN @modo_reingreso = 'Y' THEN 'N'
             ELSE @status
         END,
+        /* hm_ultra: todo reingreso con EsSalud Vida. */
+        FlagEssaludVida = CASE
+            WHEN @modo_reingreso = 'Y' AND LOWER(DB_NAME()) = 'hm_ultra' THEN 'Y'
+            ELSE FlagEssaludVida
+        END,
         contractmodality = NULLIF(LTRIM(RTRIM(@contractmodality)), ''),
         ocupation = NULLIF(LTRIM(RTRIM(@ocupation)), ''),
         specialstatus = NULLIF(LTRIM(RTRIM(@specialstatus)), ''),

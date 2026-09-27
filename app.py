@@ -7395,6 +7395,7 @@ def _empleado_pensiones_desde_form(form):
         'pensioninscriptiondate': str(form.get('pensioninscriptiondate') or '').strip(),
         'regimehealth': str(form.get('regimehealth') or '').strip(),
         'flagmixta': 'Y' if form.get('flagmixta') == 'Y' else 'N',
+        'flagessaludvida': 'Y' if form.get('flagessaludvida') == 'Y' else 'N',
         'cuspp': str(form.get('cuspp') or '').strip().upper()[:20],
     }
 
@@ -7567,7 +7568,7 @@ def trabajadores_editar(person_id):
             cursor.execute(
                 'EXEC sp_pr_actualizar_pensiones_trabajador_web '
                 '@cia=?, @person=?, @pensiontype=?, @pensioninscriptiondate=?, '
-                '@regimehealth=?, @flagmixta=?, @cuspp=?, @xlastuser=?',
+                '@regimehealth=?, @flagmixta=?, @cuspp=?, @xlastuser=?, @flagessaludvida=?',
                 (
                     cia,
                     person_id,
@@ -7577,6 +7578,7 @@ def trabajadores_editar(person_id):
                     datos['flagmixta'],
                     datos['cuspp'],
                     xlastuser,
+                    datos['flagessaludvida'],
                 ),
             )
             conn.commit()
@@ -7886,6 +7888,7 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'pensioninscriptiondate': '',
         'regimehealth': '',
         'flagmixta': 'N',
+        'flagessaludvida': 'Y' if _es_cliente_ultraseguros() else 'N',
         'cuspp': '',
         'collectionform': '',
         'salarybank': '',
@@ -8039,7 +8042,8 @@ def trabajadores_nuevo():
                     @contractmodality=?, @ocupation=?, @specialstatus=?, @position=?,
                     @costcenter=?, @payrolltype=?, @accountprofile=?, @sueldo=?, @flagasigfamiliar=?,
                     @diasvacaciones=?,
-                    @pensiontype=?, @pensioninscriptiondate=?, @regimehealth=?, @flagmixta=?, @cuspp=?,
+                    @pensiontype=?, @pensioninscriptiondate=?, @regimehealth=?, @flagmixta=?,
+                    @flagessaludvida=?, @cuspp=?,
                     @collectionform=?, @salarybank=?, @salaryaccounttype=?, @salaryaccount=?,
                     @cci=?, @ctsbank=?, @ctsaccount=?, @ctscurrency=?,
                     @instructionlevel=?, @costcenter1=?, @costcenter2=?, @anio_egreso=?,
@@ -8083,6 +8087,7 @@ def trabajadores_nuevo():
                     _sql_date_str_param(pensiones['pensioninscriptiondate']) or None,
                     pensiones['regimehealth'] or None,
                     pensiones['flagmixta'],
+                    pensiones['flagessaludvida'],
                     pensiones['cuspp'] or None,
                     collectionform or None,
                     str(request.form.get('salarybank') or '').strip() or None,

@@ -57,6 +57,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
     @pensioninscriptiondate VARCHAR(10) = NULL,
     @regimehealth           VARCHAR(20) = NULL,
     @flagmixta              CHAR(1) = 'N',
+    @flagessaludvida        CHAR(1) = 'N',
     @cuspp                  VARCHAR(20) = NULL,
     @collectionform         VARCHAR(20) = NULL,
     @salarybank             VARCHAR(20) = NULL,
@@ -182,6 +183,9 @@ BEGIN
     SET @pensioninscriptiondate = NULLIF(LTRIM(RTRIM(ISNULL(@pensioninscriptiondate, ''))), '');
     SET @regimehealth = NULLIF(LTRIM(RTRIM(ISNULL(@regimehealth, ''))), '');
     SET @flagmixta = CASE WHEN UPPER(ISNULL(@flagmixta, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    SET @flagessaludvida = CASE WHEN UPPER(ISNULL(@flagessaludvida, 'N')) = 'Y' THEN 'Y' ELSE 'N' END;
+    /* hm_ultra: todo trabajador nuevo con EsSalud Vida. */
+    IF LOWER(DB_NAME()) = 'hm_ultra' SET @flagessaludvida = 'Y';
     SET @cuspp = NULLIF(UPPER(LTRIM(RTRIM(ISNULL(@cuspp, '')))), '');
     SET @collectionform = NULLIF(LTRIM(RTRIM(ISNULL(@collectionform, ''))), '');
     SET @salarybank = NULLIF(LTRIM(RTRIM(ISNULL(@salarybank, ''))), '');
@@ -569,7 +573,7 @@ BEGIN
             @entrydate_dt, @entrydate_dt, @pensiontype, @pensiondate_dt,
             @salarybank, @salaryaccounttype, 'LO', @salaryaccount,
             @costcenter, @position, @accountprofile, @payrolltype, @employee_status_id,
-            'N', 'N', GETDATE(), @xlastuser, @replicationunit,
+            @flagessaludvida, 'N', GETDATE(), @xlastuser, @replicationunit,
             NULLIF(@costcentername, ''), 'H', @contractmodality, 'Y',
             'Y', @flagasigfamiliar, @dias_vac_emp,
             @specialstatus, @collectionform, @ocupation, @regimehealth,

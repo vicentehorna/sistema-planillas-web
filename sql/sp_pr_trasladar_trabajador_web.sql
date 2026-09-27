@@ -189,6 +189,9 @@ BEGIN
     WHERE e.Company = @cia_origen
       AND e.Person = @person;
 
+    /* hm_ultra: todo trabajador trasladado con EsSalud Vida. */
+    IF @db_name = 'hm_ultra' SET @flagessaludvida = 'Y';
+
     IF @replicationunit IS NULL
     BEGIN
         SELECT @replicationunit = NULLIF(LTRIM(RTRIM(sp.ReplicationUnit)), '')

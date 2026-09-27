@@ -772,11 +772,16 @@
                                    placeholder="12 caracteres alfanuméricos">
                             <div class="form-text">Código único del sistema privado de pensiones (AFP).</div>
                         </div>
-                        <div class="col-md-6 d-flex align-items-end">
+                        <div class="col-md-6 d-flex align-items-end gap-4">
                             <div class="form-check mb-4">
                                 <input class="form-check-input" type="checkbox" id="chkFlagMixta" name="flagmixta" value="Y"
                                        {% if empleado.flagmixta == 'Y' %}checked{% endif %}>
                                 <label class="form-check-label small" for="chkFlagMixta">AFP Mixta</label>
+                            </div>
+                            <div class="form-check mb-4">
+                                <input class="form-check-input" type="checkbox" id="chkFlagEssaludVida" name="flagessaludvida" value="Y"
+                                       {% if empleado.flagessaludvida == 'Y' %}checked{% endif %}>
+                                <label class="form-check-label small" for="chkFlagEssaludVida">EsSalud Vida</label>
                             </div>
                         </div>
                         <div class="col-12">

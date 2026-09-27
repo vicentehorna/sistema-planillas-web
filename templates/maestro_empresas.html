@@ -1,0 +1,1204 @@
+{% extends "layout.html" %}
+
+{% block title %}Empresas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .empresas-page {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        height: calc(100vh - 7.5rem);
+        max-height: calc(100vh - 7.5rem);
+        overflow: hidden;
+    }
+
+    .empresas-filtros {
+        flex-shrink: 0;
+    }
+
+    .empresas-filtros .card-body {
+        padding: 0.7rem 0.85rem;
+    }
+
+    .empresas-layout {
+        display: flex;
+        gap: 0.85rem;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .empresas-panel-izq {
+        flex: 0 0 38%;
+        max-width: 38%;
+        min-width: 260px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
+    .empresas-panel-der {
+        flex: 1 1 62%;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    .empresas-grilla {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .empresas-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .empresas-grilla-scroll:focus {
+        outline: none;
+    }
+
+    .empresas-grilla-scroll:focus-visible {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .empresas-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #d7dee8;
+        background: #f1f4f8;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+
+    .table-empresas-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-empresas-lista th,
+    .table-empresas-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+
+    .table-empresas-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+    }
+
+    .table-empresas-lista thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-empresas-lista thead th.th-sort:hover {
+        background: #e4eaf2;
+    }
+
+    .table-empresas-lista thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+        font-size: 10px;
+    }
+
+    .table-empresas-lista tbody tr.empresa-row {
+        cursor: pointer;
+    }
+
+    .table-empresas-lista tbody tr.empresa-row:hover {
+        background: #eef4fb;
+    }
+
+    .table-empresas-lista tbody tr.empresa-row.active {
+        background: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .table-empresas-lista tbody tr.empresa-row.active td {
+        font-weight: 600;
+    }
+
+    .table-empresas-lista .col-codigo {
+        width: 4.5rem;
+    }
+
+    .table-empresas-lista .col-nombre {
+        min-width: 10rem;
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .table-empresas-lista .col-estado {
+        width: 4.5rem;
+        text-align: center;
+    }
+
+    .empresas-badge-estado {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.6rem;
+    }
+
+    .empresas-badge-estado.activo {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .empresas-badge-estado.inactivo {
+        background: #f8d7da;
+        color: #842029;
+    }
+
+    .empresas-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    .empresas-dw-titlebar {
+        background: #1a4b84;
+        padding: 0.45rem 0.75rem;
+        min-height: 2.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+
+    .empresas-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        margin: 0;
+    }
+
+    .empresas-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-left: auto;
+    }
+
+    .empresas-btn-guardar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+
+    .empresas-msg-guardado {
+        margin: 0;
+        min-width: 0;
+        max-width: 18rem;
+        font-size: 0.75rem;
+    }
+
+    .empresas-dw-body {
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.85rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+
+    .empresas-form-card .form-label {
+        font-size: 0.72rem;
+        margin-bottom: 0.12rem;
+    }
+
+    .empresas-form-card .form-control-sm,
+    .empresas-form-card .form-select-sm {
+        font-size: 0.8rem;
+    }
+
+    .empresas-seccion {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #1a4b84;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #d7dee8;
+        padding-bottom: 0.15rem;
+        margin: 0.35rem 0 0.1rem;
+    }
+
+    .campo-obligatorio.form-control {
+        background-color: #fff;
+        border-color: #ced4da;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+
+    .campo-obligatorio.form-control:focus {
+        border-color: #86b7fe;
+        box-shadow: inset 3px 0 0 #1a4b84, 0 0 0 0.2rem rgba(26, 75, 132, 0.12);
+    }
+
+    .form-label.mc-req::after {
+        content: ' *';
+        color: #c0392b;
+        font-weight: 700;
+    }
+
+    .empresas-estado-grupo {
+        min-height: 31px;
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        padding: 0 0.5rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #f8fafc;
+    }
+
+    .empresas-estado-grupo .form-check {
+        margin-bottom: 0;
+    }
+
+    .empresas-estado-grupo .form-check-label {
+        font-size: 0.8rem;
+    }
+
+    .empresas-ubigeo-wrap {
+        position: relative;
+    }
+
+    .empresas-ubigeo-lista {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(100% + 2px);
+        z-index: 1080;
+        max-height: 14rem;
+        overflow-y: auto;
+        background: #fff;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
+        box-shadow: 0 4px 12px rgba(26, 75, 132, 0.12);
+    }
+
+    .empresas-ubigeo-lista .list-group-item {
+        border: 0;
+        border-bottom: 1px solid #eef2f7;
+        padding: 0.4rem 0.65rem;
+        font-size: 0.8rem;
+        cursor: pointer;
+        color: #495057;
+    }
+
+    .empresas-ubigeo-lista .list-group-item:last-child {
+        border-bottom: 0;
+    }
+
+    .empresas-ubigeo-lista .list-group-item:hover,
+    .empresas-ubigeo-lista .list-group-item.active {
+        background: #e7f1ff;
+        color: #1a4b84;
+    }
+
+    .empresas-ubigeo-hint {
+        font-size: 0.72rem;
+        color: #6c757d;
+        margin-top: 0.2rem;
+        min-height: 1rem;
+    }
+
+    .empresas-auditoria .form-control {
+        background: #f1f4f8;
+        color: #495057;
+    }
+
+    .empresas-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1 1 auto;
+        min-height: 0;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+
+    @media (max-width: 991.98px) {
+        .empresas-page {
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }
+
+        .empresas-layout {
+            flex-direction: column;
+            overflow: visible;
+        }
+
+        .empresas-panel-izq {
+            flex: 1 1 auto;
+            max-width: 100%;
+        }
+
+        .empresas-grilla {
+            max-height: 260px;
+        }
+
+        .empresas-panel-der {
+            min-height: 22rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="empresas-page">
+<div class="card shadow-sm border-0 empresas-filtros">
+    <div class="card-body">
+        <form id="frmFiltrosEmpresas" class="row g-2 align-items-end">
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtBuscarEmpresa" class="form-label small fw-bold text-muted mb-1">Buscar empresa</label>
+                <input type="search" id="txtBuscarEmpresa" class="form-control form-control-sm" placeholder="Código, razón social o RUC..." autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="cboFiltroEstado" class="form-label small fw-bold text-muted mb-1">Estado</label>
+                <select id="cboFiltroEstado" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="A">Activos</option>
+                    <option value="I">Inactivos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto d-flex align-items-end flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="empresas-layout">
+    <aside class="empresas-panel-izq">
+        <div class="empresas-grilla">
+            <div class="empresas-grilla-scroll" id="grillaScrollEmpresas" tabindex="0"
+                 role="listbox" aria-label="Lista de empresas. Use flechas arriba y abajo para navegar.">
+                <table class="table table-sm table-hover table-empresas-lista align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-codigo th-sort" data-sort="company">Código<span class="sort-ind"></span></th>
+                            <th class="col-nombre th-sort" data-sort="description">Compañía<span class="sort-ind"></span></th>
+                            <th class="col-estado th-sort" data-sort="estado">Estado<span class="sort-ind"></span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyEmpresas">
+                        <tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoEmpresas" class="empresas-grilla-footer">0 registros</div>
+        </div>
+    </aside>
+
+    <section class="empresas-panel-der">
+        <div id="placeholderEmpresa" class="empresas-placeholder">
+            <div>
+                <i class="bi bi-buildings fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione una empresa de la lista.
+            </div>
+        </div>
+
+        <div id="panelEdicionEmpresa" class="empresas-dw-panel empresas-form-card d-none">
+            <div class="empresas-dw-titlebar">
+                <span class="empresas-dw-title-text" id="tituloEdicionEmpresa">Editar empresa</span>
+                <div id="msgGuardadoEmpresa" class="empresas-msg-guardado d-none" role="status" aria-live="polite"></div>
+                <div class="empresas-titlebar-actions">
+                    <button type="button" class="btn btn-success btn-sm empresas-btn-guardar" id="btnGuardarEmpresa" title="Ctrl+S">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+            <div class="empresas-dw-body">
+                <form id="frmEmpresa" class="row g-2" autocomplete="off">
+                    <div class="col-12 empresas-seccion">Datos generales</div>
+
+                    <div class="col-4 col-md-2">
+                        <label for="txtCompany" class="form-label fw-semibold text-muted">Código</label>
+                        <input type="text" id="txtCompany" class="form-control form-control-sm" maxlength="4" readonly>
+                    </div>
+                    <div class="col-8 col-md-10">
+                        <label for="txtDescription" class="form-label fw-semibold text-muted mc-req">Compañía</label>
+                        <input type="text" id="txtDescription" class="form-control form-control-sm campo-obligatorio" maxlength="255" required>
+                    </div>
+
+                    <div class="col-6 col-md-4">
+                        <label for="txtRuc" class="form-label fw-semibold text-muted">R.U.C.</label>
+                        <input type="text" id="txtRuc" class="form-control form-control-sm" maxlength="15" inputmode="numeric">
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label for="txtTelephone" class="form-label fw-semibold text-muted">Teléfono</label>
+                        <input type="text" id="txtTelephone" class="form-control form-control-sm" maxlength="15">
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-semibold text-muted">Estado</label>
+                        <div class="empresas-estado-grupo">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="rdoStatus" id="rdoStatusA" value="A">
+                                <label class="form-check-label" for="rdoStatusA">Activo</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="rdoStatus" id="rdoStatusI" value="I">
+                                <label class="form-check-label" for="rdoStatusI">Inactivo</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-12">
+                        <label for="txtAddress" class="form-label fw-semibold text-muted">Dirección</label>
+                        <input type="text" id="txtAddress" class="form-control form-control-sm" maxlength="255">
+                    </div>
+
+                    <div class="col-12">
+                        <label for="txtUbigeo" class="form-label fw-semibold text-muted">Ubigeo / Distrito</label>
+                        <div class="empresas-ubigeo-wrap">
+                            <input type="hidden" id="hidLocalite" value="">
+                            <div class="input-group input-group-sm">
+                                <input type="search" id="txtUbigeo" class="form-control form-control-sm"
+                                       placeholder="Buscar distrito, provincia o departamento..."
+                                       autocomplete="off" spellcheck="false">
+                                <button type="button" class="btn btn-outline-secondary" id="btnLimpiarUbigeo" title="Limpiar ubigeo">
+                                    <i class="bi bi-x-lg"></i>
+                                </button>
+                            </div>
+                            <div id="listaUbigeo" class="list-group empresas-ubigeo-lista d-none" role="listbox"></div>
+                        </div>
+                        <div class="empresas-ubigeo-hint" id="lblUbigeoHint">País: Perú. Escriba para buscar el distrito.</div>
+                    </div>
+
+                    <div class="col-12 empresas-seccion">Representante</div>
+
+                    <div class="col-12 col-md-7">
+                        <label for="txtRepresentative" class="form-label fw-semibold text-muted">Nombre</label>
+                        <input type="text" id="txtRepresentative" class="form-control form-control-sm" maxlength="100">
+                    </div>
+                    <div class="col-12 col-md-5">
+                        <label for="txtRepPosition" class="form-label fw-semibold text-muted">Cargo</label>
+                        <input type="text" id="txtRepPosition" class="form-control form-control-sm" maxlength="100">
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label for="cboRepDocType" class="form-label fw-semibold text-muted">Tipo documento</label>
+                        <select id="cboRepDocType" class="form-select form-select-sm">
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-md-4">
+                        <label for="txtRepDocNumber" class="form-label fw-semibold text-muted">Número</label>
+                        <input type="text" id="txtRepDocNumber" class="form-control form-control-sm" maxlength="15">
+                    </div>
+
+                    <div class="col-12 empresas-seccion">Auditoría</div>
+
+                    <div class="col-12">
+                        <div class="row g-2 empresas-auditoria">
+                            <div class="col-6 col-md-3">
+                                <label for="txtXCreateUser" class="form-label fw-semibold text-muted">Creado por</label>
+                                <input type="text" id="txtXCreateUser" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="txtXCreateDate" class="form-label fw-semibold text-muted">Fecha creación</label>
+                                <input type="text" id="txtXCreateDate" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="txtXLastUser" class="form-label fw-semibold text-muted">Modificado por</label>
+                                <input type="text" id="txtXLastUser" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                            <div class="col-6 col-md-3">
+                                <label for="txtXLastDate" class="form-label fw-semibold text-muted">Fecha modificación</label>
+                                <input type="text" id="txtXLastDate" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const STORAGE_KEY = 'maestro_empresas_filtros';
+
+    let empresasCache = [];
+    let empresasVisibles = [];
+    let empresaSeleccionada = null;
+    let idxEmpresaActiva = -1;
+    let obtenerAbort = null;
+    let snapshotFormulario = '';
+    let formDirty = false;
+    let tiposDocCompany = null;
+
+    const tbodyEmpresas = document.getElementById('tbodyEmpresas');
+    const grillaScroll = document.getElementById('grillaScrollEmpresas');
+    const placeholder = document.getElementById('placeholderEmpresa');
+    const panelEdicion = document.getElementById('panelEdicionEmpresa');
+    const msgGuardado = document.getElementById('msgGuardadoEmpresa');
+    const frmEmpresa = document.getElementById('frmEmpresa');
+    const btnGuardar = document.getElementById('btnGuardarEmpresa');
+    const txtBuscar = document.getElementById('txtBuscarEmpresa');
+    const cboFiltroEstado = document.getElementById('cboFiltroEstado');
+    const cboRepDocType = document.getElementById('cboRepDocType');
+
+    function escHtml(s) {
+        return String(s ?? '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        return confirm(opciones.mensaje || '¿Continuar?');
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try {
+                data = JSON.parse(raw);
+            } catch (e) {
+                if (raw.trimStart().startsWith('<')) {
+                    throw new Error('Sesión expirada o error del servidor. Recargue la página e intente de nuevo.');
+                }
+                throw new Error('Respuesta no válida del servidor.');
+            }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function ocultarMensajeGuardado() {
+        if (window.HmUi) {
+            HmUi.hideFormBanner(msgGuardado);
+            return;
+        }
+        msgGuardado.textContent = '';
+        msgGuardado.classList.add('d-none');
+    }
+
+    function mostrarMensajeGuardado(texto, tipo) {
+        const mensaje = texto || 'Registro actualizado correctamente.';
+        if (window.HmUi) {
+            HmUi.showFormBanner(msgGuardado, mensaje, tipo || 'success', { delay: 8000, scrollIntoView: true });
+            return;
+        }
+        msgGuardado.textContent = mensaje;
+        msgGuardado.classList.remove('d-none');
+    }
+
+    function mostrarPanelEdicion(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panelEdicion.classList.toggle('d-none', !visible);
+    }
+
+    function guardarFiltros() {
+        try {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify({
+                busqueda: txtBuscar.value.trim(),
+                estado: cboFiltroEstado.value,
+            }));
+        } catch (e) { /* sin almacenamiento */ }
+    }
+
+    function leerFiltros() {
+        try {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+        } catch (e) {
+            return null;
+        }
+    }
+
+    /* ---------- Dirty tracking ---------- */
+    function serializarFormulario() {
+        const pairs = [];
+        frmEmpresa.querySelectorAll('input, select, textarea').forEach((el) => {
+            if (el.readOnly || !el.id || el.id === 'txtUbigeo') return;
+            if (el.type === 'radio') {
+                if (el.checked) pairs.push(el.name + '=' + el.value);
+                return;
+            }
+            pairs.push(el.id + '=' + String(el.value == null ? '' : el.value));
+        });
+        pairs.sort();
+        return pairs.join('&');
+    }
+
+    function capturarSnapshot() {
+        snapshotFormulario = serializarFormulario();
+        formDirty = false;
+    }
+
+    function marcarFormDirty() {
+        formDirty = serializarFormulario() !== snapshotFormulario;
+    }
+
+    async function confirmarSalidaSiDirty() {
+        if (!formDirty || panelEdicion.classList.contains('d-none')) return true;
+        return hmConfirmar({
+            titulo: 'Cambios sin guardar',
+            mensaje: 'Hay cambios sin guardar en la empresa.\nSi continúa, se perderán.',
+            textoOk: 'Salir sin guardar',
+            textoCancelar: 'Seguir editando',
+            variant: 'danger',
+        });
+    }
+
+    /* ---------- Listado y orden ---------- */
+    const ordenLista = { col: null, dir: 1 };
+
+    function ordenarFilas(rows) {
+        if (!ordenLista.col) return rows;
+        const col = ordenLista.col;
+        const dir = ordenLista.dir;
+        return rows.slice().sort((a, b) =>
+            String(a[col] || '').localeCompare(String(b[col] || ''), 'es', { numeric: true, sensitivity: 'base' }) * dir
+        );
+    }
+
+    function actualizarIndicadoresOrden() {
+        document.querySelectorAll('.table-empresas-lista th.th-sort').forEach((th) => {
+            const ind = th.querySelector('.sort-ind');
+            const activo = th.getAttribute('data-sort') === ordenLista.col;
+            ind.textContent = activo ? (ordenLista.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLista.dir === 1 ? 'Orden ascendente (clic: descendente)' : 'Orden descendente (clic: orden original)')
+                : 'Clic para ordenar';
+        });
+    }
+
+    document.querySelectorAll('.table-empresas-lista th.th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (ordenLista.col !== col) {
+                ordenLista.col = col;
+                ordenLista.dir = 1;
+            } else if (ordenLista.dir === 1) {
+                ordenLista.dir = -1;
+            } else {
+                ordenLista.col = null;
+                ordenLista.dir = 1;
+            }
+            actualizarIndicadoresOrden();
+            renderListaEmpresas();
+        });
+    });
+    actualizarIndicadoresOrden();
+
+    function filasEmpresas() {
+        return Array.from(tbodyEmpresas.querySelectorAll('.empresa-row'));
+    }
+
+    function updateRowHighlight() {
+        filasEmpresas().forEach((tr, i) => {
+            const on = !!(empresaSeleccionada && empresaSeleccionada.company === tr.getAttribute('data-company'));
+            tr.classList.toggle('active', on);
+            tr.setAttribute('aria-selected', on ? 'true' : 'false');
+            if (on) idxEmpresaActiva = i;
+        });
+    }
+
+    function renderListaEmpresas() {
+        const estado = cboFiltroEstado.value;
+        let rows = empresasCache.filter((r) => !estado || String(r.status || 'A').toUpperCase() === estado);
+        rows = ordenarFilas(rows);
+        empresasVisibles = rows;
+        idxEmpresaActiva = -1;
+
+        if (!rows.length) {
+            tbodyEmpresas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin registros</td></tr>';
+        } else {
+            tbodyEmpresas.innerHTML = rows.map((r, idx) => {
+                const activo = !!(empresaSeleccionada && empresaSeleccionada.company === r.company);
+                if (activo) idxEmpresaActiva = idx;
+                const esActivo = String(r.status || 'A').toUpperCase() === 'A';
+                return `<tr class="empresa-row ${activo ? 'active' : ''}" data-company="${escHtml(r.company)}" data-idx="${idx}" role="option" aria-selected="${activo ? 'true' : 'false'}">
+                    <td class="col-codigo">${escHtml(r.company)}</td>
+                    <td class="col-nombre" title="${escHtml(r.description)}">${escHtml(r.description)}</td>
+                    <td class="col-estado"><span class="empresas-badge-estado ${esActivo ? 'activo' : 'inactivo'}">${esActivo ? 'Activo' : 'Inactivo'}</span></td>
+                </tr>`;
+            }).join('');
+        }
+
+        const total = empresasCache.length;
+        document.getElementById('lblConteoEmpresas').textContent = rows.length !== total
+            ? `${rows.length} registro${rows.length === 1 ? '' : 's'} de ${total}`
+            : `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+
+        filasEmpresas().forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                idxEmpresaActiva = Number(this.getAttribute('data-idx'));
+                grillaScroll.focus({ preventScroll: true });
+                await seleccionarEmpresa(empresasVisibles[idxEmpresaActiva]);
+            });
+        });
+
+        const filaActiva = tbodyEmpresas.querySelector('.empresa-row.active');
+        if (filaActiva) filaActiva.scrollIntoView({ block: 'nearest' });
+    }
+
+    async function cargarListado() {
+        guardarFiltros();
+        tbodyEmpresas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+        try {
+            const res = await fetch('/api/empresas/listado', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ busqueda: txtBuscar.value.trim() }),
+            });
+            const data = await leerJson(res);
+            empresasCache = data.rows || [];
+            renderListaEmpresas();
+        } catch (err) {
+            console.error(err);
+            empresasCache = [];
+            tbodyEmpresas.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function activarEmpresaPorIndice(idx) {
+        const filas = filasEmpresas();
+        if (!filas.length) return;
+        idx = Math.max(0, Math.min(idx, filas.length - 1));
+        const row = empresasVisibles[idx];
+        if (!row) return;
+        idxEmpresaActiva = idx;
+        filas[idx].scrollIntoView({ block: 'nearest' });
+        await seleccionarEmpresa(row);
+    }
+
+    /* ---------- Tipos de documento del representante ---------- */
+    async function cargarTiposDocumento(company, valorActual, descActual) {
+        if (tiposDocCompany !== company) {
+            cboRepDocType.innerHTML = '<option value="">Cargando...</option>';
+            let items = [];
+            try {
+                const res = await fetch(`/api/empresas/tipos-documento?company=${encodeURIComponent(company)}`);
+                items = await res.json();
+            } catch (e) {
+                console.error(e);
+            }
+            cboRepDocType.innerHTML = '<option value="">Seleccione...</option>';
+            (Array.isArray(items) ? items : []).forEach((it) => {
+                const opt = document.createElement('option');
+                opt.value = String(it.id || '');
+                opt.textContent = String(it.text || it.id || '');
+                cboRepDocType.appendChild(opt);
+            });
+            tiposDocCompany = company;
+        }
+        cboRepDocType.querySelectorAll('option[data-extra="1"]').forEach((o) => o.remove());
+        const valor = String(valorActual || '').trim();
+        if (valor && !Array.from(cboRepDocType.options).some((o) => o.value === valor)) {
+            const opt = document.createElement('option');
+            opt.value = valor;
+            opt.textContent = descActual || valor;
+            opt.setAttribute('data-extra', '1');
+            cboRepDocType.appendChild(opt);
+        }
+        cboRepDocType.value = valor;
+    }
+
+    /* ---------- Ubigeo (distrito) ---------- */
+    const ubigeo = (function () {
+        const txt = document.getElementById('txtUbigeo');
+        const hid = document.getElementById('hidLocalite');
+        const lista = document.getElementById('listaUbigeo');
+        const hint = document.getElementById('lblUbigeoHint');
+        const btnClear = document.getElementById('btnLimpiarUbigeo');
+        let timer = null;
+        let items = [];
+        let idxActivo = -1;
+        let seleccionTexto = '';
+        let ciaCatalogo = '';
+
+        function actualizarHint(item) {
+            if (!item) {
+                hint.textContent = 'País: Perú. Escriba para buscar el distrito.';
+                return;
+            }
+            const partes = [item.pais || 'PERU', item.departamento, item.provincia, item.ubigeo].filter(Boolean);
+            hint.textContent = partes.join(' · ');
+        }
+
+        function cerrarLista() {
+            lista.classList.add('d-none');
+            lista.innerHTML = '';
+            idxActivo = -1;
+        }
+
+        function aplicarSeleccion(item) {
+            if (!item) return;
+            hid.value = item.id || '';
+            seleccionTexto = item.text || '';
+            txt.value = seleccionTexto;
+            actualizarHint(item);
+            cerrarLista();
+            marcarFormDirty();
+        }
+
+        function limpiar() {
+            hid.value = '';
+            seleccionTexto = '';
+            txt.value = '';
+            actualizarHint(null);
+            cerrarLista();
+            marcarFormDirty();
+            txt.focus();
+        }
+
+        function renderLista(rows) {
+            items = Array.isArray(rows) ? rows : [];
+            idxActivo = items.length ? 0 : -1;
+            if (!items.length) {
+                lista.innerHTML = '<div class="list-group-item text-muted">Sin coincidencias</div>';
+                lista.classList.remove('d-none');
+                return;
+            }
+            lista.innerHTML = items.map((it, i) => {
+                const cod = it.ubigeo ? ` <span class="text-muted">(${escHtml(it.ubigeo)})</span>` : '';
+                return `<button type="button" class="list-group-item list-group-item-action ${i === 0 ? 'active' : ''}" data-idx="${i}" role="option">${escHtml(it.text)}${cod}</button>`;
+            }).join('');
+            lista.classList.remove('d-none');
+            lista.querySelectorAll('[data-idx]').forEach((btn) => {
+                btn.addEventListener('mousedown', function (e) {
+                    e.preventDefault();
+                    aplicarSeleccion(items[Number(this.getAttribute('data-idx'))]);
+                });
+            });
+        }
+
+        function marcarActivo(idx) {
+            const botones = lista.querySelectorAll('[data-idx]');
+            if (!botones.length) return;
+            idx = Math.max(0, Math.min(idx, botones.length - 1));
+            idxActivo = idx;
+            botones.forEach((b, i) => b.classList.toggle('active', i === idx));
+            botones[idx].scrollIntoView({ block: 'nearest' });
+        }
+
+        async function buscar(q) {
+            const query = String(q || '').trim();
+            if (query.length < 2) {
+                cerrarLista();
+                return;
+            }
+            try {
+                const url = `/api/selectores/ubigeo?cia=${encodeURIComponent(ciaCatalogo)}&q=${encodeURIComponent(query)}&top=40`;
+                const res = await fetch(url);
+                renderLista(await res.json());
+            } catch (err) {
+                console.error(err);
+                lista.innerHTML = '<div class="list-group-item text-danger">Error al buscar ubigeo</div>';
+                lista.classList.remove('d-none');
+            }
+        }
+
+        txt.addEventListener('input', function () {
+            const val = (this.value || '').trim();
+            if (hid.value && val !== seleccionTexto) {
+                hid.value = '';
+                actualizarHint(null);
+            }
+            clearTimeout(timer);
+            timer = setTimeout(() => buscar(val), 250);
+        });
+
+        txt.addEventListener('keydown', function (e) {
+            if (lista.classList.contains('d-none')) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                marcarActivo(idxActivo < 0 ? 0 : idxActivo + 1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                marcarActivo(idxActivo < 0 ? 0 : idxActivo - 1);
+            } else if (e.key === 'Enter' && idxActivo >= 0 && items[idxActivo]) {
+                e.preventDefault();
+                aplicarSeleccion(items[idxActivo]);
+            } else if (e.key === 'Escape') {
+                cerrarLista();
+            }
+        });
+
+        txt.addEventListener('blur', function () {
+            setTimeout(() => {
+                cerrarLista();
+                if (!hid.value) {
+                    if ((txt.value || '').trim() !== seleccionTexto) txt.value = '';
+                } else {
+                    txt.value = seleccionTexto;
+                }
+            }, 150);
+        });
+
+        btnClear.addEventListener('click', function (e) {
+            e.preventDefault();
+            limpiar();
+        });
+
+        return {
+            cargar(data, company) {
+                ciaCatalogo = company || '';
+                hid.value = data.localite || '';
+                seleccionTexto = data.ubigeo_texto || '';
+                txt.value = seleccionTexto;
+                cerrarLista();
+                if (data.localite) {
+                    actualizarHint(data);
+                } else if (data.provincia || data.departamento) {
+                    hint.textContent = [data.pais, data.departamento, data.provincia].filter(Boolean).join(' · ') +
+                        ' — sin distrito, escriba para buscarlo.';
+                } else {
+                    actualizarHint(null);
+                }
+            },
+        };
+    })();
+
+    /* ---------- Edición ---------- */
+    function setStatus(valor) {
+        const v = String(valor || 'A').toUpperCase() === 'I' ? 'I' : 'A';
+        document.getElementById('rdoStatusA').checked = v === 'A';
+        document.getElementById('rdoStatusI').checked = v === 'I';
+    }
+
+    function getStatus() {
+        return document.getElementById('rdoStatusI').checked ? 'I' : 'A';
+    }
+
+    async function cargarFormulario(data) {
+        document.getElementById('tituloEdicionEmpresa').textContent =
+            `Editar empresa — ${data.company || ''}`;
+        document.getElementById('txtCompany').value = data.company || '';
+        document.getElementById('txtDescription').value = data.description || '';
+        document.getElementById('txtRuc').value = data.ruc || '';
+        document.getElementById('txtTelephone').value = data.telephone || '';
+        document.getElementById('txtAddress').value = data.address || '';
+        setStatus(data.status);
+        ubigeo.cargar(data, data.company);
+        document.getElementById('txtRepresentative').value = data.representative || '';
+        document.getElementById('txtRepPosition').value = data.rep_position || '';
+        document.getElementById('txtRepDocNumber').value = data.rep_docnumber || '';
+        await cargarTiposDocumento(data.company || '', data.rep_doctype, data.rep_doctypedesc);
+        document.getElementById('txtXCreateUser').value = data.xcreateuser || '';
+        document.getElementById('txtXCreateDate').value = data.xcreatedate || '';
+        document.getElementById('txtXLastUser').value = data.xlastuser || '';
+        document.getElementById('txtXLastDate').value = data.xlastdate || '';
+        capturarSnapshot();
+    }
+
+    function payloadFormulario() {
+        return {
+            company: document.getElementById('txtCompany').value.trim(),
+            description: document.getElementById('txtDescription').value.trim(),
+            ruc: document.getElementById('txtRuc').value.trim(),
+            telephone: document.getElementById('txtTelephone').value.trim(),
+            address: document.getElementById('txtAddress').value.trim(),
+            localite: document.getElementById('hidLocalite').value.trim(),
+            status: getStatus(),
+            representative: document.getElementById('txtRepresentative').value.trim(),
+            rep_position: document.getElementById('txtRepPosition').value.trim(),
+            rep_doctype: cboRepDocType.value.trim(),
+            rep_docnumber: document.getElementById('txtRepDocNumber').value.trim(),
+        };
+    }
+
+    async function seleccionarEmpresa(row) {
+        if (!row || !row.company) return;
+        if (empresaSeleccionada && empresaSeleccionada.company !== row.company) {
+            const ok = await confirmarSalidaSiDirty();
+            if (!ok) {
+                updateRowHighlight();
+                return;
+            }
+        }
+        ocultarMensajeGuardado();
+        if (obtenerAbort) obtenerAbort.abort();
+        obtenerAbort = new AbortController();
+        const signal = obtenerAbort.signal;
+
+        empresaSeleccionada = row;
+        updateRowHighlight();
+        mostrarPanelEdicion(true);
+
+        try {
+            const res = await fetch('/api/empresas/obtener', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ company: row.company }),
+                signal,
+            });
+            const data = await leerJson(res);
+            if (signal.aborted) return;
+            await cargarFormulario(data);
+        } catch (err) {
+            if (err.name === 'AbortError') return;
+            hmError(err.message);
+        }
+    }
+
+    async function guardarEmpresa() {
+        const payload = payloadFormulario();
+        if (!payload.company) {
+            hmAdvertencia('Seleccione una empresa.');
+            return;
+        }
+        if (!payload.description) {
+            hmAdvertencia('Indique la razón social de la empresa.');
+            document.getElementById('txtDescription').focus();
+            return;
+        }
+        if (payload.ruc && !/^\d{8,15}$/.test(payload.ruc)) {
+            hmAdvertencia('El RUC debe contener solo dígitos.');
+            document.getElementById('txtRuc').focus();
+            return;
+        }
+
+        btnGuardar.disabled = true;
+        try {
+            const res = await fetch('/api/empresas/guardar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            formDirty = false;
+            await cargarListado();
+            const row = empresasCache.find((x) => x.company === (data.company || payload.company));
+            await seleccionarEmpresa(row || { company: payload.company });
+            mostrarMensajeGuardado(data.mensaje || 'Empresa actualizada correctamente.');
+        } catch (err) {
+            hmError(err.message);
+        } finally {
+            btnGuardar.disabled = false;
+        }
+    }
+
+    /* ---------- Eventos ---------- */
+    frmEmpresa.addEventListener('input', marcarFormDirty);
+    frmEmpresa.addEventListener('change', marcarFormDirty);
+    frmEmpresa.addEventListener('submit', (e) => e.preventDefault());
+    btnGuardar.addEventListener('click', guardarEmpresa);
+
+    ['txtDescription', 'txtRepresentative', 'txtRepPosition', 'txtAddress'].forEach((id) => {
+        const el = document.getElementById(id);
+        el.addEventListener('blur', () => {
+            const up = el.value.toUpperCase();
+            if (up !== el.value) {
+                el.value = up;
+                marcarFormDirty();
+            }
+        });
+    });
+
+    document.addEventListener('keydown', function (e) {
+        if (!(e.ctrlKey || e.metaKey) || String(e.key || '').toLowerCase() !== 's') return;
+        if (btnGuardar.disabled || panelEdicion.classList.contains('d-none')) return;
+        e.preventDefault();
+        btnGuardar.click();
+    });
+
+    document.getElementById('frmFiltrosEmpresas').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await cargarListado();
+    });
+
+    cboFiltroEstado.addEventListener('change', function () {
+        guardarFiltros();
+        renderListaEmpresas();
+    });
+
+    txtBuscar.addEventListener('keydown', async function (e) {
+        if (e.key === 'ArrowDown') {
+            if (!filasEmpresas().length) return;
+            e.preventDefault();
+            grillaScroll.focus({ preventScroll: true });
+            await activarEmpresaPorIndice(idxEmpresaActiva >= 0 ? idxEmpresaActiva : 0);
+        }
+    });
+
+    grillaScroll.addEventListener('keydown', async function (e) {
+        if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(e.key)) return;
+        const filas = filasEmpresas();
+        if (!filas.length) return;
+        e.preventDefault();
+        if (e.key === 'ArrowDown') await activarEmpresaPorIndice(idxEmpresaActiva < 0 ? 0 : idxEmpresaActiva + 1);
+        else if (e.key === 'ArrowUp') await activarEmpresaPorIndice(idxEmpresaActiva < 0 ? 0 : idxEmpresaActiva - 1);
+        else if (e.key === 'Home') await activarEmpresaPorIndice(0);
+        else if (e.key === 'End') await activarEmpresaPorIndice(filas.length - 1);
+        else if (e.key === 'Enter' && idxEmpresaActiva >= 0) await activarEmpresaPorIndice(idxEmpresaActiva);
+    });
+
+    window.addEventListener('beforeunload', function (e) {
+        if (!formDirty) return;
+        e.preventDefault();
+        e.returnValue = '';
+    });
+
+    const filtros = leerFiltros();
+    if (filtros) {
+        txtBuscar.value = filtros.busqueda || '';
+        cboFiltroEstado.value = filtros.estado || '';
+    }
+    await cargarListado();
+});
+</script>
+{% endblock %}

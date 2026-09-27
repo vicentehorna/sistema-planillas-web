@@ -10,6 +10,7 @@ from typing import Any, Iterable, Optional
 # endpoint Flask -> menu_code
 ENDPOINT_MENU_MAP = {
     'dashboard': 'alertas',
+    'empresas_page': 'empresas',
     'conceptos_page': 'conceptos',
     'tipos_planilla_page': 'tipos_planilla',
     'formulas_page': 'formulas',
@@ -136,6 +137,8 @@ PATH_PREFIX_MENU_MAP = {
     '/registro-descansos-medicos': 'registro_descansos_medicos',
     '/api/asignacion': 'asignacion_conceptos',
     '/asignacion-conceptos': 'asignacion_conceptos',
+    '/api/empresas': 'empresas',
+    '/empresas': 'empresas',
     '/api/conceptos': 'conceptos',
     '/conceptos': 'conceptos',
     '/api/formulas': 'formulas',

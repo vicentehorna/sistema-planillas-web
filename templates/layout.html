@@ -559,8 +559,8 @@
                     <p class="sidebar-section-title px-3 mt-3 mb-0 text-uppercase fw-bold opacity-50">Configuración</p>
                 </li>
 
-                {% set generales_active = request.endpoint in ('conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page', 'companias_branding_page', 'comparar_planillas_page', 'comparar_planillas_resultado_page', 'perfiles_acceso_page', 'asignar_perfiles_page') or (mostrar_menu_receta and request.endpoint == 'receta_page') %}
-                {% set show_generales = can_menu('conceptos') or can_menu('tipos_planilla') or can_menu('formulas') or can_menu('usuarios_empresa') or can_menu('companias_branding') or can_menu('comparar_planillas') or can_menu('perfiles_acceso') or can_menu('asignar_perfiles') or (mostrar_menu_receta and can_menu('receta')) %}
+                {% set generales_active = request.endpoint in ('empresas_page', 'conceptos_page', 'tipos_planilla_page', 'formulas_page', 'usuarios_empresa_page', 'companias_branding_page', 'comparar_planillas_page', 'comparar_planillas_resultado_page', 'perfiles_acceso_page', 'asignar_perfiles_page') or (mostrar_menu_receta and request.endpoint == 'receta_page') %}
+                {% set show_generales = can_menu('empresas') or can_menu('conceptos') or can_menu('tipos_planilla') or can_menu('formulas') or can_menu('usuarios_empresa') or can_menu('companias_branding') or can_menu('comparar_planillas') or can_menu('perfiles_acceso') or can_menu('asignar_perfiles') or (mostrar_menu_receta and can_menu('receta')) %}
                 {% if show_generales %}
                 <li class="sidebar-menu-parent {{ 'active' if generales_active else '' }}">
                     <a href="#submenuGenerales"
@@ -573,6 +573,13 @@
                         <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
                     </a>
                     <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if generales_active else '' }}" id="submenuGenerales">
+                        {% if can_menu('empresas') %}
+                        <li class="{{ 'active' if request.endpoint == 'empresas_page' else '' }}">
+                            <a href="{{ url_for('empresas_page') }}" title="Empresas">
+                                <i class="bi bi-buildings"></i><span class="sidebar-link-text">Empresas</span>
+                            </a>
+                        </li>
+                        {% endif %}
                         {% if can_menu('conceptos') %}
                         <li class="{{ 'active' if request.endpoint == 'conceptos_page' else '' }}">
                             <a href="{{ url_for('conceptos_page') }}" title="Conceptos">

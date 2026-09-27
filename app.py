@@ -8936,6 +8936,12 @@ def descansos_eliminar_post():
                 pass
 
 
+@app.route('/empresas')
+@login_required
+def empresas_page():
+    return render_template('maestro_empresas.html')
+
+
 @app.route('/conceptos')
 @login_required
 def conceptos_page():
@@ -18423,6 +18429,169 @@ def api_formulas_replicar():
             except Exception:
                 pass
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _empresa_lista_dict(r):
+    return {
+        'company': _jsonable_value(r.get('company')),
+        'description': _jsonable_value(r.get('description')),
+        'status': _jsonable_value(r.get('status')) or 'A',
+        'estado': _jsonable_value(r.get('estado')),
+        'ruc': _jsonable_value(r.get('ruc')),
+        'xlastdate': _jsonable_datetime(r.get('xlastdate')),
+    }
+
+
+def _empresa_detalle_dict(r):
+    if not r:
+        return None
+    campos = (
+        'company', 'description', 'ruc', 'telephone', 'address', 'localite',
+        'distrito', 'provincia', 'departamento', 'pais', 'ubigeo', 'ubigeo_texto',
+        'status', 'representative', 'rep_doctype', 'rep_doctypedesc',
+        'rep_docnumber', 'rep_position', 'xcreateuser', 'xlastuser',
+    )
+    out = {k: _jsonable_value(r.get(k)) for k in campos}
+    out['status'] = out.get('status') or 'A'
+    out['xcreatedate'] = _jsonable_datetime(r.get('xcreatedate'))
+    out['xlastdate'] = _jsonable_datetime(r.get('xlastdate'))
+    return out
+
+
+@app.route('/api/empresas/listado', methods=['POST'])
+@login_required
+def api_empresas_listado():
+    """sp_pr_listarempresas_web: listado del maestro de empresas (SY_Company)."""
+    body = request.get_json(silent=True) or {}
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_listarempresas_web @busqueda=?", (busqueda or None,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [_empresa_lista_dict(r) for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_empresas_listado")
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/obtener', methods=['POST'])
+@login_required
+def api_empresas_obtener():
+    """sp_pr_obtenerempresa_web: detalle de empresa para edición."""
+    body = request.get_json(silent=True) or {}
+    company = str(body.get('company') or body.get('cia') or '').strip()
+    if not company:
+        return jsonify({"error": "Seleccione una empresa."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_obtenerempresa_web @company=?", (company,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        if not rows:
+            return jsonify({"error": "La empresa no existe."}), 404
+        return jsonify(_empresa_detalle_dict(rows[0]))
+    except Exception as e:
+        logging.exception("api_empresas_obtener")
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/tipos-documento')
+@login_required
+def api_empresas_tipos_documento():
+    """Tipos de documento del representante: SY_Company.Rep_DocType guarda IDs del catálogo BGT."""
+    company = str(request.args.get('company') or request.args.get('cia') or '').strip()
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        items = _selector_items_from_sp(
+            cursor, 'EXEC sp_pr_selectorpersondocumenttype_web @cia=?', ('BGT',)
+        )
+        if not items and company and company.upper() != 'BGT':
+            items = _selector_items_from_sp(
+                cursor, 'EXEC sp_pr_selectorpersondocumenttype_web @cia=?', (company,)
+            )
+        return jsonify(items)
+    except Exception:
+        logging.exception("api_empresas_tipos_documento")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/guardar', methods=['POST'])
+@login_required
+def api_empresas_guardar():
+    """sp_pr_guardarempresa_web: edición de empresa."""
+    body = request.get_json(silent=True) or {}
+    company = str(body.get('company') or '').strip()
+    description = str(body.get('description') or '').strip()
+    if not company:
+        return jsonify({"error": "Seleccione una empresa."}), 400
+    if not description:
+        return jsonify({"error": "Indique la razón social de la empresa."}), 400
+
+    def _txt(key):
+        return str(body.get(key) or '').strip() or None
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarempresa_web @company=?, @description=?, @ruc=?, @telephone=?, "
+            "@address=?, @localite=?, @status=?, @representative=?, @rep_doctype=?, "
+            "@rep_docnumber=?, @rep_position=?, @xlastuser=?",
+            (
+                company, description, _txt('ruc'), _txt('telephone'), _txt('address'),
+                _txt('localite'), _txt('status') or 'A', _txt('representative'),
+                _txt('rep_doctype'), _txt('rep_docnumber'), _txt('rep_position'),
+                _xlastuser_id() or None,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(row.get('company')) or company,
+            "modo": _jsonable_value(row.get('modo')) or 'U',
+            "mensaje": _jsonable_value(row.get('mensaje')) or 'Empresa actualizada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_empresas_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
     finally:
         if conn:
             try:

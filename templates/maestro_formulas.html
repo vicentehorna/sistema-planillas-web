@@ -48,6 +48,21 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
+    .table-formulas-lista thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-formulas-lista thead th.th-sort:hover {
+        background: #e9ecef;
+    }
+
+    .table-formulas-lista thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+        font-size: 10px;
+    }
+
     .table-formulas-lista tbody tr.formula-row {
         cursor: pointer;
     }
@@ -498,12 +513,12 @@
                             <th class="col-check">
                                 <input type="checkbox" id="chkSelTodasFormulas" title="Seleccionar todas" aria-label="Seleccionar todas">
                             </th>
-                            <th>Grupo</th>
-                            <th>Tipo</th>
-                            <th>Concepto</th>
-                            <th style="width:3rem;">Ord.</th>
-                            <th>Condición</th>
-                            <th>Últ. cambio</th>
+                            <th class="th-sort" data-sort="grupo">Grupo<span class="sort-ind"></span></th>
+                            <th class="th-sort" data-sort="tipo">Tipo<span class="sort-ind"></span></th>
+                            <th class="th-sort" data-sort="concepto">Concepto<span class="sort-ind"></span></th>
+                            <th class="th-sort" data-sort="orden" style="width:3rem;">Ord.<span class="sort-ind"></span></th>
+                            <th class="th-sort" data-sort="condicion">Condición<span class="sort-ind"></span></th>
+                            <th class="th-sort" data-sort="ultimafecha">Últ. cambio<span class="sort-ind"></span></th>
                         </tr>
                     </thead>
                     <tbody id="tbodyFormulas">
@@ -1486,7 +1501,65 @@
         chkTodas.indeterminate = marcadas > 0 && marcadas < visibles.length;
     }
 
+    const ordenLista = { col: null, dir: 1 };
+
+    function claveOrdenFormula(r, col) {
+        const v = r[col];
+        if (col === 'orden') {
+            const n = parseFloat(v);
+            return Number.isNaN(n) ? Number.MAX_VALUE : n;
+        }
+        if (col === 'ultimafecha') {
+            const m = String(v || '').match(/^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2})(?::(\d{2}))?)?/);
+            if (!m) return '';
+            return `${m[3]}${m[2]}${m[1]}${m[4] || '00'}${m[5] || '00'}${m[6] || '00'}`;
+        }
+        return String(v || '');
+    }
+
+    function ordenarFilasFormulas(rows) {
+        if (!ordenLista.col) return rows;
+        const col = ordenLista.col;
+        const dir = ordenLista.dir;
+        return rows.slice().sort((a, b) => {
+            const ka = claveOrdenFormula(a, col);
+            const kb = claveOrdenFormula(b, col);
+            if (typeof ka === 'number' && typeof kb === 'number') return (ka - kb) * dir;
+            return String(ka).localeCompare(String(kb), 'es', { numeric: true, sensitivity: 'base' }) * dir;
+        });
+    }
+
+    function actualizarIndicadoresOrden() {
+        document.querySelectorAll('.table-formulas-lista th.th-sort').forEach((th) => {
+            const ind = th.querySelector('.sort-ind');
+            const activo = th.getAttribute('data-sort') === ordenLista.col;
+            ind.textContent = activo ? (ordenLista.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLista.dir === 1 ? 'Orden ascendente (clic: descendente)' : 'Orden descendente (clic: orden original)')
+                : 'Clic para ordenar';
+        });
+    }
+
+    document.querySelectorAll('.table-formulas-lista th.th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (ordenLista.col !== col) {
+                ordenLista.col = col;
+                ordenLista.dir = 1;
+            } else if (ordenLista.dir === 1) {
+                ordenLista.dir = -1;
+            } else {
+                ordenLista.col = null;
+                ordenLista.dir = 1;
+            }
+            actualizarIndicadoresOrden();
+            renderListaFormulas(formulasCache);
+        });
+    });
+    actualizarIndicadoresOrden();
+
     function renderListaFormulas(rows) {
+        rows = ordenarFilasFormulas(rows || []);
         if (!rows.length) {
             tbodyFormulas.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoFormulas').textContent = '0 registros';

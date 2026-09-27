@@ -407,6 +407,9 @@
                 <button type="submit" class="btn btn-primary btn-sm px-3">
                     <i class="bi bi-search"></i> Consultar
                 </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnNuevaEmpresa">
+                    <i class="bi bi-plus-lg"></i> Nuevo
+                </button>
             </div>
         </form>
     </div>
@@ -466,7 +469,7 @@
                     </div>
 
                     <div class="col-6 col-md-4">
-                        <label for="txtRuc" class="form-label fw-semibold text-muted">R.U.C.</label>
+                        <label for="txtRuc" class="form-label fw-semibold text-muted" id="lblRuc">R.U.C.</label>
                         <input type="text" id="txtRuc" class="form-control form-control-sm" maxlength="15" inputmode="numeric">
                     </div>
                     <div class="col-6 col-md-4">
@@ -573,6 +576,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     let snapshotFormulario = '';
     let formDirty = false;
     let tiposDocCompany = null;
+    let modoForm = 'U';
 
     const tbodyEmpresas = document.getElementById('tbodyEmpresas');
     const grillaScroll = document.getElementById('grillaScrollEmpresas');
@@ -1024,20 +1028,35 @@ document.addEventListener('DOMContentLoaded', async function () {
         return document.getElementById('rdoStatusI').checked ? 'I' : 'A';
     }
 
-    async function cargarFormulario(data) {
-        document.getElementById('tituloEdicionEmpresa').textContent =
-            `Editar empresa — ${data.company || ''}`;
+    function aplicarModo(modo) {
+        modoForm = modo === 'I' ? 'I' : 'U';
+        const esNuevo = modoForm === 'I';
+        const txtRuc = document.getElementById('txtRuc');
+        document.getElementById('lblRuc').classList.toggle('mc-req', esNuevo);
+        txtRuc.classList.toggle('campo-obligatorio', esNuevo);
+        txtRuc.maxLength = esNuevo ? 11 : 15;
+        document.getElementById('txtCompany').title = esNuevo
+            ? 'Código propuesto: se asigna definitivamente al guardar.'
+            : '';
+    }
+
+    async function cargarFormulario(data, modo) {
+        aplicarModo(modo);
+        const catalogo = modoForm === 'I' ? 'BGT' : (data.company || '');
+        document.getElementById('tituloEdicionEmpresa').textContent = modoForm === 'I'
+            ? `Nueva empresa — código propuesto ${data.company || ''}`
+            : `Editar empresa — ${data.company || ''}`;
         document.getElementById('txtCompany').value = data.company || '';
         document.getElementById('txtDescription').value = data.description || '';
         document.getElementById('txtRuc').value = data.ruc || '';
         document.getElementById('txtTelephone').value = data.telephone || '';
         document.getElementById('txtAddress').value = data.address || '';
         setStatus(data.status);
-        ubigeo.cargar(data, data.company);
+        ubigeo.cargar(data, catalogo);
         document.getElementById('txtRepresentative').value = data.representative || '';
         document.getElementById('txtRepPosition').value = data.rep_position || '';
         document.getElementById('txtRepDocNumber').value = data.rep_docnumber || '';
-        await cargarTiposDocumento(data.company || '', data.rep_doctype, data.rep_doctypedesc);
+        await cargarTiposDocumento(catalogo, data.rep_doctype, data.rep_doctypedesc);
         document.getElementById('txtXCreateUser').value = data.xcreateuser || '';
         document.getElementById('txtXCreateDate').value = data.xcreatedate || '';
         document.getElementById('txtXLastUser').value = data.xlastuser || '';
@@ -1063,7 +1082,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function seleccionarEmpresa(row) {
         if (!row || !row.company) return;
-        if (empresaSeleccionada && empresaSeleccionada.company !== row.company) {
+        if (modoForm === 'I' || (empresaSeleccionada && empresaSeleccionada.company !== row.company)) {
             const ok = await confirmarSalidaSiDirty();
             if (!ok) {
                 updateRowHighlight();
@@ -1088,10 +1107,67 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const data = await leerJson(res);
             if (signal.aborted) return;
-            await cargarFormulario(data);
+            await cargarFormulario(data, 'U');
         } catch (err) {
             if (err.name === 'AbortError') return;
             hmError(err.message);
+        }
+    }
+
+    async function nuevaEmpresa() {
+        const ok = await confirmarSalidaSiDirty();
+        if (!ok) return;
+        ocultarMensajeGuardado();
+        if (obtenerAbort) obtenerAbort.abort();
+
+        let codigo = '';
+        try {
+            const data = await leerJson(await fetch('/api/empresas/siguiente-codigo'));
+            codigo = data.company || '';
+        } catch (err) {
+            hmError(err.message);
+            return;
+        }
+        if (!codigo) {
+            hmAdvertencia('No hay códigos de empresa disponibles.');
+            return;
+        }
+
+        empresaSeleccionada = null;
+        idxEmpresaActiva = -1;
+        updateRowHighlight();
+        mostrarPanelEdicion(true);
+        await cargarFormulario({ company: codigo, status: 'A' }, 'I');
+        document.getElementById('txtDescription').focus();
+    }
+
+    async function registrarEmpresa(payload) {
+        if (!/^\d{11}$/.test(payload.ruc)) {
+            hmAdvertencia('El RUC debe tener 11 dígitos.');
+            document.getElementById('txtRuc').focus();
+            return;
+        }
+
+        btnGuardar.disabled = true;
+        try {
+            const res = await fetch('/api/empresas/registrar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            formDirty = false;
+            aplicarModo('U');
+            await cargarListado();
+            const row = empresasCache.find((x) => x.company === data.company);
+            await seleccionarEmpresa(row || { company: data.company });
+            mostrarMensajeGuardado(
+                `${data.mensaje || 'Empresa registrada correctamente.'} Los maestros de planilla se copian con la opción Replicar.`
+            );
+        } catch (err) {
+            hmError(err.message);
+        } finally {
+            btnGuardar.disabled = false;
         }
     }
 
@@ -1104,6 +1180,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!payload.description) {
             hmAdvertencia('Indique la razón social de la empresa.');
             document.getElementById('txtDescription').focus();
+            return;
+        }
+        if (modoForm === 'I') {
+            await registrarEmpresa(payload);
             return;
         }
         if (payload.ruc && !/^\d{8,15}$/.test(payload.ruc)) {
@@ -1137,6 +1217,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     frmEmpresa.addEventListener('change', marcarFormDirty);
     frmEmpresa.addEventListener('submit', (e) => e.preventDefault());
     btnGuardar.addEventListener('click', guardarEmpresa);
+    document.getElementById('btnNuevaEmpresa').addEventListener('click', nuevaEmpresa);
 
     ['txtDescription', 'txtRepresentative', 'txtRepPosition', 'txtAddress'].forEach((id) => {
         const el = document.getElementById(id);

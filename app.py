@@ -16735,6 +16735,7 @@ def _concepto_error_sp_message(ex):
         parts = err.split(']')
         if len(parts) > 1:
             err = parts[-1].strip(" ()'\"")
+        err = re.sub(r"\s*\(\d+\)?\s*(\(SQL\w+\)?)?\s*$", '', err).strip(" ()'\"")
     return err
 
 
@@ -18586,6 +18587,85 @@ def api_empresas_guardar():
         })
     except Exception as e:
         logging.exception("api_empresas_guardar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/siguiente-codigo', methods=['GET'])
+@login_required
+def api_empresas_siguiente_codigo():
+    """sp_pr_siguientecodigoempresa_web: código propuesto para una nueva empresa (SB01…SB99, S100…)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_siguientecodigoempresa_web")
+        rows = _dicts_first_nonempty_resultset(cursor)
+        row = rows[0] if rows else {}
+        return jsonify({"company": _jsonable_value(row.get('company')) or ''})
+    except Exception as e:
+        logging.exception("api_empresas_siguiente_codigo")
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/registrar', methods=['POST'])
+@login_required
+def api_empresas_registrar():
+    """sp_pr_registrarempresa_web: alta de empresa; el código se genera al grabar."""
+    body = request.get_json(silent=True) or {}
+    description = str(body.get('description') or '').strip()
+    ruc = str(body.get('ruc') or '').strip()
+    if not description:
+        return jsonify({"error": "Indique la razón social de la empresa."}), 400
+    if len(ruc) != 11 or not ruc.isdigit():
+        return jsonify({"error": "El RUC debe tener 11 dígitos."}), 400
+
+    def _txt(key):
+        return str(body.get(key) or '').strip() or None
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_registrarempresa_web @description=?, @ruc=?, @telephone=?, "
+            "@address=?, @localite=?, @status=?, @representative=?, @rep_doctype=?, "
+            "@rep_docnumber=?, @rep_position=?, @xlastuser=?",
+            (
+                description, ruc, _txt('telephone'), _txt('address'),
+                _txt('localite'), _txt('status') or 'A', _txt('representative'),
+                _txt('rep_doctype'), _txt('rep_docnumber'), _txt('rep_position'),
+                _xlastuser_id() or None,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        company = _jsonable_value(row.get('company')) or ''
+        return jsonify({
+            "ok": True,
+            "company": company,
+            "modo": 'I',
+            "mensaje": _jsonable_value(row.get('mensaje')) or f'Empresa {company} registrada correctamente.',
+        })
+    except Exception as e:
+        logging.exception("api_empresas_registrar")
         if conn:
             try:
                 conn.rollback()

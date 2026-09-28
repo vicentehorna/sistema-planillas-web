@@ -358,6 +358,85 @@
         background: #fafbfc;
     }
 
+    .replica-origen {
+        padding: 0.45rem 0.65rem;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
+        background: #f1f4f8;
+        color: #1a4b84;
+    }
+
+    .replica-destinos {
+        height: 18rem;
+        overflow-y: auto;
+        border: 1px solid #d7dee8;
+        border-radius: 0.35rem;
+        background: #fff;
+    }
+
+    .replica-destinos:focus-visible {
+        outline: 2px solid #86b7fe;
+        outline-offset: -2px;
+    }
+
+    .replica-destino {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.35rem 0.65rem;
+        border-bottom: 1px solid #eef1f5;
+        font-size: 0.8rem;
+        cursor: pointer;
+    }
+
+    .replica-destino:hover {
+        background: #eef4fb;
+    }
+
+    .replica-destino.active {
+        background: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+        font-weight: 600;
+    }
+
+    .replica-destino .rd-codigo {
+        flex: 0 0 3.2rem;
+        color: #1a4b84;
+        font-weight: 600;
+    }
+
+    .replica-destino .rd-nombre {
+        flex: 1 1 auto;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .replica-destino .rd-ruc {
+        flex: 0 0 6.5rem;
+        color: #6c757d;
+        font-size: 0.75rem;
+    }
+
+    .replica-destino .rd-badge {
+        flex: 0 0 auto;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0.1rem 0.45rem;
+        border-radius: 0.6rem;
+    }
+
+    .replica-destino .rd-badge.vacia {
+        background: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .replica-destino .rd-badge.con-datos {
+        background: #fff3cd;
+        color: #664d03;
+    }
+
     @media (max-width: 991.98px) {
         .empresas-page {
             height: auto;
@@ -450,6 +529,10 @@
                 <span class="empresas-dw-title-text" id="tituloEdicionEmpresa">Editar empresa</span>
                 <div id="msgGuardadoEmpresa" class="empresas-msg-guardado d-none" role="status" aria-live="polite"></div>
                 <div class="empresas-titlebar-actions">
+                    <button type="button" class="btn btn-light btn-sm empresas-btn-guardar" id="btnReplicarEmpresa"
+                            title="Copiar conceptos, fórmulas y maestros de esta empresa a otra">
+                        <i class="bi bi-copy"></i> Replicar
+                    </button>
                     <button type="button" class="btn btn-success btn-sm empresas-btn-guardar" id="btnGuardarEmpresa" title="Ctrl+S">
                         <i class="bi bi-save"></i> Guardar
                     </button>
@@ -560,6 +643,56 @@
         </div>
     </section>
 </div>
+</div>
+
+<div class="modal fade" id="modalReplicarEmpresa" tabindex="-1" aria-labelledby="modalReplicarEmpresaLabel" aria-hidden="true"
+     data-bs-backdrop="static">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalReplicarEmpresaLabel"><i class="bi bi-copy"></i> Replicar empresa</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar" id="btnCerrarReplica"></button>
+            </div>
+            <div class="modal-body">
+                <div class="replica-origen mb-2">
+                    <span class="text-muted small fw-semibold">Empresa origen</span>
+                    <div id="lblReplicaOrigen" class="fw-bold"></div>
+                </div>
+
+                <div id="pasoReplicaDestino">
+                    <label for="txtBuscarDestino" class="form-label small fw-semibold text-muted mb-1">Empresa destino</label>
+                    <input type="search" id="txtBuscarDestino" class="form-control form-control-sm mb-2"
+                           placeholder="Buscar por código, razón social o RUC..." autocomplete="off">
+                    <div class="replica-destinos" id="listaDestinos" role="listbox" tabindex="0"
+                         aria-label="Empresas destino. Use flechas arriba y abajo para navegar."></div>
+                    <div class="small text-muted mt-1" id="lblReplicaDestinosInfo">
+                        Solo se listan empresas sin trabajadores registrados.
+                    </div>
+                </div>
+
+                <div id="pasoReplicaConfirmar" class="d-none">
+                    <div class="alert mb-0" id="alertReplicaConfirmar" role="alert"></div>
+                </div>
+
+                <div id="pasoReplicaProceso" class="d-none text-center py-4">
+                    <div class="spinner-border text-primary mb-2" role="status" aria-hidden="true"></div>
+                    <div id="lblReplicaProceso">Replicando, espere por favor...</div>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal" id="btnCancelarReplica">Cancelar</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm d-none" id="btnVolverReplica">
+                    <i class="bi bi-arrow-left"></i> Volver
+                </button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnSiguienteReplica" disabled>
+                    Replicar <i class="bi bi-arrow-right"></i>
+                </button>
+                <button type="button" class="btn btn-primary btn-sm d-none" id="btnConfirmarReplica">
+                    <i class="bi bi-check2"></i> Sí, replicar
+                </button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -1035,6 +1168,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('lblRuc').classList.toggle('mc-req', esNuevo);
         txtRuc.classList.toggle('campo-obligatorio', esNuevo);
         txtRuc.maxLength = esNuevo ? 11 : 15;
+        document.getElementById('btnReplicarEmpresa').classList.toggle('d-none', esNuevo);
         document.getElementById('txtCompany').title = esNuevo
             ? 'Código propuesto: se asigna definitivamente al guardar.'
             : '';
@@ -1162,7 +1296,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const row = empresasCache.find((x) => x.company === data.company);
             await seleccionarEmpresa(row || { company: data.company });
             mostrarMensajeGuardado(
-                `${data.mensaje || 'Empresa registrada correctamente.'} Los maestros de planilla se copian con la opción Replicar.`
+                `${data.mensaje || 'Empresa registrada correctamente.'} Para copiarle conceptos y fórmulas, seleccione la empresa origen y pulse Replicar.`
             );
         } catch (err) {
             hmError(err.message);
@@ -1212,7 +1346,228 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    /* ---------- Replicar ---------- */
+    const replica = (function () {
+        const modalEl = document.getElementById('modalReplicarEmpresa');
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl, { backdrop: 'static' });
+        const lblOrigen = document.getElementById('lblReplicaOrigen');
+        const txtDestino = document.getElementById('txtBuscarDestino');
+        const lista = document.getElementById('listaDestinos');
+        const lblInfo = document.getElementById('lblReplicaDestinosInfo');
+        const pasoDestino = document.getElementById('pasoReplicaDestino');
+        const pasoConfirmar = document.getElementById('pasoReplicaConfirmar');
+        const pasoProceso = document.getElementById('pasoReplicaProceso');
+        const alertConfirmar = document.getElementById('alertReplicaConfirmar');
+        const btnCancelar = document.getElementById('btnCancelarReplica');
+        const btnCerrar = document.getElementById('btnCerrarReplica');
+        const btnVolver = document.getElementById('btnVolverReplica');
+        const btnSiguiente = document.getElementById('btnSiguienteReplica');
+        const btnConfirmar = document.getElementById('btnConfirmarReplica');
+
+        let origen = null;
+        let destinos = [];
+        let visibles = [];
+        let seleccion = null;
+        let enProceso = false;
+
+        function nombreEmpresa(e) {
+            return e ? `${e.company} — ${e.description || ''}` : '';
+        }
+
+        function mostrarPaso(paso) {
+            pasoDestino.classList.toggle('d-none', paso !== 'destino');
+            pasoConfirmar.classList.toggle('d-none', paso !== 'confirmar');
+            pasoProceso.classList.toggle('d-none', paso !== 'proceso');
+            btnSiguiente.classList.toggle('d-none', paso !== 'destino');
+            btnVolver.classList.toggle('d-none', paso !== 'confirmar');
+            btnConfirmar.classList.toggle('d-none', paso !== 'confirmar');
+            btnCancelar.disabled = paso === 'proceso';
+            btnCerrar.disabled = paso === 'proceso';
+            btnSiguiente.disabled = !seleccion;
+        }
+
+        function normalizar(s) {
+            return String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
+        }
+
+        function renderDestinos() {
+            const q = normalizar(txtDestino.value.trim());
+            visibles = destinos.filter((d) => !q
+                || normalizar(d.company).includes(q)
+                || normalizar(d.description).includes(q)
+                || String(d.ruc || '').includes(q));
+
+            if (!visibles.length) {
+                lista.innerHTML = `<div class="text-center text-muted small py-4">${destinos.length
+                    ? 'Sin coincidencias.'
+                    : 'No hay empresas sin trabajadores para recibir la réplica. Registre primero la empresa con el botón Nuevo.'}</div>`;
+            } else {
+                lista.innerHTML = visibles.map((d, idx) => {
+                    const activo = !!(seleccion && seleccion.company === d.company);
+                    const badge = d.conceptos > 0
+                        ? `<span class="rd-badge con-datos" title="Se reemplazarán sus conceptos y fórmulas">${d.conceptos} conceptos</span>`
+                        : '<span class="rd-badge vacia">Sin conceptos</span>';
+                    return `<div class="replica-destino ${activo ? 'active' : ''}" data-idx="${idx}" role="option" aria-selected="${activo}">
+                        <span class="rd-codigo">${escHtml(d.company)}</span>
+                        <span class="rd-nombre" title="${escHtml(d.description)}">${escHtml(d.description)}</span>
+                        <span class="rd-ruc">${escHtml(d.ruc)}</span>
+                        ${badge}
+                    </div>`;
+                }).join('');
+                lista.querySelectorAll('.replica-destino').forEach((el) => {
+                    el.addEventListener('click', () => seleccionar(Number(el.getAttribute('data-idx'))));
+                    el.addEventListener('dblclick', () => {
+                        seleccionar(Number(el.getAttribute('data-idx')));
+                        irAConfirmar();
+                    });
+                });
+            }
+            if (seleccion && !visibles.some((d) => d.company === seleccion.company)) seleccion = null;
+            btnSiguiente.disabled = !seleccion;
+        }
+
+        function seleccionar(idx) {
+            const d = visibles[idx];
+            if (!d) return;
+            seleccion = d;
+            lista.querySelectorAll('.replica-destino').forEach((el, i) => {
+                el.classList.toggle('active', i === idx);
+                el.setAttribute('aria-selected', i === idx ? 'true' : 'false');
+                if (i === idx) el.scrollIntoView({ block: 'nearest' });
+            });
+            btnSiguiente.disabled = false;
+        }
+
+        function idxSeleccion() {
+            return seleccion ? visibles.findIndex((d) => d.company === seleccion.company) : -1;
+        }
+
+        async function abrir(emp) {
+            if (!emp || !emp.company) {
+                hmAdvertencia('Seleccione la empresa origen.');
+                return;
+            }
+            origen = { company: emp.company, description: emp.description || '' };
+            destinos = [];
+            seleccion = null;
+            lblOrigen.textContent = nombreEmpresa(origen);
+            txtDestino.value = '';
+            lista.innerHTML = '<div class="text-center text-muted small py-4">Cargando empresas...</div>';
+            mostrarPaso('destino');
+            modal.show();
+            try {
+                const data = await leerJson(await fetch(
+                    `/api/empresas/destinos-replica?company_base=${encodeURIComponent(origen.company)}`
+                ));
+                destinos = data.rows || [];
+                lblInfo.textContent = `Solo se listan empresas sin trabajadores registrados (${destinos.length}).`;
+                renderDestinos();
+            } catch (err) {
+                lista.innerHTML = `<div class="text-center text-danger small py-4">${escHtml(err.message)}</div>`;
+            }
+        }
+
+        function irAConfirmar() {
+            if (!seleccion) return;
+            const reemplaza = seleccion.conceptos > 0 || seleccion.formulas > 0;
+            const destino = `<strong>${escHtml(nombreEmpresa(seleccion))}</strong>`;
+            const fuente = `<strong>${escHtml(nombreEmpresa(origen))}</strong>`;
+            alertConfirmar.className = `alert mb-0 ${reemplaza ? 'alert-danger' : 'alert-primary'}`;
+            alertConfirmar.innerHTML = `
+                <p class="mb-2">Se copiarán de ${fuente} a ${destino}:</p>
+                <ul class="mb-2 small">
+                    <li>Conceptos, parámetros y fórmulas.</li>
+                    <li>Tipos de planilla, procesos, periodos y control de procesos.</li>
+                    <li>Catálogos de la ficha del trabajador (cargos, AFP, ocupaciones, etc.).</li>
+                    <li>Bancos, plan de cuentas, perfiles contables y configuración de la planilla.</li>
+                </ul>
+                <p class="mb-2 small">No se copian trabajadores ni movimientos.</p>
+                ${reemplaza
+                    ? `<p class="mb-2 fw-semibold"><i class="bi bi-exclamation-triangle-fill"></i>
+                        La empresa destino ya tiene ${seleccion.conceptos} conceptos y ${seleccion.formulas} fórmulas:
+                        se eliminarán y se reemplazarán por los de la empresa origen.</p>`
+                    : ''}
+                <p class="mb-0 fw-semibold">¿Desea continuar con la réplica?</p>`;
+            btnConfirmar.className = `btn btn-sm ${reemplaza ? 'btn-danger' : 'btn-primary'}`;
+            mostrarPaso('confirmar');
+            btnConfirmar.focus();
+        }
+
+        async function ejecutar() {
+            if (!origen || !seleccion || enProceso) return;
+            const destino = seleccion;
+            enProceso = true;
+            document.getElementById('lblReplicaProceso').textContent =
+                `Replicando ${origen.company} a ${destino.company}, espere por favor...`;
+            mostrarPaso('proceso');
+            try {
+                const data = await leerJson(await fetch('/api/empresas/replicar', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        company_base: origen.company,
+                        company: destino.company,
+                        reemplazar: destino.conceptos > 0 || destino.formulas > 0,
+                    }),
+                }));
+                enProceso = false;
+                modal.hide();
+                mostrarMensajeGuardado(data.mensaje || 'Réplica completada.');
+            } catch (err) {
+                enProceso = false;
+                mostrarPaso('confirmar');
+                hmError(err.message);
+            }
+        }
+
+        modalEl.addEventListener('hide.bs.modal', (e) => {
+            if (enProceso) e.preventDefault();
+        });
+        modalEl.addEventListener('shown.bs.modal', () => txtDestino.focus());
+        txtDestino.addEventListener('input', renderDestinos);
+        txtDestino.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' && visibles.length) {
+                e.preventDefault();
+                lista.focus({ preventScroll: true });
+                seleccionar(Math.max(0, idxSeleccion()));
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                if (seleccion) irAConfirmar();
+                else if (visibles.length === 1) {
+                    seleccionar(0);
+                    irAConfirmar();
+                }
+            }
+        });
+        lista.addEventListener('keydown', (e) => {
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(e.key) || !visibles.length) return;
+            e.preventDefault();
+            const i = idxSeleccion();
+            if (e.key === 'ArrowDown') seleccionar(i < 0 ? 0 : Math.min(i + 1, visibles.length - 1));
+            else if (e.key === 'ArrowUp') seleccionar(i <= 0 ? 0 : i - 1);
+            else if (e.key === 'Home') seleccionar(0);
+            else if (e.key === 'End') seleccionar(visibles.length - 1);
+            else if (e.key === 'Enter') irAConfirmar();
+        });
+        btnSiguiente.addEventListener('click', irAConfirmar);
+        btnVolver.addEventListener('click', () => {
+            mostrarPaso('destino');
+            lista.focus({ preventScroll: true });
+        });
+        btnConfirmar.addEventListener('click', ejecutar);
+
+        return { abrir };
+    })();
+
     /* ---------- Eventos ---------- */
+    document.getElementById('btnReplicarEmpresa').addEventListener('click', () => {
+        if (modoForm === 'I') return;
+        replica.abrir({
+            company: document.getElementById('txtCompany').value.trim(),
+            description: document.getElementById('txtDescription').value.trim()
+                || (empresaSeleccionada && empresaSeleccionada.description) || '',
+        });
+    });
     frmEmpresa.addEventListener('input', marcarFormDirty);
     frmEmpresa.addEventListener('change', marcarFormDirty);
     frmEmpresa.addEventListener('submit', (e) => e.preventDefault());

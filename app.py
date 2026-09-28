@@ -18680,6 +18680,93 @@ def api_empresas_registrar():
                 pass
 
 
+@app.route('/api/empresas/destinos-replica', methods=['GET'])
+@login_required
+def api_empresas_destinos_replica():
+    """sp_pr_listardestinosreplica_web: empresas sin trabajadores que pueden recibir la réplica."""
+    company_base = str(request.args.get('company_base') or request.args.get('origen') or '').strip()
+    if not company_base:
+        return jsonify({"error": "Seleccione la empresa origen."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_listardestinosreplica_web @company_base=?", (company_base,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [{
+            "company": _jsonable_value(r.get('company')) or '',
+            "description": _jsonable_value(r.get('description')) or '',
+            "ruc": _jsonable_value(r.get('ruc')) or '',
+            "status": _jsonable_value(r.get('status')) or 'A',
+            "conceptos": int(r.get('conceptos') or 0),
+            "formulas": int(r.get('formulas') or 0),
+            "xcreatedate": _jsonable_datetime(r.get('xcreatedate')),
+        } for r in rows]
+        return jsonify({"rows": resultado, "total": len(resultado)})
+    except Exception as e:
+        logging.exception("api_empresas_destinos_replica")
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/empresas/replicar', methods=['POST'])
+@login_required
+def api_empresas_replicar():
+    """sp_pr_replicarempresa_web: copia conceptos, fórmulas y maestros de planilla de una empresa a otra."""
+    body = request.get_json(silent=True) or {}
+    company_base = str(body.get('company_base') or '').strip()
+    company = str(body.get('company') or '').strip()
+    reemplazar = 1 if body.get('reemplazar') in (True, 1, '1', 'true', 'S') else 0
+    if not company_base:
+        return jsonify({"error": "Seleccione la empresa origen."}), 400
+    if not company:
+        return jsonify({"error": "Seleccione la empresa destino."}), 400
+    if company.upper() == company_base.upper():
+        return jsonify({"error": "La empresa origen debe ser distinta a la empresa destino."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_replicarempresa_web @company=?, @company_base=?, @xlastuser=?, @reemplazar=?",
+            (company, company_base, _xlastuser_id() or None, reemplazar),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        while cursor.nextset():
+            pass
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "company": company,
+            "company_base": company_base,
+            "conceptos": int(row.get('conceptos') or 0),
+            "formulas": int(row.get('formulas') or 0),
+            "filas": int(row.get('filas') or 0),
+            "mensaje": _jsonable_value(row.get('mensaje')) or f'Réplica de {company_base} a {company} completada.',
+        })
+    except Exception as e:
+        logging.exception("api_empresas_replicar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/conceptos/listado', methods=['POST'])
 @login_required
 def api_conceptos_listado():

@@ -944,12 +944,12 @@
                 <div class="te-dw-titlebar">
                     <span class="te-dw-title-text">{{ seccion_titulo }}</span>
                     <div class="te-titlebar-actions">
-                        <a href="{{ url_for('trabajadores_page', retorno=1) }}"
-                           class="btn btn-sm te-btn-cancelar te-link-salida">Cancelar</a>
                         <button type="submit" form="{{ form_id }}" id="btnGuardarTrabajador"
                                 class="btn btn-success btn-sm te-btn-guardar" title="Ctrl+S">
                             <i class="bi bi-save"></i> Guardar
-                </button>
+                        </button>
+                        <a href="{{ url_for('trabajadores_page', retorno=1) }}"
+                           class="btn btn-sm te-btn-cancelar te-link-salida">Cancelar</a>
                     </div>
                 </div>
                 <div class="te-dw-body">

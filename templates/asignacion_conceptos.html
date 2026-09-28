@@ -38,6 +38,21 @@
         box-shadow: none;
     }
 
+    .table-asignacion-conceptos thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-asignacion-conceptos thead th.th-sort:hover {
+        background-color: #e4e9f0;
+    }
+
+    .table-asignacion-conceptos thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+        font-size: 10px;
+    }
+
     .table-asignacion-conceptos tbody tr:hover {
         background-color: #eef4fb;
     }
@@ -265,17 +280,17 @@
                 <thead>
                     <tr>
                         <th class="col-item">Item</th>
-                        <th>Código</th>
-                        <th>Empleado</th>
-                        <th>Concepto</th>
-                        <th>Tipo</th>
-                        <th class="col-valor">Valor</th>
-                        <th>Moneda</th>
-                        <th>Vigente Desde</th>
-                        <th>Hasta</th>
-                        <th>C.Costo</th>
-                        <th>Tareo</th>
-                        <th>Aplica</th>
+                        <th class="th-sort" data-sort="codigo">Código<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="empleado">Empleado<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="concepto">Concepto<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="tipo">Tipo<span class="sort-ind"></span></th>
+                        <th class="th-sort col-valor" data-sort="valor">Valor<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="moneda">Moneda<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="desde">Vigente Desde<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="hasta">Hasta<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="ccosto">C.Costo<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="tareo">Tareo<span class="sort-ind"></span></th>
+                        <th class="th-sort" data-sort="aplica">Aplica<span class="sort-ind"></span></th>
                         <th class="col-acciones">Acciones</th>
                     </tr>
                 </thead>
@@ -1157,10 +1172,80 @@ document.addEventListener('DOMContentLoaded', async function () {
         return { excelRows, count: filas.length };
     }
 
+    const ordenLista = { col: null, dir: 1 };
+    let asigRowsCache = [];
+
+    function claveOrdenAsig(row, col) {
+        switch (col) {
+            case 'codigo': return String(row.employeecode || row.person || '');
+            case 'empleado': return String(row.nombre || '');
+            case 'concepto': return String(row.conceptname || row.concept || '');
+            case 'tipo': return etiquetaFrecuencia(row.flagfrecuencytype);
+            case 'valor': {
+                const n = Number(row.conceptvalue);
+                return Number.isFinite(n) ? n : Number.MAX_VALUE;
+            }
+            case 'moneda': return etiquetaMoneda(row.conceptcurrency);
+            case 'desde': return String(row.prperiodstart || '').trim();
+            case 'hasta': return String(row.prperiodend || '').trim();
+            case 'ccosto': return String(row.costcentercode || row.costcenter || '');
+            case 'tareo': return String(row.tareo || '');
+            case 'aplica': return etiquetaAplica(row.flagapplyformula);
+            default: return '';
+        }
+    }
+
+    function ordenarFilasAsig(rows) {
+        if (!ordenLista.col) return rows;
+        const col = ordenLista.col;
+        const dir = ordenLista.dir;
+        return rows.slice().sort((a, b) => {
+            const ka = claveOrdenAsig(a, col);
+            const kb = claveOrdenAsig(b, col);
+            if (typeof ka === 'number' && typeof kb === 'number') return (ka - kb) * dir;
+            return String(ka).localeCompare(String(kb), 'es', { numeric: true, sensitivity: 'base' }) * dir;
+        });
+    }
+
+    function actualizarIndicadoresOrden() {
+        document.querySelectorAll('.table-asignacion-conceptos th.th-sort').forEach((th) => {
+            const ind = th.querySelector('.sort-ind');
+            const activo = th.getAttribute('data-sort') === ordenLista.col;
+            ind.textContent = activo ? (ordenLista.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLista.dir === 1 ? 'Orden ascendente (clic: descendente)' : 'Orden descendente (clic: orden original)')
+                : 'Clic para ordenar';
+        });
+    }
+
+    document.querySelectorAll('.table-asignacion-conceptos th.th-sort').forEach((th) => {
+        th.addEventListener('click', () => {
+            const col = th.getAttribute('data-sort');
+            if (ordenLista.col !== col) {
+                ordenLista.col = col;
+                ordenLista.dir = 1;
+            } else if (ordenLista.dir === 1) {
+                ordenLista.dir = -1;
+            } else {
+                ordenLista.col = null;
+                ordenLista.dir = 1;
+            }
+            actualizarIndicadoresOrden();
+            if (!consultaEjecutada) return;
+            const built = renderizarTabla(asigRowsCache);
+            if (lastExportAsigConceptos) {
+                lastExportAsigConceptos.data = filasParaExcel(built.excelRows);
+                lastExportAsigConceptos.excelRows = built.excelRows;
+            }
+        });
+    });
+    actualizarIndicadoresOrden();
+
     function renderizarTabla(rows) {
         const tbody = document.getElementById('tbody-asignacion-conceptos');
         tbody.innerHTML = '';
-        const { excelRows, count } = construirDatosListado(rows);
+        asigRowsCache = Array.isArray(rows) ? rows.slice() : [];
+        const { excelRows, count } = construirDatosListado(ordenarFilasAsig(asigRowsCache));
 
         excelRows.forEach((entry) => {
             const tr = document.createElement('tr');

@@ -15,6 +15,10 @@
         en PR_ProcessType, que hacía coincidir formulacodes de otros procesos).
       - Solo elimina cabecera/detalle si @idformula <> ''.
       - Joins de Concept/Parameter/Process del detalle filtrados por compañía origen.
+      - Destino con nemónico duplicado en PR_Concept: usa TOP 1 (menor Concept)
+        y elimina todas las fórmulas destino coincidentes.
+      - Cada empresa se procesa con SAVE TRANSACTION: si falla, se revierte solo
+        esa empresa, se continúa con las demás y al final se informa el detalle.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_replicar_formula_cia]
     @cia           VARCHAR(4),
@@ -29,7 +33,12 @@ BEGIN
     DECLARE @company    VARCHAR(20);
     DECLARE @planilla   VARCHAR(50);
     DECLARE @proceso    VARCHAR(50);
-    DECLARE @idformula  VARCHAR(20);
+    DECLARE @conceptdst VARCHAR(20);
+    DECLARE @ok         INT = 0;
+    DECLARE @errores    NVARCHAR(MAX) = N'';
+    DECLARE @nerr       INT = 0;
+    DECLARE @msg        NVARCHAR(2048);
+    DECLARE @propia     BIT;
 
     SET @cia_destino = NULLIF(LTRIM(RTRIM(ISNULL(@cia_destino, ''))), '');
 
@@ -113,35 +122,47 @@ BEGIN
             WHERE M.Company = @company AND M.ShortName = @proceso
         )
         BEGIN
-        SET @idformula = ISNULL((
-            SELECT fh.FormulaHeader
-            FROM PR_FormulaHeader fh
-            INNER JOIN PR_Concept c_dest
-                ON fh.Concept = c_dest.Concept
-               AND fh.Company = c_dest.Company
-               AND LTRIM(RTRIM(c_dest.FormulaCode)) = LTRIM(RTRIM(@formulacode))
-            WHERE fh.Company = @company
-              AND EXISTS (
-                    SELECT 1
-                    FROM PR_ProcessType pt
-                    WHERE pt.Company = @company
-                      AND pt.ShortName = @proceso
-                      AND pt.ProcessType = fh.Proccestype
-              )
-              AND EXISTS (
-                    SELECT 1
-                    FROM PR_PayRollType prt
-                    WHERE prt.Company = @company
-                      AND prt.ShortName = @planilla
-                      AND prt.Payrolltype = fh.Payrolltype
-              )
-        ), '');
+        SET @propia = CASE WHEN @@TRANCOUNT = 0 THEN 1 ELSE 0 END;
+        IF @propia = 1
+            BEGIN TRANSACTION;
+        ELSE
+            SAVE TRANSACTION sp_repl_formula_cia;
 
-        IF @idformula <> ''
-        BEGIN
-            DELETE FROM PR_FormulaDetail WHERE FormulaHeader = @idformula;
-            DELETE FROM PR_FormulaHeader WHERE FormulaHeader = @idformula;
-        END
+        BEGIN TRY
+        SELECT TOP 1 @conceptdst = c.Concept
+        FROM PR_Concept c
+        WHERE c.Company = @company
+          AND LTRIM(RTRIM(c.FormulaCode)) = LTRIM(RTRIM(@formulacode))
+        ORDER BY c.Concept;
+
+        DECLARE @fh_borrar TABLE (FormulaHeader VARCHAR(20) PRIMARY KEY);
+        DELETE FROM @fh_borrar;
+
+        INSERT INTO @fh_borrar (FormulaHeader)
+        SELECT DISTINCT fh.FormulaHeader
+        FROM PR_FormulaHeader fh
+        INNER JOIN PR_Concept c_dest
+            ON fh.Concept = c_dest.Concept
+           AND fh.Company = c_dest.Company
+           AND LTRIM(RTRIM(c_dest.FormulaCode)) = LTRIM(RTRIM(@formulacode))
+        WHERE fh.Company = @company
+          AND EXISTS (
+                SELECT 1
+                FROM PR_ProcessType pt
+                WHERE pt.Company = @company
+                  AND pt.ShortName = @proceso
+                  AND pt.ProcessType = fh.Proccestype
+          )
+          AND EXISTS (
+                SELECT 1
+                FROM PR_PayRollType prt
+                WHERE prt.Company = @company
+                  AND prt.ShortName = @planilla
+                  AND prt.Payrolltype = fh.Payrolltype
+          );
+
+        DELETE FD FROM PR_FormulaDetail FD INNER JOIN @fh_borrar B ON B.FormulaHeader = FD.FormulaHeader;
+        DELETE FH FROM PR_FormulaHeader FH INNER JOIN @fh_borrar B ON B.FormulaHeader = FH.FormulaHeader;
 
         EXEC SP_SY_ObjectSecuence_Edit 'PRA_FORM2024', @company, 'LIMA', @id OUTPUT;
 
@@ -153,9 +174,9 @@ BEGIN
         SELECT
             @id,
             @company,
-            (SELECT Payrolltype FROM PR_PayRollType T WHERE T.Company = @company AND T.ShortName = PR_PayRollType.ShortName),
-            (SELECT ProcessType FROM PR_ProcessType M WHERE M.Company = @company AND M.ShortName = PR_ProcessType.ShortName),
-            (SELECT Concept FROM PR_Concept WHERE LTRIM(RTRIM(FormulaCode)) = LTRIM(RTRIM(@formulacode)) AND Company = @company),
+            (SELECT TOP 1 Payrolltype FROM PR_PayRollType T WHERE T.Company = @company AND T.ShortName = PR_PayRollType.ShortName ORDER BY T.Payrolltype),
+            (SELECT TOP 1 ProcessType FROM PR_ProcessType M WHERE M.Company = @company AND M.ShortName = PR_ProcessType.ShortName ORDER BY M.ProcessType),
+            @conceptdst,
             PR_FormulaHeader.Description,
             orden,
             'MASIVO',
@@ -163,7 +184,7 @@ BEGIN
             period,
             person,
             tipo,
-            (SELECT Concept FROM PR_Concept T WHERE T.FormulaCode = C.FormulaCode AND T.Company = @company),
+            (SELECT TOP 1 T.Concept FROM PR_Concept T WHERE T.FormulaCode = C.FormulaCode AND T.Company = @company ORDER BY T.Concept),
             PR_FormulaHeader.GrupoFormula,
             flagtruncate,
             @formulacode,
@@ -247,6 +268,31 @@ BEGIN
            AND PR_ProcessType.Company = ISNULL(NULLIF(LTRIM(RTRIM(fd.company)), ''), @cia)
         WHERE fd.FormulaHeader = @formulaheader;
 
+        IF @propia = 1
+            COMMIT TRANSACTION;
+        SET @ok = @ok + 1;
+        END TRY
+        BEGIN CATCH
+            IF XACT_STATE() = -1
+            BEGIN
+                SET @msg = ERROR_MESSAGE();
+                ROLLBACK TRANSACTION;
+                CLOSE empresas;
+                DEALLOCATE empresas;
+                RAISERROR(N'Réplica cancelada en %s: %s', 16, 1, @company, @msg);
+                RETURN;
+            END;
+            IF @propia = 1
+                ROLLBACK TRANSACTION;
+            ELSE IF XACT_STATE() = 1
+                ROLLBACK TRANSACTION sp_repl_formula_cia;
+
+            SET @nerr = @nerr + 1;
+            IF @nerr <= 10
+                SET @errores = @errores + CASE WHEN @errores = N'' THEN N'' ELSE N' | ' END
+                             + LTRIM(RTRIM(@company)) + N': ' + ERROR_MESSAGE();
+        END CATCH
+
         END
 
         FETCH NEXT FROM empresas INTO @company;
@@ -254,5 +300,13 @@ BEGIN
 
     CLOSE empresas;
     DEALLOCATE empresas;
+
+    IF @nerr > 0
+    BEGIN
+        SET @msg = N'Replicada en ' + CAST(@ok AS NVARCHAR(10)) + N' empresa(s); falló en '
+                 + CAST(@nerr AS NVARCHAR(10)) + N': ' + @errores;
+        SET @msg = LEFT(REPLACE(@msg, N'%', N'%%'), 2000);
+        RAISERROR(@msg, 16, 1);
+    END;
 END
 GO

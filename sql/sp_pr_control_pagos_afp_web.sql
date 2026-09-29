@@ -55,6 +55,20 @@ BEGIN
     WHERE H.company = @company
       AND (@payrolltype = '' OR H.payrolltype = @payrolltype)
       AND LEFT(H.prperiod, 6) = @period
+      /* Mismo criterio que el listado AFPnet: la planilla del periodo debe tener AFP. */
+      AND EXISTS (
+            SELECT 1
+            FROM PR_EmployeePayRoll EP (NOLOCK)
+                INNER JOIN PR_ProcessType PT (NOLOCK)
+                    ON PT.ProcessType = EP.ProcessType
+                   AND PT.Company = EP.Company
+            WHERE EP.Company = F.company
+              AND EP.Person = F.person
+              AND LEFT(EP.PRPeriod, 6) = @period
+              AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+              AND LTRIM(RTRIM(PT.ShortName)) IN ('FIN_DE_MES', 'LIQUIDACION', 'SEMANAL')
+              AND (@payrolltype = '' OR EP.PayRollType = @payrolltype)
+      )
     GROUP BY
         CASE WHEN @payrolltype = '' THEN '' ELSE P.description END,
         A.description

@@ -172,24 +172,110 @@ BEGIN
          OR EPC.Concept = @AFPEmployerContribution
       );
 
+    /*
+      PK de PR_EmployeeAFP = (Person, Company, PRPeriod): una sola fila por persona/periodo.
+      Si el trabajador está en varias planillas (p.ej. EMPLEADOS + PART-TIME), se consolidan
+      todos sus conceptos AFP del periodo para no perder montos ni violar la PK.
+    */
+    IF @payroll_all = 'N'
+    BEGIN
+        INSERT INTO #ConceptosAfp (
+            person, company, payrolltype, processtype, prperiod, concept,
+            conceptcurrency, exchangerate, conceptvalue, conceptvaluelo, conceptvalueex,
+            afpcard, ceasedate, entrydate, afp, costcenter, costcentername, replicationunit
+        )
+        SELECT
+            LTRIM(RTRIM(EPC.Person)),
+            LTRIM(RTRIM(EPC.Company)),
+            LTRIM(RTRIM(EPC.PayRollType)),
+            LTRIM(RTRIM(EPC.ProcessType)),
+            LTRIM(RTRIM(EPC.PRPeriod)),
+            LTRIM(RTRIM(EPC.Concept)),
+            EPC.ConceptCurrency,
+            EPC.ExchangeRate,
+            ISNULL(EPC.ConceptValue, 0),
+            ISNULL(EPC.ConceptValueLo, 0),
+            ISNULL(EPC.ConceptValueEx, 0),
+            LTRIM(RTRIM(COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(EP.AFPCard, ''))), ''),
+                ''
+            ))),
+            EP.CeaseDate,
+            EP.EntryDate,
+            LTRIM(RTRIM(EP.AFP)),
+            LTRIM(RTRIM(EP.CostCenter)),
+            LTRIM(RTRIM(EP.CostCenterName)),
+            LTRIM(RTRIM(ISNULL(EP.ReplicationUnit, EPC.ReplicationUnit)))
+        FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+            INNER JOIN PR_EmployeePayRoll EP (NOLOCK)
+                ON EPC.Company = EP.Company
+               AND EPC.PayRollType = EP.PayRollType
+               AND EPC.PRPeriod = EP.PRPeriod
+               AND EPC.Person = EP.Person
+               AND EPC.ProcessType = EP.ProcessType
+            INNER JOIN PR_Employee EM (NOLOCK)
+                ON EPC.Company = EM.Company
+               AND EPC.Person = EM.person
+            INNER JOIN (
+                SELECT DISTINCT person FROM #ConceptosAfp
+            ) Pers ON LTRIM(RTRIM(EPC.Person)) = Pers.person
+        WHERE EPC.Company = @cia
+          AND LEFT(EPC.PRPeriod, 6) = @period
+          AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+          AND (
+                EPC.Concept = @AFPAssureableRemConcept
+             OR EPC.Concept = @AFPFixedAmountConcept
+             OR EPC.Concept = @AFPVariableAmountConcept
+             OR EPC.Concept = @AFPInsuredAmountConcept
+             OR EPC.Concept = @AFPARComisionAmountConcept
+             OR EPC.Concept = @AFPEmployerContribution
+          )
+          AND NOT EXISTS (
+                SELECT 1
+                FROM #ConceptosAfp X
+                WHERE X.person = LTRIM(RTRIM(EPC.Person))
+                  AND X.company = LTRIM(RTRIM(EPC.Company))
+                  AND X.payrolltype = LTRIM(RTRIM(EPC.PayRollType))
+                  AND X.processtype = LTRIM(RTRIM(EPC.ProcessType))
+                  AND X.prperiod = LTRIM(RTRIM(EPC.PRPeriod))
+                  AND X.concept = LTRIM(RTRIM(EPC.Concept))
+          );
+    END
+
     BEGIN TRY
         BEGIN TRANSACTION;
 
+        /* Borrar por persona/periodo (clave PK), no solo por planilla. */
         DELETE H
         FROM PR_EmployeeAFPHeader H
-            INNER JOIN (
-                SELECT DISTINCT payrolltype FROM #PlanillasProcesar
-            ) P ON H.PayRollType = P.payrolltype
         WHERE H.Company = @cia
-          AND LEFT(H.PRPeriod, 6) = @period;
+          AND LEFT(H.PRPeriod, 6) = @period
+          AND (
+                @payroll_all = 'Y'
+             OR H.PayRollType IN (SELECT DISTINCT payrolltype FROM #PlanillasProcesar)
+             OR H.PayRollType IN (SELECT DISTINCT payrolltype FROM #ConceptosAfp)
+          );
 
         DELETE A
         FROM PR_EmployeeAFP A
-            INNER JOIN (
-                SELECT DISTINCT payrolltype FROM #PlanillasProcesar
-            ) P ON A.PayRollType = P.payrolltype
         WHERE A.Company = @cia
-          AND LEFT(A.PRPeriod, 6) = @period;
+          AND LEFT(A.PRPeriod, 6) = @period
+          AND A.Person IN (SELECT DISTINCT person FROM #ConceptosAfp);
+
+        /* Trabajadores que ya no tienen AFP en la planilla del periodo (p. ej. se les quitó la AFP y se recalculó). */
+        DELETE A
+        FROM PR_EmployeeAFP A
+        WHERE A.Company = @cia
+          AND LEFT(A.PRPeriod, 6) = @period
+          AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRoll EP (NOLOCK)
+                WHERE EP.Company = A.Company
+                  AND EP.Person = A.Person
+                  AND LEFT(EP.PRPeriod, 6) = @period
+                  AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+          );
 
         INSERT INTO PR_EmployeeAFP (
             Person, Company, PRPeriod, AFP, AFPCurrency, AFPExchangeRate,
@@ -272,7 +358,11 @@ BEGIN
                 MAX(C.replicationunit) AS replicationunit,
                 MAX(C.costcenter) AS costcenter,
                 MAX(C.costcentername) AS costcentername,
-                MAX(C.payrolltype) AS payrolltype,
+                /* Preferir planilla filtrada; si no, una de las planillas del trabajador. */
+                COALESCE(
+                    MAX(CASE WHEN @payroll_all = 'N' AND C.payrolltype = @payroll THEN C.payrolltype END),
+                    MAX(C.payrolltype)
+                ) AS payrolltype,
                 MAX(C.afpcard) AS afpcard,
                 /* Preferir FIN_DE_MES; si no hay, LIQUIDACION / SEMANAL (obreros). */
                 COALESCE(
@@ -295,7 +385,8 @@ BEGIN
                 INNER JOIN PR_ProcessType PT (NOLOCK)
                     ON PT.ProcessType = C.processtype
                    AND PT.Company = C.company
-            GROUP BY C.person, C.company, C.payrolltype, LEFT(C.prperiod, 6) + SUBSTRING(C.prperiod, 5, 2)
+            /* Una fila por persona/periodo: respeta PK (Person, Company, PRPeriod). */
+            GROUP BY C.person, C.company, LEFT(C.prperiod, 6) + SUBSTRING(C.prperiod, 5, 2)
         ) S
             INNER JOIN pr_employee EM (NOLOCK)
                 ON EM.person = S.person
@@ -321,7 +412,7 @@ BEGIN
         FROM PR_EmployeeAFP A (NOLOCK)
         WHERE A.Company = @cia
           AND LEFT(A.PRPeriod, 6) = @period
-          AND A.PayRollType IN (SELECT DISTINCT payrolltype FROM #PlanillasProcesar)
+          AND A.Person IN (SELECT DISTINCT person FROM #ConceptosAfp)
           AND ISNULL(A.ReplicationUnit, '') <> ''
         GROUP BY
             A.Company, A.ReplicationUnit, A.PRPeriod, A.PayRollType, A.AFP, A.Costcenter;
@@ -337,10 +428,13 @@ BEGIN
             1 AS actualizado,
             (SELECT COUNT(*) FROM PR_EmployeeAFP (NOLOCK)
              WHERE Company = @cia AND LEFT(PRPeriod, 6) = @period
-               AND PayRollType IN (SELECT DISTINCT payrolltype FROM #PlanillasProcesar)) AS filas_afp,
+               AND Person IN (SELECT DISTINCT person FROM #ConceptosAfp)) AS filas_afp,
             (SELECT COUNT(*) FROM PR_EmployeeAFPHeader (NOLOCK)
              WHERE Company = @cia AND LEFT(PRPeriod, 6) = @period
-               AND PayRollType IN (SELECT DISTINCT payrolltype FROM #PlanillasProcesar)) AS filas_header,
+               AND (
+                    @payroll_all = 'Y'
+                 OR PayRollType IN (SELECT DISTINCT payrolltype FROM #ConceptosAfp)
+               )) AS filas_header,
             'Control de datos AFP ejecutado correctamente.' AS mensaje;
     END TRY
     BEGIN CATCH

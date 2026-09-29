@@ -106,15 +106,15 @@
                 </select>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
-                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
-                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
-                    <option value="">Seleccione...</option>
-                </select>
-            </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="cboPlanilla" class="form-label small fw-bold text-muted">Planilla</label>
                 <select id="cboPlanilla" class="form-select form-select-sm" disabled>
                     <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
                 </select>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
@@ -233,13 +233,8 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.declaracionAfp
-        ? window.FiltrosPlanillasReportes.declaracionAfp()
-        : null;
-
     const URL_LISTADO = {{ url_for('api_declaracion_afp_listado') | tojson }};
     const URL_VALIDAR = {{ url_for('api_declaracion_afp_validar_resumen') | tojson }};
     const URL_GENERAR = {{ url_for('api_declaracion_afp_generar_xlsx') | tojson }};
@@ -344,6 +339,41 @@ document.addEventListener('DOMContentLoaded', async function () {
         return Array.from(select.options).some((o) => String(o.value).trim() === v);
     }
 
+    /* Periodo abierto de la planilla (no el último configurado, que suele ser diciembre). */
+    async function periodoSugerido(cia, payrolltype) {
+        if (!cia || !payrolltype) return '';
+        try {
+            const res = await fetch(
+                `/api/aperturar-periodos/periodo-sugerido?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json();
+            return periodoYyyymm(data && data.prperiod);
+        } catch (e) {
+            console.error(e);
+            return '';
+        }
+    }
+
+    async function seleccionarPeriodo(cboPeriodo, cia, payrolltype, periodoPreferido) {
+        let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+        if (!preferido || !optionExists(cboPeriodo, preferido)) {
+            let planillaRef = payrolltype;
+            if (!planillaRef) {
+                const primera = Array.from(document.getElementById('cboPlanilla').options)
+                    .find((o) => String(o.value || '').trim());
+                planillaRef = primera ? primera.value : '';
+            }
+            preferido = await periodoSugerido(cia, planillaRef);
+        }
+        if (!preferido || !optionExists(cboPeriodo, preferido)) {
+            const primeraOpcion = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
+            preferido = primeraOpcion ? String(primeraOpcion.value).trim() : '';
+        }
+        if (preferido && optionExists(cboPeriodo, preferido)) {
+            cboPeriodo.value = preferido;
+        }
+    }
+
     async function cargarPeriodos(cia, payrolltype, periodoPreferido) {
         const cboPeriodo = document.getElementById('cboPeriodo');
         cboPeriodo.disabled = true;
@@ -357,31 +387,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboPeriodo,
                 '<option value="">Seleccione...</option>'
             );
-            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
-            if (!preferido || !optionExists(cboPeriodo, preferido)) {
-                try {
-                    const cboPlanilla = document.getElementById('cboPlanilla');
-                    const primeraPlanilla = Array.from(cboPlanilla.options).find((o) => String(o.value || '').trim());
-                    if (primeraPlanilla && primeraPlanilla.value) {
-                        const resApertura = await fetch(
-                            `/api/aperturar-periodos/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(primeraPlanilla.value)}`
-                        );
-                        const dataApertura = await resApertura.json();
-                        if (Array.isArray(dataApertura) && dataApertura.length) {
-                            preferido = periodoYyyymm(dataApertura[0].id);
-                        }
-                    }
-                } catch (e) {
-                    console.error(e);
-                }
-            }
-            if (!preferido || !optionExists(cboPeriodo, preferido)) {
-                const primeraOpcion = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
-                preferido = primeraOpcion ? String(primeraOpcion.value).trim() : '';
-            }
-            if (preferido && optionExists(cboPeriodo, preferido)) {
-                cboPeriodo.value = preferido;
-            }
+            await seleccionarPeriodo(cboPeriodo, cia, '', periodoPreferido);
             return;
         }
 
@@ -401,15 +407,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboPeriodo.appendChild(opt);
             });
             cboPeriodo.disabled = false;
-
-            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
-            if (!preferido || !optionExists(cboPeriodo, preferido)) {
-                const primeraOpcion = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
-                preferido = primeraOpcion ? String(primeraOpcion.value).trim() : '';
-            }
-            if (preferido && optionExists(cboPeriodo, preferido)) {
-                cboPeriodo.value = preferido;
-            }
+            await seleccionarPeriodo(cboPeriodo, cia, payrolltype, periodoPreferido);
         } catch (e) {
             console.error(e);
             cboPeriodo.innerHTML = '<option value="">Error</option>';
@@ -763,7 +761,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('Seleccione compañía y periodo.');
             return;
         }
-        if (filtrosPersist) filtrosPersist.guardar();
 
         document.getElementById('lblRowCountAfp').textContent = '0';
         document.getElementById('btnGenerarAfpnet').disabled = true;
@@ -909,56 +906,32 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         await onCompaniaChange(this.value.trim());
-        if (filtrosPersist) filtrosPersist.guardar();
+        actualizarTitulosAfpnet();
     });
 
     document.getElementById('cboPlanilla').addEventListener('change', async function () {
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll = this.value.trim();
+        const periodoActual = document.getElementById('cboPeriodo').value.trim();
         await Promise.all([
-            cargarPeriodos(cia, payroll),
+            cargarPeriodos(cia, payroll, periodoActual),
             cargarTrabajadores(cia, payroll, '')
         ]);
-        if (filtrosPersist) filtrosPersist.guardar();
+        actualizarTitulosAfpnet();
     });
 
-    ['cboPeriodo', 'cboPlanilla', 'cboAfp', 'cboTrabajador'].forEach((id) => {
-        const el = document.getElementById(id);
-        if (el) el.addEventListener('change', function () {
-            if (id === 'cboPeriodo') actualizarTitulosAfpnet();
-            if (filtrosPersist) filtrosPersist.guardar();
-        });
-    });
+    document.getElementById('cboPeriodo').addEventListener('change', actualizarTitulosAfpnet);
 
     const cboCompania = document.getElementById('cboCompania');
-    const cboPlanilla = document.getElementById('cboPlanilla');
 
     await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCompania, '<option value="">Seleccione...</option>');
 
-    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
-    if (guardado && guardado.cia) {
-        seleccionarCompaniaInsensitive(cboCompania, guardado.cia);
-        await onCompaniaChange(
-            guardado.cia,
-            guardado.period || '',
-            guardado.payroll || '',
-            guardado.afp || '',
-            guardado.employee || ''
-        );
-        if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
-        if (guardado.cia && guardado.period && /^\d{6}$/.test(String(guardado.period))) {
+    if (seleccionarCompaniaInsensitive(cboCompania, DEFAULT_CIA)) {
+        await onCompaniaChange(DEFAULT_CIA);
+        const periodo = document.getElementById('cboPeriodo').value.trim();
+        if (/^\d{6}$/.test(periodo)) {
             ejecutarConsulta();
         }
-    } else {
-        if (seleccionarCompaniaInsensitive(cboCompania, DEFAULT_CIA)) {
-            await onCompaniaChange(DEFAULT_CIA);
-            const periodo = document.getElementById('cboPeriodo').value.trim();
-            if (filtrosPersist) filtrosPersist.guardar();
-            if (/^\d{6}$/.test(periodo)) {
-                ejecutarConsulta();
-            }
-        }
-        if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
     }
 });
 </script>

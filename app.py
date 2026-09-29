@@ -3561,10 +3561,12 @@ def _declaracion_afp_ejecutar_listado(cursor, p):
 
 def _declaracion_afp_generar_xlsx_bytes(filas):
     from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
 
     wb = Workbook()
     ws = wb.active
     ws.title = 'AFPnet'
+    anchos = {}
     for idx, row in enumerate(filas, start=1):
         valores = _afpnet_fila_excel(idx, row)
         ws.append(valores)
@@ -3573,6 +3575,12 @@ def _declaracion_afp_generar_xlsx_bytes(filas):
             celda = ws.cell(row=fila_excel, column=col)
             celda.number_format = '@'
             celda.value = str(valores[col - 1])
+        for col, valor in enumerate(valores, start=1):
+            largo = len(str(valor)) if valor is not None else 0
+            if largo > anchos.get(col, 0):
+                anchos[col] = largo
+    for col, largo in anchos.items():
+        ws.column_dimensions[get_column_letter(col)].width = max(largo + 2, 4)
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

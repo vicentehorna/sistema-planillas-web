@@ -3559,6 +3559,19 @@ def _declaracion_afp_ejecutar_listado(cursor, p):
     return [_declaracion_afp_row_dict(r) for r in rows]
 
 
+def _declaracion_afp_nombre_archivo(empresa_nombre, period, fallback='EMPRESA'):
+    """AFP_LA PERICA SAC_09-2026.xlsx"""
+    raw = str(empresa_nombre or '').strip() or fallback
+    normalized = unicodedata.normalize('NFKD', raw)
+    empresa = ''.join(c for c in normalized if not unicodedata.combining(c)).upper()
+    empresa = empresa.replace('.', '')
+    empresa = re.sub(r'[\\/:*?"<>|\r\n\t]+', ' ', empresa)
+    empresa = re.sub(r'\s+', ' ', empresa).strip() or fallback
+    digits = re.sub(r'[^0-9]+', '', _normalize_pr_period(period) or str(period or ''))
+    periodo = f'{digits[4:6]}-{digits[:4]}' if len(digits) >= 6 else (digits or 'PERIODO')
+    return f'AFP_{empresa}_{periodo}.xlsx'
+
+
 def _declaracion_afp_generar_xlsx_bytes(filas):
     from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
@@ -21847,10 +21860,11 @@ def api_declaracion_afp_generar_xlsx():
         filas, validaciones = _declaracion_afp_validaciones_completas(cursor, filas, p)
 
         empresa_nombre = _company_description(cursor, p['cia'])
-        empresa_token = _boleta_filename_token(empresa_nombre, fallback=p['cia'] or 'EMPRESA')
 
         buf = _declaracion_afp_generar_xlsx_bytes(filas)
-        filename = f'AFPNET_{p["period"]}_{empresa_token}.xlsx'
+        filename = _declaracion_afp_nombre_archivo(
+            empresa_nombre, p['period'], fallback=p['cia'] or 'EMPRESA'
+        )
         tiene_diferencias = _declaracion_afp_resumen_tiene_diferencias(resumen)
         return jsonify({
             'filename': filename,
@@ -21975,8 +21989,9 @@ def api_declaracion_afp_masivo_generar_zip():
                     })
                     continue
                 buf = _declaracion_afp_generar_xlsx_bytes(filas)
-                empresa_token = _boleta_filename_token(company_desc, fallback=cia or 'EMPRESA')
-                filename = f'AFPNET_{period_yyyymm}_{empresa_token}.xlsx'
+                filename = _declaracion_afp_nombre_archivo(
+                    company_desc, period_yyyymm, fallback=cia or 'EMPRESA'
+                )
                 archivos.append((filename, buf.getvalue(), company_desc))
             except Exception as exc:
                 logging.exception('api_declaracion_afp_masivo_generar_zip cia=%s', cia)

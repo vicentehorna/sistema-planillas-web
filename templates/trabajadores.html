@@ -373,10 +373,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const btnReingresoTrab = document.getElementById('btnReingresoTrabajador');
     const btnTrasladoTrab = document.getElementById('btnTrasladoTrabajador');
     const btnInactivarCesados = document.getElementById('btnInactivarCesados');
-    // hm_alamo: Traslado también para activos. (Buscar todos también existe en hm_garc.)
     const ES_ALAMO = {{ ((sql_database or '')|lower == 'hm_alamo')|tojson }};
     // hm_garc: traslado permite fecha de ingreso anterior o igual al cese en origen.
     const ES_GARC = {{ ((sql_database or '')|lower == 'hm_garc')|tojson }};
+    // hm_alamo / hm_garc: Traslado también para activos (no exige fecha de cese).
+    const TRASLADO_PERMITE_ACTIVO = ES_ALAMO || ES_GARC;
     let consultaHabilitada = false;
     let trabajadorSeleccionado = null;
 
@@ -405,12 +406,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         const tieneSel = consultaHabilitada
             && trabajadorSeleccionado
             && trabajadorSeleccionado.person;
-        const ok = tieneSel && (ES_ALAMO || trabajadorSeleccionado.cesado);
+        const ok = tieneSel && (TRASLADO_PERMITE_ACTIVO || trabajadorSeleccionado.cesado);
         btnTrasladoTrab.disabled = !ok;
         if (ok) {
             btnTrasladoTrab.title = 'Trasladar a otra empresa: '
                 + (trabajadorSeleccionado.nombre || trabajadorSeleccionado.person);
-        } else if (ES_ALAMO) {
+        } else if (TRASLADO_PERMITE_ACTIVO) {
             btnTrasladoTrab.title = 'Seleccione un trabajador en el listado';
         } else {
             btnTrasladoTrab.title = 'Seleccione un trabajador cesado en el listado';
@@ -1213,17 +1214,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
         if (!trabajadorSeleccionado || !trabajadorSeleccionado.person) {
-            hmAdvertencia(ES_ALAMO
+            hmAdvertencia(TRASLADO_PERMITE_ACTIVO
                 ? 'Seleccione en el listado el trabajador a trasladar.'
                 : 'Seleccione en el listado el trabajador cesado a trasladar.');
             return;
         }
-        if (!ES_ALAMO && !trabajadorSeleccionado.cesado) {
-            hmAdvertencia(
-                ES_GARC
-                    ? 'Solo se puede trasladar un trabajador cesado (con fecha de cese). No es necesario que esté Inactivo.'
-                    : 'Solo se puede trasladar un trabajador con fecha de cese.'
-            );
+        if (!TRASLADO_PERMITE_ACTIVO && !trabajadorSeleccionado.cesado) {
+            hmAdvertencia('Solo se puede trasladar un trabajador con fecha de cese.');
             return;
         }
         const lbl = document.getElementById('lblTrasladoTrabajadorNombre');

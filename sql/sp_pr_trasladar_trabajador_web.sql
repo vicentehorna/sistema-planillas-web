@@ -10,7 +10,7 @@
     Validaciones:
       - Por defecto: basta CeaseDate en origen (cesado). No se exige Status = 'Y' (inactivo).
       - @entrydate > CeaseDate origen (salvo hm_garc).
-      - hm_alamo: también permite traslado si sigue activo en origen (doble vínculo).
+      - hm_alamo / hm_garc: también permite traslado si sigue activo en origen (doble vínculo).
       - hm_garc: no exige que @entrydate sea posterior al CeaseDate de origen;
         además, si en origen tenía permanente AFP_FLUJO / REM_BASICA / FLAG_ASIG_FAM
         (asignación de conceptos), los asegura en destino con el mismo importe;
@@ -89,7 +89,7 @@ BEGIN
     DECLARE @entrydate_dt DATETIME = CONVERT(DATETIME, @entrydate, 120);
     DECLARE @cese_origen DATETIME = NULL;
     DECLARE @db_name VARCHAR(128) = LOWER(DB_NAME());
-    DECLARE @permite_activo BIT = CASE WHEN @db_name = 'hm_alamo' THEN 1 ELSE 0 END;
+    DECLARE @permite_activo BIT = CASE WHEN @db_name IN ('hm_alamo', 'hm_garc') THEN 1 ELSE 0 END;
     DECLARE @omite_validacion_cese BIT = CASE WHEN @db_name = 'hm_garc' THEN 1 ELSE 0 END;
 
     SELECT @cese_origen = e.CeaseDate

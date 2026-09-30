@@ -52,6 +52,13 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "max_args": 1,
         "param_names": ["deducible"],
     },
+    "SP_PR_OBTENERHORASTRABAJADAS": {
+        "display": "sp_pr_obtenerhorastrabajadas",
+        "description": "Horas del periodo (Tablas > Horas Trabajadas, BGT). Sin argumento usa el periodo del cálculo",
+        "min_args": 0,
+        "max_args": 1,
+        "param_names": ["periodo"],
+    },
 }
 
 _ALIASES = {

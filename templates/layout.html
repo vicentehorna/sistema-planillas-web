@@ -450,6 +450,37 @@
             padding: 15px 30px;
         }
 
+        .navbar-location {
+            min-width: 0;
+            line-height: 1.2;
+            margin-right: 1.5rem;
+        }
+        @media (max-width: 768px) {
+            .navbar-bienvenida {
+                display: none;
+            }
+        }
+        .navbar-location-path {
+            font-size: 0.72rem;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #6c757d;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .navbar-location-path:empty {
+            display: none;
+        }
+        .navbar-location-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: #212529;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
         @media (max-width: 768px) {
             body.sidebar-collapsed #sidebar {
                 width: var(--sidebar-width);
@@ -1556,17 +1587,60 @@
                     <button type="button" class="btn btn-outline-secondary d-md-none me-2" id="sidebarToggle" aria-label="Mostrar u ocultar menú">
                         <i class="bi bi-list" aria-hidden="true"></i>
                     </button>
-                    <span class="navbar-text fw-bold">
-                        Bienvenido, {% if current_user.is_authenticated %}{{ current_user.nombre or current_user.username }}{% else %}Usuario{% endif %}
-                    </span>
+                    <div class="navbar-location" id="navbarLocation" hidden>
+                        <div class="navbar-location-path" id="navbarLocationPath"></div>
+                        <div class="navbar-location-title" id="navbarLocationTitle"></div>
+                    </div>
                     <div class="ms-auto text-end">
-                        <small class="text-muted">{{ now.strftime('%d/%m/%Y') if now else '' }}</small>
-                        {% if sql_database %}
-                        <div class="navbar-db-hint">{{ sql_database }}</div>
-                        {% endif %}
+                        <span class="navbar-text navbar-bienvenida fw-bold p-0">
+                            Bienvenido, {% if current_user.is_authenticated %}{{ current_user.nombre or current_user.username }}{% else %}Usuario{% endif %}
+                        </span>
+                        <div>
+                            <small class="text-muted">{{ now.strftime('%d/%m/%Y') if now else '' }}</small>
+                            {% if sql_database %}
+                            <span class="navbar-db-hint d-inline ms-2">{{ sql_database }}</span>
+                            {% endif %}
+                        </div>
                     </div>
                 </div>
             </nav>
+            <script>
+                (function () {
+                    var box = document.getElementById('navbarLocation');
+                    var sidebar = document.getElementById('sidebar');
+                    if (!box) return;
+                    var titulo = '';
+                    var ruta = [];
+                    var link = sidebar && (
+                        sidebar.querySelector('.sidebar-submenu li.active > a[title]')
+                        || sidebar.querySelector('ul.components > li.active:not(.sidebar-menu-parent) > a[title]')
+                    );
+                    if (link) {
+                        titulo = link.getAttribute('title') || link.textContent.trim();
+                        var padre = link.closest('.sidebar-menu-parent');
+                        var liTop = padre || link.closest('li');
+                        var prev = liTop ? liTop.previousElementSibling : null;
+                        while (prev) {
+                            var sec = prev.querySelector('.sidebar-section-title');
+                            if (sec) {
+                                ruta.push(sec.textContent.trim());
+                                break;
+                            }
+                            prev = prev.previousElementSibling;
+                        }
+                        if (padre) {
+                            var padreLink = padre.querySelector('.sidebar-parent-link');
+                            if (padreLink) ruta.push(padreLink.getAttribute('title') || padreLink.textContent.trim());
+                        }
+                    } else {
+                        titulo = String(document.title || '').replace(/^Planillas\s*-\s*/, '').trim();
+                    }
+                    if (!titulo) return;
+                    document.getElementById('navbarLocationTitle').textContent = titulo;
+                    document.getElementById('navbarLocationPath').textContent = ruta.join(' \u203A ');
+                    box.hidden = false;
+                })();
+            </script>
 
             <div class="container-fluid p-4">
                 {% with messages = get_flashed_messages(with_categories=true) %}

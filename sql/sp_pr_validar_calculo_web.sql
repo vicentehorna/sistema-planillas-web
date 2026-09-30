@@ -66,6 +66,25 @@ BEGIN
             OR CONVERT(DATE, ISNULL(E.ReEntryDate, E.EntryDate)) <= @fecha_fin_mes
           );
 
+    /* Forma de pago EFECTIVO: no requiere banco, tipo ni número de cuenta de haberes. */
+    CREATE TABLE #pago_efectivo (
+        person VARCHAR(20) NOT NULL PRIMARY KEY
+    );
+
+    INSERT INTO #pago_efectivo (person)
+    SELECT DISTINCT E.Person
+    FROM PR_Employee E (NOLOCK)
+        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
+        INNER JOIN TE_CollectionForm CF (NOLOCK)
+            ON CF.CollectionForm = E.CollectionForm
+           AND CF.Company = E.Company
+    WHERE E.Company = @cia
+      AND E.PayRollType = @payrolltype
+      AND (
+            UPPER(LTRIM(RTRIM(ISNULL(CF.Name, '')))) = 'EFECTIVO'
+            OR UPPER(LTRIM(RTRIM(ISNULL(CF.Description, '')))) = 'EFECTIVO'
+          );
+
     INSERT INTO #lista_rem_basica (person)
     SELECT EC.Person
     FROM PR_EmployeeConcept EC (NOLOCK)
@@ -250,7 +269,8 @@ BEGIN
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
     ) T
-    WHERE ISNULL(T.SalaryAccount, '') = '';
+    WHERE ISNULL(T.SalaryAccount, '') = ''
+      AND NOT EXISTS (SELECT 1 FROM #pago_efectivo PE WHERE PE.person = T.Person);
 
     INSERT INTO #errores (person, name, observacion)
     SELECT T.Person, T.Name, 'Trabajador no tiene banco de haberes'
@@ -271,7 +291,8 @@ BEGIN
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
     ) T
-    WHERE ISNULL(T.SalaryBank, '') = '';
+    WHERE ISNULL(T.SalaryBank, '') = ''
+      AND NOT EXISTS (SELECT 1 FROM #pago_efectivo PE WHERE PE.person = T.Person);
 
     INSERT INTO #errores (person, name, observacion)
     SELECT T.Person, T.Name, 'Trabajador no tiene tipo cuenta de haberes'
@@ -292,7 +313,8 @@ BEGIN
           AND E.PayRollType = @payrolltype
           AND E.Status = 'N'
     ) T
-    WHERE ISNULL(T.SalaryAccountType, '') = '';
+    WHERE ISNULL(T.SalaryAccountType, '') = ''
+      AND NOT EXISTS (SELECT 1 FROM #pago_efectivo PE WHERE PE.person = T.Person);
 
     INSERT INTO #errores (person, name, observacion)
     SELECT T.Person, T.Name, 'Trabajador no tiene perfil contable'

@@ -1,0 +1,371 @@
+{% extends "layout.html" %}
+
+{% block title %}Horas Trabajadas — Tablas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ht-grilla {
+        max-height: calc(100vh - 255px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-ht {
+        font-size: 12px;
+        margin-bottom: 0;
+    }
+    .table-ht th,
+    .table-ht td {
+        padding: 0.3rem 0.45rem;
+        vertical-align: middle;
+    }
+    .table-ht thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        color: #495057;
+    }
+    .table-ht tbody tr.dirty {
+        background: #fff8e6;
+    }
+    .table-ht tbody tr.nueva {
+        background: #eef8ff;
+    }
+    .table-ht .form-control-sm,
+    .table-ht .form-select-sm {
+        min-width: 0;
+        font-size: 12px;
+    }
+    .ht-msg {
+        min-height: 1.4rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">Horas Trabajadas</h5>
+                <div class="small text-muted">Número máximo de horas trabajadas por periodo (planilla Empleados).</div>
+            </div>
+        </div>
+        <form id="frmHoras" class="row g-2 align-items-end">
+            <div class="col-12 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" disabled>
+                    <option value="BGT">BGT</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnAgregar">
+                    <i class="bi bi-plus-lg"></i> Agregar
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm px-3" id="btnGuardar" disabled>
+                    <i class="bi bi-save"></i> Guardar cambios
+                </button>
+                <span id="lblConteo" class="small text-muted ms-auto">0 registros</span>
+            </div>
+        </form>
+        <div id="msgHoras" class="ht-msg small mt-2"></div>
+    </div>
+</div>
+
+<div class="ht-grilla">
+    <table class="table table-bordered table-sm table-hover table-ht align-middle">
+        <thead>
+            <tr>
+                <th style="width:12rem">Periodo</th>
+                <th style="width:10rem" class="text-end">Nro. de Horas</th>
+                <th style="min-width:14rem">Última modificación</th>
+                <th style="width:4.5rem" class="text-center">Acciones</th>
+            </tr>
+        </thead>
+        <tbody id="tbodyHoras">
+            <tr>
+                <td colspan="4" class="text-center text-muted py-4">Pulse Consultar</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const CIA = 'BGT';
+    const PLANILLA = 'EMPLEADOS';
+    const cboCia = document.getElementById('cboCompania');
+    const tbody = document.getElementById('tbodyHoras');
+    const lblConteo = document.getElementById('lblConteo');
+    const msg = document.getElementById('msgHoras');
+    const btnAgregar = document.getElementById('btnAgregar');
+    const btnGuardar = document.getElementById('btnGuardar');
+
+    let filas = [];
+    let periodos = [];
+
+    function escHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastOk(texto) {
+        if (window.HmUi) HmUi.exito(texto);
+        else alert(texto);
+    }
+
+    function toastErr(texto) {
+        if (window.HmUi) HmUi.error(texto);
+        else alert(texto);
+    }
+
+    async function postJson(url, body) {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || data.error) {
+            throw new Error(data.error || 'Error al procesar la solicitud.');
+        }
+        return data;
+    }
+
+    function formatoPeriodo(period) {
+        const p = String(period || '');
+        return p.length === 8 ? `${p.slice(0, 4)}-${p.slice(4, 6)}-${p.slice(6, 8)}` : p;
+    }
+
+    function formatoFecha(valor) {
+        if (!valor) return '';
+        const d = new Date(valor);
+        if (Number.isNaN(d.getTime())) return String(valor);
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getDate())}/${pad(d.getMonth() + 1)}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    function opcionesPeriodo(idxActual) {
+        const usados = new Set(
+            filas.filter((f, i) => i !== idxActual && f.period).map((f) => f.period)
+        );
+        const actual = filas[idxActual] ? filas[idxActual].period : '';
+        const opts = ['<option value="">Seleccione...</option>'];
+        periodos.forEach((p) => {
+            if (usados.has(p.id)) return;
+            const sel = p.id === actual ? ' selected' : '';
+            opts.push(`<option value="${escHtml(p.id)}"${sel}>${escHtml(p.text)}</option>`);
+        });
+        return opts.join('');
+    }
+
+    function actualizarBotones() {
+        btnGuardar.disabled = !filas.some((fila) => fila.dirty);
+        lblConteo.textContent = `${filas.length} registro${filas.length === 1 ? '' : 's'}`;
+    }
+
+    function renderizar() {
+        if (!filas.length) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted py-4">Sin horas registradas</td></tr>';
+            actualizarBotones();
+            return;
+        }
+
+        tbody.innerHTML = filas.map((fila, idx) => `
+            <tr class="${fila.nueva ? 'nueva' : ''} ${fila.dirty ? 'dirty' : ''}" data-index="${idx}">
+                <td>
+                    ${fila.nueva
+                        ? `<select class="form-select form-select-sm ht-period">${opcionesPeriodo(idx)}</select>`
+                        : `<span class="fw-semibold">${escHtml(formatoPeriodo(fila.period))}</span>`}
+                </td>
+                <td>
+                    <input type="number" class="form-control form-control-sm text-end ht-horas"
+                           value="${escHtml(fila.nrohoras)}" min="1" max="744" step="1"
+                           inputmode="numeric" autocomplete="off">
+                </td>
+                <td class="text-muted">
+                    ${fila.nueva ? '' : escHtml([fila.xlastuser, formatoFecha(fila.xlastdate)].filter(Boolean).join(' — '))}
+                </td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-outline-danger btn-sm ht-eliminar"
+                            title="${fila.nueva ? 'Quitar fila' : 'Eliminar horas del periodo'}">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>
+        `).join('');
+
+        tbody.querySelectorAll('tr[data-index]').forEach((tr) => {
+            const idx = Number(tr.dataset.index);
+            const cboPeriod = tr.querySelector('.ht-period');
+            if (cboPeriod) {
+                cboPeriod.addEventListener('change', function () {
+                    filas[idx].period = this.value;
+                    filas[idx].dirty = true;
+                    renderizar();
+                });
+            }
+            const txtHoras = tr.querySelector('.ht-horas');
+            txtHoras.addEventListener('keydown', function (event) {
+                if (['.', ',', 'e', 'E', '+', '-'].includes(event.key)) event.preventDefault();
+            });
+            txtHoras.addEventListener('input', function () {
+                const limpio = this.value.replace(/[^0-9]/g, '');
+                if (limpio !== this.value) this.value = limpio;
+                filas[idx].nrohoras = limpio;
+                filas[idx].dirty = true;
+                tr.classList.add('dirty');
+                actualizarBotones();
+            });
+            tr.querySelector('.ht-eliminar').addEventListener('click', () => eliminarFila(idx));
+        });
+        actualizarBotones();
+    }
+
+    async function cargarPeriodos() {
+        const response = await fetch(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(CIA)}&payrolltype=${encodeURIComponent(PLANILLA)}`
+        );
+        const data = await response.json().catch(() => []);
+        periodos = (Array.isArray(data) ? data : [])
+            .map((item) => ({
+                id: String(item.id || '').trim(),
+                text: String(item.text || item.id || '').trim()
+            }))
+            .filter((item) => item.id);
+    }
+
+    async function cargarCompania() {
+        try {
+            const response = await fetch('/api/selectores/companias');
+            const data = await response.json();
+            const item = (Array.isArray(data) ? data : []).find(
+                (x) => String(x.id || '').trim().toUpperCase() === CIA
+            );
+            if (item && item.text) cboCia.options[0].textContent = String(item.text);
+        } catch (error) {
+            /* se mantiene BGT */
+        }
+    }
+
+    async function consultar() {
+        msg.textContent = 'Consultando...';
+        try {
+            const data = await postJson('/api/horas-trabajadas/listado', {});
+            filas = (Array.isArray(data.rows) ? data.rows : []).map((row) => ({
+                period: String(row.period || '').trim(),
+                nrohoras: row.nrohoras != null ? String(row.nrohoras) : '',
+                xlastuser: String(row.xlastuser || '').trim(),
+                xlastdate: row.xlastdate || '',
+                nueva: false,
+                dirty: false
+            }));
+            renderizar();
+            msg.textContent = '';
+        } catch (error) {
+            msg.textContent = '';
+            toastErr(error.message);
+        }
+    }
+
+    function agregarFila() {
+        filas.unshift({
+            period: '',
+            nrohoras: '',
+            xlastuser: '',
+            xlastdate: '',
+            nueva: true,
+            dirty: true
+        });
+        renderizar();
+        const cbo = tbody.querySelector('.ht-period');
+        if (cbo) cbo.focus();
+    }
+
+    async function eliminarFila(idx) {
+        const fila = filas[idx];
+        if (!fila) return;
+        if (fila.nueva) {
+            filas.splice(idx, 1);
+            renderizar();
+            return;
+        }
+        if (!confirm(`¿Eliminar las horas del periodo ${formatoPeriodo(fila.period)}?`)) return;
+
+        try {
+            const data = await postJson('/api/horas-trabajadas/eliminar', { period: fila.period });
+            filas.splice(idx, 1);
+            renderizar();
+            toastOk(data.mensaje || 'Horas trabajadas eliminadas.');
+        } catch (error) {
+            toastErr(error.message);
+        }
+    }
+
+    async function guardarCambios() {
+        const pendientes = filas.filter((fila) => fila.dirty);
+        if (!pendientes.length) return;
+
+        for (const fila of pendientes) {
+            const horas = String(fila.nrohoras || '').trim();
+            if (!fila.period) {
+                toastErr('Seleccione el periodo en todas las filas nuevas.');
+                return;
+            }
+            if (!/^\d+$/.test(horas) || Number(horas) < 1 || Number(horas) > 744) {
+                toastErr(`Periodo ${formatoPeriodo(fila.period)}: el número de horas debe ser un entero entre 1 y 744.`);
+                return;
+            }
+        }
+
+        btnGuardar.disabled = true;
+        msg.textContent = `Guardando ${pendientes.length} registro${pendientes.length === 1 ? '' : 's'}...`;
+        try {
+            const mensajes = [];
+            for (const fila of pendientes) {
+                const data = await postJson('/api/horas-trabajadas/guardar', {
+                    modo: fila.nueva ? 'I' : 'U',
+                    period: fila.period,
+                    nrohoras: Number(fila.nrohoras)
+                });
+                fila.nueva = false;
+                fila.dirty = false;
+                if (data.mensaje) mensajes.push(String(data.mensaje));
+            }
+            msg.textContent = '';
+            toastOk(
+                pendientes.length === 1 && mensajes[0]
+                    ? mensajes[0]
+                    : 'Cambios guardados correctamente.'
+            );
+            await consultar();
+        } catch (error) {
+            msg.textContent = '';
+            renderizar();
+            toastErr(error.message);
+        }
+    }
+
+    document.getElementById('frmHoras').addEventListener('submit', async function (event) {
+        event.preventDefault();
+        await consultar();
+    });
+    btnAgregar.addEventListener('click', agregarFila);
+    btnGuardar.addEventListener('click', guardarCambios);
+
+    await Promise.all([cargarCompania(), cargarPeriodos()]);
+    await consultar();
+});
+</script>
+{% endblock %}

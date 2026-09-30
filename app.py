@@ -279,6 +279,7 @@ def inject_now():
         'now': datetime.now(),
         'sql_database': sql_db,
         'es_multi_cia_apertura': sql_db_l in _APERTURAR_MASIVO_DBS,
+        'es_garc': sql_db_l == 'hm_garc',
         'receta_only': es_vhornac,
         'mostrar_menu_receta': es_vhornac,
         'web_admin': bool(session.get('web_admin')) if current_user.is_authenticated else False,
@@ -9141,6 +9142,14 @@ def centros_costo_page():
     return render_template('maestro_centros_costo.html')
 
 
+@app.route('/horas-trabajadas')
+@login_required
+def horas_trabajadas_page():
+    if not _es_cliente_garc():
+        abort(404)
+    return render_template('maestro_horas_trabajadas.html')
+
+
 @app.route('/companias-branding')
 @login_required
 def companias_branding_page():
@@ -13385,6 +13394,151 @@ def api_centros_costo_eliminar():
             except Exception:
                 pass
         logging.exception("api_centros_costo_eliminar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+_HORAS_TRABAJADAS_CIA = 'BGT'
+_HORAS_TRABAJADAS_PLANILLA = 'EMPLEADOS'
+
+
+def _require_hm_garc_json(feature='Esta opción'):
+    if not _es_cliente_garc():
+        return jsonify({'error': f'{feature} solo está disponible en hm_garc.'}), 403
+    return None
+
+
+@app.route('/api/horas-trabajadas/listado', methods=['POST'])
+@login_required
+def api_horas_trabajadas_listado():
+    """sp_pr_listar_horas_trabajadas_web: horas máximas por periodo (BGT)."""
+    denied = _require_hm_garc_json('Horas Trabajadas')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_horas_trabajadas_web @company=?",
+            (_HORAS_TRABAJADAS_CIA,),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "cia": _HORAS_TRABAJADAS_CIA,
+            "planilla": _HORAS_TRABAJADAS_PLANILLA,
+            "rows": [
+                {
+                    "period": _jsonable_value(r.get('period')),
+                    "periodo": _jsonable_value(r.get('periodo')),
+                    "nrohoras": _jsonable_value(r.get('nrohoras')),
+                    "xlastuser": _jsonable_value(r.get('xlastuser')),
+                    "xlastdate": _jsonable_value(r.get('xlastdate')),
+                }
+                for r in rows
+            ],
+            "total": len(rows),
+        })
+    except Exception as e:
+        logging.exception("api_horas_trabajadas_listado")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/horas-trabajadas/guardar', methods=['POST'])
+@login_required
+def api_horas_trabajadas_guardar():
+    """sp_pr_guardar_horas_trabajadas_web: alta / edición de horas por periodo."""
+    denied = _require_hm_garc_json('Horas Trabajadas')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    period = re.sub(r'[^0-9]+', '', str(body.get('period') or ''))
+    modo = str(body.get('modo') or 'I').strip().upper()
+    raw_horas = str(body.get('nrohoras') if body.get('nrohoras') is not None else '').strip()
+    if len(period) != 8:
+        return jsonify({"error": "Seleccione un periodo válido."}), 400
+    if not re.fullmatch(r'\d+', raw_horas):
+        return jsonify({"error": "El número de horas debe ser un entero."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardar_horas_trabajadas_web "
+            "@modo=?, @company=?, @period=?, @nrohoras=?, @xlastuser=?",
+            (modo, _HORAS_TRABAJADAS_CIA, period, int(raw_horas), _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "period": _jsonable_value(row.get('period')) or period,
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Horas trabajadas guardadas.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_horas_trabajadas_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/horas-trabajadas/eliminar', methods=['POST'])
+@login_required
+def api_horas_trabajadas_eliminar():
+    """sp_pr_eliminar_horas_trabajadas_web: elimina las horas de un periodo."""
+    denied = _require_hm_garc_json('Horas Trabajadas')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    period = re.sub(r'[^0-9]+', '', str(body.get('period') or ''))
+    if len(period) != 8:
+        return jsonify({"error": "Indique el periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_eliminar_horas_trabajadas_web @company=?, @period=?",
+            (_HORAS_TRABAJADAS_CIA, period),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+        row = rows[0] if rows else {}
+        return jsonify({
+            "ok": True,
+            "period": _jsonable_value(row.get('period')) or period,
+            "mensaje": _jsonable_value(row.get('mensaje')) or "Horas trabajadas eliminadas.",
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_horas_trabajadas_eliminar")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

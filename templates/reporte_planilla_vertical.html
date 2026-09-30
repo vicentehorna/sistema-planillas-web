@@ -569,13 +569,18 @@ document.addEventListener('DOMContentLoaded', async function () {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
-        const stamp = new Date().toISOString().slice(0, 10);
-        const periodoRaw = String(meta.periodoValor || meta.periodo || '')
-            .replace(/[^0-9]/g, '')
-            .slice(0, 8) || 'periodo';
-        const sufijo = modoAgrupadoActivo ? '_agrupado_cc' : '';
-        a.download = `planilla_${safe(meta.compania)}_${periodoRaw}${sufijo}_${stamp}.xlsx`;
+        const empresa = String(meta.compania || '')
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/\./g, '')
+            .replace(/[\\/:*?"<>|\r\n\t]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 80) || 'EMPRESA';
+        const periodoDigitos = String(meta.periodoValor || meta.periodo || '').replace(/[^0-9]/g, '');
+        const periodoArchivo = periodoDigitos.length >= 6
+            ? `${periodoDigitos.slice(4, 6)}-${periodoDigitos.slice(0, 4)}`
+            : (periodoDigitos || 'PERIODO');
+        a.download = `PLANILLA_${empresa}_${periodoArchivo}.xlsx`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

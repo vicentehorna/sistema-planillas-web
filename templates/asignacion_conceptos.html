@@ -137,8 +137,18 @@
         opacity: 1;
     }
 
+    #modalAsignacionConcepto #frmModalAsignacion {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+
     #modalAsignacionConcepto .modal-body {
         padding: 0.85rem 1rem;
+        overflow-y: auto;
+        min-height: 0;
     }
 
     #modalAsignacionConcepto .modal-footer {
@@ -389,15 +399,13 @@
                             <label for="txtModalObservacion" class="form-label small fw-bold text-muted">Observación</label>
                             <textarea id="txtModalObservacion" class="form-control form-control-sm" rows="2" maxlength="255" placeholder="Comentarios u observaciones de la asignación"></textarea>
                         </div>
-                        <div class="col-md-6 d-flex flex-column gap-2">
-                            <div>
-                                <label for="txtModalAuditUsuario" class="form-label small fw-bold text-muted">Usuario</label>
-                                <input type="text" id="txtModalAuditUsuario" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
-                            </div>
-                            <div>
-                                <label for="txtModalAuditFecha" class="form-label small fw-bold text-muted">Fecha</label>
-                                <input type="text" id="txtModalAuditFecha" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
-                            </div>
+                        <div class="col-md-3">
+                            <label for="txtModalAuditUsuario" class="form-label small fw-bold text-muted">Usuario</label>
+                            <input type="text" id="txtModalAuditUsuario" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
+                        </div>
+                        <div class="col-md-3">
+                            <label for="txtModalAuditFecha" class="form-label small fw-bold text-muted">Fecha</label>
+                            <input type="text" id="txtModalAuditFecha" class="form-control form-control-sm modal-campo-bloqueado" readonly disabled>
                         </div>
                     </div>
                 </div>
@@ -800,7 +808,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function mostrarAuditoriaAsig(det) {
-        const usuario = det && (det.xlastusername || det.xlastuser) ? String(det.xlastusername || det.xlastuser).trim() : '';
+        const usuario = det && (det.xlastuser || det.xlastusername) ? String(det.xlastuser || det.xlastusername).trim() : '';
         document.getElementById('txtModalAuditUsuario').value = usuario;
         document.getElementById('txtModalAuditFecha').value = formatearFechaAuditoria(det && det.xlastdate);
     }

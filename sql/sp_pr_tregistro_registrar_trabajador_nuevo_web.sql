@@ -744,12 +744,32 @@ BEGIN
         CASE WHEN @employee_type_id IS NOT NULL AND e.employeetype = @employee_type_id THEN 0 ELSE 1 END,
         e.xlastdate DESC;
 
+    /* SIN PLANILLA (LIMA<cia>...) va antes que EMPLEADOS por código: no usarla como default. */
+    IF @payroll_type_id IS NOT NULL AND EXISTS (
+        SELECT 1
+        FROM pr_payrolltype pt (NOLOCK)
+        WHERE pt.payrolltype = @payroll_type_id
+          AND (
+                UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'SIN PLANILLA'
+             OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'SIN PLANILLA'
+          )
+    )
+        SET @payroll_type_id = NULL;
+
     IF @payroll_type_id IS NULL
     BEGIN
         SELECT TOP 1 @payroll_type_id = pt.payrolltype
         FROM pr_payrolltype pt (NOLOCK)
         WHERE pt.company = @cia
-        ORDER BY pt.payrolltype;
+        ORDER BY
+            CASE
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'SIN PLANILLA'
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'SIN PLANILLA' THEN 2
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'EMPLEADOS'
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'EMPLEADOS' THEN 0
+                ELSE 1
+            END,
+            pt.payrolltype;
     END;
 
     IF @salaryaccounttype_id IS NULL

@@ -58,7 +58,10 @@ BEGIN
 
         EXEC dbo.sp_pr_obtenerhorastrabajadas
             @period = @periodo_horas,
-            @horas = @result OUTPUT;
+            @horas = @result OUTPUT,
+            @cia = @cia,
+            @payrolltype = @payrolltype,
+            @person = @person;
         RETURN;
     END
 

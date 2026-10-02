@@ -98,17 +98,38 @@
     .tri-archivo-falta {
         color: #adb5bd;
     }
+
+    .estado-observado {
+        color: #b02a37;
+        font-weight: 600;
+    }
+
+    .table-tregistro-import .tri-input-nombre {
+        font-size: 11px;
+        min-width: 7.5rem;
+        padding: 0.1rem 0.35rem;
+    }
+
+    .table-tregistro-import .tri-input-nombre.tri-revisar {
+        border-color: #ffc107;
+        background-color: #fff8e1;
+    }
+
+    .tri-obs {
+        white-space: normal;
+        min-width: 16rem;
+        max-width: 26rem;
+    }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="alert alert-light border tri-info mb-3" role="note">
-    <strong>Importación T-Registro — reportes SUNAT.</strong>
-    Seleccione la compañía y los <strong>cinco ZIP</strong> descargados de la interfaz del T-Registro
-    (<code>IDE</code>, <code>DIR</code>, <code>TRA</code>, <code>SSA</code> y <code>SET</code>).
-    El sistema los descomprimirá, listará los TXT internos y marcará como <strong>nuevos</strong>
-    los trabajadores cuyo DNI no esté en la ficha. Al registrar nuevos se graban también los
-    <strong>datos de educación</strong> del archivo <code>SET</code> (nivel, institución, carrera, año e indicador).
+    <strong>Importación T-Registro — constancias PDF SUNAT.</strong>
+    Seleccione la compañía y los <strong>PDF de constancia</strong> del T-Registro de cada trabajador
+    (<code>Formulario 1604-1</code> alta o <code>1604-2</code> modificación). El sistema lee cada PDF y marca como
+    <strong>nuevos</strong> los trabajadores cuyo DNI no esté en la ficha. Revise la separación de
+    <strong>apellidos y nombres</strong> antes de registrar (las celdas en amarillo requieren revisión).
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -122,21 +143,21 @@
             </div>
 
             <div class="col-12 col-lg-8">
-                <label for="fileZipsTregistro" class="form-label small fw-bold text-muted">
-                    ZIP T-Registro (5 archivos)
+                <label for="filePdfTregistro" class="form-label small fw-bold text-muted">
+                    Constancias PDF T-Registro
                 </label>
-                <input type="file" class="form-control form-control-sm" id="fileZipsTregistro"
-                       accept=".zip,application/zip" multiple>
-                <div class="form-text">Seleccione a la vez los 5 ZIP: IDE, DIR, TRA, SSA y SET.</div>
+                <input type="file" class="form-control form-control-sm" id="filePdfTregistro"
+                       accept=".pdf,application/pdf" multiple>
+                <div class="form-text">Puede seleccionar varios PDF a la vez (uno por trabajador).</div>
             </div>
 
-            <div class="col-12 d-none" id="wrapListaTxtZip">
+            <div class="col-12 d-none" id="wrapListaPdf">
                 <div class="border rounded p-3 bg-light">
                     <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
-                        <strong class="small mb-0">TXT detectados en los ZIP</strong>
-                        <span class="small text-muted" id="lblConteoZipTxt">0 / 5</span>
+                        <strong class="small mb-0">PDF seleccionados</strong>
+                        <span class="small text-muted" id="lblConteoPdf">0</span>
                     </div>
-                    <div id="listaTxtZip" class="row g-2 small"></div>
+                    <div id="listaPdf" class="row g-1 small"></div>
                 </div>
             </div>
 
@@ -145,12 +166,12 @@
                     <i class="bi bi-search"></i> Analizar archivos
                 </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnRegistrarNuevos" disabled>
-                    <i class="bi bi-person-plus"></i> Registrar nuevos
+                    <i class="bi bi-person-plus"></i> Registrar seleccionados
                 </button>
                 <button type="button" class="btn btn-outline-primary btn-sm px-4" id="btnActualizarNuevos" disabled title="Disponible después de registrar nuevos">
                     <i class="bi bi-pencil-square"></i> Actualizar nuevos
                 </button>
-                <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los cinco ZIP.</span>
+                <span class="small text-muted" id="lblEstadoAccion">Seleccione la compañía y los PDF.</span>
             </div>
         </form>
     </div>
@@ -215,6 +236,7 @@
                 <button type="button" class="btn btn-outline-secondary active" data-filtro="TODOS">Todos</button>
                 <button type="button" class="btn btn-outline-success" data-filtro="NUEVO">Nuevos</button>
                 <button type="button" class="btn btn-outline-primary" data-filtro="EXISTENTE">En ficha</button>
+                <button type="button" class="btn btn-outline-danger" data-filtro="OBSERVADO">Observados</button>
             </div>
         </div>
 
@@ -225,16 +247,21 @@
             <table class="table table-bordered table-sm table-hover table-tregistro-import align-middle">
                 <thead>
                     <tr>
+                        <th class="text-center">
+                            <input type="checkbox" class="form-check-input" id="chkTodosNuevos" title="Marcar todos los nuevos">
+                        </th>
                         <th>Estado</th>
                         <th>DNI / Doc.</th>
-                        <th>Trabajador</th>
+                        <th>Apellido paterno</th>
+                        <th>Apellido materno</th>
+                        <th>Nombres</th>
                         <th>F. ingreso</th>
                         <th>Tipo trabajador</th>
                         <th>Régimen pensión</th>
-                        <th>Nivel instrucción</th>
-                        <th>Institución / Carrera</th>
-                        <th>Situación</th>
-                        <th>Archivos</th>
+                        <th>Nivel educativo</th>
+                        <th>Forma de pago</th>
+                        <th>Archivo</th>
+                        <th>Observaciones</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyTregistroImport"></tbody>
@@ -245,34 +272,19 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const URL_RESUMEN = {{ url_for('api_tregistro_importacion_resumen') | tojson }};
-    const URL_REGISTRAR = {{ url_for('api_tregistro_importacion_registrar') | tojson }};
+    const URL_RESUMEN = {{ url_for('api_tregistro_importacion_pdf_resumen') | tojson }};
+    const URL_REGISTRAR = {{ url_for('api_tregistro_importacion_pdf_registrar') | tojson }};
     const URL_CAMPOS_LISTAR = {{ url_for('api_tregistro_campos_nuevos_listar') | tojson }};
     const URL_CAMPOS_GUARDAR = {{ url_for('api_tregistro_campos_nuevos_guardar') | tojson }};
     const DEFAULT_CIA = 'BGT';
-    const ORDEN_TIPOS = ['IDE', 'DIR', 'TRA', 'SSA', 'SET'];
-    const CAMPOS_FORM = {
-        IDE: 'file_ide',
-        DIR: 'file_dir',
-        TRA: 'file_tra',
-        SSA: 'file_ssa',
-        SET: 'file_set',
-    };
-    const ETIQUETAS = {
-        IDE: 'TR3 Identificación',
-        DIR: 'TR4 Dirección',
-        TRA: 'TR5 Laborales',
-        SSA: 'TR6 Seg. social',
-        SET: 'TR1 Educación',
-    };
+    const MAX_PDF = 300;
 
     let filasResumen = [];
     let filtroActual = 'TODOS';
     let resumenActual = null;
-    let archivosTxtPorTipo = {};
+    let archivosPdf = [];
     let nuevosParaActualizar = [];
     let selectoresLaborales = { position: [], costcenter: [], accountprofile: [] };
     let modalActualizarInstance = null;
@@ -335,30 +347,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    function detectarTipoPorNombre(nombre) {
-        const m = String(nombre || '').match(/(?:^|[\\/])(\d{11})_(IDE|DIR|TRA|SSA|SET)_\d{8}/i);
-        return m ? m[2].toUpperCase() : null;
-    }
-
-    function detectarTipoPorContenido(texto) {
-        const primera = String(texto || '').split(/\r?\n/, 1)[0].toUpperCase();
-        const mapa = { 'TR3:': 'IDE', 'TR4:': 'DIR', 'TR5:': 'TRA', 'TR6:': 'SSA', 'TR1:': 'SET' };
-        for (const [pref, code] of Object.entries(mapa)) {
-            if (primera.includes(pref)) return code;
-        }
-        return null;
-    }
-
-    function hayCincoCompletos() {
-        return ORDEN_TIPOS.every((code) => archivosTxtPorTipo[code] && archivosTxtPorTipo[code].file);
-    }
-
     function syncBotonesSelector() {
-        const ok = hayCincoCompletos();
+        const ok = archivosPdf.length > 0;
         document.getElementById('btnAnalizarArchivos').disabled = !ok;
         document.getElementById('lblEstadoAccion').textContent = ok
-            ? 'Listos los 5 TXT. Puede analizar.'
-            : 'Seleccione la compañía y los cinco ZIP.';
+            ? `${archivosPdf.length} PDF listo(s). Puede analizar.`
+            : 'Seleccione la compañía y los PDF.';
         document.getElementById('btnRegistrarNuevos').disabled = true;
         document.getElementById('btnActualizarNuevos').disabled = nuevosParaActualizar.length === 0;
         resumenActual = null;
@@ -367,142 +361,64 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cardEstadoArchivos').classList.add('d-none');
     }
 
-    function renderListaTxt() {
-        const wrap = document.getElementById('wrapListaTxtZip');
-        const lista = document.getElementById('listaTxtZip');
-        const lbl = document.getElementById('lblConteoZipTxt');
-        const n = ORDEN_TIPOS.filter((c) => archivosTxtPorTipo[c]).length;
-        lbl.textContent = `${n} / 5`;
-        wrap.classList.toggle('d-none', n === 0);
-
-        lista.innerHTML = ORDEN_TIPOS.map((code) => {
-            const item = archivosTxtPorTipo[code];
-            if (!item) {
-                return `
-                    <div class="col-md-6 col-lg-4">
-                        <div class="border rounded px-2 py-2 tri-archivo-falta bg-white">
-                            <strong>${code}</strong>
-                            <span class="badge text-bg-secondary ms-1">${escapeHtml(ETIQUETAS[code])}</span>
-                            <div class="text-muted">Pendiente</div>
-                        </div>
-                    </div>`;
-            }
-            return `
-                <div class="col-md-6 col-lg-4">
-                    <div class="border rounded px-2 py-2 tri-archivo-ok bg-white">
-                        <strong>${code}</strong>
-                        <span class="badge text-bg-secondary ms-1">${escapeHtml(ETIQUETAS[code])}</span>
-                        <div class="text-break">${escapeHtml(item.txtName)}</div>
-                        <div class="text-muted">ZIP: ${escapeHtml(item.zipName)}</div>
-                    </div>
-                </div>`;
-        }).join('');
+    function renderListaPdf() {
+        const wrap = document.getElementById('wrapListaPdf');
+        const lista = document.getElementById('listaPdf');
+        document.getElementById('lblConteoPdf').textContent = `${archivosPdf.length} archivo(s)`;
+        wrap.classList.toggle('d-none', archivosPdf.length === 0);
+        lista.innerHTML = archivosPdf.map((f) => `
+            <div class="col-md-6 col-lg-4 text-truncate tri-archivo-ok" title="${escapeHtml(f.name)}">
+                <i class="bi bi-file-earmark-pdf"></i> ${escapeHtml(f.name)}
+            </div>`).join('');
         syncBotonesSelector();
     }
 
-    async function procesarZipsSeleccionados(fileList) {
-        archivosTxtPorTipo = {};
+    function seleccionarPdf(fileList) {
         const files = Array.from(fileList || []);
-        if (!files.length) {
-            renderListaTxt();
-            return;
+        const noPdf = files.filter((f) => !/\.pdf$/i.test(f.name));
+        if (noPdf.length) {
+            toastWarn(`Solo se aceptan PDF. Se omitieron: ${noPdf.map((f) => f.name).join(', ')}`);
         }
-        if (files.length !== 5) {
-            toastWarn(`Debe seleccionar exactamente 5 ZIP (uno por IDE, DIR, TRA, SSA y SET). Recibidos: ${files.length}.`);
-            document.getElementById('fileZipsTregistro').value = '';
-            renderListaTxt();
-            return;
+        archivosPdf = files.filter((f) => /\.pdf$/i.test(f.name));
+        if (archivosPdf.length > MAX_PDF) {
+            toastWarn(`Puede cargar como máximo ${MAX_PDF} PDF por vez.`);
+            archivosPdf = [];
+            document.getElementById('filePdfTregistro').value = '';
         }
-
-        if (typeof JSZip === 'undefined') {
-            toastErr('No se pudo cargar el descompresor ZIP (JSZip).');
-            return;
-        }
-
-        const asignados = {};
-        try {
-            for (const zipFile of files) {
-                if (!/\.zip$/i.test(zipFile.name)) {
-                    throw new Error(`El archivo "${zipFile.name}" no es ZIP.`);
-                }
-                const zip = await JSZip.loadAsync(await zipFile.arrayBuffer());
-                const entradasTxt = Object.keys(zip.files).filter((n) => {
-                    const entry = zip.files[n];
-                    return !entry.dir && /\.txt$/i.test(n) && !n.includes('__MACOSX');
-                });
-                if (!entradasTxt.length) {
-                    throw new Error(`El ZIP "${zipFile.name}" no contiene un TXT.`);
-                }
-
-                let txtPath = entradasTxt.find((n) => detectarTipoPorNombre(n)) || entradasTxt[0];
-                const txtName = txtPath.split(/[\\/]/).pop();
-                const u8 = await zip.files[txtPath].async('uint8array');
-                let tipo = detectarTipoPorNombre(txtName) || detectarTipoPorNombre(zipFile.name);
-                if (!tipo) {
-                    const preview = new TextDecoder('latin1').decode(u8.slice(0, 400));
-                    tipo = detectarTipoPorContenido(preview);
-                }
-                if (!tipo || !ORDEN_TIPOS.includes(tipo)) {
-                    throw new Error(`No se reconoció el tipo T-Registro de "${zipFile.name}" / "${txtName}".`);
-                }
-                if (asignados[tipo]) {
-                    throw new Error(`Hay más de un ZIP para el tipo ${tipo} (${asignados[tipo].zipName} y ${zipFile.name}).`);
-                }
-                const blob = new Blob([u8], { type: 'text/plain' });
-                const fileTxt = new File([blob], txtName, { type: 'text/plain' });
-                asignados[tipo] = { zipName: zipFile.name, txtName, file: fileTxt };
-            }
-
-            const faltantes = ORDEN_TIPOS.filter((c) => !asignados[c]);
-            if (faltantes.length) {
-                throw new Error(`Faltan tipos en la selección: ${faltantes.join(', ')}.`);
-            }
-
-            archivosTxtPorTipo = asignados;
-            renderListaTxt();
-            toastOk('Se cargaron los 5 TXT desde los ZIP.');
-        } catch (err) {
-            console.error(err);
-            archivosTxtPorTipo = {};
-            document.getElementById('fileZipsTregistro').value = '';
-            renderListaTxt();
-            toastErr(err.message || String(err));
-        }
+        renderListaPdf();
     }
 
-    function obtenerFilesParaApi() {
-        if (!hayCincoCompletos()) return null;
-        const out = {};
-        ORDEN_TIPOS.forEach((code) => {
-            out[CAMPOS_FORM[code]] = archivosTxtPorTipo[code].file;
-        });
-        return out;
+    function formDataConPdf(cia) {
+        const fd = new FormData();
+        fd.append('cia', cia);
+        archivosPdf.forEach((f) => fd.append('files', f, f.name));
+        return fd;
     }
 
-    function renderEstadoArchivos(meta, resumen) {
+    function renderEstadoArchivos(data) {
+        const meta = data.meta || {};
+        const resumen = data.resumen || {};
+        const errores = Array.isArray(data.errores) ? data.errores : [];
         const card = document.getElementById('cardEstadoArchivos');
         const cont = document.getElementById('contenidoEstadoArchivos');
         card.classList.remove('d-none', 'estado-carga-ok', 'estado-carga-alerta', 'estado-carga-vacio');
 
-        const advertencias = (resumen && resumen.advertencias) || [];
-        if (advertencias.length) card.classList.add('estado-carga-alerta');
-        else card.classList.add('estado-carga-ok');
+        const advertencias = resumen.advertencias || [];
+        card.classList.add(advertencias.length || errores.length ? 'estado-carga-alerta' : 'estado-carga-ok');
 
-        const archivos = (meta && meta.archivos) || {};
-        const filasArchivos = ORDEN_TIPOS.map((code) => {
-            const info = archivos[code];
-            if (!info) {
-                return `<div class="col-md-6 col-lg-4 tri-archivo-falta"><strong>${code}:</strong> no cargado</div>`;
-            }
-            return `<div class="col-md-6 col-lg-4 tri-archivo-ok"><strong>${code}:</strong> ${escapeHtml(info.nombre || code)} (${Number(info.filas || 0)} reg.)</div>`;
-        }).join('');
+        const rucDistinto = meta.ruc && meta.ruc_compania && meta.ruc !== meta.ruc_compania;
+        const listaErrores = errores.length
+            ? `<div class="col-12 text-danger">${errores.map((e) =>
+                `<div><i class="bi bi-x-circle"></i> <strong>${escapeHtml(e.archivo)}:</strong> ${escapeHtml(e.error)}</div>`).join('')}</div>`
+            : '';
 
         cont.innerHTML = `
             <div class="row g-2">
-                <div class="col-md-4"><strong>RUC:</strong> ${escapeHtml(meta.ruc || '-')}</div>
+                <div class="col-md-4"><strong>RUC PDF:</strong> ${escapeHtml(meta.ruc || '-')}</div>
                 <div class="col-md-8"><strong>Empleador:</strong> ${escapeHtml(meta.razon_social || '-')}</div>
-                <div class="col-md-6"><strong>Fecha generación:</strong> ${escapeHtml(meta.fecha_generacion || '-')}</div>
-                ${filasArchivos}
+                <div class="col-md-4 ${rucDistinto ? 'text-danger fw-bold' : ''}"><strong>RUC compañía:</strong> ${escapeHtml(meta.ruc_compania || '-')}</div>
+                <div class="col-md-8"><strong>PDF leídos:</strong> ${Number(resumen.total_archivos || 0) - errores.length} de ${Number(resumen.total_archivos || 0)}</div>
+                ${listaErrores}
             </div>
         `;
     }
@@ -510,70 +426,127 @@ document.addEventListener('DOMContentLoaded', async function () {
     function renderResumen(resumen) {
         const cont = document.getElementById('resumenTregistroImport');
         const alertas = document.getElementById('alertasTregistroImport');
-        const btnRegistrar = document.getElementById('btnRegistrarNuevos');
 
         cont.innerHTML = `
-            <div><strong>Trabajadores en T-Registro:</strong> ${Number(resumen.total_trabajadores || 0)}</div>
+            <div><strong>Trabajadores en PDF:</strong> ${Number(resumen.total_trabajadores || 0)}</div>
             <div><strong>Nuevos (sin ficha):</strong> <span class="valor-nuevo">${Number(resumen.nuevos || 0)}</span></div>
             <div><strong>Ya en ficha:</strong> ${Number(resumen.existentes || 0)}</div>
-            <div><strong>Próximo paso:</strong> registrar solo los nuevos con el botón verde</div>
+            <div><strong>Observados:</strong> <span class="estado-observado">${Number(resumen.observados || 0)}</span></div>
         `;
 
         const advertencias = Array.isArray(resumen.advertencias) ? resumen.advertencias : [];
         alertas.innerHTML = advertencias.length
             ? `<div class="alert alert-warning py-2 small mb-3">${advertencias.map((a) => escapeHtml(a)).join('<br>')}</div>`
             : '';
+    }
 
-        btnRegistrar.disabled = Number(resumen.nuevos || 0) === 0;
-        btnRegistrar.title = Number(resumen.nuevos || 0) === 0
-            ? 'No hay trabajadores nuevos para registrar'
-            : 'Registrar en la ficha los trabajadores marcados como nuevos';
+    function filasMarcadas() {
+        return filasResumen.filter((f) => f.estado === 'NUEVO' && f._marcado);
+    }
+
+    function syncBotonRegistrar() {
+        const n = filasMarcadas().length;
+        const btn = document.getElementById('btnRegistrarNuevos');
+        btn.disabled = n === 0;
+        btn.title = n === 0
+            ? 'Marque al menos un trabajador nuevo'
+            : `Registrar ${n} trabajador(es) marcado(s)`;
+        const nuevos = filasResumen.filter((f) => f.estado === 'NUEVO');
+        const chkTodos = document.getElementById('chkTodosNuevos');
+        chkTodos.checked = nuevos.length > 0 && n === nuevos.length;
+        chkTodos.indeterminate = n > 0 && n < nuevos.length;
+        chkTodos.disabled = nuevos.length === 0;
+    }
+
+    function inputNombre(f, campo, idx) {
+        const valor = (f.payload && f.payload[campo]) || '';
+        const revisar = f.revisar_nombre ? ' tri-revisar' : '';
+        return `<input type="text" class="form-control form-control-sm tri-input-nombre${revisar}"
+                    data-idx="${idx}" data-campo="${campo}" value="${escapeHtml(valor)}"
+                    maxlength="${campo === 'nombres' ? 80 : 40}">`;
     }
 
     function renderGrilla() {
         const tbody = document.getElementById('tbodyTregistroImport');
-        const filas = filasResumen.filter((f) => filtroActual === 'TODOS' || f.estado === filtroActual);
+        const filas = filasResumen
+            .map((f, idx) => ({ f, idx }))
+            .filter(({ f }) => filtroActual === 'TODOS' || f.estado === filtroActual);
 
         if (!filas.length) {
-            tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-3">Sin registros para el filtro seleccionado.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" class="text-center text-muted py-3">Sin registros para el filtro seleccionado.</td></tr>';
+            syncBotonRegistrar();
             return;
         }
 
-        tbody.innerHTML = filas.map((f) => {
-            const clsEstado = f.estado === 'NUEVO' ? 'estado-nuevo' : 'estado-existente';
-            const etiqueta = f.estado === 'NUEVO' ? 'Nuevo' : 'En ficha';
-            const archivos = Array.isArray(f.archivos_presentes) ? f.archivos_presentes.join(', ') : '';
-            const educDetalle = [f.nombre_inst_educ, f.carrera, f.anio_egreso]
-                .map((v) => String(v || '').trim())
-                .filter(Boolean)
-                .join(' · ');
+        const etiquetas = { NUEVO: 'Nuevo', EXISTENTE: 'En ficha', OBSERVADO: 'Observado' };
+        const clases = { NUEVO: 'estado-nuevo', EXISTENTE: 'estado-existente', OBSERVADO: 'estado-observado' };
+
+        tbody.innerHTML = filas.map(({ f, idx }) => {
+            const esNuevo = f.estado === 'NUEVO';
+            const p = f.payload || {};
+            const obs = Array.isArray(f.observaciones) ? f.observaciones : [];
+            const celdasNombre = esNuevo
+                ? `<td>${inputNombre(f, 'apellido_paterno', idx)}</td>
+                   <td>${inputNombre(f, 'apellido_materno', idx)}</td>
+                   <td>${inputNombre(f, 'nombres', idx)}</td>`
+                : `<td>${escapeHtml(p.apellido_paterno || '')}</td>
+                   <td>${escapeHtml(p.apellido_materno || '')}</td>
+                   <td>${escapeHtml(p.nombres || '')}</td>`;
             return `
                 <tr>
-                    <td class="${clsEstado}">${escapeHtml(etiqueta)}</td>
+                    <td class="text-center">
+                        ${esNuevo ? `<input type="checkbox" class="form-check-input tri-chk" data-idx="${idx}"${f._marcado ? ' checked' : ''}>` : ''}
+                    </td>
+                    <td class="${clases[f.estado] || ''}">${escapeHtml(etiquetas[f.estado] || f.estado)}</td>
                     <td>${escapeHtml(f.num_doc || '')}</td>
-                    <td>${escapeHtml(f.nombre_completo || '')}</td>
+                    ${celdasNombre}
                     <td>${escapeHtml(f.fecha_ingreso || '')}</td>
                     <td>${escapeHtml(f.tipo_trabajador || '')}</td>
                     <td>${escapeHtml(f.regimen_pension || '')}</td>
                     <td>${escapeHtml(f.nivel_educativo || '')}</td>
-                    <td>${escapeHtml(educDetalle || '—')}</td>
-                    <td>${escapeHtml(f.situacion || '')}</td>
-                    <td>${escapeHtml(archivos)}</td>
+                    <td>${escapeHtml(f.tipo_pago || '')}</td>
+                    <td class="text-truncate" style="max-width: 12rem;" title="${escapeHtml(f.archivo || '')}">${escapeHtml(f.archivo || '')}</td>
+                    <td class="tri-obs">${obs.map((o) => escapeHtml(o)).join('<br>') || '—'}</td>
                 </tr>
             `;
         }).join('');
+        syncBotonRegistrar();
     }
+
+    document.getElementById('tbodyTregistroImport').addEventListener('change', function (e) {
+        const el = e.target;
+        const f = filasResumen[Number(el.getAttribute('data-idx'))];
+        if (!f) return;
+        if (el.classList.contains('tri-chk')) {
+            f._marcado = el.checked;
+            syncBotonRegistrar();
+        } else if (el.classList.contains('tri-input-nombre')) {
+            el.value = el.value.trim().toUpperCase();
+            f.payload[el.getAttribute('data-campo')] = el.value;
+        }
+    });
+
+    document.getElementById('chkTodosNuevos').addEventListener('change', function () {
+        filasResumen.forEach((f) => {
+            if (f.estado === 'NUEVO') f._marcado = this.checked;
+        });
+        renderGrilla();
+    });
 
     function renderResultado(data) {
         resumenActual = data;
         filasResumen = Array.isArray(data.filas) ? data.filas : [];
+        filasResumen.forEach((f) => {
+            f.payload = f.payload || {};
+            f._marcado = f.estado === 'NUEVO';
+        });
         filtroActual = 'TODOS';
 
         document.querySelectorAll('.tri-filtros-trabajadores [data-filtro]').forEach((btn) => {
             btn.classList.toggle('active', btn.getAttribute('data-filtro') === 'TODOS');
         });
 
-        renderEstadoArchivos(data.meta || {}, data.resumen || {});
+        renderEstadoArchivos(data);
         renderResumen(data.resumen || {});
         renderGrilla();
 
@@ -584,9 +557,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('cardResumenTregistro').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
 
-    document.getElementById('fileZipsTregistro').addEventListener('change', async function () {
-        document.getElementById('lblEstadoAccion').textContent = 'Leyendo ZIP...';
-        await procesarZipsSeleccionados(this.files);
+    document.getElementById('filePdfTregistro').addEventListener('change', function () {
+        seleccionarPdf(this.files);
     });
 
     document.getElementById('frmTregistroImportar').addEventListener('submit', async function (e) {
@@ -597,9 +569,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
-        const files = obtenerFilesParaApi();
-        if (!files) {
-            toastWarn('Debe seleccionar los cinco ZIP (IDE, DIR, TRA, SSA y SET) antes de analizar.');
+        if (!archivosPdf.length) {
+            toastWarn('Seleccione al menos un PDF de constancia del T-Registro.');
             return;
         }
 
@@ -609,11 +580,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Analizando...';
 
         try {
-            const fd = new FormData();
-            fd.append('cia', cia);
-            Object.entries(files).forEach(([name, file]) => fd.append(name, file));
-
-            const res = await fetch(URL_RESUMEN, { method: 'POST', body: fd });
+            const res = await fetch(URL_RESUMEN, { method: 'POST', body: formDataConPdf(cia) });
             const data = await leerRespuestaJson(res, 'T-Registro');
             if (!res.ok || data.error) {
                 toastErr(data.error || 'No se pudo analizar los archivos.');
@@ -640,9 +607,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     document.getElementById('btnRegistrarNuevos').addEventListener('click', async function () {
-        const nuevos = Number((resumenActual && resumenActual.resumen && resumenActual.resumen.nuevos) || 0);
+        const marcadas = filasMarcadas();
+        const nuevos = marcadas.length;
         if (!nuevos) {
-            toastWarn('No hay trabajadores nuevos para registrar.');
+            toastWarn('Marque al menos un trabajador nuevo para registrar.');
+            return;
+        }
+        const sinNombre = marcadas.filter((f) => !String(f.payload.apellido_paterno || '').trim() || !String(f.payload.nombres || '').trim());
+        if (sinNombre.length) {
+            toastWarn(`Complete apellido paterno y nombres de: ${sinNombre.map((f) => f.num_doc).join(', ')}`);
             return;
         }
 
@@ -663,9 +636,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             : window.confirm(`Se registrarán ${nuevos} trabajador(es) nuevo(s). ¿Desea continuar?`);
         if (!confirmar) return;
 
-        const files = obtenerFilesParaApi();
-        if (!files) {
-            toastWarn('Debe mantener los cinco ZIP cargados para registrar.');
+        if (!archivosPdf.length) {
+            toastWarn('Debe mantener los PDF cargados para registrar.');
             return;
         }
 
@@ -675,10 +647,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Registrando...';
 
         try {
-            const fd = new FormData();
-            fd.append('cia', cia);
+            const fd = formDataConPdf(cia);
             fd.append('replicationunit', 'LIMA');
-            Object.entries(files).forEach(([name, file]) => fd.append(name, file));
+            fd.append('seleccion', JSON.stringify(marcadas.map((f) => ({
+                num_doc: f.num_doc,
+                apellido_paterno: f.payload.apellido_paterno || '',
+                apellido_materno: f.payload.apellido_materno || '',
+                nombres: f.payload.nombres || '',
+            }))));
 
             const res = await fetch(URL_REGISTRAR, { method: 'POST', body: fd });
             const data = await leerRespuestaJson(res, 'Registro T-Registro');
@@ -691,8 +667,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             if (Array.isArray(data.filas) && data.filas.length) {
                 const errores = data.filas.filter((f) => f.estado === 'ERROR');
-                if (errores.length) {
-                    toastWarn(errores.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n'));
+                const sinCatalogo = data.filas.filter((f) => f.estado === 'OK' && /Sin equivalencia/i.test(f.mensaje || ''));
+                const avisos = errores.concat(sinCatalogo);
+                if (avisos.length) {
+                    toastWarn(avisos.map((f) => `${f.num_doc}: ${f.mensaje}`).join('\n'));
                 }
                 nuevosParaActualizar = data.filas
                     .filter((f) => f.estado === 'OK' && String(f.person || '').trim())
@@ -889,7 +867,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
     await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
-    renderListaTxt();
+    renderListaPdf();
 });
 </script>
 {% endblock %}

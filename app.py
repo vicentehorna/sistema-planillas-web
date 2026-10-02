@@ -66,12 +66,8 @@ except Exception as _weasy_err:
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
 from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta
-from tregistro_import import (
-    construir_payload_registro_nuevos,
-    construir_resumen_importacion,
-    normalizar_num_doc,
-    parsear_archivo_tregistro,
-)
+from tregistro_import import normalizar_num_doc
+from tregistro_pdf_import import construir_resumen_pdf
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
 
 
@@ -19924,87 +19920,60 @@ def _tregistro_import_ruc_compania(cursor, cia):
     return str(row[0]).strip() if row and row[0] else ''
 
 
-def _tregistro_import_parse_uploads(request_obj):
-    campos = {
-        'IDE': 'file_ide',
-        'DIR': 'file_dir',
-        'TRA': 'file_tra',
-        'SSA': 'file_ssa',
-        'SET': 'file_set',
-    }
-    faltantes = [code for code, field in campos.items() if not request_obj.files.get(field)]
-    if faltantes:
-        raise ValueError(f"Debe adjuntar los cinco archivos TXT. Faltan: {', '.join(faltantes)}.")
-
-    parsed_files = {}
-    for code, field in campos.items():
-        upload = request_obj.files[field]
-        raw = upload.read()
-        if not raw:
-            raise ValueError(f"El archivo {code} está vacío.")
-        try:
-            contenido = raw.decode('utf-8')
-        except UnicodeDecodeError:
-            contenido = raw.decode('cp1252')
-        bundle = parsear_archivo_tregistro(contenido, upload.filename or f'{code}.txt')
-        tipo_detectado = str(bundle.get('codigo') or '').upper()
-        if tipo_detectado != code:
-            raise ValueError(
-                f"El archivo seleccionado para {code} parece ser de tipo {tipo_detectado}. "
-                f'Verifique que subió el TXT correcto.'
-            )
-        parsed_files[code] = bundle
-    return parsed_files
+TREGISTRO_PDF_MAX_ARCHIVOS = 300
+TREGISTRO_PDF_MAX_BYTES = 5 * 1024 * 1024
 
 
-@app.route('/api/tregistro-importacion/resumen', methods=['POST'])
+def _tregistro_pdf_uploads(request_obj):
+    """Lee los PDF de constancias T-Registro enviados en el campo multipart 'files'."""
+    uploads = [f for f in request_obj.files.getlist('files') if f and f.filename]
+    if not uploads:
+        raise ValueError('Seleccione al menos un PDF de constancia del T-Registro.')
+    if len(uploads) > TREGISTRO_PDF_MAX_ARCHIVOS:
+        raise ValueError(f'Puede cargar como máximo {TREGISTRO_PDF_MAX_ARCHIVOS} PDF por vez.')
+    archivos = []
+    for upload in uploads:
+        nombre = os.path.basename(upload.filename)
+        if not nombre.lower().endswith('.pdf'):
+            raise ValueError(f'El archivo "{nombre}" no es PDF.')
+        contenido = upload.read(TREGISTRO_PDF_MAX_BYTES + 1)
+        if len(contenido) > TREGISTRO_PDF_MAX_BYTES:
+            raise ValueError(f'El archivo "{nombre}" supera los 5 MB.')
+        archivos.append((nombre, contenido))
+    return archivos
+
+
+def _tregistro_pdf_resumen(cursor, cia, archivos):
+    dnis_existentes = _tregistro_import_mapa_dnis_existentes(cursor, cia)
+    ruc_compania = _tregistro_import_ruc_compania(cursor, cia)
+    resultado = construir_resumen_pdf(archivos, dnis_existentes, ruc_compania)
+    resultado['meta']['ruc_compania'] = ruc_compania
+    return resultado
+
+
+@app.route('/api/tregistro-importacion/pdf/resumen', methods=['POST'])
 @login_required
-def api_tregistro_importacion_resumen():
-    """Analiza los 5 TXT del T-Registro SUNAT y compara DNIs con la ficha de trabajadores."""
+def api_tregistro_importacion_pdf_resumen():
+    """Analiza las constancias PDF del T-Registro y compara DNIs con la ficha de trabajadores."""
     cia = str(request.form.get('cia') or '').strip()
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
 
-    campos = {
-        'IDE': 'file_ide',
-        'DIR': 'file_dir',
-        'TRA': 'file_tra',
-        'SSA': 'file_ssa',
-        'SET': 'file_set',
-    }
-    faltantes = [code for code, field in campos.items() if not request.files.get(field)]
-    if faltantes:
-        return jsonify({
-            "error": f"Debe adjuntar los cinco archivos TXT. Faltan: {', '.join(faltantes)}.",
-        }), 400
-
     try:
-        parsed_files = _tregistro_import_parse_uploads(request)
+        archivos = _tregistro_pdf_uploads(request)
     except ValueError as ex:
         return jsonify({"error": str(ex)}), 400
-    except Exception as ex:
-        logging.exception('api_tregistro_importacion_resumen parse')
-        return jsonify({"error": f"No se pudo leer un archivo TXT: {ex}"}), 400
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        dnis_existentes = _tregistro_import_mapa_dnis_existentes(cursor, cia)
-        resultado = construir_resumen_importacion(parsed_files, dnis_existentes)
-
-        ruc_archivos = str((resultado.get('meta') or {}).get('ruc') or '').strip()
-        ruc_compania = _tregistro_import_ruc_compania(cursor, cia)
-        if ruc_archivos and ruc_compania and ruc_archivos != ruc_compania:
-            resultado.setdefault('resumen', {}).setdefault('advertencias', []).append(
-                f'El RUC de los archivos ({ruc_archivos}) no coincide con el RUC de la compañía seleccionada ({ruc_compania}).'
-            )
-
+        resultado = _tregistro_pdf_resumen(cursor, cia, archivos)
         resultado['ok'] = True
         resultado['cia'] = cia
         return jsonify(resultado)
     except Exception as ex:
-        logging.exception('api_tregistro_importacion_resumen')
+        logging.exception('api_tregistro_importacion_pdf_resumen')
         return jsonify({"error": str(ex)}), 500
     finally:
         if conn:
@@ -20014,46 +19983,65 @@ def api_tregistro_importacion_resumen():
                 pass
 
 
-@app.route('/api/tregistro-importacion/registrar', methods=['POST'])
+def _tregistro_pdf_seleccion(raw):
+    """Selección enviada por la grilla: {num_doc: {apellido_paterno, apellido_materno, nombres}}."""
+    try:
+        items = json.loads(raw or '[]')
+    except (TypeError, ValueError):
+        raise ValueError('La selección de trabajadores no es válida.')
+    seleccion = {}
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        clave = normalizar_num_doc(it.get('num_doc'))
+        if clave:
+            seleccion[clave] = {
+                k: str(it.get(k) or '').strip().upper()[:40 if k != 'nombres' else 80]
+                for k in ('apellido_paterno', 'apellido_materno', 'nombres')
+            }
+    return seleccion
+
+
+@app.route('/api/tregistro-importacion/pdf/registrar', methods=['POST'])
 @login_required
-def api_tregistro_importacion_registrar():
-    """Registra en la ficha los trabajadores nuevos detectados en los TXT del T-Registro."""
+def api_tregistro_importacion_pdf_registrar():
+    """Registra en la ficha los trabajadores nuevos seleccionados de las constancias PDF del T-Registro."""
     cia = str(request.form.get('cia') or '').strip()
     replicationunit = str(request.form.get('replicationunit') or 'LIMA').strip() or 'LIMA'
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
 
     try:
-        parsed_files = _tregistro_import_parse_uploads(request)
+        archivos = _tregistro_pdf_uploads(request)
+        seleccion = _tregistro_pdf_seleccion(request.form.get('seleccion'))
     except ValueError as ex:
         return jsonify({"error": str(ex)}), 400
-    except Exception as ex:
-        logging.exception('api_tregistro_importacion_registrar parse')
-        return jsonify({"error": f"No se pudo leer un archivo TXT: {ex}"}), 400
+    if not seleccion:
+        return jsonify({"error": "Marque al menos un trabajador nuevo para registrar."}), 400
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        dnis_existentes = _tregistro_import_mapa_dnis_existentes(cursor, cia)
-        payload = construir_payload_registro_nuevos(parsed_files, dnis_existentes)
+        resumen = _tregistro_pdf_resumen(cursor, cia, archivos)
+
+        payload = []
+        for fila in resumen.get('filas') or []:
+            edicion = seleccion.get(normalizar_num_doc(fila.get('num_doc')))
+            if fila.get('estado') != 'NUEVO' or edicion is None:
+                continue
+            item = dict(fila['payload'])
+            for campo, valor in edicion.items():
+                if valor or campo == 'apellido_materno':
+                    item[campo] = valor
+            item['nombre_completo'] = ' '.join(
+                p for p in (item['apellido_paterno'], item['apellido_materno'], item['nombres']) if p
+            )
+            payload.append(item)
 
         if not payload:
             return jsonify({
-                "error": "No hay trabajadores nuevos completos (5 archivos) para registrar.",
-            }), 400
-
-        ruc_archivos = ''
-        metas = [parsed_files[c]['meta'] for c in parsed_files if c in parsed_files]
-        rucs = {m.get('ruc') for m in metas if m.get('ruc')}
-        if rucs:
-            ruc_archivos = next(iter(rucs))
-        ruc_compania = _tregistro_import_ruc_compania(cursor, cia)
-        if ruc_archivos and ruc_compania and ruc_archivos != ruc_compania:
-            return jsonify({
-                "error": (
-                    f"El RUC de los archivos ({ruc_archivos}) no coincide con el de la compañía ({ruc_compania})."
-                ),
+                "error": "Ninguno de los trabajadores marcados está como nuevo en los PDF cargados.",
             }), 400
 
         filas = []
@@ -20150,6 +20138,7 @@ def api_tregistro_importacion_registrar():
                     ),
                 )
                 out_rows = _dicts_first_nonempty_resultset(cursor)
+                conn.commit()
                 person = (out_rows[0].get('person') if out_rows else '') or ''
                 mensaje = (out_rows[0].get('mensaje') if out_rows else '') or 'Trabajador registrado correctamente.'
                 filas.append({
@@ -20161,6 +20150,10 @@ def api_tregistro_importacion_registrar():
                 })
                 registrados += 1
             except Exception as ex_item:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 filas.append({
                     'num_doc': item.get('num_doc'),
                     'nombre': item.get('nombre_completo'),
@@ -20169,8 +20162,6 @@ def api_tregistro_importacion_registrar():
                     'mensaje': str(ex_item),
                 })
                 errores += 1
-
-        conn.commit()
 
         return jsonify({
             "ok": True,
@@ -20191,7 +20182,7 @@ def api_tregistro_importacion_registrar():
                 conn.rollback()
             except Exception:
                 pass
-        logging.exception('api_tregistro_importacion_registrar')
+        logging.exception('api_tregistro_importacion_pdf_registrar')
         return jsonify({"error": str(ex)}), 500
     finally:
         if conn:

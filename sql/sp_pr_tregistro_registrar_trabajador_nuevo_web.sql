@@ -6,7 +6,7 @@
     Address: solo texto libre. Nacionalidad: solo texto (columna Nacionalidad).
     No registra ubigeo ni dirección estructurada.
 
-    Usado por: POST /api/tregistro-importacion/registrar
+    Usado por: POST /api/tregistro-importacion/pdf/registrar
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_tregistro_registrar_trabajador_nuevo_web]
     @cia                    VARCHAR(10),
@@ -107,6 +107,7 @@ BEGIN
     DECLARE @txt                    VARCHAR(200);
     DECLARE @tipo_contrato_raw      VARCHAR(80);
     DECLARE @pos_space              INT;
+    DECLARE @sin_catalogo           VARCHAR(1000);
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @tipo_doc = LTRIM(RTRIM(ISNULL(@tipo_doc, '')));
@@ -306,7 +307,17 @@ BEGIN
         ORDER BY et.employeetype;
     END;
 
-    /* --- Régimen laboral (728 -> PRIVADO) --- */
+    /* T-Registro abrevia: "MINERO DE SOCAVON" → "MINERO DE MINA DE SOCAVON" */
+    IF @employee_type_id IS NULL AND @txt <> ''
+    BEGIN
+        SELECT TOP 1 @employee_type_id = et.employeetype
+        FROM pr_employeetype et (NOLOCK)
+        WHERE et.company = @cia
+          AND UPPER(LTRIM(RTRIM(ISNULL(et.description, '')))) LIKE '%' + REPLACE(@txt, ' ', '%') + '%'
+        ORDER BY LEN(et.description), et.employeetype;
+    END;
+
+    /* --- Régimen laboral (728 -> PRIVADO; regímenes especiales sin catálogo -> PRIVADO) --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@regimen_laboral, ''))));
     IF @txt LIKE '%728%' OR @txt LIKE '%PRIVAD%'
         SET @txt = 'PRIVADO';
@@ -318,6 +329,15 @@ BEGIN
     WHERE (rl.company = @cia OR rl.regimenlabour LIKE 'LIMA' + @cia + '%')
       AND UPPER(LTRIM(RTRIM(ISNULL(rl.description, '')))) = @txt
     ORDER BY CASE WHEN rl.regimenlabour LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END;
+
+    IF @regimen_labour_id IS NULL AND @txt NOT IN ('', 'PUBLICO')
+    BEGIN
+        SELECT TOP 1 @regimen_labour_id = rl.regimenlabour
+        FROM pr_regimenlabour rl (NOLOCK)
+        WHERE (rl.company = @cia OR rl.regimenlabour LIKE 'LIMA' + @cia + '%')
+          AND UPPER(LTRIM(RTRIM(ISNULL(rl.description, '')))) = 'PRIVADO'
+        ORDER BY CASE WHEN rl.regimenlabour LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END;
+    END;
 
     /* --- Categoría ocupacional --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@cat_ocupacional, ''))));
@@ -335,7 +355,9 @@ BEGIN
         FROM pr_ocupation o (NOLOCK)
         WHERE UPPER(LTRIM(RTRIM(ISNULL(o.description, '')))) = @txt
            OR UPPER(LTRIM(RTRIM(ISNULL(o.description, '')))) LIKE '%' + @txt + '%'
-        ORDER BY CASE WHEN o.ocupation LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, o.ocupation;
+        ORDER BY CASE WHEN o.ocupation LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                 CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(o.description, '')))) = @txt THEN 0 ELSE 1 END,
+                 o.ocupation;
     END;
 
     /* --- Nivel educativo --- */
@@ -346,7 +368,9 @@ BEGIN
         FROM pr_instructionlevel il (NOLOCK)
         WHERE UPPER(LTRIM(RTRIM(ISNULL(il.description, '')))) = @txt
            OR UPPER(LTRIM(RTRIM(ISNULL(il.description, '')))) LIKE '%' + @txt + '%'
-        ORDER BY CASE WHEN il.instructionlevel LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, il.instructionlevel;
+        ORDER BY CASE WHEN il.instructionlevel LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                 CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(il.description, '')))) = @txt THEN 0 ELSE 1 END,
+                 il.instructionlevel;
     END;
 
     /* --- Educación detalle (SET TR1 → campos SY_Person reutilizados) --- */
@@ -455,6 +479,18 @@ BEGIN
             CASE WHEN cm.company = @cia THEN 0 ELSE 1 END,
             CASE WHEN cm.contractmodality LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
             cm.contractmodality;
+
+        /* T-Registro abrevia: "POR INICIO O INCREM DE ACTIV" → "POR INICIO O INCREMENTO DE ACTIVIDAD" */
+        IF @contract_modality_id IS NULL
+            SELECT TOP 1 @contract_modality_id = cm.contractmodality
+            FROM hr_contractmodality cm (NOLOCK)
+            WHERE (cm.company = @cia OR cm.contractmodality LIKE 'LIMA' + @cia + '%')
+              AND UPPER(LTRIM(RTRIM(ISNULL(cm.description, '')))) LIKE '%' + REPLACE(@txt, ' ', '%') + '%'
+            ORDER BY
+                CASE WHEN cm.company = @cia THEN 0 ELSE 1 END,
+                CASE WHEN cm.contractmodality LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+                LEN(cm.description),
+                cm.contractmodality;
     END;
 
     /* --- Pensión --- */
@@ -778,6 +814,28 @@ BEGIN
         WHERE e.company = @cia AND e.salaryaccounttype IS NOT NULL
         ORDER BY e.xlastdate DESC;
 
+    SET @sin_catalogo = '';
+    IF @employee_type_id IS NULL AND LTRIM(RTRIM(ISNULL(@tipo_trabajador, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', tipo de trabajador (' + LTRIM(RTRIM(@tipo_trabajador)) + ')';
+    IF @regimen_labour_id IS NULL AND LTRIM(RTRIM(ISNULL(@regimen_laboral, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', régimen laboral (' + LTRIM(RTRIM(@regimen_laboral)) + ')';
+    IF @prof_category_id IS NULL AND LTRIM(RTRIM(ISNULL(@cat_ocupacional, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', categoría ocupacional (' + LTRIM(RTRIM(@cat_ocupacional)) + ')';
+    IF @ocupation_id IS NULL AND LTRIM(RTRIM(ISNULL(@ocupacion, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', ocupación (' + LTRIM(RTRIM(@ocupacion)) + ')';
+    IF @instruction_level_id IS NULL AND LTRIM(RTRIM(ISNULL(@nivel_educativo, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', nivel educativo (' + LTRIM(RTRIM(@nivel_educativo)) + ')';
+    IF @contract_modality_id IS NULL AND LTRIM(RTRIM(ISNULL(@tipo_contrato, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', tipo de contrato (' + LTRIM(RTRIM(@tipo_contrato)) + ')';
+    IF @pension_type_id IS NULL AND LTRIM(RTRIM(ISNULL(@regimen_pension, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', régimen pensionario (' + LTRIM(RTRIM(@regimen_pension)) + ')';
+    IF @regime_health_id IS NULL AND LTRIM(RTRIM(ISNULL(@regimen_salud, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', régimen de salud (' + LTRIM(RTRIM(@regimen_salud)) + ')';
+    IF @collection_form_id IS NULL AND LTRIM(RTRIM(ISNULL(@tipo_pago, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', forma de pago (' + LTRIM(RTRIM(@tipo_pago)) + ')';
+    IF @salary_bank_id IS NULL AND LTRIM(RTRIM(ISNULL(@entidad_financiera, ''))) <> ''
+        SET @sin_catalogo = @sin_catalogo + ', banco (' + LTRIM(RTRIM(@entidad_financiera)) + ')';
+
     IF NOT EXISTS (
         SELECT 1
         FROM sy_replicationunit (NOLOCK)
@@ -1030,7 +1088,12 @@ BEGIN
         COMMIT TRANSACTION;
 
         SET @person_out = @person;
-        SET @mensaje_out = 'Trabajador registrado correctamente.';
+        SET @mensaje_out = LEFT(
+            'Trabajador registrado correctamente.'
+            + CASE WHEN @sin_catalogo <> ''
+                   THEN ' Sin equivalencia en catálogo: ' + STUFF(@sin_catalogo, 1, 2, '') + '.'
+                   ELSE '' END,
+            500);
     END TRY
     BEGIN CATCH
         IF @@TRANCOUNT > 0

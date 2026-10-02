@@ -1,7 +1,9 @@
 /*
     Valida conceptos filtrados de una compañía frente a las demás empresas activas:
       - FALTANTE: no existe el nemónico (FormulaCode) en destino
-      - DIFERENCIA: existe pero PDT, Insertar en, Afecto 5ta o Afecto AFP no coinciden
+      - DIFERENCIA: existe pero Tipo, PDT, Insertar en, Afecto 5ta o Afecto AFP no coinciden.
+        Tipo se lee solo de PR_ConceptType de la misma compañía del concepto; vacío,
+        inexistente o de otra compañía se reporta como '(sin tipo válido)', también en origen.
 
     Filtros (mismos criterios que el listado web):
       @company, @descripcion, @tipos (códigos cortos separados por coma)
@@ -64,6 +66,7 @@ BEGIN
     FROM PR_Concept C (NOLOCK)
         LEFT JOIN PR_ConceptType T (NOLOCK)
             ON C.ConceptType = T.ConceptType
+           AND (T.Company = C.Company OR LTRIM(RTRIM(ISNULL(T.Company, ''))) = '')
     WHERE C.Company = @company
       AND C.FormulaCode IS NOT NULL
       AND LTRIM(RTRIM(C.FormulaCode)) <> ''
@@ -119,12 +122,48 @@ BEGIN
               AND LTRIM(RTRIM(c2.FormulaCode)) = o.formulacode
         );
 
+    INSERT INTO #incidencias (
+        tipo_validacion, company_destino, company_desc, formulacode,
+        description, tiposhortname, campo, valor_origen, valor_destino
+    )
+    SELECT
+        'DIFERENCIA',
+        C.Company,
+        ISNULL(sc.description, C.Company),
+        LTRIM(RTRIM(C.FormulaCode)),
+        ISNULL(C.Description, ''),
+        '',
+        'Tipo',
+        '(sin tipo válido)',
+        ISNULL(C.ConceptType, '(vacío)')
+    FROM PR_Concept C (NOLOCK)
+        LEFT JOIN SY_Company sc (NOLOCK)
+            ON sc.Company = C.Company
+    WHERE C.Company = @company
+      AND C.FormulaCode IS NOT NULL
+      AND LTRIM(RTRIM(C.FormulaCode)) <> ''
+      AND (
+            @descripcion IS NULL
+         OR C.Description LIKE '%' + @descripcion + '%'
+         OR C.FormulaCode LIKE '%' + @descripcion + '%'
+         OR C.PrintText LIKE '%' + @descripcion + '%'
+      )
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_ConceptType T (NOLOCK)
+            WHERE T.ConceptType = C.ConceptType
+              AND (T.Company = C.Company OR LTRIM(RTRIM(ISNULL(T.Company, ''))) = '')
+      );
+
     SELECT
         sc.Company AS company_destino,
         ISNULL(sc.description, sc.Company) AS company_desc,
         o.formulacode,
         o.description,
         o.tiposhortname,
+        CAST(CASE WHEN LTRIM(RTRIM(o.tiposhortname)) = '' THEN '(sin tipo válido)'
+                  ELSE LTRIM(RTRIM(o.tiposhortname)) END AS VARCHAR(20)) AS o_tipo,
+        CAST(COALESCE(NULLIF(LTRIM(RTRIM(TD.ShortName)), ''), '(sin tipo válido)') AS VARCHAR(20)) AS d_tipo,
         o.pdt AS o_pdt,
         ISNULL(LTRIM(RTRIM(C.pdt)), '') AS d_pdt,
         o.flaginsertar AS o_flaginsertar,
@@ -139,6 +178,9 @@ BEGIN
         INNER JOIN PR_Concept C (NOLOCK)
             ON C.Company = sc.Company
            AND LTRIM(RTRIM(C.FormulaCode)) = o.formulacode
+        LEFT JOIN PR_ConceptType TD (NOLOCK)
+            ON TD.ConceptType = C.ConceptType
+           AND (TD.Company = C.Company OR LTRIM(RTRIM(ISNULL(TD.Company, ''))) = '')
     WHERE sc.status = 'A'
       AND sc.Company <> @company;
 
@@ -146,6 +188,8 @@ BEGIN
         tipo_validacion, company_destino, company_desc, formulacode,
         description, tiposhortname, campo, valor_origen, valor_destino
     )
+    SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Tipo', o_tipo, d_tipo FROM #pares WHERE o_tipo <> d_tipo AND o_tipo <> '(sin tipo válido)'
+    UNION ALL
     SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'PDT', o_pdt, d_pdt FROM #pares WHERE o_pdt <> d_pdt
     UNION ALL
     SELECT 'DIFERENCIA', company_destino, company_desc, formulacode, description, tiposhortname, 'Insertar en', o_flaginsertar, d_flaginsertar FROM #pares WHERE o_flaginsertar <> d_flaginsertar

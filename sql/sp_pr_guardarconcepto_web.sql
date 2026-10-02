@@ -40,6 +40,7 @@ BEGIN
 
     DECLARE @replicationunit VARCHAR(4) = 'LIMA';
     DECLARE @concept_nuevo   VARCHAR(20);
+    DECLARE @concepttype_cia VARCHAR(20);
     DECLARE @tabla_id        TABLE (id_generado VARCHAR(20));
 
     SET @modo = UPPER(LTRIM(RTRIM(ISNULL(@modo, ''))));
@@ -153,6 +154,31 @@ BEGIN
     BEGIN
         RAISERROR('Tipo de concepto inexistente.', 16, 1);
         RETURN;
+    END;
+
+    -- Los IDs de PR_ConceptType son por compañía: uno ajeno se traduce por ShortName.
+    IF NOT EXISTS (
+        SELECT 1 FROM PR_ConceptType (NOLOCK)
+        WHERE ConceptType = @concepttype
+          AND (Company = @company OR LTRIM(RTRIM(ISNULL(Company, ''))) = '')
+    )
+    BEGIN
+        SELECT TOP 1 @concepttype_cia = D.ConceptType
+        FROM PR_ConceptType O (NOLOCK)
+        INNER JOIN PR_ConceptType D (NOLOCK)
+            ON LTRIM(RTRIM(ISNULL(D.ShortName, ''))) = LTRIM(RTRIM(ISNULL(O.ShortName, '')))
+        WHERE O.ConceptType = @concepttype
+          AND D.Company = @company
+          AND LTRIM(RTRIM(ISNULL(O.ShortName, ''))) <> ''
+        ORDER BY D.ConceptType;
+
+        IF @concepttype_cia IS NULL
+        BEGIN
+            RAISERROR('El tipo de concepto no pertenece a la compañía y no tiene equivalente en ella.', 16, 1);
+            RETURN;
+        END;
+
+        SET @concepttype = @concepttype_cia;
     END;
 
     IF @conceptgroup IS NULL

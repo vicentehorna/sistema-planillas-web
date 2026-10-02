@@ -804,6 +804,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     let conceptosCacheServidor = [];
     let conceptoSeleccionado = null;
     let tiposConceptoCache = [];
+    let tiposConceptoCia = '';
+    let tiposConceptoToken = 0;
+    let listadoToken = 0;
     let obtenerAbort = null;
     let idxConceptoActivo = -1;
     let snapshotFormulario = '';
@@ -992,20 +995,45 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarTiposConcepto(cia) {
+        const token = ++tiposConceptoToken;
+        const cbo = document.getElementById('cboConceptType');
+        tiposConceptoCia = '';
         if (!cia) {
             tiposConceptoCache = [];
-            document.getElementById('cboConceptType').innerHTML = '<option value="">Seleccione compañía</option>';
+            cbo.innerHTML = '<option value="">Seleccione compañía</option>';
             renderFiltroTiposConcepto();
             return;
         }
-        await poblarSelect(`/api/selectores/concept-types?cia=${encodeURIComponent(cia)}`, document.getElementById('cboConceptType'));
+        cbo.innerHTML = '<option value="">Cargando...</option>';
+        let tipos = [];
         try {
             const res = await fetch(`/api/selectores/concept-types?cia=${encodeURIComponent(cia)}`);
-            tiposConceptoCache = await res.json();
+            const data = await res.json();
+            tipos = Array.isArray(data) ? data : [];
         } catch (e) {
-            tiposConceptoCache = [];
+            console.error(e);
+            tipos = null;
         }
+        // Una respuesta lenta de otra compañía no debe pisar la lista vigente.
+        if (token !== tiposConceptoToken || cboCia.value.trim() !== cia) return;
+
+        tiposConceptoCache = tipos || [];
+        cbo.innerHTML = tipos ? '<option value="">Seleccione...</option>' : '<option value="">Error</option>';
+        tiposConceptoCache.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : '';
+            opt.textContent = item.text != null ? String(item.text) : '';
+            cbo.appendChild(opt);
+        });
+        if (tipos) tiposConceptoCia = cia;
         renderFiltroTiposConcepto();
+    }
+
+    function tipoConceptoPerteneceACia(cia, concepttype) {
+        const id = String(concepttype || '').trim();
+        return Boolean(id)
+            && tiposConceptoCia === String(cia || '').trim()
+            && tiposConceptoCache.some((t) => String(t.id != null ? t.id : '').trim() === id);
     }
 
     function normalizarShortTipo(valor) {
@@ -1543,6 +1571,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarListado() {
+        const token = ++listadoToken;
         const cia = cboCia.value.trim();
         if (!cia) {
             conceptosCache = [];
@@ -1564,10 +1593,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }),
             });
             const data = await leerJson(res);
+            if (token !== listadoToken || cboCia.value.trim() !== cia) return;
             conceptosCacheServidor = data.rows || [];
             conceptosCache = filtrarConceptosPorTipo(conceptosCacheServidor);
             renderListaConceptos(conceptosCache);
         } catch (err) {
+            if (token !== listadoToken) return;
             console.error(err);
             conceptosCacheServidor = [];
             conceptosCache = [];
@@ -1803,6 +1834,12 @@ document.addEventListener('DOMContentLoaded', async function () {
             hmAdvertencia('Complete concepto, nemónico y tipo.');
             return;
         }
+        if (!tipoConceptoPerteneceACia(payload.cia, payload.concepttype)) {
+            await cargarTiposConcepto(payload.cia);
+            document.getElementById('cboConceptType').value = '';
+            hmAdvertencia('La lista de tipos de concepto no correspondía a la compañía seleccionada. Se recargó: elija nuevamente el tipo y guarde.');
+            return;
+        }
 
         const esNuevo = String(payload.modo || '').toUpperCase() === 'I';
         const formulacodeOrigen = String(
@@ -1893,6 +1930,21 @@ document.addEventListener('DOMContentLoaded', async function () {
         return true;
     }
 
+    cboCia.addEventListener('change', async function () {
+        const nueva = this.value.trim();
+        const ok = await confirmarSalidaSiDirty();
+        if (!ok) {
+            this.value = ciaAnterior;
+            return;
+        }
+        formDirty = false;
+        ciaAnterior = this.value;
+        conceptoSeleccionado = null;
+        mostrarPanelEdicion(false);
+        await cargarTiposConcepto(nueva);
+        await cargarListado();
+    });
+
     await poblarSelect('/api/selectores/companias', cboCia);
 
     const guardado = filtrosPersist ? filtrosPersist.leer() : null;
@@ -1965,21 +2017,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
         });
     }
-
-    cboCia.addEventListener('change', async function () {
-        const nueva = this.value.trim();
-        const ok = await confirmarSalidaSiDirty();
-        if (!ok) {
-            this.value = ciaAnterior;
-            return;
-        }
-        formDirty = false;
-        ciaAnterior = this.value;
-        conceptoSeleccionado = null;
-        mostrarPanelEdicion(false);
-        await cargarTiposConcepto(nueva);
-        await cargarListado();
-    });
 
     document.getElementById('frmFiltrosConceptos').addEventListener('submit', async function (e) {
         e.preventDefault();

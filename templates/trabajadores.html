@@ -848,20 +848,71 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    const VALOR_REINTENTAR = '__reintentar__';
+    const estadoCargaSelect = new WeakMap();
+
+    /** Aborta la carga previa del combo; solo la última carga puede escribir en él. */
+    function iniciarCargaSelect(selectElement, reintentar) {
+        const prev = estadoCargaSelect.get(selectElement);
+        if (prev && prev.ctrl) prev.ctrl.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const seq = (prev ? prev.seq : 0) + 1;
+        estadoCargaSelect.set(selectElement, { seq, ctrl, reintentar: reintentar || null });
+        return {
+            signal: ctrl ? ctrl.signal : undefined,
+            vigente: () => (estadoCargaSelect.get(selectElement) || {}).seq === seq
+        };
+    }
+
+    function resetSelect(selectElement, valor, texto) {
+        iniciarCargaSelect(selectElement, null);
+        selectElement.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = valor;
+        opt.textContent = texto;
+        selectElement.appendChild(opt);
+        selectElement.disabled = true;
+    }
+
+    function seleccionarPorTexto(selectElement, texto) {
+        const want = String(texto || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(selectElement.options).find(
+            (o) => o.value !== '' && o.value !== '0' && o.value !== VALOR_REINTENTAR
+                && o.textContent.trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        selectElement.value = opt.value;
+        return true;
+    }
+
+    document.addEventListener('change', function (e) {
+        const sel = e.target;
+        if (!(sel instanceof HTMLSelectElement) || sel.value !== VALOR_REINTENTAR) return;
+        e.stopPropagation();
+        const st = estadoCargaSelect.get(sel);
+        if (st && typeof st.reintentar === 'function') st.reintentar();
+    }, true);
+
+    /** Devuelve true solo si la respuesta sigue vigente y se cargó el combo. */
     const poblarSelect = async (url, selectElement, opciones) => {
         opciones = opciones || {};
         const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
         const textoTodos = opciones.textoTodos || 'Todos';
         const incluyeTodos = !!opciones.incluyeTodos;
 
+        const carga = iniciarCargaSelect(selectElement, () => poblarSelect(url, selectElement, opciones));
         selectElement.innerHTML = '';
         const loading = document.createElement('option');
         loading.value = '';
         loading.textContent = 'Cargando...';
         selectElement.appendChild(loading);
+        selectElement.disabled = true;
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: carga.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (!carga.vigente()) return false;
             selectElement.innerHTML = '';
             if (incluyeTodos) {
                 const optTodos = document.createElement('option');
@@ -881,9 +932,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                 selectElement.appendChild(opt);
             });
             selectElement.disabled = false;
+            return true;
         } catch (err) {
+            if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
             console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.innerHTML = '';
+            const optErr = document.createElement('option');
+            optErr.value = incluyeTodos ? valorTodos : '';
+            optErr.textContent = 'Error al cargar';
+            const optRetry = document.createElement('option');
+            optRetry.value = VALOR_REINTENTAR;
+            optRetry.textContent = 'Reintentar';
+            selectElement.appendChild(optErr);
+            selectElement.appendChild(optRetry);
+            selectElement.disabled = false;
+            return false;
         }
     };
 
@@ -891,8 +954,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cboBanco = document.getElementById('cboBancoHaberes');
         if (!cboBanco) return;
         if (!cia) {
-            cboBanco.innerHTML = '<option value="0" selected>Todos</option>';
-            cboBanco.disabled = true;
+            resetSelect(cboBanco, '0', 'Todos');
             return;
         }
         await poblarSelect(
@@ -902,19 +964,34 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
     }
 
-    async function poblarDependientesCompania(cia) {
-        if (!cia) return;
-        await poblarSelect(
+    let generacionCompania = 0;
+
+    /** Carga planillas, trabajadores y bancos en paralelo; conserva la planilla si existe con el mismo nombre. */
+    async function poblarDependientesCompania(cia, planillaPreferida) {
+        const gen = ++generacionCompania;
+        if (!cia) {
+            resetSelect(cboPlanilla, '0', 'Todos');
+            resetSelect(cboTrabajador, '0', 'Todos (por defecto)');
+            await poblarBancosHaberes('');
+            return;
+        }
+        const cargaSecundaria = Promise.all([
+            poblarSelect(
+                `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+                cboTrabajador,
+                { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos (por defecto)' }
+            ),
+            poblarBancosHaberes(cia)
+        ]);
+        const ok = await poblarSelect(
             `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
             cboPlanilla,
             { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
         );
-        await poblarSelect(
-            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-            cboTrabajador,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos (por defecto)' }
-        );
-        await poblarBancosHaberes(cia);
+        if (ok && gen === generacionCompania && planillaPreferida) {
+            seleccionarPorTexto(cboPlanilla, planillaPreferida);
+        }
+        await cargaSecundaria;
     }
 
     const DEFAULT_CIA = 'BGT';
@@ -926,8 +1003,18 @@ document.addEventListener('DOMContentLoaded', async function () {
     const paramsUrl = new URLSearchParams(window.location.search);
     const esRetornoListado = paramsUrl.get('retorno') === '1';
 
+    cboCia.addEventListener('change', async function () {
+        const planillaPrevia = cboPlanilla.value && cboPlanilla.value !== '0' && cboPlanilla.value !== VALOR_REINTENTAR
+            ? selectedText('cboTipoPlanilla')
+            : '';
+        const gen = generacionCompania + 1;
+        await poblarDependientesCompania(this.value, planillaPrevia);
+        if (gen === generacionCompania && filtrosPersist) filtrosPersist.guardar();
+    });
+
     await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
     limpiarValorComboSiObsoleto(cboCia);
+    cboCia.disabled = true;
     await cargarUnidades();
 
     const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
@@ -953,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             await poblarDependientesCompania(ciaInicial);
         }
     }
+    cboCia.disabled = false;
 
     {
         const cia = cboCia.value.trim();
@@ -967,23 +1055,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (esRetornoListado) {
         history.replaceState({}, '', window.location.pathname);
     }
-
-    document.getElementById('cboCompania').addEventListener('change', async function () {
-        const cia = this.value;
-        const cboPlanillaEl = document.getElementById('cboTipoPlanilla');
-        const cboTrabajadorEl = document.getElementById('cboTrabajador');
-        const cboBancoEl = document.getElementById('cboBancoHaberes');
-
-        if (cia) {
-            await poblarDependientesCompania(cia);
-        } else {
-            cboPlanillaEl.innerHTML = '<option value="0">Todos</option>';
-            cboPlanillaEl.disabled = true;
-            cboTrabajadorEl.innerHTML = '<option value="0">Todos (por defecto)</option>';
-            cboTrabajadorEl.disabled = true;
-            await poblarBancosHaberes('');
-        }
-    });
 
     document.getElementById('chkFechaIngreso').addEventListener('change', function () {
         actualizarFiltroFechaIngreso(this.checked);

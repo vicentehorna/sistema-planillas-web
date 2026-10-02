@@ -696,45 +696,131 @@ document.addEventListener('DOMContentLoaded', async function () {
         toggleChecks(this);
     });
 
-    const poblarSelect = async (url, selectElement) => {
-        if (!selectElement) return;
+    const VALOR_REINTENTAR = '__reintentar__';
+    const estadoCargaSelect = new WeakMap();
+
+    /** Aborta la carga previa del combo; solo la última carga puede escribir en él. */
+    function iniciarCargaSelect(selectElement, reintentar) {
+        const prev = estadoCargaSelect.get(selectElement);
+        if (prev && prev.ctrl) prev.ctrl.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const seq = (prev ? prev.seq : 0) + 1;
+        estadoCargaSelect.set(selectElement, { seq, ctrl, reintentar: reintentar || null });
+        return {
+            signal: ctrl ? ctrl.signal : undefined,
+            vigente: () => (estadoCargaSelect.get(selectElement) || {}).seq === seq
+        };
+    }
+
+    function resetSelect(selectElement, valor, texto) {
+        iniciarCargaSelect(selectElement, null);
+        selectElement.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = valor != null ? valor : '';
+        opt.textContent = texto || 'Seleccione...';
+        selectElement.appendChild(opt);
+        selectElement.value = opt.value;
+        selectElement.disabled = true;
+    }
+
+    function mostrarErrorSelect(selectElement, valor) {
+        selectElement.innerHTML = '';
+        const optErr = document.createElement('option');
+        optErr.value = valor;
+        optErr.textContent = 'Error al cargar';
+        const optRetry = document.createElement('option');
+        optRetry.value = VALOR_REINTENTAR;
+        optRetry.textContent = 'Reintentar';
+        selectElement.appendChild(optErr);
+        selectElement.appendChild(optRetry);
+        selectElement.value = valor;
+        selectElement.disabled = false;
+    }
+
+    function seleccionarPorTexto(selectElement, texto) {
+        const want = String(texto || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(selectElement.options).find(
+            (o) => o.value !== '' && o.value !== '0' && o.value !== VALOR_REINTENTAR
+                && o.textContent.trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        selectElement.value = opt.value;
+        return true;
+    }
+
+    function textoSeleccionValido(selectElement) {
+        const v = String(selectElement.value || '').trim();
+        if (!v || v === VALOR_REINTENTAR) return '';
+        const opt = selectElement.options[selectElement.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function valorSeleccionValido(selectElement) {
+        const v = String(selectElement.value || '').trim();
+        return v === VALOR_REINTENTAR ? '' : v;
+    }
+
+    document.addEventListener('change', function (e) {
+        const sel = e.target;
+        if (!(sel instanceof HTMLSelectElement) || sel.value !== VALOR_REINTENTAR) return;
+        e.stopPropagation();
+        const st = estadoCargaSelect.get(sel);
+        if (st && typeof st.reintentar === 'function') st.reintentar();
+    }, true);
+
+    /** Devuelve true solo si la respuesta sigue vigente y se cargó el combo. */
+    const poblarSelect = async (url, selectElement, opciones) => {
+        opciones = opciones || {};
+        if (!selectElement) return false;
+        const carga = iniciarCargaSelect(selectElement, () => poblarSelect(url, selectElement, opciones));
         selectElement.innerHTML = '';
         const loading = document.createElement('option');
         loading.value = '';
         loading.textContent = 'Cargando...';
         selectElement.appendChild(loading);
+        selectElement.disabled = true;
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: carga.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (!carga.vigente()) return false;
+            const items = Array.isArray(data) ? data : [];
             selectElement.innerHTML = '';
             const def = document.createElement('option');
             def.value = '';
-            def.textContent = 'Seleccione...';
+            def.textContent = !items.length && opciones.textoVacio ? opciones.textoVacio : 'Seleccione...';
             selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
+            items.forEach((item) => {
                 const opt = document.createElement('option');
                 opt.value = item.id != null ? String(item.id) : '';
                 opt.textContent = item.text != null ? String(item.text) : '';
                 selectElement.appendChild(opt);
             });
             selectElement.disabled = false;
+            return true;
         } catch (err) {
+            if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
             console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
+            mostrarErrorSelect(selectElement, '');
+            return false;
         }
     };
 
     async function cargarUnidades() {
         if (!cboUnidad) return;
         const prev = String(cboUnidad.value || '0').trim();
+        const carga = iniciarCargaSelect(cboUnidad, cargarUnidades);
         cboUnidad.innerHTML = '';
         const optAll = document.createElement('option');
         optAll.value = '0';
         optAll.textContent = 'Todas';
         cboUnidad.appendChild(optAll);
         try {
-            const res = await fetch(URL_UNIDADES);
+            const res = await fetch(URL_UNIDADES, { signal: carga.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (!carga.vigente()) return;
             (Array.isArray(data) ? data : []).forEach((item) => {
                 const id = item.id != null ? String(item.id).trim() : '';
                 if (!id || id === '0') return;
@@ -746,8 +832,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             const ok = Array.from(cboUnidad.options).some((o) => String(o.value).trim() === prev);
             cboUnidad.value = ok ? prev : '0';
         } catch (e) {
+            if (!carga.vigente() || (e && e.name === 'AbortError')) return;
             console.error(e);
-            cboUnidad.value = '0';
+            mostrarErrorSelect(cboUnidad, '0');
         }
     }
 
@@ -755,18 +842,24 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!cboCentroCosto) return;
         const prev = String(cboCentroCosto.value || '0').trim();
         const cia = String(cboCia?.value || '').trim();
+        const carga = iniciarCargaSelect(cboCentroCosto, cargarCentrosCosto);
         cboCentroCosto.innerHTML = '';
         const optAll = document.createElement('option');
         optAll.value = '0';
         optAll.textContent = 'Todos';
         cboCentroCosto.appendChild(optAll);
-        if (!cia) {
+        cboCentroCosto.disabled = false;
+        if (!cia || cia === VALOR_REINTENTAR) {
             cboCentroCosto.value = '0';
             return;
         }
+        cboCentroCosto.disabled = true;
         try {
-            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`);
+            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`, { signal: carga.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (!carga.vigente()) return;
+            cboCentroCosto.disabled = false;
             (Array.isArray(data) ? data : []).forEach((item) => {
                 const id = item.id != null ? String(item.id).trim() : '';
                 if (!id || id === '0') return;
@@ -778,8 +871,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             const ok = Array.from(cboCentroCosto.options).some((o) => String(o.value).trim() === prev);
             cboCentroCosto.value = ok ? prev : '0';
         } catch (e) {
+            if (!carga.vigente() || (e && e.name === 'AbortError')) return;
             console.error(e);
-            cboCentroCosto.value = '0';
+            mostrarErrorSelect(cboCentroCosto, '0');
         }
     }
 
@@ -1158,91 +1252,129 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnEjecutarBoletas').addEventListener('click', ejecutarAccion);
     syncModoProcesoUI();
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-    await cargarUnidades();
+    /* Cada cambio de compañía invalida las cascadas anteriores aún en curso. */
+    let generacionFiltros = 0;
 
-    let filtrosRestaurados = false;
-    if (filtrosPersist) {
-        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({
-            poblarSelect,
-            cargarCentrosCosto
-        });
-    }
-    if (!filtrosRestaurados) {
-        limpiarValorComboSiObsoleto(cboCia);
-        if (!String(cboCia.value || '').trim()) {
-            seleccionarCompaniaInsensitive(cboCia, 'BGT');
+    async function cargarPeriodos(periodoPreferido) {
+        const cia = valorSeleccionValido(cboCia);
+        const pt = valorSeleccionValido(cboPt);
+        const proc = valorSeleccionValido(cboProc);
+        if (!cia || !pt || !proc) {
+            resetSelect(cboPer);
+            return;
         }
-        if (cboCia.value.trim()) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
+        const ok = await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
+            cboPer,
+            { textoVacio: 'Sin periodos' }
+        );
+        if (ok && periodoPreferido && Array.from(cboPer.options).some((o) => o.value === periodoPreferido)) {
+            cboPer.value = periodoPreferido;
+        }
+    }
+
+    async function cargarProcesos(procesoPreferido, periodoPreferido) {
+        const cia = valorSeleccionValido(cboCia);
+        const pt = valorSeleccionValido(cboPt);
+        resetSelect(cboPer);
+        if (!cia || !pt) {
+            resetSelect(cboProc);
+            return;
+        }
+        const ok = await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+            cboProc,
+            { textoVacio: 'Sin procesos' }
+        );
+        if (ok && procesoPreferido && seleccionarPorTexto(cboProc, procesoPreferido)) {
+            await cargarPeriodos(periodoPreferido);
+        }
+    }
+
+    /** Al cambiar compañía conserva tipo de planilla, proceso y periodo si existen en la nueva. */
+    async function alCambiarCompania() {
+        const gen = ++generacionFiltros;
+        const cia = valorSeleccionValido(cboCia);
+        const planillaPrevia = valorSeleccionValido(cboPt) ? textoSeleccionValido(cboPt) : '';
+        const procesoPrevio = valorSeleccionValido(cboProc) ? textoSeleccionValido(cboProc) : '';
+        const periodoPrevio = valorSeleccionValido(cboPer);
+
+        if (cboUnidad && Array.from(cboUnidad.options).some((o) => o.value === '0')) cboUnidad.value = '0';
+        resetSelect(cboProc);
+        resetSelect(cboPer);
+
+        if (!cia) {
+            resetSelect(cboPt);
             await cargarCentrosCosto();
+            return;
         }
-        limpiarValorComboSiObsoleto(cboCia);
-        limpiarValorComboSiObsoleto(cboPt);
+
+        const cargaCentros = cargarCentrosCosto();
+        const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+        if (gen !== generacionFiltros) return;
+        if (ok && planillaPrevia && seleccionarPorTexto(cboPt, planillaPrevia)) {
+            await cargarProcesos(procesoPrevio, periodoPrevio);
+        }
+        await cargaCentros;
     }
+
+    cboCia.addEventListener('change', alCambiarCompania);
+    cboPt.addEventListener('change', function () {
+        ++generacionFiltros;
+        cargarProcesos();
+    });
+    cboProc.addEventListener('change', function () {
+        ++generacionFiltros;
+        cargarPeriodos();
+    });
 
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();
     }
 
+    const [companiasOk] = await Promise.all([
+        poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia),
+        cargarUnidades(),
+    ]);
+
+    /* Bloquea compañía mientras se restaura la cascada guardada para que no se crucen cargas. */
+    let filtrosRestaurados = false;
+    if (companiasOk) {
+        cboCia.disabled = true;
+        try {
+            if (filtrosPersist) {
+                filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({
+                    poblarSelect,
+                    cargarCentrosCosto
+                });
+            }
+            if (!filtrosRestaurados) {
+                limpiarValorComboSiObsoleto(cboCia);
+                if (!String(cboCia.value || '').trim()) {
+                    seleccionarCompaniaInsensitive(cboCia, 'BGT');
+                }
+                if (cboCia.value.trim()) {
+                    await Promise.all([
+                        poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt),
+                        cargarCentrosCosto(),
+                    ]);
+                }
+                limpiarValorComboSiObsoleto(cboCia);
+                limpiarValorComboSiObsoleto(cboPt);
+            }
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
+
     if (
-        cboCia.value.trim()
-        && cboPt.value.trim()
-        && cboProc.value.trim()
-        && cboPer.value.trim()
+        valorSeleccionValido(cboCia)
+        && valorSeleccionValido(cboPt)
+        && valorSeleccionValido(cboProc)
+        && valorSeleccionValido(cboPer)
     ) {
         await cargarListaBoletas();
     }
-
-    document.getElementById('cboCompania').addEventListener('change', async function () {
-        const cia = this.value.trim();
-        if (cboUnidad) cboUnidad.value = '0';
-        document.getElementById('cboProceso').innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('cboProceso').disabled = true;
-        document.getElementById('cboPeriodo').innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-        if (cia) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
-            await cargarCentrosCosto();
-        } else {
-            cboPt.innerHTML = '<option value="">Seleccione...</option>';
-            cboPt.disabled = true;
-            await cargarCentrosCosto();
-        }
-    });
-
-    document.getElementById('cboTipoPlanilla').addEventListener('change', function () {
-        const cia = cboCia.value;
-        const pt = this.value;
-        const cboProceso = document.getElementById('cboProceso');
-        document.getElementById('cboPeriodo').innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-        if (pt) {
-            poblarSelect(
-                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
-                cboProceso
-            );
-        } else {
-            cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-            cboProceso.disabled = true;
-        }
-    });
-
-    document.getElementById('cboProceso').addEventListener('change', function () {
-        const cia = cboCia.value;
-        const pt = document.getElementById('cboTipoPlanilla').value;
-        const proc = this.value;
-        const cboPeriodo = document.getElementById('cboPeriodo');
-        if (proc) {
-            poblarSelect(
-                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
-                cboPeriodo
-            );
-        } else {
-            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-            cboPeriodo.disabled = true;
-        }
-    });
 });
 </script>
 {% endblock %}

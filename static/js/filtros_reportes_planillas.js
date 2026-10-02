@@ -59,19 +59,31 @@
      * Carga periodos del proceso y selecciona el preferido o, si no hay, el activo (PR_ProcessControl).
      * @param {string} periodoPreferido — valor guardado en filtros; vacío usa periodo activo.
      */
+    /**
+     * Con poblarSelect de CombosCarga: false si el combo fue recargado por otra petición entretanto.
+     * Con otros poblarSelect (sin cargaSeq) siempre es true.
+     */
+    function cargaSigueVigente(selectElement, seq) {
+        return selectElement.dataset.cargaSeq === seq;
+    }
+
     async function poblarPeriodosConActivo(cia, payrolltype, processtype, selectElement, poblarSelect, periodoPreferido) {
-        if (!selectElement || typeof poblarSelect !== 'function') return;
-        await poblarSelect(
+        if (!selectElement || typeof poblarSelect !== 'function') return false;
+        const ok = await poblarSelect(
             `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}&processtype=${encodeURIComponent(processtype)}`,
             selectElement
         );
+        if (ok === false) return false;
+        const seq = selectElement.dataset.cargaSeq;
         let periodo = periodoPreferido != null ? String(periodoPreferido).trim() : '';
         if (!periodo) {
             periodo = await obtenerPeriodoActivo(cia, payrolltype, processtype);
+            if (!cargaSigueVigente(selectElement, seq)) return false;
         }
         if (periodo && optionExists(selectElement, periodo)) {
             selectElement.value = periodo;
         }
+        return true;
     }
 
     async function obtenerConceptoNeto(cia) {
@@ -91,18 +103,22 @@
      * @param {string} conceptoPreferido — valor guardado en filtros; vacío usa concepto NETO.
      */
     async function poblarConceptosConNeto(cia, selectElement, poblarSelect, conceptoPreferido) {
-        if (!selectElement || typeof poblarSelect !== 'function') return;
-        await poblarSelect(
+        if (!selectElement || typeof poblarSelect !== 'function') return false;
+        const ok = await poblarSelect(
             `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
             selectElement
         );
+        if (ok === false) return false;
+        const seq = selectElement.dataset.cargaSeq;
         let concepto = conceptoPreferido != null ? String(conceptoPreferido).trim() : '';
         if (!concepto) {
             concepto = await obtenerConceptoNeto(cia);
+            if (!cargaSigueVigente(selectElement, seq)) return false;
         }
         if (concepto && optionExists(selectElement, concepto)) {
             selectElement.value = concepto;
         }
+        return true;
     }
 
     /**

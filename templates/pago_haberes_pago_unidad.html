@@ -183,6 +183,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
@@ -215,32 +216,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    async function poblarSelect(url, selectElement, { keepFirst } = {}) {
-        const prev = String(selectElement.value || '').trim();
-        selectElement.innerHTML = '<option value="">Cargando...</option>';
-        selectElement.disabled = true;
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : opt.value;
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-            if (prev && Array.from(selectElement.options).some((o) => o.value === prev)) {
-                selectElement.value = prev;
-            }
-        } catch (e) {
-            console.error(e);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
+    function poblarSelect(url, selectElement, opciones) {
+        return CombosCarga.poblarSelect(url, selectElement, Object.assign({ conservarValor: true }, opciones || {}));
     }
 
     function unidadesSeleccionadas() {
@@ -414,49 +391,58 @@ document.addEventListener('DOMContentLoaded', async function () {
     const txtFecha = document.getElementById('txtFechaPago');
     if (!txtFecha.value) txtFecha.value = hoyIsoLocal();
 
-    await poblarSelect(URL_PLANILLAS, document.getElementById('cboTipoPlanilla'));
-    await poblarSelect(URL_CONCEPTOS, document.getElementById('cboConcepto'));
-    // Prefer NETO if present
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
     const cboConcepto = document.getElementById('cboConcepto');
-    const netoOpt = Array.from(cboConcepto.options).find((o) => String(o.value).toUpperCase() === 'NETO');
-    if (netoOpt) cboConcepto.value = netoOpt.value;
+    const { resetSelect, valorValido } = CombosCarga;
 
-    try {
-        await cargarUnidadesCatalogo();
-        document.getElementById('panelResultados').classList.remove('d-none');
-    } catch (e) {
-        console.error(e);
-        alert(e.message || 'Error cargando unidades');
+    async function cargarPeriodos() {
+        const payroll = valorValido(cboPlanilla);
+        const proceso = valorValido(cboProceso);
+        if (!payroll || !proceso) {
+            resetSelect(cboPeriodo);
+            return false;
+        }
+        return poblarSelect(
+            `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`,
+            cboPeriodo,
+            { textoVacio: 'Sin periodos' }
+        );
     }
 
-    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
-        const payroll = this.value.trim();
-        const cboProceso = document.getElementById('cboProceso');
-        const cboPeriodo = document.getElementById('cboPeriodo');
-        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+    /* Conserva proceso y periodo si existen para la nueva planilla. */
+    async function cargarProcesos() {
+        const payroll = valorValido(cboPlanilla);
+        if (!payroll) {
+            resetSelect(cboProceso);
+            resetSelect(cboPeriodo);
+            return false;
+        }
+        CombosCarga.iniciarCarga(cboPeriodo, null);
         cboPeriodo.disabled = true;
-        if (payroll) {
-            await poblarSelect(`${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`, cboProceso);
-        } else {
-            cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-            cboProceso.disabled = true;
-        }
-    });
+        const ok = await poblarSelect(
+            `${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`,
+            cboProceso,
+            { textoVacio: 'Sin procesos' }
+        );
+        if (!ok) return false;
+        if (valorValido(cboProceso)) return cargarPeriodos();
+        resetSelect(cboPeriodo);
+        return true;
+    }
 
-    document.getElementById('cboProceso').addEventListener('change', async function () {
-        const payroll = document.getElementById('cboTipoPlanilla').value.trim();
-        const proceso = this.value.trim();
-        const cboPeriodo = document.getElementById('cboPeriodo');
-        if (payroll && proceso) {
-            await poblarSelect(
-                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`,
-                cboPeriodo
-            );
-        } else {
-            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-            cboPeriodo.disabled = true;
+    async function cargarConceptos() {
+        const ok = await poblarSelect(URL_CONCEPTOS, cboConcepto);
+        if (ok && !valorValido(cboConcepto)) {
+            const netoOpt = Array.from(cboConcepto.options).find((o) => String(o.value).toUpperCase() === 'NETO');
+            if (netoOpt) cboConcepto.value = netoOpt.value;
         }
-    });
+        return ok;
+    }
+
+    cboPlanilla.addEventListener('change', cargarProcesos);
+    cboProceso.addEventListener('change', cargarPeriodos);
 
     document.getElementById('frmPagoUnidad').addEventListener('submit', ejecutarBusqueda);
 
@@ -533,6 +519,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             actualizarContadores();
         }
     });
+
+    await Promise.all([
+        poblarSelect(URL_PLANILLAS, cboPlanilla),
+        cargarConceptos(),
+        cargarUnidadesCatalogo()
+            .then(() => document.getElementById('panelResultados').classList.remove('d-none'))
+            .catch((e) => {
+                console.error(e);
+                alert(e.message || 'Error cargando unidades');
+            }),
+    ]);
 });
 </script>
 {% endblock %}

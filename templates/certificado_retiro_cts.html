@@ -191,42 +191,33 @@ document.addEventListener('DOMContentLoaded', async function () {
             || text.includes('LIQUIDACI');
     }
 
-    async function resolverProcesoLiquidacion() {
-        const cia = cboCia.value.trim();
-        const payroll_type = cboPt.value.trim();
-        if (!cia || !payroll_type) {
-            cboProc.innerHTML = '<option value="" selected>Liquidación</option>';
-            cboProc.disabled = true;
-            return '';
-        }
-        try {
-            const res = await fetch(
-                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll_type)}`
-            );
-            const data = await res.json();
-            const items = Array.isArray(data) ? data : [];
-            const match = items.find(esProcesoLiquidacion);
-            if (!match) {
-                cboProc.innerHTML = '<option value="" selected>Liquidación</option>';
-                cboProc.disabled = true;
-                return '';
-            }
-            const procesoId = String(match.id || '').trim();
-            const procesoTexto = String(match.text || 'Liquidación').trim();
-            cboProc.innerHTML = '';
-            const opt = document.createElement('option');
-            opt.value = procesoId;
-            opt.textContent = procesoTexto;
-            opt.selected = true;
-            cboProc.appendChild(opt);
-            cboProc.disabled = true;
-            return procesoId;
-        } catch (err) {
-            console.error(err);
-            cboProc.innerHTML = '<option value="" selected>Liquidación</option>';
-            cboProc.disabled = true;
-            return '';
-        }
+    function fijarProcesoLiquidacion(id, texto) {
+        cboProc.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = id || '';
+        opt.textContent = texto || 'Liquidación';
+        opt.selected = true;
+        cboProc.appendChild(opt);
+        cboProc.disabled = true;
+    }
+
+    async function resolverProcesoLiquidacion(signal) {
+        const cia = valorSeleccionValido(cboCia);
+        const payroll_type = valorSeleccionValido(cboPt);
+        if (!cia || !payroll_type) return { id: '', texto: 'Liquidación' };
+        const res = await fetch(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll_type)}`,
+            { signal }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : [];
+        const match = items.find(esProcesoLiquidacion);
+        if (!match) return { id: '', texto: 'Liquidación' };
+        return {
+            id: String(match.id || '').trim(),
+            texto: String(match.text || 'Liquidación').trim()
+        };
     }
 
     function procesoFijo() {
@@ -441,52 +432,156 @@ document.addEventListener('DOMContentLoaded', async function () {
         toggleChecks(this);
     });
 
-    const poblarSelect = async (url, selectElement) => {
-        if (!selectElement) return;
+    const VALOR_REINTENTAR = '__reintentar__';
+    const estadoCargaSelect = new WeakMap();
+
+    /** Aborta la carga previa del combo; solo la última carga puede escribir en él. */
+    function iniciarCargaSelect(selectElement, reintentar) {
+        const prev = estadoCargaSelect.get(selectElement);
+        if (prev && prev.ctrl) prev.ctrl.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        const seq = (prev ? prev.seq : 0) + 1;
+        estadoCargaSelect.set(selectElement, { seq, ctrl, reintentar: reintentar || null });
+        return {
+            signal: ctrl ? ctrl.signal : undefined,
+            vigente: () => (estadoCargaSelect.get(selectElement) || {}).seq === seq
+        };
+    }
+
+    function resetSelect(selectElement, texto) {
+        iniciarCargaSelect(selectElement, null);
         selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = texto || 'Seleccione...';
+        selectElement.appendChild(opt);
+        selectElement.value = '';
+        selectElement.disabled = true;
+    }
+
+    function mostrarErrorSelect(selectElement) {
+        selectElement.innerHTML = '';
+        const optErr = document.createElement('option');
+        optErr.value = '';
+        optErr.textContent = 'Error al cargar';
+        const optRetry = document.createElement('option');
+        optRetry.value = VALOR_REINTENTAR;
+        optRetry.textContent = 'Reintentar';
+        selectElement.appendChild(optErr);
+        selectElement.appendChild(optRetry);
+        selectElement.value = '';
+        selectElement.disabled = false;
+    }
+
+    function seleccionarPorTexto(selectElement, texto) {
+        const want = String(texto || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(selectElement.options).find(
+            (o) => o.value !== '' && o.value !== VALOR_REINTENTAR
+                && o.textContent.trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        selectElement.value = opt.value;
+        return true;
+    }
+
+    function valorSeleccionValido(selectElement) {
+        const v = String(selectElement.value || '').trim();
+        return v === VALOR_REINTENTAR ? '' : v;
+    }
+
+    function textoSeleccionValido(selectElement) {
+        if (!valorSeleccionValido(selectElement)) return '';
+        const opt = selectElement.options[selectElement.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    document.addEventListener('change', function (e) {
+        const sel = e.target;
+        if (!(sel instanceof HTMLSelectElement) || sel.value !== VALOR_REINTENTAR) return;
+        e.stopPropagation();
+        const st = estadoCargaSelect.get(sel);
+        if (st && typeof st.reintentar === 'function') st.reintentar();
+    }, true);
+
+    function llenarOpciones(selectElement, items, textoVacio) {
+        selectElement.innerHTML = '';
+        const def = document.createElement('option');
+        def.value = '';
+        def.textContent = !items.length && textoVacio ? textoVacio : 'Seleccione...';
+        selectElement.appendChild(def);
+        items.forEach((item) => {
+            const opt = document.createElement('option');
+            opt.value = item.id != null ? String(item.id) : '';
+            opt.textContent = item.text != null ? String(item.text) : '';
+            selectElement.appendChild(opt);
+        });
+    }
+
+    /** Devuelve true solo si la respuesta sigue vigente y se cargó el combo. */
+    const poblarSelect = async (url, selectElement) => {
+        if (!selectElement) return false;
+        const carga = iniciarCargaSelect(selectElement, () => poblarSelect(url, selectElement));
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
         try {
-            const res = await fetch(url);
+            const res = await fetch(url, { signal: carga.signal });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
+            if (!carga.vigente()) return false;
+            llenarOpciones(selectElement, Array.isArray(data) ? data : []);
             selectElement.disabled = false;
+            return true;
         } catch (err) {
+            if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
             console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
+            mostrarErrorSelect(selectElement);
+            return false;
         }
     };
 
-    async function cargarPeriodosLiquidacion() {
-        const cia = cboCia.value.trim();
-        const payroll_type = cboPt.value.trim();
+    /** Resuelve el proceso Liquidación del tipo de planilla y carga sus periodos. */
+    async function cargarPeriodosLiquidacion(periodoPreferido) {
+        const cia = valorSeleccionValido(cboCia);
+        const payroll_type = valorSeleccionValido(cboPt);
+        const carga = iniciarCargaSelect(cboPer, () => cargarPeriodosLiquidacion(periodoPreferido));
+        fijarProcesoLiquidacion('', 'Liquidación');
         if (!cia || !payroll_type) {
             cboPer.innerHTML = '<option value="">Seleccione...</option>';
             cboPer.disabled = true;
-            return;
+            return false;
         }
-        const procesoId = await resolverProcesoLiquidacion();
-        if (!procesoId) {
-            cboPer.innerHTML = '<option value="">Sin periodos de liquidación</option>';
-            cboPer.disabled = true;
-            return;
+        cboPer.innerHTML = '<option value="">Cargando...</option>';
+        cboPer.disabled = true;
+        try {
+            const proceso = await resolverProcesoLiquidacion(carga.signal);
+            if (!carga.vigente()) return false;
+            fijarProcesoLiquidacion(proceso.id, proceso.texto);
+            if (!proceso.id) {
+                cboPer.innerHTML = '<option value="">Sin periodos de liquidación</option>';
+                cboPer.disabled = true;
+                return false;
+            }
+            const res = await fetch(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll_type)}&processtype=${encodeURIComponent(proceso.id)}`,
+                { signal: carga.signal }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!carga.vigente()) return false;
+            const items = Array.isArray(data) ? data : [];
+            llenarOpciones(cboPer, items, 'Sin periodos de liquidación');
+            if (periodoPreferido && items.some((it) => String(it.id) === periodoPreferido)) {
+                cboPer.value = periodoPreferido;
+            }
+            cboPer.disabled = false;
+            return true;
+        } catch (err) {
+            if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
+            console.error(err);
+            mostrarErrorSelect(cboPer);
+            return false;
         }
-        await poblarSelect(
-            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll_type)}&processtype=${encodeURIComponent(procesoId)}`,
-            cboPer
-        );
     }
 
     async function cargarListaRetiroCts() {
@@ -767,56 +862,72 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnEjecutarRetiroCts').addEventListener('click', ejecutarAccion);
     syncModoProcesoUI();
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+    /* Cada cambio de compañía invalida las cascadas anteriores aún en curso. */
+    let generacionFiltros = 0;
 
-    let filtrosRestaurados = false;
-    if (filtrosPersist) {
-        filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarPeriodosLiquidacion });
+    /** Al cambiar compañía conserva tipo de planilla y periodo si existen en la nueva. */
+    async function alCambiarCompania() {
+        const gen = ++generacionFiltros;
+        const cia = valorSeleccionValido(cboCia);
+        const planillaPrevia = textoSeleccionValido(cboPt);
+        const periodoPrevio = valorSeleccionValido(cboPer);
+
+        fijarProcesoLiquidacion('', 'Liquidación');
+        resetSelect(cboPer);
+        if (!cia) {
+            resetSelect(cboPt);
+            return;
+        }
+
+        const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+        if (gen !== generacionFiltros) return;
+        if (ok && planillaPrevia && seleccionarPorTexto(cboPt, planillaPrevia)) {
+            await cargarPeriodosLiquidacion(periodoPrevio);
+        }
     }
-    if (!filtrosRestaurados) {
-        limpiarValorComboSiObsoleto(cboCia);
-        if (!String(cboCia.value || '').trim()) {
-            seleccionarCompaniaInsensitive(cboCia, 'BGT');
-        }
-        if (cboCia.value.trim()) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
-        }
-        limpiarValorComboSiObsoleto(cboCia);
-        limpiarValorComboSiObsoleto(cboPt);
-        if (cboCia.value.trim() && cboPt.value.trim()) {
-            await cargarPeriodosLiquidacion();
-        }
-    }
+
+    cboCia.addEventListener('change', alCambiarCompania);
+    cboPt.addEventListener('change', function () {
+        ++generacionFiltros;
+        cargarPeriodosLiquidacion();
+    });
 
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();
     }
 
-    if (cboCia.value.trim() && cboPt.value.trim() && cboPer.value.trim()) {
-        await cargarListaRetiroCts();
+    const companiasOk = await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+
+    /* Bloquea compañía mientras se restaura la cascada guardada para que no se crucen cargas. */
+    let filtrosRestaurados = false;
+    if (companiasOk) {
+        cboCia.disabled = true;
+        try {
+            if (filtrosPersist) {
+                filtrosRestaurados = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarPeriodosLiquidacion });
+            }
+            if (!filtrosRestaurados) {
+                limpiarValorComboSiObsoleto(cboCia);
+                if (!String(cboCia.value || '').trim()) {
+                    seleccionarCompaniaInsensitive(cboCia, 'BGT');
+                }
+                if (cboCia.value.trim()) {
+                    await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cboCia.value.trim())}`, cboPt);
+                }
+                limpiarValorComboSiObsoleto(cboCia);
+                limpiarValorComboSiObsoleto(cboPt);
+                if (valorSeleccionValido(cboCia) && valorSeleccionValido(cboPt)) {
+                    await cargarPeriodosLiquidacion();
+                }
+            }
+        } finally {
+            cboCia.disabled = false;
+        }
     }
 
-    document.getElementById('cboCompania').addEventListener('change', async function () {
-        const cia = this.value.trim();
-        cboProc.innerHTML = '<option value="" selected>Liquidación</option>';
-        cboProc.disabled = true;
-        document.getElementById('cboPeriodo').innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-        if (cia) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
-        } else {
-            cboPt.innerHTML = '<option value="">Seleccione...</option>';
-            cboPt.disabled = true;
-        }
-    });
-
-    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
-        document.getElementById('cboPeriodo').innerHTML = '<option value="">Seleccione...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-        if (this.value.trim()) {
-            await cargarPeriodosLiquidacion();
-        }
-    });
+    if (valorSeleccionValido(cboCia) && valorSeleccionValido(cboPt) && valorSeleccionValido(cboPer)) {
+        await cargarListaRetiroCts();
+    }
 });
 </script>
 {% endblock %}

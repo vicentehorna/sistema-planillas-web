@@ -271,7 +271,17 @@ def inject_now():
             return False
         return session_can_menu(session, code)
 
+    favoritos = {}
+    if current_user.is_authenticated and not es_vhornac:
+        try:
+            favoritos = _favoritos_estado()
+        except Exception:
+            logging.exception("favoritos: inject")
+
     return {
+        'favoritos_habilitado': bool(favoritos.get('enabled')),
+        'favoritos_items': favoritos.get('items') or [],
+        'favoritos_maximo': _FAVORITOS_MAXIMO,
         'now': datetime.now(),
         'sql_database': sql_db,
         'es_multi_cia_apertura': sql_db_l in _APERTURAR_MASIVO_DBS,
@@ -334,6 +344,128 @@ def ensure_and_enforce_web_access():
         return redirect(url_for(target))
     except Exception:
         return redirect(url_for('dashboard'))
+
+
+_FAVORITOS_MAXIMO = 15
+_FAVORITOS_RECHEQUEO_SEG = 900
+
+
+def _favoritos_userid():
+    return str(getattr(current_user, 'id', '') or session.get('login_userid') or '').strip()
+
+
+def _favoritos_items_desde_cursor(cursor):
+    items = []
+    for r in _dicts_first_nonempty_resultset(cursor):
+        clave = str(r.get('MenuKey') or r.get('menukey') or '').strip()
+        if clave:
+            items.append({'clave': clave, 'titulo': str(r.get('Title') or r.get('title') or '').strip()})
+    return items
+
+
+def _favoritos_estado(forzar=False):
+    """Favoritos del usuario cacheados en sesión. enabled=False si la BD no tiene los SP."""
+    from database import get_active_database
+    db = str(get_active_database() or '').strip().lower()
+    cache = session.get('web_favoritos') or {}
+    ahora = time.time()
+    if not forzar and cache.get('db') == db:
+        if cache.get('enabled') or ahora - float(cache.get('ts') or 0) < _FAVORITOS_RECHEQUEO_SEG:
+            return cache
+    estado = {'db': db, 'enabled': False, 'items': [], 'ts': ahora}
+    uid = _favoritos_userid()
+    if not uid:
+        return estado
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT CASE WHEN OBJECT_ID('dbo.sp_web_favoritos_listar_web', 'P') IS NULL THEN 0 ELSE 1 END"
+        )
+        if int(cursor.fetchone()[0] or 0) == 1:
+            cursor.execute("EXEC sp_web_favoritos_listar_web @userid=?", (uid,))
+            estado['items'] = _favoritos_items_desde_cursor(cursor)
+            estado['enabled'] = True
+    except Exception:
+        logging.exception("favoritos: no se pudo cargar (db=%s)", db)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    session['web_favoritos'] = estado
+    return estado
+
+
+def _favoritos_clave_valida(clave):
+    clave = str(clave or '').strip()
+    if not clave or len(clave) > 200 or not clave.startswith('/') or clave.startswith('//'):
+        return ''
+    return clave
+
+
+def _favoritos_ejecutar(sql, params):
+    estado = _favoritos_estado()
+    if not estado.get('enabled'):
+        return jsonify({'error': 'Favoritos no está habilitado en esta base de datos.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(sql, params)
+        items = _favoritos_items_desde_cursor(cursor)
+        conn.commit()
+        estado = dict(estado, items=items, ts=time.time())
+        session['web_favoritos'] = estado
+        return jsonify({'enabled': True, 'items': items, 'maximo': _FAVORITOS_MAXIMO})
+    except Exception as e:
+        logging.exception("favoritos: error al guardar")
+        return jsonify({'error': _sql_error_message(e)}), 400
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/favoritos', methods=['GET'])
+@login_required
+def api_favoritos_listar():
+    estado = _favoritos_estado(forzar=True)
+    return jsonify({
+        'enabled': bool(estado.get('enabled')),
+        'items': estado.get('items') or [],
+        'maximo': _FAVORITOS_MAXIMO,
+    })
+
+
+@app.route('/api/favoritos', methods=['POST'])
+@login_required
+def api_favoritos_guardar():
+    body = request.get_json(silent=True) or {}
+    accion = str(body.get('accion') or '').strip().lower()
+    clave = _favoritos_clave_valida(body.get('clave'))
+    if accion not in ('agregar', 'quitar') or not clave:
+        return jsonify({'error': 'Opción no válida.'}), 400
+    titulo = str(body.get('titulo') or '').strip()[:120]
+    return _favoritos_ejecutar(
+        "EXEC sp_web_favoritos_guardar_web @userid=?, @accion=?, @menukey=?, @title=?, @maximo=?",
+        (_favoritos_userid(), 'A' if accion == 'agregar' else 'Q', clave, titulo or None, _FAVORITOS_MAXIMO),
+    )
+
+
+@app.route('/api/favoritos/orden', methods=['PUT'])
+@login_required
+def api_favoritos_ordenar():
+    body = request.get_json(silent=True) or {}
+    claves = [c for c in (_favoritos_clave_valida(x) for x in (body.get('claves') or [])) if c]
+    return _favoritos_ejecutar(
+        "EXEC sp_web_favoritos_ordenar_web @userid=?, @claves=?",
+        (_favoritos_userid(), '\n'.join(claves)),
+    )
 
 
 def _jsonable_value(value):

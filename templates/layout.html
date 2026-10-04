@@ -416,6 +416,122 @@
             pointer-events: none;
         }
 
+        /* Favoritos */
+        #sidebar .sidebar-favoritos > .sidebar-parent-link > i.bi-star-fill {
+            color: #fbbf24;
+        }
+
+        #sidebar li.sidebar-fav-host {
+            position: relative;
+        }
+
+        #sidebar li.sidebar-fav-host > a {
+            padding-right: 2.25rem;
+        }
+
+        #sidebar .sidebar-fav-btn {
+            position: absolute;
+            top: 50%;
+            right: 8px;
+            transform: translateY(-50%);
+            border: 0;
+            background: transparent;
+            color: rgba(255, 255, 255, 0.8);
+            padding: 2px 5px;
+            line-height: 1;
+            font-size: 0.8rem;
+            opacity: 0;
+            cursor: pointer;
+            transition: opacity 0.15s, color 0.15s;
+        }
+
+        #sidebar li.sidebar-fav-host:hover > .sidebar-fav-btn,
+        #sidebar .sidebar-fav-btn:focus-visible {
+            opacity: 1;
+        }
+
+        #sidebar .sidebar-fav-btn.es-favorito {
+            color: #fbbf24;
+            opacity: 0.6;
+        }
+
+        #sidebar .sidebar-fav-btn:hover {
+            color: #fde68a;
+        }
+
+        @media (hover: none) {
+            #sidebar .sidebar-fav-btn {
+                opacity: 0.5;
+            }
+        }
+
+        body.sidebar-collapsed #sidebar ul.components > li > .sidebar-fav-btn {
+            display: none;
+        }
+
+        #sidebar .sidebar-fav-item.fav-activo > a {
+            color: #fff;
+            background: var(--accent-color);
+        }
+
+        #sidebar .sidebar-fav-item.arrastrando {
+            opacity: 0.4;
+        }
+
+        #sidebar .sidebar-fav-item.drop-antes > a {
+            box-shadow: inset 0 2px 0 #fbbf24;
+        }
+
+        #sidebar .sidebar-fav-item.drop-despues > a {
+            box-shadow: inset 0 -2px 0 #fbbf24;
+        }
+
+        #sidebar .sidebar-fav-vacio {
+            padding: 6px 16px 10px 2.75rem;
+            font-size: 0.78rem;
+            line-height: 1.35;
+            color: rgba(255, 255, 255, 0.55);
+            white-space: normal;
+        }
+
+        .sidebar-fav-ctx {
+            position: fixed;
+            z-index: 2000;
+            min-width: 210px;
+            padding: 4px 0;
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.15);
+            border-radius: 6px;
+            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2);
+            font-size: 0.875rem;
+        }
+
+        .sidebar-fav-ctx button {
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            width: 100%;
+            padding: 7px 14px;
+            border: 0;
+            background: transparent;
+            color: #212529;
+            text-align: left;
+        }
+
+        .sidebar-fav-ctx button:hover,
+        .sidebar-fav-ctx button:focus-visible {
+            background: #f1f3f5;
+        }
+
+        .sidebar-fav-ctx button i {
+            width: 1rem;
+            color: #6c757d;
+        }
+
+        .sidebar-fav-ctx button i.bi-star-fill {
+            color: #f59e0b;
+        }
+
         /* Content Area */
         #content {
             width: calc(100% - var(--sidebar-width));
@@ -583,6 +699,29 @@
                     <a href="{{ url_for('dashboard') }}" title="Alertas">
                         <i class="bi bi-exclamation-triangle-fill"></i><span class="sidebar-link-text">Alertas</span>
                     </a>
+                </li>
+                {% endif %}
+
+                {% if favoritos_habilitado %}
+                <li class="sidebar-menu-parent sidebar-favoritos" id="sidebarFavoritos">
+                    <a href="#submenuFavoritos"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="true"
+                       aria-controls="submenuFavoritos"
+                       title="Favoritos">
+                        <i class="bi bi-star-fill"></i><span class="sidebar-link-text">Favoritos</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse show list-unstyled sidebar-submenu" id="submenuFavoritos"></ul>
+                    <script>
+                        try {
+                            if (localStorage.getItem('planillas-sidebar-favoritos') === '0') {
+                                document.getElementById('submenuFavoritos').classList.remove('show');
+                                document.querySelector('#sidebarFavoritos > .sidebar-parent-link').setAttribute('aria-expanded', 'false');
+                            }
+                        } catch (e) {}
+                    </script>
                 </li>
                 {% endif %}
 
@@ -1580,6 +1719,326 @@
                 </li>
             </ul>
         </nav>
+        {% if favoritos_habilitado %}
+        <script>
+            (function () {
+                var bloque = document.getElementById('sidebarFavoritos');
+                var sidebar = document.getElementById('sidebar');
+                var lista = document.getElementById('submenuFavoritos');
+                if (!bloque || !sidebar || !lista) return;
+
+                var items = {{ favoritos_items|tojson }};
+                var MAXIMO = {{ favoritos_maximo|int }};
+                var STORAGE_OPEN = 'planillas-sidebar-favoritos';
+                var CLAVE_LOGOUT = {{ url_for('logout')|tojson }};
+                var ocupado = false;
+
+                function claveDe(a) {
+                    var href = a.getAttribute('href') || '';
+                    if (!href || href.charAt(0) === '#') return '';
+                    try {
+                        var u = new URL(href, window.location.origin);
+                        if (u.origin !== window.location.origin) return '';
+                        return u.pathname + u.search;
+                    } catch (e) {
+                        return '';
+                    }
+                }
+
+                function tituloDe(a) {
+                    return String(a.getAttribute('title') || a.textContent || '').trim();
+                }
+
+                var fuentes = {};
+                sidebar.querySelectorAll('ul.components a[href]').forEach(function (a) {
+                    if (bloque.contains(a)) return;
+                    if (a.classList.contains('sidebar-parent-link') || a.classList.contains('sidebar-link-disabled')) return;
+                    var k = claveDe(a);
+                    if (!k || k === CLAVE_LOGOUT || fuentes[k]) return;
+                    fuentes[k] = a;
+                });
+
+                function esFavorito(clave) {
+                    return items.some(function (it) { return it.clave === clave; });
+                }
+
+                function aviso(mensaje, tipo) {
+                    if (window.HmUi && typeof window.HmUi.toast === 'function') {
+                        window.HmUi.toast(mensaje, tipo || 'info');
+                    }
+                }
+
+                function abrirBloque() {
+                    if (lista.classList.contains('show')) return;
+                    if (window.bootstrap && window.bootstrap.Collapse) {
+                        window.bootstrap.Collapse.getOrCreateInstance(lista, { toggle: false }).show();
+                    } else {
+                        lista.classList.add('show');
+                    }
+                }
+
+                function actualizarEstrellas() {
+                    sidebar.querySelectorAll('.sidebar-fav-estrella').forEach(function (b) {
+                        var fav = esFavorito(b.dataset.clave);
+                        b.classList.toggle('es-favorito', fav);
+                        b.innerHTML = fav ? '<i class="bi bi-star-fill"></i>' : '<i class="bi bi-star"></i>';
+                        b.title = fav ? 'Quitar de favoritos' : 'Agregar a favoritos';
+                        b.setAttribute('aria-label', b.title);
+                    });
+                }
+
+                function render() {
+                    lista.innerHTML = '';
+                    var visibles = 0;
+                    items.forEach(function (it) {
+                        var src = fuentes[it.clave];
+                        if (!src) return;
+                        visibles++;
+                        var li = document.createElement('li');
+                        li.className = 'sidebar-fav-item sidebar-fav-host';
+                        li.draggable = true;
+                        li.dataset.clave = it.clave;
+                        var srcLi = src.closest('li');
+                        if (srcLi && srcLi.classList.contains('active')) li.classList.add('fav-activo');
+
+                        var a = document.createElement('a');
+                        a.href = src.getAttribute('href');
+                        a.title = tituloDe(src);
+                        a.draggable = false;
+                        var icono = src.querySelector('i');
+                        if (icono) a.appendChild(icono.cloneNode(true));
+                        var texto = document.createElement('span');
+                        texto.className = 'sidebar-link-text';
+                        texto.textContent = tituloDe(src);
+                        a.appendChild(texto);
+                        li.appendChild(a);
+
+                        var quitar = document.createElement('button');
+                        quitar.type = 'button';
+                        quitar.className = 'sidebar-fav-btn';
+                        quitar.title = 'Quitar de favoritos';
+                        quitar.setAttribute('aria-label', 'Quitar de favoritos');
+                        quitar.innerHTML = '<i class="bi bi-x-lg"></i>';
+                        quitar.addEventListener('click', function (e) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            guardar('quitar', it.clave);
+                        });
+                        li.appendChild(quitar);
+                        lista.appendChild(li);
+                    });
+                    if (!visibles) {
+                        var vacio = document.createElement('li');
+                        vacio.className = 'sidebar-fav-vacio';
+                        vacio.textContent = 'Clic derecho o \u2606 en una opción del menú para agregarla aquí.';
+                        lista.appendChild(vacio);
+                    }
+                    actualizarEstrellas();
+                }
+
+                function pedir(url, metodo, cuerpo) {
+                    return fetch(url, {
+                        method: metodo,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(cuerpo),
+                    }).then(function (r) {
+                        return r.json().catch(function () { return {}; }).then(function (d) {
+                            if (!r.ok || d.error) throw new Error(d.error || 'No se pudo guardar el favorito.');
+                            return d;
+                        });
+                    });
+                }
+
+                function guardar(accion, clave, titulo) {
+                    if (ocupado) return;
+                    if (accion === 'agregar' && items.length >= MAXIMO) {
+                        aviso('Solo se permiten ' + MAXIMO + ' favoritos. Quite alguno antes de agregar otro.', 'warning');
+                        return;
+                    }
+                    ocupado = true;
+                    pedir('/api/favoritos', 'POST', { accion: accion, clave: clave, titulo: titulo || '' })
+                        .then(function (d) {
+                            items = d.items || [];
+                            render();
+                            if (accion === 'agregar') abrirBloque();
+                        })
+                        .catch(function (e) { aviso(e.message, 'danger'); })
+                        .finally(function () { ocupado = false; });
+                }
+
+                function clavesEnPantalla() {
+                    var visibles = Array.prototype.map.call(
+                        lista.querySelectorAll('.sidebar-fav-item'),
+                        function (li) { return li.dataset.clave; }
+                    );
+                    items.forEach(function (it) {
+                        if (visibles.indexOf(it.clave) < 0) visibles.push(it.clave);
+                    });
+                    return visibles;
+                }
+
+                function guardarOrden(claves) {
+                    var anteriores = items.slice();
+                    var porClave = {};
+                    items.forEach(function (it) { porClave[it.clave] = it; });
+                    items = claves.map(function (k) { return porClave[k]; }).filter(Boolean);
+                    render();
+                    pedir('/api/favoritos/orden', 'PUT', { claves: claves })
+                        .then(function (d) { items = d.items || items; render(); })
+                        .catch(function (e) {
+                            items = anteriores;
+                            render();
+                            aviso(e.message, 'danger');
+                        });
+                }
+
+                function mover(clave, delta) {
+                    var claves = clavesEnPantalla();
+                    var i = claves.indexOf(clave);
+                    var j = i + delta;
+                    if (i < 0 || j < 0 || j >= lista.querySelectorAll('.sidebar-fav-item').length) return;
+                    claves.splice(j, 0, claves.splice(i, 1)[0]);
+                    guardarOrden(claves);
+                }
+
+                Object.keys(fuentes).forEach(function (k) {
+                    var a = fuentes[k];
+                    var li = a.closest('li');
+                    if (!li || li.querySelector(':scope > .sidebar-fav-estrella')) return;
+                    li.classList.add('sidebar-fav-host');
+                    var b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'sidebar-fav-btn sidebar-fav-estrella';
+                    b.dataset.clave = k;
+                    b.addEventListener('click', function (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        guardar(esFavorito(k) ? 'quitar' : 'agregar', k, tituloDe(a));
+                    });
+                    li.appendChild(b);
+                });
+
+                /* Menú de clic derecho */
+                var ctx = document.createElement('div');
+                ctx.className = 'sidebar-fav-ctx';
+                ctx.setAttribute('role', 'menu');
+                ctx.hidden = true;
+                document.body.appendChild(ctx);
+
+                function cerrarCtx() {
+                    ctx.hidden = true;
+                }
+
+                function abrirCtx(x, y, opciones) {
+                    ctx.innerHTML = '';
+                    opciones.forEach(function (op) {
+                        var b = document.createElement('button');
+                        b.type = 'button';
+                        b.setAttribute('role', 'menuitem');
+                        b.innerHTML = '<i class="bi ' + op.icono + '"></i><span></span>';
+                        b.querySelector('span').textContent = op.texto;
+                        b.addEventListener('click', function () {
+                            cerrarCtx();
+                            op.accion();
+                        });
+                        ctx.appendChild(b);
+                    });
+                    ctx.hidden = false;
+                    ctx.style.left = Math.max(4, Math.min(x, window.innerWidth - ctx.offsetWidth - 8)) + 'px';
+                    ctx.style.top = Math.max(4, Math.min(y, window.innerHeight - ctx.offsetHeight - 8)) + 'px';
+                    var primero = ctx.querySelector('button');
+                    if (primero) primero.focus();
+                }
+
+                sidebar.addEventListener('contextmenu', function (e) {
+                    var a = e.target.closest('a[href]');
+                    if (!a) return;
+                    var favLi = a.closest('.sidebar-fav-item');
+                    var clave = favLi ? favLi.dataset.clave : claveDe(a);
+                    if (!favLi && fuentes[clave] !== a) return;
+                    e.preventDefault();
+                    var ops = [];
+                    if (esFavorito(clave)) {
+                        ops.push({ texto: 'Quitar de favoritos', icono: 'bi-star', accion: function () { guardar('quitar', clave); } });
+                    } else {
+                        ops.push({ texto: 'Agregar a favoritos', icono: 'bi-star-fill', accion: function () { guardar('agregar', clave, tituloDe(a)); } });
+                    }
+                    if (favLi) {
+                        if (favLi.previousElementSibling) {
+                            ops.push({ texto: 'Subir', icono: 'bi-arrow-up', accion: function () { mover(clave, -1); } });
+                        }
+                        if (favLi.nextElementSibling) {
+                            ops.push({ texto: 'Bajar', icono: 'bi-arrow-down', accion: function () { mover(clave, 1); } });
+                        }
+                    }
+                    ops.push({ texto: 'Abrir en pestaña nueva', icono: 'bi-box-arrow-up-right', accion: function () { window.open(a.href, '_blank', 'noopener'); } });
+                    abrirCtx(e.clientX, e.clientY, ops);
+                });
+
+                document.addEventListener('mousedown', function (e) {
+                    if (!ctx.hidden && !ctx.contains(e.target)) cerrarCtx();
+                });
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape') cerrarCtx();
+                });
+                window.addEventListener('blur', cerrarCtx);
+                window.addEventListener('resize', cerrarCtx);
+                var scrollMenu = sidebar.querySelector('ul.components');
+                if (scrollMenu) scrollMenu.addEventListener('scroll', cerrarCtx);
+
+                /* Arrastrar para ordenar */
+                var arrastrado = null;
+
+                function limpiarMarcas() {
+                    lista.querySelectorAll('.drop-antes, .drop-despues').forEach(function (li) {
+                        li.classList.remove('drop-antes', 'drop-despues');
+                    });
+                }
+
+                lista.addEventListener('dragstart', function (e) {
+                    var li = e.target.closest('.sidebar-fav-item');
+                    if (!li) return;
+                    arrastrado = li;
+                    li.classList.add('arrastrando');
+                    e.dataTransfer.effectAllowed = 'move';
+                    try { e.dataTransfer.setData('text/plain', li.dataset.clave); } catch (x) {}
+                });
+                lista.addEventListener('dragover', function (e) {
+                    if (!arrastrado) return;
+                    var li = e.target.closest('.sidebar-fav-item');
+                    if (!li || li === arrastrado) return;
+                    e.preventDefault();
+                    var r = li.getBoundingClientRect();
+                    limpiarMarcas();
+                    li.classList.add(e.clientY - r.top < r.height / 2 ? 'drop-antes' : 'drop-despues');
+                });
+                lista.addEventListener('drop', function (e) {
+                    if (!arrastrado) return;
+                    e.preventDefault();
+                    var destino = lista.querySelector('.drop-antes, .drop-despues');
+                    if (destino) {
+                        lista.insertBefore(arrastrado, destino.classList.contains('drop-antes') ? destino : destino.nextSibling);
+                        guardarOrden(clavesEnPantalla());
+                    }
+                    limpiarMarcas();
+                });
+                lista.addEventListener('dragend', function () {
+                    if (arrastrado) arrastrado.classList.remove('arrastrando');
+                    arrastrado = null;
+                    limpiarMarcas();
+                });
+
+                lista.addEventListener('shown.bs.collapse', function () {
+                    try { localStorage.setItem(STORAGE_OPEN, '1'); } catch (e) {}
+                });
+                lista.addEventListener('hidden.bs.collapse', function () {
+                    try { localStorage.setItem(STORAGE_OPEN, '0'); } catch (e) {}
+                });
+
+                render();
+            })();
+        </script>
+        {% endif %}
 
         <div id="content">
             <nav class="navbar navbar-expand-lg">

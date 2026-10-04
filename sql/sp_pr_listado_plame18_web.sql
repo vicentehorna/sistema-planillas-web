@@ -17,6 +17,7 @@
 
     ConceptType permitidos en detalle: I (Ingresos), A (Aportes), D (Descuentos).
     No incluye auxiliares (X), aunque tengan PDT.
+    hm_garc: incluye SCTR_SALUD_PART (PDT 0806) pese a estar en la lista de excluidos.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listado_plame18_web]
     @cia         VARCHAR(10),
@@ -189,9 +190,13 @@ BEGIN
           AND pr_concept.pdt IS NOT NULL
           AND LTRIM(RTRIM(pr_concept.pdt)) <> ''
           AND pr_concept.flagismonetary = 'Y'
-          AND pr_concept.pdt NOT IN (
-                '0100', '0200', '0300', '0400', '0500', '0600', '0603', '0604', '0607',
-                '0610', '0700', '0800', '0802', '0804', '0806', '0808'
+          AND (
+                pr_concept.pdt NOT IN (
+                    '0100', '0200', '0300', '0400', '0500', '0600', '0603', '0604', '0607',
+                    '0610', '0700', '0800', '0802', '0804', '0806', '0808'
+                )
+                /* hm_garc declara el SCTR salud particular (0806) */
+             OR (LOWER(DB_NAME()) = 'hm_garc' AND LTRIM(RTRIM(pr_concept.FormulaCode)) = 'SCTR_SALUD_PART')
           )
           AND pr_employeepayrollconcept.processtype NOT IN ('LIMABGT 000000000010', 'LIMABGT 000000000011')
           AND EXISTS (SELECT 1 FROM #Empleados E WHERE E.person = pr_employee.person)

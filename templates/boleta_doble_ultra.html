@@ -41,23 +41,14 @@
         .empresa-nombre { font-size: 10.5px; font-weight: bold; color: #1a4b84; text-transform: uppercase; }
         .empresa-info { font-size: 7px; color: #555; }
         .logo-img {
-            max-height: 30px;
-            max-width: 130px;
+            max-height: 52px;
+            max-width: 200px;
             width: auto;
             height: auto;
             object-fit: contain;
+            object-position: right center;
             display: block;
             margin-left: auto;
-        }
-        .ejemplar {
-            display: inline-block;
-            border: 1px solid #1a4b84;
-            color: #1a4b84;
-            font-size: 7px;
-            font-weight: bold;
-            padding: 1px 5px;
-            border-radius: 3px;
-            margin-bottom: 2px;
         }
         .boleta-titulo {
             font-size: 10.5px;
@@ -114,23 +105,24 @@
             width: 28%;
         }
 
-        .firmas-table { margin-top: 4px; margin-bottom: 0; text-align: center; }
-        .linea-firma { border-top: 1px solid #000; width: 160px; margin: 0 auto; padding-top: 2px; font-weight: bold; font-size: 7.5px; }
+        .firmas-table { margin-top: 28px; margin-bottom: 0; text-align: center; }
+        .linea-firma { border-top: 1px solid #000; width: 220px; margin: 0 auto; padding-top: 3px; font-weight: bold; font-size: 8px; }
         .firma-img {
-            max-height: 38px;
-            max-width: 150px;
+            max-height: 80px;
+            max-width: 220px;
             width: auto;
             height: auto;
             object-fit: contain;
-            margin: 0 auto 2px;
+            object-position: center bottom;
+            margin: 0 auto 3px;
             display: block;
         }
-        .firma-spacer { height: 38px; }
-        .firma-info { font-size: 6.5px; color: #555; }
+        .firma-spacer { height: 80px; }
+        .firma-info { font-size: 7px; color: #555; }
     </style>
 </head>
 <body>
-{% macro boleta_block(ejemplar, clase='') %}
+{% macro boleta_block(clase='') %}
 <div class="boleta {{ clase }}">
     {% if clase == 'copia' %}<div class="corte">&#9986; cortar aquí</div>{% endif %}
     <table class="header-table">
@@ -141,8 +133,7 @@
                 <div class="empresa-info">{{ cabecera.direccion_empresa }}</div>
                 <div class="empresa-info">D.S. N° 001-98-TR</div>
             </td>
-            <td width="30%" style="text-align: right; vertical-align: top;">
-                <div class="ejemplar">{{ ejemplar }}</div>
+            <td width="30%" style="text-align: right; vertical-align: middle;">
                 {% if logo_src %}
                 <img src="{{ logo_src }}" class="logo-img" alt="Logo empresa">
                 {% endif %}
@@ -344,7 +335,7 @@
 </div>
 {% endmacro %}
 
-{{ boleta_block('ORIGINAL - EMPLEADOR') }}
-{{ boleta_block('COPIA - TRABAJADOR', 'copia') }}
+{{ boleta_block() }}
+{{ boleta_block('copia') }}
 </body>
 </html>

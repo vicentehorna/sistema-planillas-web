@@ -70,7 +70,14 @@ BEGIN
       AND LEFT(EP.PRPeriod, 6) = @period
       AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
       AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
-      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp);
+      AND (@afp_all = 'Y' OR LTRIM(RTRIM(EP.AFP)) = @afp)
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_ProcessType PTQ (NOLOCK)
+            WHERE PTQ.ProcessType = EP.ProcessType
+              AND PTQ.Company = EP.Company
+              AND LTRIM(RTRIM(PTQ.ShortName)) = 'QUINCENA'
+      );
 
     CREATE TABLE #PlanillaFechas (
         person VARCHAR(20) NOT NULL PRIMARY KEY,

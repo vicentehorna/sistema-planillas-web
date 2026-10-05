@@ -6,7 +6,8 @@
     Basado en: AUXILIARES/control de datos AFP.txt (PowerBuilder w_pr_afp_calc_list).
 
     Solo procesa combinaciones planilla/proceso que tengan concepto formulacode = TOTAL_REM_AFP
-    en PR_EmployeePayRollConcept para el periodo indicado.
+    en PR_EmployeePayRollConcept para el periodo indicado. El proceso QUINCENA (adelanto) nunca
+    se incluye en AFPnet: sus aportes se declaran con el FIN DE MES.
 
     CUSPP: prioriza PR_Employee.AFPCard (ficha); si falta, usa PR_EmployeePayRoll.AFPCard.
 
@@ -86,7 +87,14 @@ BEGIN
     WHERE EPC.Company = @cia
       AND LEFT(EPC.PRPeriod, 6) = @period
       AND C.FormulaCode = 'TOTAL_REM_AFP'
-      AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll);
+      AND (@payroll_all = 'Y' OR EPC.PayRollType = @payroll)
+      AND NOT EXISTS (
+            SELECT 1
+            FROM PR_ProcessType PTQ (NOLOCK)
+            WHERE PTQ.ProcessType = EPC.ProcessType
+              AND PTQ.Company = EPC.Company
+              AND LTRIM(RTRIM(PTQ.ShortName)) = 'QUINCENA'
+      );
 
     IF NOT EXISTS (SELECT 1 FROM #PlanillasProcesar)
     BEGIN
@@ -233,6 +241,13 @@ BEGIN
           )
           AND NOT EXISTS (
                 SELECT 1
+                FROM PR_ProcessType PTQ (NOLOCK)
+                WHERE PTQ.ProcessType = EPC.ProcessType
+                  AND PTQ.Company = EPC.Company
+                  AND LTRIM(RTRIM(PTQ.ShortName)) = 'QUINCENA'
+          )
+          AND NOT EXISTS (
+                SELECT 1
                 FROM #ConceptosAfp X
                 WHERE X.person = LTRIM(RTRIM(EPC.Person))
                   AND X.company = LTRIM(RTRIM(EPC.Company))
@@ -275,6 +290,13 @@ BEGIN
                   AND EP.Person = A.Person
                   AND LEFT(EP.PRPeriod, 6) = @period
                   AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+                  AND NOT EXISTS (
+                        SELECT 1
+                        FROM PR_ProcessType PTQ (NOLOCK)
+                        WHERE PTQ.ProcessType = EP.ProcessType
+                          AND PTQ.Company = EP.Company
+                          AND LTRIM(RTRIM(PTQ.ShortName)) = 'QUINCENA'
+                  )
           );
 
         INSERT INTO PR_EmployeeAFP (

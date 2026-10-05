@@ -5484,6 +5484,35 @@ def enviar_correo_certificado_quinta(destinatario, nombre_empleado, anio, sexo, 
         return False, str(e)
 
 
+def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
+    """Días de faltas justificadas y suspensión (no los trae sp_pr_generarboleta_web de hm_ultra)."""
+    extra = {'dias_faltas_justif': 0, 'dias_suspension': 0}
+    columnas = {'CANT_DIAS_AUS_JUSTI': 'dias_faltas_justif', 'DIASUSPENSION': 'dias_suspension'}
+    try:
+        cursor.execute(
+            """
+            SELECT LTRIM(RTRIM(c.FormulaCode)), SUM(ISNULL(epc.ConceptValue, 0))
+            FROM PR_EmployeePayRollConcept epc (NOLOCK)
+                INNER JOIN PR_Concept c (NOLOCK) ON c.Concept = epc.Concept
+            WHERE epc.Company = ?
+              AND epc.ProcessType = ?
+              AND epc.PayRollType = ?
+              AND epc.PRPeriod = ?
+              AND epc.Person = ?
+              AND LTRIM(RTRIM(c.FormulaCode)) IN ('CANT_DIAS_AUS_JUSTI', 'DIASUSPENSION')
+            GROUP BY LTRIM(RTRIM(c.FormulaCode))
+            """,
+            (cia, processtype, payroll_type, period, person),
+        )
+        for codigo, valor in cursor.fetchall():
+            clave = columnas.get(str(codigo or '').strip().upper())
+            if clave:
+                extra[clave] = valor or 0
+    except Exception:
+        logging.exception('_boleta_ultra_dias_extra person=%s', person)
+    return extra
+
+
 def generar_pdf_en_memoria(params):
     cia_param = str(params.get('cia') or '').strip()
     if not cia_param and has_request_context():
@@ -5524,6 +5553,10 @@ def generar_pdf_en_memoria(params):
             'EXEC sp_pr_detalleboletaaportes_web @cia=?, @process=?, @payrolltype=?, @period=?, @person=?',
             (cia, processtype, payroll_type, period, person),
         )
+        boleta_doble = _es_cliente_ultraseguros()
+        if boleta_doble:
+            cabecera = dict(cabecera or {})
+            cabecera.update(_boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person))
     finally:
         if conn:
             try:
@@ -5549,7 +5582,7 @@ def generar_pdf_en_memoria(params):
 
     if WEASYPRINT_AVAILABLE:
         html_renderizado = render_template(
-            'boleta_moderna.html',
+            'boleta_doble_ultra.html' if boleta_doble else 'boleta_moderna.html',
             cabecera=cabecera,
             ingresos=ingresos,
             descuentos=descuentos,

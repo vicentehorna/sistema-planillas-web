@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Boleta de Pago</title>
+    <style>
+        @page { size: A4; margin: 6mm 8mm; }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 7.5px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.2;
+        }
+        /* Media hoja A4 por copia; si el contenido no cabe, la copia pasa a la hoja siguiente. */
+        .boleta {
+            min-height: 139mm;
+            page-break-inside: avoid;
+            position: relative;
+        }
+        .boleta.copia {
+            border-top: 1px dashed #888;
+            padding-top: 3mm;
+        }
+        .corte {
+            position: absolute;
+            top: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #fff;
+            color: #888;
+            font-size: 6.5px;
+            padding: 0 4px;
+        }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 3px; table-layout: fixed; }
+        td, th { padding: 1px 3px; vertical-align: top; }
+
+        .header-table { margin-bottom: 3px; border-bottom: 1.5px solid #1a4b84; padding-bottom: 2px; }
+        .empresa-nombre { font-size: 10.5px; font-weight: bold; color: #1a4b84; text-transform: uppercase; }
+        .empresa-info { font-size: 7px; color: #555; }
+        .logo-img {
+            max-height: 30px;
+            max-width: 130px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            display: block;
+            margin-left: auto;
+        }
+        .ejemplar {
+            display: inline-block;
+            border: 1px solid #1a4b84;
+            color: #1a4b84;
+            font-size: 7px;
+            font-weight: bold;
+            padding: 1px 5px;
+            border-radius: 3px;
+            margin-bottom: 2px;
+        }
+        .boleta-titulo {
+            font-size: 10.5px;
+            font-weight: bold;
+            text-align: center;
+            background-color: #f4f6f9;
+            padding: 3px;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            margin-bottom: 3px;
+        }
+        .boleta-titulo .periodo { font-size: 7.5px; font-weight: normal; color: #555; }
+
+        .datos-table { border: 1px solid #ddd; margin-bottom: 3px; }
+        .datos-table td { border: 1px solid #eee; }
+        .label { font-weight: bold; background-color: #f8f9fa; width: 11%; font-size: 6.8px; color: #444; }
+        .value { width: 22.33%; font-size: 7.3px; }
+        .tasas { font-size: 7px; }
+        .tasas span { margin-right: 10px; white-space: nowrap; }
+
+        .conceptos-table { border: 1px solid #1a4b84; margin-top: 2px; }
+        .conceptos-table th {
+            background-color: #1a4b84;
+            color: white;
+            font-size: 7.5px;
+            text-align: left;
+            border: 1px solid #1a4b84;
+            padding: 2px 3px;
+        }
+        .conceptos-table td { border-left: 1px solid #ddd; border-right: 1px solid #ddd; padding: 0; }
+        .col-concepto { width: 33.33%; }
+        .inner-table { width: 100%; border: none; margin: 0; table-layout: auto; }
+        .inner-table td { border: none; padding: 0.8px 3px; font-size: 7px; }
+        .monto { text-align: right; width: 28%; white-space: nowrap; }
+
+        .totales-row { border-top: 1px solid #1a4b84; border-bottom: 1px solid #1a4b84; background-color: #f4f6f9; font-weight: bold; }
+        .totales-row td { padding: 1px; }
+
+        .neto-table { margin-top: 3px; margin-bottom: 0; }
+        .neto-label-cell {
+            border: none;
+            text-align: right;
+            font-size: 9.5px;
+            font-weight: bold;
+            padding: 3px 6px 3px 0;
+        }
+        .neto-amount-cell {
+            background-color: #e9ecef;
+            font-size: 9.5px;
+            font-weight: bold;
+            text-align: right;
+            padding: 3px 5px;
+            border: 1.5px solid #1a4b84;
+            width: 28%;
+        }
+
+        .firmas-table { margin-top: 4px; margin-bottom: 0; text-align: center; }
+        .linea-firma { border-top: 1px solid #000; width: 160px; margin: 0 auto; padding-top: 2px; font-weight: bold; font-size: 7.5px; }
+        .firma-img {
+            max-height: 38px;
+            max-width: 150px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            margin: 0 auto 2px;
+            display: block;
+        }
+        .firma-spacer { height: 38px; }
+        .firma-info { font-size: 6.5px; color: #555; }
+    </style>
+</head>
+<body>
+{% macro boleta_block(ejemplar, clase='') %}
+<div class="boleta {{ clase }}">
+    {% if clase == 'copia' %}<div class="corte">&#9986; cortar aquí</div>{% endif %}
+    <table class="header-table">
+        <tr>
+            <td width="70%">
+                <div class="empresa-nombre">{{ cabecera.nombre_empresa }}</div>
+                <div class="empresa-info">RUC: {{ cabecera.ruc_empresa }}</div>
+                <div class="empresa-info">{{ cabecera.direccion_empresa }}</div>
+                <div class="empresa-info">D.S. N° 001-98-TR</div>
+            </td>
+            <td width="30%" style="text-align: right; vertical-align: top;">
+                <div class="ejemplar">{{ ejemplar }}</div>
+                {% if logo_src %}
+                <img src="{{ logo_src }}" class="logo-img" alt="Logo empresa">
+                {% endif %}
+            </td>
+        </tr>
+    </table>
+
+    <div class="boleta-titulo">
+        {{ cabecera.titulo_boleta }}
+        <span class="periodo"> — Periodo: {{ cabecera.RangoFechas }}</span>
+    </div>
+
+    <table class="datos-table">
+        <tr>
+            <td class="label">Trabajador:</td>
+            <td class="value" colspan="3"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
+            <td class="label">{{ cabecera.DocumentType or 'DNI:' }}</td>
+            <td class="value">{{ cabecera.dni }}</td>
+        </tr>
+        <tr>
+            <td class="label">Cargo:</td>
+            <td class="value" colspan="3">{{ cabecera.cargo_trabajador }}</td>
+            <td class="label">Clasificación:</td>
+            <td class="value">{{ cabecera.clasificacion or '---' }}</td>
+        </tr>
+        <tr>
+            <td class="label">F. Ingreso:</td>
+            <td class="value">{{ cabecera.fecha_ingreso|fecha }}</td>
+            <td class="label">F. Cese:</td>
+            <td class="value">{{ cabecera.fecha_cese|fecha if cabecera.fecha_cese else '---' }}</td>
+            <td class="label">Rem. Básica:</td>
+            <td class="value">{{ (cabecera.salaryconcept or cabecera.sueldobasico or cabecera.rem_basica)|importe }}</td>
+        </tr>
+        <tr>
+            <td class="label">Reg. Pensión:</td>
+            <td class="value" colspan="3">
+                {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
+                    NINGUNO
+                {% else %}
+                    {{ cabecera.afp_description or cabecera.regimenpension or 'SNP' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                {% endif %}
+            </td>
+            <td class="label">CUSPP:</td>
+            <td class="value">{{ cabecera.cupss or '---' }}</td>
+        </tr>
+        <tr>
+            <td class="label">Tasas:</td>
+            <td class="value tasas" colspan="5">
+                <span>Aporte: {{ cabecera.aporte|importe }} %</span>
+                <span>Com. Flujo: {{ cabecera.comisionflujo|importe }} %</span>
+                <span>Com. Mixta: {{ cabecera.comisionmixta|importe }} %</span>
+                <span>Seguro: {{ cabecera.seguro|importe }} %</span>
+                <span>SNP: {{ cabecera.snp|importe }} %</span>
+            </td>
+        </tr>
+        <tr>
+            <td class="label">Banco:</td>
+            <td class="value" colspan="3">{{ cabecera.bancosalario or '---' }}</td>
+            <td class="label">Nro. Cuenta:</td>
+            <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
+        </tr>
+        <tr>
+            <td class="label">Días Laborables:</td>
+            <td class="value">{{ cabecera.dias_laborables|dias }}</td>
+            <td class="label">Días Vacaciones:</td>
+            <td class="value">{{ cabecera.dias_vacaciones|dias }}</td>
+            <td class="label">Lic. Con Goce:</td>
+            <td class="value">{{ cabecera.diascongoce|dias }}</td>
+        </tr>
+        <tr>
+            <td class="label">Lic. Sin Goce:</td>
+            <td class="value">{{ cabecera.diassingoce|dias }}</td>
+            <td class="label">Subsidiados:</td>
+            <td class="value">{{ cabecera.dias_subsidio|dias }}</td>
+            <td class="label">No Subsidiados:</td>
+            <td class="value">{{ cabecera.dias_no_subsidiados|dias }}</td>
+        </tr>
+        <tr>
+            <td class="label">Faltas Just.:</td>
+            <td class="value">{{ cabecera.dias_faltas_justif|dias }}</td>
+            <td class="label">Faltas Injust.:</td>
+            <td class="value">{{ cabecera.dias_faltas_injustif|dias }}</td>
+            <td class="label">Suspensión:</td>
+            <td class="value">{{ cabecera.dias_suspension|dias }}</td>
+        </tr>
+        <tr>
+            <td class="label">Fallecimiento:</td>
+            <td class="value">{{ cabecera.dias_fallecimiento|dias }}</td>
+            <td class="label">Paternidad:</td>
+            <td class="value">{{ cabecera.dias_paternidad|dias }}</td>
+            <td class="label">No Laborados:</td>
+            <td class="value">{{ cabecera.dias_no_laborados|dias }}</td>
+        </tr>
+        <tr>
+            <td class="label">Hrs. Trab.:</td>
+            <td class="value">{{ cabecera.horassemana|dias }}</td>
+            <td class="label">H. Extra 25%:</td>
+            <td class="value">{{ cabecera.cant_horas_25|dias }}</td>
+            <td class="label">H. Extra 35% / 100%:</td>
+            <td class="value">{{ cabecera.cant_horas_35|dias }} / {{ cabecera.cant_horas_100|dias }}</td>
+        </tr>
+    </table>
+
+    <table class="conceptos-table">
+        <thead>
+            <tr>
+                <th class="col-concepto">INGRESOS</th>
+                <th class="col-concepto">DESCUENTOS</th>
+                <th class="col-concepto">APORTES DEL EMPLEADOR</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>
+                    <table class="inner-table">
+                        {% for item in ingresos %}
+                        <tr>
+                            <td>{{ item.printtext }}</td>
+                            <td class="monto">{{ item.conceptvalue|importe }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </td>
+                <td>
+                    <table class="inner-table">
+                        {% for item in descuentos %}
+                        <tr>
+                            <td>{{ item.printtext }}</td>
+                            <td class="monto">{{ item.conceptvalue|importe }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </td>
+                <td>
+                    <table class="inner-table">
+                        {% for item in aportes %}
+                        <tr>
+                            <td>{{ item.printtext }}</td>
+                            <td class="monto">{{ item.conceptvalue|importe }}</td>
+                        </tr>
+                        {% endfor %}
+                    </table>
+                </td>
+            </tr>
+            <tr class="totales-row">
+                <td>
+                    <table class="inner-table">
+                        <tr>
+                            <td>Total Ingresos:</td>
+                            <td class="monto">{{ cabecera.total_ingresos|importe }}</td>
+                        </tr>
+                    </table>
+                </td>
+                <td>
+                    <table class="inner-table">
+                        <tr>
+                            <td>Total Descuentos:</td>
+                            <td class="monto">{{ cabecera.total_egresos|importe }}</td>
+                        </tr>
+                    </table>
+                </td>
+                <td>
+                    <table class="inner-table">
+                        <tr>
+                            <td>Total Aportes:</td>
+                            <td class="monto">{{ cabecera.total_aportes|importe }}</td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </tbody>
+    </table>
+
+    <table class="neto-table">
+        <tr>
+            <td class="neto-label-cell">NETO A PAGAR:</td>
+            <td class="neto-amount-cell">S/ {{ cabecera.neto_pagar|importe }}</td>
+        </tr>
+    </table>
+
+    <table class="firmas-table">
+        <tr>
+            <td width="50%">
+                {% if firma_src %}
+                <img src="{{ firma_src }}" class="firma-img" alt="Firma empleador">
+                {% else %}
+                <div class="firma-spacer"></div>
+                {% endif %}
+                <div class="linea-firma">EMPLEADOR</div>
+                <div class="firma-info">{{ cabecera.nombre_representante }}{% if cabecera.cargo_representante %} — {{ cabecera.cargo_representante }}{% endif %}</div>
+            </td>
+            <td width="50%">
+                <div class="firma-spacer"></div>
+                <div class="linea-firma">TRABAJADOR</div>
+                <div class="firma-info">{{ cabecera.nombre_trabajador }} — DNI: {{ cabecera.dni }}</div>
+            </td>
+        </tr>
+    </table>
+</div>
+{% endmacro %}
+
+{{ boleta_block('ORIGINAL - EMPLEADOR') }}
+{{ boleta_block('COPIA - TRABAJADOR', 'copia') }}
+</body>
+</html>

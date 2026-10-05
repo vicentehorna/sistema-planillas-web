@@ -212,6 +212,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
@@ -401,38 +402,35 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (elHasta && hasta) seleccionarPeriodo(elHasta, hasta);
     }
 
-    async function poblarPeriodosPlame(cia, selectElement) {
-        if (!selectElement) return;
-        selectElement.innerHTML = '<option value="">Cargando...</option>';
-        selectElement.disabled = true;
-        try {
-            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
-            const data = await res.json();
-            selectElement.innerHTML = '<option value="">Seleccione...</option>';
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (e) {
-            console.error(e);
-            selectElement.innerHTML = '<option value="">Error</option>';
-            selectElement.disabled = true;
-        }
-    }
-
-    async function poblarPeriodosPlameRango(cia, cboDesde, cboHasta) {
+    async function poblarPeriodosPlameRango(cia, cboDesde, cboHasta, desdePreferido, hastaPreferido) {
         if (!cia) {
-            cboDesde.innerHTML = '<option value="">Seleccione...</option>';
-            cboHasta.innerHTML = '<option value="">Seleccione...</option>';
-            cboDesde.disabled = true;
-            cboHasta.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboDesde);
+            CombosCarga.resetSelect(cboHasta);
+            return false;
         }
-        await poblarPeriodosPlame(cia, cboDesde);
-        clonarOpcionesSelect(cboDesde, cboHasta);
+        CombosCarga.resetSelect(cboHasta, 'Cargando...');
+        const ok = await CombosCarga.poblarSelect(
+            `/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`,
+            cboDesde,
+            {
+                textoVacio: 'Sin periodos',
+                alCargar: (sel) => {
+                    clonarOpcionesSelect(sel, cboHasta);
+                    if (desdePreferido && hastaPreferido
+                        && validarRangoPeriodos(desdePreferido, hastaPreferido, 12).ok
+                        && seleccionarPeriodo(cboDesde, desdePreferido)
+                        && seleccionarPeriodo(cboHasta, hastaPreferido)) {
+                        return;
+                    }
+                    const defecto = rangoAnioActualDefecto(cboDesde);
+                    establecerRangoPeriodos(defecto.desde, defecto.hasta);
+                }
+            }
+        );
+        if (!ok && cboDesde.querySelector(`option[value="${CombosCarga.VALOR_REINTENTAR}"]`)) {
+            CombosCarga.resetSelect(cboHasta);
+        }
+        return ok;
     }
 
     function selectedText(id) {
@@ -657,33 +655,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    const poblarSelect = async (url, selectElement) => {
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
-    };
-
     document.getElementById('frmPlanillaPorConceptos').addEventListener('submit', function (e) {
         e.preventDefault();
         ejecutarConsulta();
@@ -701,7 +672,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboCia = document.getElementById('cboCompania');
     const cboPeriodoDesde = document.getElementById('cboPeriodoDesde');
     const cboPeriodoHasta = document.getElementById('cboPeriodoHasta');
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+
+    cboCia.addEventListener('change', async function () {
+        const cia = CombosCarga.valorValido(this);
+        const desdePrevio = CombosCarga.valorValido(cboPeriodoDesde);
+        const hastaPrevio = CombosCarga.valorValido(cboPeriodoHasta);
+        const ok = await poblarPeriodosPlameRango(cia, cboPeriodoDesde, cboPeriodoHasta, desdePrevio, hastaPrevio);
+        if (ok && filtrosPersist) filtrosPersist.guardar();
+    });
+
+    [cboPeriodoDesde, cboPeriodoHasta].forEach((el) => {
+        if (el) el.addEventListener('change', () => { if (filtrosPersist) filtrosPersist.guardar(); });
+    });
+
+    await CombosCarga.poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
 
     let periodoDesdeGuardado = '';
     let periodoHastaGuardado = '';
@@ -723,35 +707,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         seleccionarCompaniaInsensitive(cboCia, 'BGT');
     }
 
-    const ciaInicial = cboCia.value.trim();
+    const ciaInicial = CombosCarga.valorValido(cboCia);
+    let periodosOk = false;
     if (ciaInicial) {
-        await poblarPeriodosPlameRango(ciaInicial, cboPeriodoDesde, cboPeriodoHasta);
-        if (periodoDesdeGuardado && periodoHastaGuardado
-            && validarRangoPeriodos(periodoDesdeGuardado, periodoHastaGuardado, 12).ok
-            && seleccionarPeriodo(cboPeriodoDesde, periodoDesdeGuardado)
-            && seleccionarPeriodo(cboPeriodoHasta, periodoHastaGuardado)) {
-            // rango restaurado desde localStorage
-        } else {
-            const defecto = rangoAnioActualDefecto(cboPeriodoDesde);
-            establecerRangoPeriodos(defecto.desde, defecto.hasta);
+        cboCia.disabled = true;
+        try {
+            periodosOk = await poblarPeriodosPlameRango(
+                ciaInicial, cboPeriodoDesde, cboPeriodoHasta, periodoDesdeGuardado, periodoHastaGuardado
+            );
+        } finally {
+            cboCia.disabled = false;
         }
     }
 
-    cboCia.addEventListener('change', async function () {
-        const cia = this.value.trim();
-        await poblarPeriodosPlameRango(cia, cboPeriodoDesde, cboPeriodoHasta);
-        if (cia) {
-            const defecto = rangoAnioActualDefecto(cboPeriodoDesde);
-            establecerRangoPeriodos(defecto.desde, defecto.hasta);
-        }
-        if (filtrosPersist) filtrosPersist.guardar();
-    });
-
-    [cboPeriodoDesde, cboPeriodoHasta].forEach((el) => {
-        if (el) el.addEventListener('change', () => { if (filtrosPersist) filtrosPersist.guardar(); });
-    });
-
-    if (ciaInicial && cboPeriodoDesde.value.trim() && cboPeriodoHasta.value.trim()) {
+    if (periodosOk && CombosCarga.valorValido(cboPeriodoDesde) && CombosCarga.valorValido(cboPeriodoHasta)) {
         setTimeout(() => ejecutarConsulta(), 150);
     }
 });

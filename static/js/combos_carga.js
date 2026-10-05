@@ -85,10 +85,15 @@
      * Combo "Seleccione..." + items {id, text}. Devuelve true solo si la respuesta sigue vigente.
      * opciones.textoVacio: texto de la primera opción cuando la lista llega vacía.
      * opciones.conservarValor: reselecciona el valor previo si existe en la nueva lista.
+     * opciones.mapId: transforma el id recibido antes de usarlo como value.
+     * opciones.incluyeTodos / valorTodos / textoTodos: primera opción "Todos" seleccionada por defecto.
+     * opciones.alCargar(select): se ejecuta tras cada carga exitosa (también al reintentar).
      */
     async function poblarSelect(url, select, opciones) {
         opciones = opciones || {};
         if (!select) return false;
+        const incluyeTodos = !!opciones.incluyeTodos;
+        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
         const prev = opciones.conservarValor ? valorValido(select) : '';
         const carga = iniciarCarga(select, () => poblarSelect(url, select, opciones));
         select.innerHTML = '<option value="">Cargando...</option>';
@@ -99,12 +104,19 @@
             const items = Array.isArray(data) ? data : [];
             select.innerHTML = '';
             const def = document.createElement('option');
-            def.value = '';
-            def.textContent = !items.length && opciones.textoVacio ? opciones.textoVacio : 'Seleccione...';
+            if (incluyeTodos) {
+                def.value = valorTodos;
+                def.textContent = opciones.textoTodos || 'Todos';
+            } else {
+                def.value = '';
+                def.textContent = !items.length && opciones.textoVacio ? opciones.textoVacio : 'Seleccione...';
+            }
             select.appendChild(def);
+            select.value = def.value;
             items.forEach((item) => {
                 const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
+                const rawId = item.id != null ? String(item.id) : '';
+                opt.value = typeof opciones.mapId === 'function' ? opciones.mapId(rawId) : rawId;
                 opt.textContent = item.text != null ? String(item.text) : opt.value;
                 select.appendChild(opt);
             });
@@ -112,11 +124,12 @@
                 select.value = prev;
             }
             select.disabled = false;
+            if (typeof opciones.alCargar === 'function') opciones.alCargar(select);
             return true;
         } catch (err) {
             if (!carga.vigente() || esAbort(err)) return false;
             console.error(err);
-            mostrarError(select, '');
+            mostrarError(select, incluyeTodos ? valorTodos : '');
             return false;
         }
     }

@@ -127,6 +127,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
@@ -176,110 +177,96 @@ document.addEventListener('DOMContentLoaded', async function () {
         return true;
     }
 
-    function soloTodos(selectElement, texto) {
-        if (!selectElement) return;
-        selectElement.innerHTML = '';
-        const opt = document.createElement('option');
-        opt.value = '0';
-        opt.textContent = texto || 'Todos';
-        selectElement.appendChild(opt);
-        selectElement.value = '0';
-        selectElement.disabled = false;
+    const poblarSelect = CombosCarga.poblarSelect;
+    const OPC_TODOS = { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' };
+
+    function soloTodos(selectElement) {
+        return CombosCarga.poblarConTodos('', selectElement, { valorTodos: '0', textoTodos: 'Todos' });
     }
 
-    async function poblarSelect(url, selectElement, opciones) {
-        const incluyeTodos = !!(opciones && opciones.incluyeTodos);
-        const valorTodos = (opciones && opciones.valorTodos != null) ? String(opciones.valorTodos) : '0';
-        const textoTodos = (opciones && opciones.textoTodos != null) ? String(opciones.textoTodos) : 'Todos';
-        selectElement.disabled = true;
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            if (incluyeTodos) {
-                const optTodos = document.createElement('option');
-                optTodos.value = valorTodos;
-                optTodos.textContent = textoTodos;
-                selectElement.appendChild(optTodos);
-            } else {
-                const def = document.createElement('option');
-                def.value = '';
-                def.textContent = 'Seleccione...';
-                selectElement.appendChild(def);
-            }
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (e) {
-            console.error(e);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
-    }
-
-    async function cargarTrabajadores(cia) {
+    async function cargarTrabajadores(cia, trabajadorPreferido) {
         if (!cia) {
-            soloTodos(cboTra, 'Todos');
-            cboTra.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboTra, 'Todos', '0');
+            return false;
         }
-        await poblarSelect(
+        return poblarSelect(
             `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
             cboTra,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            Object.assign({}, OPC_TODOS, {
+                alCargar: (sel) => CombosCarga.seleccionarPorTexto(sel, trabajadorPreferido)
+            })
         );
     }
 
-    async function cargarPlanillas(cia) {
+    async function cargarPlanillas(cia, planillaPreferida) {
         if (!cia) {
-            soloTodos(cboPt, 'Todos');
-            soloTodos(cboProc, 'Todos');
-            soloTodos(cboPer, 'Todos');
-            cboPt.disabled = true;
-            cboProc.disabled = true;
-            cboPer.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboPt, 'Todos', '0');
+            CombosCarga.resetSelect(cboProc, 'Todos', '0');
+            CombosCarga.resetSelect(cboPer, 'Todos', '0');
+            return false;
         }
-        await poblarSelect(
+        return poblarSelect(
             `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
             cboPt,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            Object.assign({}, OPC_TODOS, {
+                alCargar: (sel) => CombosCarga.seleccionarPorTexto(sel, planillaPreferida)
+            })
         );
     }
 
-    async function cargarProcesos(cia, payroll) {
+    async function cargarProcesos(cia, payroll, procesoPreferido) {
+        soloTodos(cboPer);
         if (!cia || !payroll || payroll === '0') {
-            soloTodos(cboProc, 'Todos');
-            soloTodos(cboPer, 'Todos');
-            return;
+            return soloTodos(cboProc);
         }
-        await poblarSelect(
+        const ok = await poblarSelect(
             `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
             cboProc,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            OPC_TODOS
         );
-        soloTodos(cboPer, 'Todos');
+        if (ok) CombosCarga.seleccionarPorTexto(cboProc, procesoPreferido);
+        return ok;
     }
 
-    async function cargarPeriodos(cia, payroll, proceso) {
+    async function cargarPeriodos(cia, payroll, proceso, periodoPreferido) {
         if (!cia || !payroll || payroll === '0' || !proceso || proceso === '0') {
-            soloTodos(cboPer, 'Todos');
-            return;
+            return soloTodos(cboPer);
         }
-        await poblarSelect(
+        const ok = await poblarSelect(
             `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(proceso)}`,
             cboPer,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            OPC_TODOS
         );
+        if (!ok) return false;
+        if (periodoPreferido && optionExists(cboPer, periodoPreferido)) {
+            cboPer.value = periodoPreferido;
+            return true;
+        }
         if (window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.obtenerPeriodoActivo) {
+            const seq = cboPer.dataset.cargaSeq;
             const activo = await window.FiltrosPlanillasReportes.obtenerPeriodoActivo(cia, payroll, proceso);
+            if (cboPer.dataset.cargaSeq !== seq) return false;
             if (activo && optionExists(cboPer, activo)) {
                 cboPer.value = activo;
             }
         }
+        return true;
+    }
+
+    let generacionFiltros = 0;
+
+    async function cargarCascadaCompania(cia, pref) {
+        const gen = ++generacionFiltros;
+        pref = pref || {};
+        const [okPlanilla] = await Promise.all([
+            cargarPlanillas(cia, pref.planilla),
+            cargarTrabajadores(cia, pref.trabajador),
+        ]);
+        if (gen !== generacionFiltros || !okPlanilla) return false;
+        const payroll = CombosCarga.valorValido(cboPt) || '0';
+        const okProceso = await cargarProcesos(cia, payroll, pref.proceso);
+        if (gen !== generacionFiltros || !okProceso) return false;
+        return cargarPeriodos(cia, payroll, CombosCarga.valorValido(cboProc) || '0', pref.periodo);
     }
 
     function fmtFechaEnvio(valor) {
@@ -392,59 +379,34 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-
-    let restaurado = false;
-    if (filtrosPersist) {
-        restaurado = await filtrosPersist.aplicarRestauracionCascada({
-            poblarSelect,
-            cargarPlanillas,
-            cargarProcesos,
-            cargarPeriodos,
-            cargarTrabajadores
-        });
-        filtrosPersist.registrarGuardadoEnCambio();
-    }
-
-    if (!restaurado) {
-        const ciaInicial = DEFAULT_CIA;
-        if (ciaInicial && optionExists(cboCia, ciaInicial)) {
-            seleccionarInsensitive(cboCia, ciaInicial);
-        } else if (cboCia.options.length > 1) {
-            cboCia.selectedIndex = 1;
-        }
-        const cia = cboCia.value.trim();
-        if (cia) {
-            await cargarPlanillas(cia);
-            await cargarProcesos(cia, '0');
-            await cargarPeriodos(cia, '0', '0');
-            await cargarTrabajadores(cia);
-        }
-    }
-
     cboCia.addEventListener('change', async function () {
-        const cia = cboCia.value.trim();
-        await cargarPlanillas(cia);
-        await cargarProcesos(cia, '0');
-        await cargarPeriodos(cia, '0', '0');
-        await cargarTrabajadores(cia);
-        if (filtrosPersist) filtrosPersist.guardar();
+        const pref = {
+            planilla: CombosCarga.textoValido(cboPt),
+            proceso: CombosCarga.textoValido(cboProc),
+            periodo: CombosCarga.valorValido(cboPer),
+            trabajador: CombosCarga.textoValido(cboTra),
+        };
+        const ok = await cargarCascadaCompania(CombosCarga.valorValido(cboCia), pref);
+        if (ok && filtrosPersist) filtrosPersist.guardar();
     });
 
     cboPt.addEventListener('change', async function () {
-        const cia = cboCia.value.trim();
-        const payroll = cboPt.value.trim() || '0';
-        await cargarProcesos(cia, payroll);
-        await cargarPeriodos(cia, payroll, '0');
-        if (filtrosPersist) filtrosPersist.guardar();
+        const gen = ++generacionFiltros;
+        const cia = CombosCarga.valorValido(cboCia);
+        const payroll = CombosCarga.valorValido(cboPt) || '0';
+        const ok = await cargarProcesos(cia, payroll);
+        if (gen !== generacionFiltros || !ok) return;
+        await cargarPeriodos(cia, payroll, CombosCarga.valorValido(cboProc) || '0');
+        if (gen === generacionFiltros && filtrosPersist) filtrosPersist.guardar();
     });
 
     cboProc.addEventListener('change', async function () {
-        const cia = cboCia.value.trim();
-        const payroll = cboPt.value.trim() || '0';
-        const proceso = cboProc.value.trim() || '0';
+        const gen = ++generacionFiltros;
+        const cia = CombosCarga.valorValido(cboCia);
+        const payroll = CombosCarga.valorValido(cboPt) || '0';
+        const proceso = CombosCarga.valorValido(cboProc) || '0';
         await cargarPeriodos(cia, payroll, proceso);
-        if (filtrosPersist) filtrosPersist.guardar();
+        if (gen === generacionFiltros && filtrosPersist) filtrosPersist.guardar();
     });
 
     cboPer.addEventListener('change', function () {
@@ -464,6 +426,36 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!lastExport) return;
         await exportExcel(lastExport);
     });
+
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+
+    let restaurado = false;
+    if (filtrosPersist) {
+        cboCia.disabled = true;
+        try {
+            restaurado = await filtrosPersist.aplicarRestauracionCascada({
+                poblarSelect,
+                cargarPlanillas,
+                cargarProcesos,
+                cargarPeriodos,
+                cargarTrabajadores
+            });
+        } finally {
+            cboCia.disabled = false;
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+
+    if (!restaurado) {
+        const ciaInicial = DEFAULT_CIA;
+        if (ciaInicial && optionExists(cboCia, ciaInicial)) {
+            seleccionarInsensitive(cboCia, ciaInicial);
+        } else if (cboCia.options.length > 1 && !CombosCarga.valorValido(cboCia)) {
+            cboCia.selectedIndex = 1;
+        }
+        const cia = CombosCarga.valorValido(cboCia);
+        if (cia) await cargarCascadaCompania(cia, {});
+    }
 });
 </script>
 {% endblock %}

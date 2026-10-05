@@ -95,6 +95,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
@@ -346,34 +347,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         window.URL.revokeObjectURL(url);
     }
 
-    const poblarSelect = async (url, selectElement) => {
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                // periodos-plame usa YYYYMM; otros selectores pueden devolver YYYYMMDD
-                const rawId = item.id != null ? String(item.id) : '';
-                opt.value = url.includes('periodos-plame') ? periodoYyyymm(rawId) : rawId;
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (e) {
-            console.error(e);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
-    };
+    // periodos-plame usa YYYYMM; otros selectores pueden devolver YYYYMMDD
+    const poblarSelect = (url, selectElement, opciones) => CombosCarga.poblarSelect(
+        url,
+        selectElement,
+        Object.assign(url.includes('periodos-plame') ? { mapId: periodoYyyymm } : {}, opciones || {})
+    );
 
     function selectedText(id) {
         const el = document.getElementById(id);
@@ -389,7 +368,12 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function cargarPeriodos(cia, periodoPreferido) {
         const cboPeriodo = document.getElementById('cboPeriodo');
-        await poblarSelect(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`, cboPeriodo);
+        const ok = await poblarSelect(
+            `/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`,
+            cboPeriodo,
+            { textoVacio: 'Sin periodos' }
+        );
+        if (!ok) return;
         let periodo = periodoPreferido != null ? periodoYyyymm(periodoPreferido) : '';
         if (periodo && optionExists(cboPeriodo, periodo)) {
             cboPeriodo.value = periodo;
@@ -455,19 +439,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', document.getElementById('cboCompania'));
-    if (filtrosPersist) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
-    }
+    const cboCia = document.getElementById('cboCompania');
 
-    document.getElementById('cboCompania').addEventListener('change', async function () {
-        const cia = this.value.trim();
+    /* Al cambiar compañía conserva el periodo si existe en la nueva. */
+    cboCia.addEventListener('change', async function () {
+        const cia = CombosCarga.valorValido(cboCia);
         const cboPeriodo = document.getElementById('cboPeriodo');
+        const periodoPrevio = CombosCarga.valorValido(cboPeriodo);
         if (cia) {
-            await cargarPeriodos(cia, '');
+            await cargarPeriodos(cia, periodoPrevio);
         } else {
-            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-            cboPeriodo.disabled = true;
+            CombosCarga.resetSelect(cboPeriodo);
         }
     });
 
@@ -492,6 +474,17 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('No se pudo generar el archivo Excel.');
         }
     });
+
+    /* Bloquea compañía mientras se restaura la cascada guardada para que no se crucen cargas. */
+    const companiasOk = await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+    if (companiasOk && filtrosPersist) {
+        cboCia.disabled = true;
+        try {
+            await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
 });
 </script>
 {% endblock %}

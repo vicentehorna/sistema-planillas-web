@@ -146,6 +146,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
@@ -233,82 +234,24 @@ document.addEventListener('DOMContentLoaded', async function () {
         return String(valor);
     }
 
-    async function poblarSelect(url, select, firstOption) {
-        select.disabled = true;
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            const items = Array.isArray(data) ? data : [];
-            select.innerHTML = '';
-            if (firstOption) {
-                const o0 = document.createElement('option');
-                o0.value = firstOption.value;
-                o0.textContent = firstOption.text;
-                select.appendChild(o0);
-            }
-            items.forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : opt.value;
-                select.appendChild(opt);
-            });
-            select.disabled = false;
-        } catch (err) {
-            console.error(err);
-            select.innerHTML = '<option value="">Error</option>';
-        }
-    }
-
     async function cargarUnidades() {
-        if (!cboUnidad) return;
-        const prev = String(cboUnidad.value || '0').trim() || '0';
-        cboUnidad.innerHTML = '';
-        const optAll = document.createElement('option');
-        optAll.value = '0';
-        optAll.textContent = 'Todas';
-        cboUnidad.appendChild(optAll);
-        try {
-            const res = await fetch('/api/selectores/unidades');
-            const data = await res.json();
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const id = item.id != null ? String(item.id).trim() : '';
-                if (!id || id === '0') return;
-                const opt = document.createElement('option');
-                opt.value = id;
-                opt.textContent = item.text != null ? String(item.text) : id;
-                cboUnidad.appendChild(opt);
-            });
-            if (optionExists(cboUnidad, prev)) {
-                cboUnidad.value = prev;
-            } else {
-                cboUnidad.value = '0';
-            }
-        } catch (e) {
-            console.error(e);
-            cboUnidad.value = '0';
-        }
+        if (!cboUnidad) return false;
+        return CombosCarga.poblarConTodos('/api/selectores/unidades', cboUnidad, {
+            valorTodos: '0', textoTodos: 'Todas'
+        });
     }
 
     async function cargarPlanillas() {
-        const cia = cboCia.value.trim();
-        cboPt.innerHTML = '<option value="0">Todos</option>';
-        cboPt.disabled = !cia;
-        if (!cia) return;
-        try {
-            const res = await fetch(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`);
-            const items = await res.json();
-            (Array.isArray(items) ? items : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : opt.value;
-                cboPt.appendChild(opt);
-            });
-            cboPt.value = '0';
-            cboPt.disabled = false;
-        } catch (e) {
-            console.error(e);
-            cboPt.disabled = false;
+        const cia = CombosCarga.valorValido(cboCia);
+        const planillaPrevia = CombosCarga.textoValido(cboPt);
+        if (!cia) {
+            CombosCarga.resetSelect(cboPt, 'Todos', '0');
+            return false;
         }
+        return CombosCarga.poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt, {
+            incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos',
+            alCargar: (sel) => CombosCarga.seleccionarPorTexto(sel, planillaPrevia)
+        });
     }
 
     function renderTabla(response) {
@@ -434,10 +377,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboCia.addEventListener('change', cargarPlanillas);
 
     syncFechaIngreso();
-    await cargarUnidades();
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia, { value: '', text: 'Seleccione...' });
+    await Promise.all([
+        cargarUnidades(),
+        CombosCarga.poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia),
+    ]);
     if (DEFAULT_CIA) seleccionarInsensitive(cboCia, DEFAULT_CIA);
-    if (cboCia.value) await cargarPlanillas();
+    if (CombosCarga.valorValido(cboCia)) await cargarPlanillas();
 });
 </script>
 {% endblock %}

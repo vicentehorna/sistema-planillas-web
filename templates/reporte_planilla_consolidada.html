@@ -202,6 +202,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
@@ -698,77 +699,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    const poblarSelect = async (url, selectElement, opciones) => {
-        opciones = opciones || {};
-        const valorTodos = opciones.valorTodos != null ? String(opciones.valorTodos) : '';
-        const textoTodos = opciones.textoTodos || 'Todos';
-        const incluyeTodos = !!opciones.incluyeTodos;
+    const poblarSelect = CombosCarga.poblarSelect;
+    const { resetSelect, valorValido } = CombosCarga;
 
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            if (incluyeTodos) {
-                const optTodos = document.createElement('option');
-                optTodos.value = valorTodos;
-                optTodos.textContent = textoTodos;
-                selectElement.appendChild(optTodos);
-            } else {
-                const def = document.createElement('option');
-                def.value = '';
-                def.textContent = 'Seleccione...';
-                selectElement.appendChild(def);
-            }
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
-    };
-
-    async function cargarUnidades() {
-        const cboUnidad = document.getElementById('cboUnidad');
-        if (!cboUnidad) return;
-        const prev = String(cboUnidad.value || '0').trim();
-        cboUnidad.innerHTML = '';
-        const optAll = document.createElement('option');
-        optAll.value = '0';
-        optAll.textContent = 'Todas';
-        cboUnidad.appendChild(optAll);
-        try {
-            const res = await fetch('/api/selectores/unidades');
-            const data = await res.json();
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const id = item.id != null ? String(item.id).trim() : '';
-                if (!id || id === '0') return;
-                const opt = document.createElement('option');
-                opt.value = id;
-                opt.textContent = item.text != null ? String(item.text) : id;
-                cboUnidad.appendChild(opt);
-            });
-            const ok = Array.from(cboUnidad.options).some((o) => String(o.value).trim() === prev);
-            cboUnidad.value = ok ? prev : '0';
-        } catch (e) {
-            console.error(e);
-            cboUnidad.value = '0';
-        }
+    function cargarUnidades() {
+        return CombosCarga.poblarConTodos('/api/selectores/unidades', document.getElementById('cboUnidad'), {
+            valorTodos: '0',
+            textoTodos: 'Todas'
+        });
     }
 
     async function poblarBancosHaberes() {
         const cboBanco = document.getElementById('cboBancoHaberes');
-        if (!cboBanco) return;
-        await poblarSelect(
+        if (!cboBanco) return false;
+        return poblarSelect(
             '/api/selectores/bancos-consolidada',
             cboBanco,
             { incluyeTodos: true, valorTodos: '', textoTodos: 'Todos' }
@@ -776,60 +720,34 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
     const cboTrabajador = document.getElementById('cboTrabajador');
 
-    await cargarUnidades();
-    await poblarSelect('/api/selectores/planillas-consolidada', cboPlanilla);
-    await poblarSelect('/api/selectores/trabajadores-consolidada', cboTrabajador);
-    await poblarBancosHaberes();
-    etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-
-    const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
-    if (filtrosPersist && guardadoObj) {
-        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes, cargarUnidades });
-        etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-    }
-
-    {
-        const pt = document.getElementById('cboTipoPlanilla').value.trim();
-        const proc = document.getElementById('cboProceso').value.trim();
-        const period = document.getElementById('cboPeriodo').value.trim();
-        if (pt && proc && period) {
-            await ejecutarConsultaConsolidada();
-        }
-    }
-
-    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
-        const pt = this.value.trim();
-        const cboProceso = document.getElementById('cboProceso');
-        const cboPeriodo = document.getElementById('cboPeriodo');
-
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-        cboProceso.disabled = true;
-        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-        cboPeriodo.disabled = true;
-
+    cboPlanilla.addEventListener('change', async function () {
+        const pt = valorValido(cboPlanilla);
+        resetSelect(cboProceso);
+        resetSelect(cboPeriodo);
         if (pt) {
             await poblarSelect(
                 `/api/selectores/procesos-consolidada?payroll_desc=${encodeURIComponent(pt)}`,
-                cboProceso
+                cboProceso,
+                { textoVacio: 'Sin procesos' }
             );
         }
     });
 
-    document.getElementById('cboProceso').addEventListener('change', function () {
-        const pt = document.getElementById('cboTipoPlanilla').value.trim();
-        const proc = this.value.trim();
-        const cboPeriodo = document.getElementById('cboPeriodo');
-
-        if (proc) {
+    cboProceso.addEventListener('change', function () {
+        const pt = valorValido(cboPlanilla);
+        const proc = valorValido(cboProceso);
+        if (pt && proc) {
             poblarSelect(
                 `/api/selectores/periodos-consolidada?payroll_desc=${encodeURIComponent(pt)}&proceso_desc=${encodeURIComponent(proc)}`,
-                cboPeriodo
+                cboPeriodo,
+                { textoVacio: 'Sin periodos' }
             );
         } else {
-            cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-            cboPeriodo.disabled = true;
+            resetSelect(cboPeriodo);
         }
     });
 
@@ -871,6 +789,24 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('No se pudo generar el archivo Excel.');
         }
     });
+
+    const [planillasOk] = await Promise.all([
+        poblarSelect('/api/selectores/planillas-consolidada', cboPlanilla),
+        cargarUnidades(),
+        poblarSelect('/api/selectores/trabajadores-consolidada', cboTrabajador, {
+            alCargar: etiquetaTrabajadorTodosPorDefecto
+        }),
+        poblarBancosHaberes(),
+    ]);
+
+    const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
+    if (planillasOk && filtrosPersist && guardadoObj) {
+        await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, poblarBancosHaberes, cargarUnidades });
+        etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+        if (valorValido(cboPlanilla) && valorValido(cboProceso) && valorValido(cboPeriodo)) {
+            await ejecutarConsultaConsolidada();
+        }
+    }
 });
 </script>
 {% endblock %}

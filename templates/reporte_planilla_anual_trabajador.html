@@ -174,6 +174,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
@@ -254,39 +255,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         catch (e) { return {}; }
     }
 
-    async function poblarSelect(url, selectElement, opciones) {
-        opciones = opciones || {};
-        const prev = selectElement.value;
-        selectElement.innerHTML = '';
-        if (opciones.incluyeTodos) {
-            const o = document.createElement('option');
-            o.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
-            o.textContent = opciones.textoTodos || 'Todos';
-            selectElement.appendChild(o);
-        } else if (!opciones.sinPlaceholder) {
-            const o = document.createElement('option');
-            o.value = '';
-            o.textContent = opciones.placeholder || 'Seleccione...';
-            selectElement.appendChild(o);
+    const poblarSelect = CombosCarga.poblarSelect;
+
+    function reseleccionar(select, pref) {
+        if (!pref) return false;
+        if (pref.texto) return CombosCarga.seleccionarPorTexto(select, pref.texto);
+        if (pref.valor && optionExists(select, pref.valor)) {
+            select.value = pref.valor;
+            return true;
         }
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            (data || []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-            if (prev && optionExists(selectElement, prev)) selectElement.value = prev;
-            else if (opciones.incluyeTodos) {
-                selectElement.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
-            }
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
+        return false;
     }
 
     function sumMeses(row) {
@@ -486,86 +464,99 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('frmPlanillaAnual').addEventListener('submit', consultar);
     btnExcel.addEventListener('click', exportExcel);
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-    await poblarSelect('/api/selectores/unidades', cboUnidad, {
-        incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
-    });
+    let generacionCompania = 0;
 
-    const guardado = leerFiltros();
-    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
-    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
-    if (guardado.anio) txtAnio.value = guardado.anio;
-    if (guardado.unidad && optionExists(cboUnidad, guardado.unidad)) cboUnidad.value = guardado.unidad;
-    if (typeof guardado.solo_boleta === 'boolean') chkSoloBoleta.checked = guardado.solo_boleta;
-    else chkSoloBoleta.checked = true;
-
-    async function cargarDependientesCia(cia, restore) {
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-        cboProceso.disabled = true;
-        if (!cia) {
-            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
-            cboPlanilla.disabled = true;
-            cboTrabajador.innerHTML = '<option value="">Todos</option>';
-            cboTrabajador.disabled = true;
-            cboConcepto.innerHTML = '<option value="0">Todos</option>';
-            cboConcepto.disabled = true;
-            return;
-        }
-        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-        await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador, {
-            incluyeTodos: true, valorTodos: '', textoTodos: 'Todos'
-        });
-        await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto, {
-            incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
-        });
-        if (restore) {
-            if (restore.payrolltype && optionExists(cboPlanilla, restore.payrolltype)) {
-                cboPlanilla.value = restore.payrolltype;
-            }
-            if (restore.person && optionExists(cboTrabajador, restore.person)) {
-                cboTrabajador.value = restore.person;
-            }
-            if (restore.concept && optionExists(cboConcepto, restore.concept)) {
-                cboConcepto.value = restore.concept;
-            }
-        }
-    }
-
-    async function cargarProcesos(cia, payrolltype, restoreProcess) {
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+    async function cargarProcesos(cia, payrolltype, procesoPreferido) {
         if (!cia || !payrolltype) {
-            cboProceso.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboProceso);
+            return false;
         }
-        await poblarSelect(
+        const ok = await poblarSelect(
             `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            cboProceso
+            cboProceso,
+            { textoVacio: 'Sin procesos' }
         );
-        if (restoreProcess && optionExists(cboProceso, restoreProcess)) {
-            cboProceso.value = restoreProcess;
-        }
+        if (ok) reseleccionar(cboProceso, procesoPreferido);
+        return ok;
     }
 
-    const ciaIni = cboCia.value.trim();
-    if (ciaIni) {
-        await cargarDependientesCia(ciaIni, guardado);
-        await cargarProcesos(ciaIni, cboPlanilla.value.trim(), guardado.process);
+    async function cargarDependientesCia(cia, pref) {
+        const gen = ++generacionCompania;
+        pref = pref || {};
+        CombosCarga.resetSelect(cboProceso);
+        if (!cia) {
+            CombosCarga.resetSelect(cboPlanilla);
+            CombosCarga.resetSelect(cboTrabajador, 'Todos');
+            CombosCarga.resetSelect(cboConcepto, 'Todos', '0');
+            return false;
+        }
+        const q = encodeURIComponent(cia);
+        const [okPlanilla] = await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${q}`, cboPlanilla, { textoVacio: 'Sin planillas' }),
+            poblarSelect(`/api/selectores/trabajadores?cia=${q}`, cboTrabajador, {
+                incluyeTodos: true, valorTodos: '', textoTodos: 'Todos',
+                alCargar: (sel) => reseleccionar(sel, pref.trabajador)
+            }),
+            poblarSelect(`/api/selectores/conceptos?cia=${q}`, cboConcepto, {
+                incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos',
+                alCargar: (sel) => reseleccionar(sel, pref.concepto)
+            }),
+        ]);
+        if (gen !== generacionCompania || !okPlanilla) return false;
+        reseleccionar(cboPlanilla, pref.planilla);
+        return cargarProcesos(cia, CombosCarga.valorValido(cboPlanilla), pref.proceso);
     }
 
     cboCia.addEventListener('change', async function () {
-        await cargarDependientesCia(this.value.trim(), null);
-        await cargarProcesos(this.value.trim(), cboPlanilla.value.trim(), null);
+        const pref = {
+            planilla: { texto: CombosCarga.textoValido(cboPlanilla) },
+            proceso: { texto: CombosCarga.textoValido(cboProceso) },
+            trabajador: { texto: CombosCarga.textoValido(cboTrabajador) },
+            concepto: { texto: CombosCarga.textoValido(cboConcepto) },
+        };
+        await cargarDependientesCia(CombosCarga.valorValido(this), pref);
         guardarFiltros();
+        actualizarTitulo(txtAnio.value, selectedText(cboProceso));
     });
     cboPlanilla.addEventListener('change', async function () {
-        await cargarProcesos(cboCia.value.trim(), this.value.trim(), null);
+        await cargarProcesos(CombosCarga.valorValido(cboCia), CombosCarga.valorValido(this), null);
         guardarFiltros();
+        actualizarTitulo(txtAnio.value, selectedText(cboProceso));
     });
     [txtAnio, cboProceso, cboTrabajador, cboConcepto, cboUnidad, chkSoloBoleta].forEach((el) => {
         el.addEventListener('change', guardarFiltros);
     });
     txtAnio.addEventListener('change', () => actualizarTitulo(txtAnio.value, selectedText(cboProceso)));
     cboProceso.addEventListener('change', () => actualizarTitulo(txtAnio.value, selectedText(cboProceso)));
+
+    const guardado = leerFiltros();
+    await Promise.all([
+        poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia),
+        CombosCarga.poblarConTodos('/api/selectores/unidades', cboUnidad, {
+            valorTodos: '0', textoTodos: 'Todos', preferido: guardado.unidad || '0'
+        }),
+    ]);
+
+    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
+    if (guardado.anio) txtAnio.value = guardado.anio;
+    if (typeof guardado.solo_boleta === 'boolean') chkSoloBoleta.checked = guardado.solo_boleta;
+    else chkSoloBoleta.checked = true;
+
+    const ciaIni = CombosCarga.valorValido(cboCia);
+    if (ciaIni) {
+        cboCia.disabled = true;
+        try {
+            await cargarDependientesCia(ciaIni, {
+                planilla: { valor: guardado.payrolltype },
+                proceso: { valor: guardado.process },
+                trabajador: { valor: guardado.person },
+                concepto: { valor: guardado.concept },
+            });
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
     actualizarTitulo(txtAnio.value, selectedText(cboProceso));
 });
 </script>

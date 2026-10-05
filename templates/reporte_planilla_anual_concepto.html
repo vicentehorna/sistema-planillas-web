@@ -167,6 +167,7 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
@@ -258,43 +259,38 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function poblarPeriodosAsig(cia, payrolltype, cboIni, cboFin, restore) {
-        cboIni.innerHTML = '<option value="">Seleccione...</option>';
-        cboFin.innerHTML = '<option value="">Seleccione...</option>';
-        cboIni.disabled = true;
-        cboFin.disabled = true;
-        if (!cia || !payrolltype) return;
-        cboIni.innerHTML = '<option value="">Cargando...</option>';
-        try {
-            const res = await fetch(
-                `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
-            );
-            const data = await res.json();
-            cboIni.innerHTML = '<option value="">Seleccione...</option>';
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                cboIni.appendChild(opt);
-            });
-            cboIni.disabled = false;
-            clonarOpcionesSelect(cboIni, cboFin);
-
-            let okIni = false;
-            let okFin = false;
-            if (restore) {
-                okIni = seleccionarPeriodo(cboIni, restore.periodo_ini);
-                okFin = seleccionarPeriodo(cboFin, restore.periodo_fin);
-            }
-            if (!okIni || !okFin) {
-                const def = rangoAnioActualDefecto(cboIni);
-                if (!okIni && def.desde) seleccionarPeriodo(cboIni, def.desde);
-                if (!okFin && def.hasta) seleccionarPeriodo(cboFin, def.hasta);
-            }
-        } catch (err) {
-            console.error(err);
-            cboIni.innerHTML = '<option value="">Error</option>';
-            cboFin.innerHTML = '<option value="">Error</option>';
+        if (!cia || !payrolltype) {
+            CombosCarga.resetSelect(cboIni);
+            CombosCarga.resetSelect(cboFin);
+            return false;
         }
+        CombosCarga.resetSelect(cboFin, 'Cargando...');
+        const ok = await CombosCarga.poblarSelect(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            cboIni,
+            {
+                textoVacio: 'Sin periodos',
+                alCargar: (sel) => {
+                    clonarOpcionesSelect(sel, cboFin);
+                    let okIni = false;
+                    let okFin = false;
+                    if (restore) {
+                        okIni = seleccionarPeriodo(cboIni, restore.periodo_ini);
+                        okFin = seleccionarPeriodo(cboFin, restore.periodo_fin);
+                    }
+                    if (!okIni || !okFin) {
+                        const def = rangoAnioActualDefecto(cboIni);
+                        if (!okIni && def.desde) seleccionarPeriodo(cboIni, def.desde);
+                        if (!okFin && def.hasta) seleccionarPeriodo(cboFin, def.hasta);
+                    }
+                    actualizarTitulo();
+                }
+            }
+        );
+        if (!ok && cboIni.querySelector(`option[value="${CombosCarga.VALOR_REINTENTAR}"]`)) {
+            CombosCarga.resetSelect(cboFin);
+        }
+        return ok;
     }
 
     const NOMBRES_MES = [
@@ -363,39 +359,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         catch (e) { return {}; }
     }
 
-    async function poblarSelect(url, selectElement, opciones) {
-        opciones = opciones || {};
-        const prev = selectElement.value;
-        selectElement.innerHTML = '';
-        if (opciones.incluyeTodos) {
-            const o = document.createElement('option');
-            o.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
-            o.textContent = opciones.textoTodos || 'Todos';
-            selectElement.appendChild(o);
-        } else if (!opciones.sinPlaceholder) {
-            const o = document.createElement('option');
-            o.value = '';
-            o.textContent = opciones.placeholder || 'Seleccione...';
-            selectElement.appendChild(o);
+    const poblarSelect = CombosCarga.poblarSelect;
+
+    function reseleccionar(select, pref) {
+        if (!pref) return false;
+        if (pref.texto) return CombosCarga.seleccionarPorTexto(select, pref.texto);
+        if (pref.valor && optionExists(select, pref.valor)) {
+            select.value = pref.valor;
+            return true;
         }
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            (data || []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-            if (prev && optionExists(selectElement, prev)) selectElement.value = prev;
-            else if (opciones.incluyeTodos) {
-                selectElement.value = opciones.valorTodos != null ? String(opciones.valorTodos) : '0';
-            }
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
+        return false;
     }
 
     function sumMeses(row) {
@@ -596,100 +569,125 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('frmPlanillaAnualConcepto').addEventListener('submit', consultar);
     btnExcel.addEventListener('click', exportExcel);
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-    await poblarSelect('/api/selectores/unidades', cboUnidad, {
-        incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
-    });
+    let generacionCompania = 0;
+    let generacionPlanilla = 0;
 
-    const guardado = leerFiltros();
-    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
-    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
-    if (guardado.unidad && optionExists(cboUnidad, guardado.unidad)) cboUnidad.value = guardado.unidad;
-
-    async function cargarDependientesCia(cia, restore) {
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-        cboProceso.disabled = true;
-        cboPeriodoIni.innerHTML = '<option value="">Seleccione...</option>';
-        cboPeriodoFin.innerHTML = '<option value="">Seleccione...</option>';
-        cboPeriodoIni.disabled = true;
-        cboPeriodoFin.disabled = true;
-        if (!cia) {
-            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
-            cboPlanilla.disabled = true;
-            cboTrabajador.innerHTML = '<option value="">Todos</option>';
-            cboTrabajador.disabled = true;
-            cboConcepto.innerHTML = '<option value="0">Todos</option>';
-            cboConcepto.disabled = true;
-            return;
-        }
-        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-        await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador, {
-            incluyeTodos: true, valorTodos: '', textoTodos: 'Todos'
-        });
-        await poblarSelect(`/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`, cboConcepto, {
-            incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos'
-        });
-        if (restore) {
-            if (restore.payrolltype && optionExists(cboPlanilla, restore.payrolltype)) {
-                cboPlanilla.value = restore.payrolltype;
-            }
-            if (restore.person && optionExists(cboTrabajador, restore.person)) {
-                cboTrabajador.value = restore.person;
-            }
-            if (restore.concept && optionExists(cboConcepto, restore.concept)) {
-                cboConcepto.value = restore.concept;
-            }
-        }
-    }
-
-    async function cargarProcesos(cia, payrolltype, restoreProcess) {
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
+    async function cargarProcesos(cia, payrolltype, procesoPreferido) {
         if (!cia || !payrolltype) {
-            cboProceso.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboProceso);
+            return false;
         }
-        await poblarSelect(
+        const ok = await poblarSelect(
             `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            cboProceso
+            cboProceso,
+            { textoVacio: 'Sin procesos' }
         );
-        if (restoreProcess && optionExists(cboProceso, restoreProcess)) {
-            cboProceso.value = restoreProcess;
-        }
+        if (ok) reseleccionar(cboProceso, procesoPreferido);
+        return ok;
     }
 
-    const ciaIni = cboCia.value.trim();
-    if (ciaIni) {
-        await cargarDependientesCia(ciaIni, guardado);
-        const ptIni = cboPlanilla.value.trim();
-        await cargarProcesos(ciaIni, ptIni, guardado.process);
-        await poblarPeriodosAsig(ciaIni, ptIni, cboPeriodoIni, cboPeriodoFin, guardado);
+    async function cargarDependientesPlanilla(cia, payrolltype, procesoPreferido, rangoPreferido) {
+        const gen = ++generacionPlanilla;
+        const [okProceso, okPeriodos] = await Promise.all([
+            cargarProcesos(cia, payrolltype, procesoPreferido),
+            poblarPeriodosAsig(cia, payrolltype, cboPeriodoIni, cboPeriodoFin, rangoPreferido),
+        ]);
+        return gen === generacionPlanilla && okProceso && okPeriodos;
+    }
+
+    async function cargarDependientesCia(cia, pref) {
+        const gen = ++generacionCompania;
+        generacionPlanilla++;
+        pref = pref || {};
+        CombosCarga.resetSelect(cboProceso);
+        CombosCarga.resetSelect(cboPeriodoIni);
+        CombosCarga.resetSelect(cboPeriodoFin);
+        if (!cia) {
+            CombosCarga.resetSelect(cboPlanilla);
+            CombosCarga.resetSelect(cboTrabajador, 'Todos');
+            CombosCarga.resetSelect(cboConcepto, 'Todos', '0');
+            return false;
+        }
+        const q = encodeURIComponent(cia);
+        const [okPlanilla] = await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${q}`, cboPlanilla, { textoVacio: 'Sin planillas' }),
+            poblarSelect(`/api/selectores/trabajadores?cia=${q}`, cboTrabajador, {
+                incluyeTodos: true, valorTodos: '', textoTodos: 'Todos',
+                alCargar: (sel) => reseleccionar(sel, pref.trabajador)
+            }),
+            poblarSelect(`/api/selectores/conceptos?cia=${q}`, cboConcepto, {
+                incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos',
+                alCargar: (sel) => reseleccionar(sel, pref.concepto)
+            }),
+        ]);
+        if (gen !== generacionCompania || !okPlanilla) return false;
+        reseleccionar(cboPlanilla, pref.planilla);
+        return cargarDependientesPlanilla(cia, CombosCarga.valorValido(cboPlanilla), pref.proceso, pref.rango);
+    }
+
+    function refreshTitulo() {
+        actualizarTitulo();
     }
 
     cboCia.addEventListener('change', async function () {
-        await cargarDependientesCia(this.value.trim(), null);
-        const pt = cboPlanilla.value.trim();
-        await cargarProcesos(this.value.trim(), pt, null);
-        await poblarPeriodosAsig(this.value.trim(), pt, cboPeriodoIni, cboPeriodoFin, null);
+        const pref = {
+            planilla: { texto: CombosCarga.textoValido(cboPlanilla) },
+            proceso: { texto: CombosCarga.textoValido(cboProceso) },
+            trabajador: { texto: CombosCarga.textoValido(cboTrabajador) },
+            concepto: { texto: CombosCarga.textoValido(cboConcepto) },
+            rango: {
+                periodo_ini: CombosCarga.valorValido(cboPeriodoIni),
+                periodo_fin: CombosCarga.valorValido(cboPeriodoFin),
+            },
+        };
+        await cargarDependientesCia(CombosCarga.valorValido(this), pref);
         guardarFiltros();
         refreshTitulo();
     });
     cboPlanilla.addEventListener('change', async function () {
-        const cia = cboCia.value.trim();
-        const pt = this.value.trim();
-        await cargarProcesos(cia, pt, null);
-        await poblarPeriodosAsig(cia, pt, cboPeriodoIni, cboPeriodoFin, null);
+        const rango = {
+            periodo_ini: CombosCarga.valorValido(cboPeriodoIni),
+            periodo_fin: CombosCarga.valorValido(cboPeriodoFin),
+        };
+        await cargarDependientesPlanilla(
+            CombosCarga.valorValido(cboCia), CombosCarga.valorValido(this), null, rango
+        );
         guardarFiltros();
         refreshTitulo();
     });
     [cboPeriodoIni, cboPeriodoFin, cboProceso, cboTrabajador, cboConcepto, cboUnidad].forEach((el) => {
         el.addEventListener('change', guardarFiltros);
     });
-    function refreshTitulo() {
-        actualizarTitulo();
-    }
     cboPeriodoIni.addEventListener('change', refreshTitulo);
     cboPeriodoFin.addEventListener('change', refreshTitulo);
     cboProceso.addEventListener('change', refreshTitulo);
+
+    const guardado = leerFiltros();
+    await Promise.all([
+        poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia),
+        CombosCarga.poblarConTodos('/api/selectores/unidades', cboUnidad, {
+            valorTodos: '0', textoTodos: 'Todos', preferido: guardado.unidad || '0'
+        }),
+    ]);
+
+    if (guardado.cia && optionExists(cboCia, guardado.cia)) cboCia.value = guardado.cia;
+    else if (optionExists(cboCia, DEFAULT_CIA)) cboCia.value = DEFAULT_CIA;
+
+    const ciaIni = CombosCarga.valorValido(cboCia);
+    if (ciaIni) {
+        cboCia.disabled = true;
+        try {
+            await cargarDependientesCia(ciaIni, {
+                planilla: { valor: guardado.payrolltype },
+                proceso: { valor: guardado.process },
+                trabajador: { valor: guardado.person },
+                concepto: { valor: guardado.concept },
+                rango: { periodo_ini: guardado.periodo_ini, periodo_fin: guardado.periodo_fin },
+            });
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
     refreshTitulo();
 });
 </script>

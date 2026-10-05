@@ -31158,6 +31158,57 @@ def api_asignacion_conceptos_eliminar_filtrados():
                 pass
 
 
+@app.route('/api/asignacion-conceptos/pasar-temporal', methods=['POST'])
+@login_required
+def api_asignacion_conceptos_pasar_temporal():
+    """sp_pr_pasar_temporal_asignacionconceptos_filtrado_web: permanentes del listado filtrado → temporal."""
+    body = request.get_json(silent=True) or {}
+    p = _asignacion_conceptos_listado_params_from_json(body)
+    prperiodend = _normalize_pr_period(body.get('prperiodend') or body.get('period_end'))
+
+    if not p['cia']:
+        return jsonify({"error": "Seleccione compañía."}), 400
+    if not p['payrolltype']:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+    if not prperiodend:
+        return jsonify({"error": "Indique el periodo fin."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_pasar_temporal_asignacionconceptos_filtrado_web "
+            "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, "
+            "@par_person=?, @nombre=?, @cesados=?, @par_frecuencytype=?, @par_replicationunit=?, "
+            "@par_prperiodend=?, @xlastuser=?",
+            (
+                p['cia'], p['payrolltype'], p['period'], p['concept'], p['person'], p['nombre'],
+                p['cesados'], p['frecuencytype'], p['replicationunit'], prperiodend, _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        row = rows[0] if rows else {}
+        actualizados = int(row.get('actualizados') or 0)
+        omitidos = int(row.get('omitidos') or 0)
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "actualizados": actualizados,
+            "omitidos": omitidos,
+            "mensaje": str(row.get('mensaje') or '').strip(),
+        })
+    except Exception as e:
+        logging.exception("api_asignacion_conceptos_pasar_temporal")
+        return jsonify({"error": _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/reportes/listado-pagos', methods=['POST'])
 @login_required
 def api_reporte_listado_pagos():

@@ -274,6 +274,10 @@
                 <button type="button" class="btn btn-outline-danger btn-sm px-3" id="btnEliminarFiltradosAsigConceptos" disabled>
                     <i class="bi bi-trash"></i> Eliminar
                 </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-3" id="btnPasarTemporalAsigConceptos" disabled
+                        title="Pasa a Temporal las asignaciones Permanentes del listado">
+                    <i class="bi bi-hourglass-split"></i> Pasar a Temporal
+                </button>
                 <span class="ms-auto text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCountAsigConceptos">0</span>
                 </span>
@@ -419,6 +423,34 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalPasarTemporal" tabindex="-1" aria-labelledby="modalPasarTemporalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalPasarTemporalLabel">Pasar a Temporal</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small mb-3" id="lblPasarTemporalResumen"></p>
+                <label for="cboPasarTemporalFin" class="form-label small fw-bold text-muted asig-req">Periodo fin (Hasta)</label>
+                <select id="cboPasarTemporalFin" class="form-select form-select-sm modal-campo-obligatorio" required>
+                    <option value="">Cargando...</option>
+                </select>
+                <p class="asig-hint-periodos">
+                    Las asignaciones quedarán como Temporal hasta este periodo de planilla. No se modifican las que tengan
+                    periodo inicio posterior.
+                </p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm px-4" id="btnConfirmarPasarTemporal">
+                    <i class="bi bi-hourglass-split"></i> Pasar a Temporal
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -429,6 +461,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_GUARDAR = {{ url_for('api_asignacion_conceptos_guardar') | tojson }};
     const URL_ELIMINAR = {{ url_for('api_asignacion_conceptos_eliminar') | tojson }};
     const URL_ELIMINAR_FILTRADOS = {{ url_for('api_asignacion_conceptos_eliminar_filtrados') | tojson }};
+    const URL_PASAR_TEMPORAL = {{ url_for('api_asignacion_conceptos_pasar_temporal') | tojson }};
+    let filasConsultaAsig = [];
+    let filtrosConsultaAsig = null;
+    let modalPasarTemporal = null;
     const HEADERS = [
         'Item', 'Código', 'Empleado', 'Concepto', 'Tipo', 'Valor', 'Moneda',
         'Vigente Desde', 'Hasta', 'C.Costo', 'Tareo', 'Aplica'
@@ -497,10 +533,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('btnNuevaAsignacion').disabled = !(cia && payrolltype);
     }
 
+    function contarPermanentesConsulta() {
+        return filasConsultaAsig.filter(
+            (r) => String(r.flagfrecuencytype || '').trim().toUpperCase() === 'P'
+        ).length;
+    }
+
     function actualizarBtnsResultado(count) {
         const hayRegistros = Number(count) > 0;
         document.getElementById('btnExportExcelAsigConceptos').disabled = !hayRegistros;
         document.getElementById('btnEliminarFiltradosAsigConceptos').disabled = !hayRegistros;
+        document.getElementById('btnPasarTemporalAsigConceptos').disabled = !(hayRegistros && contarPermanentesConsulta() > 0);
     }
 
     function obtenerFiltrosAsigConceptos() {
@@ -1736,8 +1779,96 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function obtenerPeriodoSugerido(cia, payrolltype) {
+        try {
+            const res = await fetch(
+                `/api/aperturar-periodos/periodo-sugerido?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
+            );
+            const data = await res.json().catch(() => ({}));
+            return String((data && data.prperiod) || '').trim();
+        } catch (err) {
+            console.warn('No se pudo obtener el periodo abierto de Fin de mes.', err);
+            return '';
+        }
+    }
+
+    async function abrirModalPasarTemporal() {
+        const permanentes = contarPermanentesConsulta();
+        if (!consultaEjecutada || !filtrosConsultaAsig || permanentes <= 0) {
+            hmAdvertencia('El listado no tiene asignaciones permanentes para pasar a temporal.');
+            return;
+        }
+        const { cia, payrolltype, period } = filtrosConsultaAsig;
+        const total = filasConsultaAsig.length;
+        document.getElementById('lblPasarTemporalResumen').textContent = permanentes === total
+            ? `Se pasarán a Temporal las ${permanentes} asignación(es) Permanente(s) del listado.`
+            : `Se pasarán a Temporal las ${permanentes} asignación(es) Permanente(s) del listado `
+                + `(las ${total - permanentes} restantes ya son temporales y no cambian).`;
+
+        const cbo = document.getElementById('cboPasarTemporalFin');
+        const btnOk = document.getElementById('btnConfirmarPasarTemporal');
+        cbo.innerHTML = '<option value="">Cargando...</option>';
+        cbo.disabled = true;
+        btnOk.disabled = true;
+        modalPasarTemporal.show();
+
+        try {
+            const [periodos, sugerido] = await Promise.all([
+                obtenerPeriodosModal(cia, payrolltype),
+                obtenerPeriodoSugerido(cia, payrolltype),
+            ]);
+            poblarSelectDesdeDatos(cbo, periodos, { incluyeTodos: false });
+            const candidatos = [sugerido, period !== '0' ? period : ''];
+            const elegido = candidatos.find((c) => c && optionExists(cbo, c));
+            if (elegido) cbo.value = elegido;
+            btnOk.disabled = false;
+        } catch (err) {
+            console.error(err);
+            cbo.innerHTML = '<option value="">No se pudieron cargar los periodos</option>';
+        }
+    }
+
+    async function confirmarPasarTemporal() {
+        const cbo = document.getElementById('cboPasarTemporalFin');
+        const prperiodend = cbo.value.trim();
+        if (!prperiodend) {
+            hmAdvertencia('Seleccione el periodo fin.');
+            cbo.focus();
+            return;
+        }
+        if (!filtrosConsultaAsig) {
+            hmAdvertencia('Ejecute primero una consulta con resultados.');
+            return;
+        }
+
+        const btn = document.getElementById('btnConfirmarPasarTemporal');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_PASAR_TEMPORAL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...filtrosConsultaAsig, prperiodend })
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok || payload.error) {
+                hmError(payload.error || 'No se pudieron pasar las asignaciones a temporal.');
+                return;
+            }
+            modalPasarTemporal.hide();
+            hmExito(payload.mensaje || `Se pasaron ${payload.actualizados || 0} asignación(es) a temporal.`);
+            await ejecutarConsulta();
+        } catch (err) {
+            console.error(err);
+            hmError('Error de red o del servidor al pasar a temporal.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
     function reiniciarResultadoConsulta() {
         lastExportAsigConceptos = null;
+        filasConsultaAsig = [];
+        filtrosConsultaAsig = null;
         consultaEjecutada = false;
         document.getElementById('lblRowCountAsigConceptos').textContent = '0';
         document.getElementById('tbody-asignacion-conceptos').innerHTML = '';
@@ -1747,6 +1878,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function ejecutarConsulta() {
         lastExportAsigConceptos = null;
+        filasConsultaAsig = [];
+        filtrosConsultaAsig = null;
         actualizarBtnsResultado(0);
 
         const filtros = obtenerFiltrosAsigConceptos();
@@ -1783,6 +1916,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             const built = renderizarTabla(rows);
+            filasConsultaAsig = rows;
+            filtrosConsultaAsig = { ...filtros };
             lastExportAsigConceptos = {
                 headers: HEADERS.slice(),
                 data: filasParaExcel(built.excelRows),
@@ -1955,6 +2090,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     document.getElementById('btnEliminarFiltradosAsigConceptos').addEventListener('click', eliminarFiltradosAsigConceptos);
+    modalPasarTemporal = new bootstrap.Modal(document.getElementById('modalPasarTemporal'));
+    document.getElementById('btnPasarTemporalAsigConceptos').addEventListener('click', abrirModalPasarTemporal);
+    document.getElementById('btnConfirmarPasarTemporal').addEventListener('click', confirmarPasarTemporal);
 
     try {
         localStorage.removeItem('filtros_asignacion_conceptos');

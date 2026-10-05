@@ -1137,6 +1137,52 @@ def actualizar_fecha_envio_db(company, person, tipodoc):
         return False
 
 
+def periodo_clave_envio_boleta(cursor, company, payrolltype, period_raw):
+    """
+    Periodo con que se graba el envío en PR_DocumentPerson.period: yyyymm (formato portal),
+    o el PRPeriod completo si la planilla tiene varios periodos en el mes (semanal).
+    """
+    period_raw = str(period_raw or '').strip()
+    if len(period_raw) <= 6 or not payrolltype:
+        return period_raw
+    cursor.execute(
+        "SELECT COUNT(*) FROM PR_Period WHERE Company = ? AND PayRollType = ? AND LEFT(PRPeriod, 6) = ?",
+        (company, payrolltype, period_raw[:6]),
+    )
+    row = cursor.fetchone()
+    return period_raw if int((row[0] if row else 0) or 0) > 1 else period_raw[:6]
+
+
+def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
+    """{person: 'dd/mm/yyyy hh:mm'} con el último envío de boleta por correo del periodo."""
+    try:
+        clave = periodo_clave_envio_boleta(cursor, company, payrolltype, period)
+        cursor.execute(
+            """
+            SELECT Person, MAX(FechaEnvio)
+            FROM PR_DocumentPerson
+            WHERE Company = ?
+              AND Tipodocumento = 'BOL'
+              AND FechaEnvio IS NOT NULL
+              AND period = ?
+              AND (
+                    (ISNULL(payrolltype, '') = ? AND ISNULL(processtype, '') = ?)
+                 OR (ISNULL(payrolltype, '') = '' AND ISNULL(processtype, '') = '')
+              )
+            GROUP BY Person
+            """,
+            (company, clave, str(payrolltype or '').strip(), str(processtype or '').strip()),
+        )
+        return {
+            str(r[0] or '').strip(): r[1].strftime('%d/%m/%Y %H:%M')
+            for r in cursor.fetchall()
+            if r[1] is not None
+        }
+    except Exception as e:
+        print(f"Error en get_fechas_envio_boletas: {e}")
+        return {}
+
+
 def registrar_fecha_envio_boleta(
     company,
     person,
@@ -1153,7 +1199,7 @@ def registrar_fecha_envio_boleta(
     - Si ya existe fila BOL del mismo Company/Person/period/(payroll|process),
       actualiza FechaEnvio = GETDATE() (último envío).
     - Si no existe, inserta el registro con FechaEnvio = GETDATE().
-    Periodo portal histórico: yyyymm (6 dígitos), igual que Subir Portal.
+    Periodo: yyyymm como Subir Portal, salvo planillas semanales (periodo_clave_envio_boleta).
     """
     company = str(company or '').strip()
     person = str(person or '').strip()
@@ -1167,12 +1213,11 @@ def registrar_fecha_envio_boleta(
     if not (company and person and period_raw):
         return False
 
-    period_portal = period_raw[:6] if len(period_raw) >= 6 else period_raw
-
     conn = None
     try:
         conn = DatabaseConfig.get_connection()
         cursor = conn.cursor()
+        period_portal = periodo_clave_envio_boleta(cursor, company, payrolltype, period_raw)
 
         cursor.execute(
             """
@@ -1195,7 +1240,7 @@ def registrar_fecha_envio_boleta(
             conn.close()
             return True
 
-        # Misma persona/periodo BOL (p.ej. Subir Portal sin planilla/proceso o solo yyyymm).
+        # Fila BOL del mismo periodo sin planilla/proceso (carga masiva legacy).
         cursor.execute(
             """
             UPDATE PR_DocumentPerson
@@ -1206,6 +1251,8 @@ def registrar_fecha_envio_boleta(
               AND Person = ?
               AND Tipodocumento = ?
               AND period = ?
+              AND ISNULL(payrolltype, '') = ''
+              AND ISNULL(processtype, '') = ''
             """,
             (userid, company, person, tipodoc, period_portal),
         )

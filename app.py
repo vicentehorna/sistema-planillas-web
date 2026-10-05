@@ -65,7 +65,7 @@ except Exception as _weasy_err:
     WEASYPRINT_AVAILABLE = False
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
-from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta
+from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta, get_fechas_envio_boletas
 from tregistro_import import normalizar_num_doc
 from tregistro_pdf_import import construir_resumen_pdf
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
@@ -25340,17 +25340,20 @@ def get_lista_boletas():
             (cia, payroll_type, processtype, period, person, nombre, repunit, costcenter),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
+        fechas_envio = get_fechas_envio_boletas(cursor, cia, payroll_type, processtype, period) if rows else {}
         trabajadores = []
         for r in rows:
             fi = _jsonable_value(r.get('fechaingreso'))
             fc = _jsonable_value(r.get('fechacese'))
+            pid = str(r.get('person') or '').strip()
             trabajadores.append(
                 {
-                    'person': str(r.get('person') or '').strip(),
+                    'person': pid,
                     'nombre': str(r.get('nombre') or '').strip(),
                     'email': str(r.get('email') or '').strip(),
                     'ingreso': fi if fi is not None else '',
                     'cese': fc if fc is not None else '',
+                    'fecha_envio': fechas_envio.get(pid, ''),
                 }
             )
 

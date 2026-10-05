@@ -169,7 +169,7 @@
                         <th>Nombre del trabajador</th>
                         <th style="width: 14rem;">Email</th>
                         <th style="width: 7rem;">F. ingreso</th>
-                        <th style="width: 7rem;">F. cese</th>
+                        <th style="width: 8rem;" title="Fecha y hora del último envío por email">F. envío</th>
                         <th style="width: 8rem;" class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -593,7 +593,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             const td4 = document.createElement('td');
             td4.textContent = String(t.ingreso || '').trim();
             const td5 = document.createElement('td');
-            td5.textContent = String(t.cese || '').trim();
+            td5.className = 'col-fecha-envio';
+            td5.textContent = String(t.fecha_envio || '').trim();
             const btnPreview = document.createElement('button');
             btnPreview.type = 'button';
             btnPreview.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
@@ -968,8 +969,89 @@ document.addEventListener('DOMContentLoaded', async function () {
         };
     }
 
+    function escaparHtml(v) {
+        return String(v || '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#39;');
+    }
+
+    /** Devuelve los códigos a enviar, o null si el usuario cancela. */
+    async function confirmarReenvioBoletas(ids) {
+        const porPersona = new Map(boletasCache.map((t) => [String(t.person || '').trim(), t]));
+        const enviados = ids.filter((id) => String(porPersona.get(id)?.fecha_envio || '').trim());
+        if (!enviados.length) return ids;
+        const yaEnviados = new Set(enviados);
+        const pendientes = ids.filter((id) => !yaEnviados.has(id));
+        const MAX_LISTA = 8;
+        const filas = enviados.slice(0, MAX_LISTA).map((id) => {
+            const t = porPersona.get(id) || {};
+            return `<tr style="border-bottom:1px solid #f1f1f1;">
+                        <td style="padding:3px 6px;">${escaparHtml(t.nombre || id)}</td>
+                        <td style="padding:3px 6px; white-space:nowrap;">${escaparHtml(t.fecha_envio)}</td>
+                    </tr>`;
+        }).join('');
+        const extra = enviados.length > MAX_LISTA
+            ? `<div class="small text-muted mt-1 text-start">... y ${enviados.length - MAX_LISTA} más.</div>`
+            : '';
+        const res = await Swal.fire({
+            title: 'Boletas ya enviadas',
+            icon: 'warning',
+            width: '640px',
+            html: `
+                <p class="mb-2"><b>${enviados.length}</b> de los <b>${ids.length}</b> trabajador(es) seleccionados ya recibieron esta boleta por email. ¿Desea enviarla nuevamente?</p>
+                <div style="max-height:220px; overflow-y:auto; border:1px solid #eee;">
+                    <table style="width:100%; font-size:0.85em; text-align:left; border-collapse:collapse;">
+                        <thead><tr style="border-bottom:2px solid #ddd;"><th style="padding:3px 6px;">Trabajador</th><th style="padding:3px 6px;">Enviado</th></tr></thead>
+                        <tbody>${filas}</tbody>
+                    </table>
+                </div>
+                ${extra}
+                <p class="small text-muted mt-2 mb-0">Cada reenvío consume el límite diario de correos.</p>`,
+            showCancelButton: true,
+            showDenyButton: pendientes.length > 0,
+            confirmButtonText: pendientes.length > 0 ? `Reenviar a todos (${ids.length})` : `Sí, reenviar (${ids.length})`,
+            denyButtonText: `Enviar solo a los no enviados (${pendientes.length})`,
+            cancelButtonText: 'Cancelar',
+            confirmButtonColor: '#dc3545',
+            denyButtonColor: '#1a4b84',
+            focusCancel: true,
+        });
+        if (res.isConfirmed) return ids;
+        if (res.isDenied) return pendientes;
+        return null;
+    }
+
+    async function refrescarFechasEnvio() {
+        if (!filtrosListaActuales) return;
+        try {
+            const res = await fetch(URL_LISTA, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ...filtrosListaActuales, person: '0' })
+            });
+            if (!res.ok) return;
+            const data = await res.json();
+            const rows = Array.isArray(data) ? data : (Array.isArray(data.rows) ? data.rows : []);
+            const fechas = new Map(rows.map((t) => [String(t.person || '').trim(), String(t.fecha_envio || '').trim()]));
+            boletasCache.forEach((t) => {
+                const pid = String(t.person || '').trim();
+                if (fechas.has(pid)) t.fecha_envio = fechas.get(pid);
+            });
+            document.querySelectorAll('#tbodyBoletas tr.boleta-row').forEach((tr) => {
+                const pid = tr.querySelector('.check-persona')?.value || '';
+                const td = tr.querySelector('.col-fecha-envio');
+                if (td && fechas.has(pid)) td.textContent = fechas.get(pid);
+            });
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
     async function ejecutarAccion() {
-        const ids = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
+        let ids = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
         if (!ids.length) {
             Swal.fire('Atención', 'Por favor, seleccione al menos un trabajador.', 'warning');
             return;
@@ -984,6 +1066,11 @@ document.addEventListener('DOMContentLoaded', async function () {
                 'warning'
             );
             return;
+        }
+        if (modo === 'mail') {
+            const idsEnvio = await confirmarReenvioBoletas(ids);
+            if (!idsEnvio || !idsEnvio.length) return;
+            ids = idsEnvio;
         }
         const btn = document.getElementById('btnEjecutarBoletas');
         const prev = btn.innerHTML;
@@ -1119,6 +1206,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 }
                 if (done) break;
             }
+
+            await refrescarFechasEnvio();
 
             if (erroresDetalle.length > 0) {
                 const escapeHtml = (v) => String(v || '')

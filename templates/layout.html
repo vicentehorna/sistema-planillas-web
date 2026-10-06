@@ -1595,8 +1595,8 @@
                 </li>
                 {% endif %}
 
-                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_planilla_todas_planillas_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page', 'reporte_planilla_anual_concepto_page', 'reporte_trabajadores_page', 'reporte_envio_boletas_page') %}
-                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_planilla_todas_planillas') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') or can_menu('reporte_planilla_anual_concepto') or can_menu('reporte_trabajadores') or can_menu('reporte_envio_boletas') %}
+                {% set planillas_reportes_active = request.endpoint in ('reporte_resumen_total', 'reporte_planilla_vertical_page', 'reporte_planilla_consolidada_page', 'reporte_planilla_todas_planillas_page', 'reporte_consolidado_provisiones_page', 'reporte_listado_pagos_page', 'reporte_liquidaciones', 'reporte_planilla_por_conceptos_page', 'reporte_planilla_anual_trabajador_page', 'reporte_planilla_anual_concepto_page', 'reporte_trabajadores_page', 'reporte_envio_boletas_page') %}
+                {% set show_planillas_reportes = can_menu('reporte_resumen_total') or can_menu('reporte_planilla_vertical') or can_menu('reporte_planilla_consolidada') or can_menu('reporte_planilla_todas_planillas') or can_menu('reporte_consolidado_provisiones') or can_menu('reporte_listado_pagos') or can_menu('reporte_promedio_liquidaciones') or can_menu('reporte_planilla_por_conceptos') or can_menu('reporte_planilla_anual_trabajador') or can_menu('reporte_planilla_anual_concepto') or can_menu('reporte_trabajadores') or can_menu('reporte_envio_boletas') %}
                 {% if show_planillas_reportes %}
                 <li class="sidebar-menu-parent {{ 'active' if planillas_reportes_active else '' }}">
                     <a href="#submenuPlanillasReportes"
@@ -1634,6 +1634,13 @@
                         <li class="{{ 'active' if request.endpoint == 'reporte_planilla_todas_planillas_page' else '' }}">
                             <a href="{{ url_for('reporte_planilla_todas_planillas_page') }}" title="Consolidado de Planillas">
                                 <i class="bi bi-collection"></i><span class="sidebar-link-text">Consolidado de Planillas</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('reporte_consolidado_provisiones') %}
+                        <li class="{{ 'active' if request.endpoint == 'reporte_consolidado_provisiones_page' else '' }}">
+                            <a href="{{ url_for('reporte_consolidado_provisiones_page') }}" title="Consolidado de Provisiones">
+                                <i class="bi bi-piggy-bank"></i><span class="sidebar-link-text">Consolidado de Provisiones</span>
                             </a>
                         </li>
                         {% endif %}

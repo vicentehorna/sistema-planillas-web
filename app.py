@@ -8382,6 +8382,12 @@ def reporte_planilla_consolidada_page():
     return render_template('reporte_planilla_consolidada.html')
 
 
+@app.route('/reporte-consolidado-provisiones')
+@login_required
+def reporte_consolidado_provisiones_page():
+    return render_template('reporte_consolidado_provisiones.html')
+
+
 @app.route('/reporte-planilla-todas-planillas')
 @login_required
 def reporte_planilla_todas_planillas_page():
@@ -26953,6 +26959,41 @@ def api_periodos_consolidada():
                 pass
 
 
+@app.route('/api/selectores/periodos-provisiones')
+@login_required
+def api_periodos_provisiones():
+    """sp_pr_selectorperiodos_provisiones_web @payroll_desc → period, periodo (Consolidado de Provisiones)."""
+    payroll_desc = (request.args.get('payroll_desc') or request.args.get('payrolltype') or '').strip()
+    if not payroll_desc:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        userid = _userid_para_filtro_usercompany()
+        if userid is not None:
+            cursor.execute(
+                "EXEC sp_pr_selectorperiodos_provisiones_web @payroll_desc=?, @userid=?",
+                (payroll_desc, userid),
+            )
+        else:
+            cursor.execute(
+                "EXEC sp_pr_selectorperiodos_provisiones_web @payroll_desc=?",
+                (payroll_desc,),
+            )
+        rows = cursor.fetchall()
+        return jsonify([{"id": r.period, "text": r.periodo} for r in rows])
+    except Exception:
+        logging.exception("api_periodos_provisiones")
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/bancos-consolidada')
 @login_required
 def api_bancos_consolidada():
@@ -28688,6 +28729,136 @@ def reporte_planilla_consolidada_post():
         return jsonify({"headers": headers, "data": resultado})
     except Exception as e:
         logging.exception("reporte_planilla_consolidada_post")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+_PROVISION_SUFIJOS = {
+    'PROVISION_CTS': 'CTS',
+    'PROVISION_GRATIF': 'GRATI',
+    'PROVISION_VACACIONES': 'VAC',
+}
+_PROVISION_ORDEN = {'PROVISION_CTS': 0, 'PROVISION_GRATIF': 1, 'PROVISION_VACACIONES': 2}
+
+
+@app.route('/reporte_consolidado_provisiones', methods=['POST'])
+@login_required
+def reporte_consolidado_provisiones_post():
+    """
+    Consolidado de Provisiones (CTS + Gratificación + Vacaciones) de todas las empresas.
+    sp_pr_reporteconsolidado_provisiones_web devuelve filas largas; aquí se arma la matriz
+    (Empresa + columnas fijas del vertical + conceptos). Un concepto presente en más de
+    una provisión se muestra en una columna por proceso (sufijo CTS / GRATI / VAC).
+    """
+    body = request.get_json(silent=True) or {}
+    payroll_desc = (body.get('payroll_desc') or body.get('payroll_description') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = (body.get('person') or '0').strip() or '0'
+    salarybank_name = str(body.get('salarybank_name') or '').strip()
+    fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+
+    if not payroll_desc or not period:
+        return jsonify({"error": "Debe indicar tipo de planilla y periodo."}), 400
+    if fecha_ingreso_all == 'N':
+        if not fecha_ingreso_desde or not fecha_ingreso_hasta:
+            return jsonify({"error": "Indique fecha de ingreso desde y hasta."}), 400
+        if fecha_ingreso_desde > fecha_ingreso_hasta:
+            return jsonify({"error": "La fecha de ingreso desde no puede ser mayor que hasta."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reporteconsolidado_provisiones_web "
+            "@payroll_desc=?, @period=?, @person=?, @salarybank_name=?, @repunit=?, "
+            "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @userid=?",
+            (
+                payroll_desc, period, person, salarybank_name, repunit,
+                fecha_ingreso_all,
+                _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else '',
+                _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else '',
+                _userid_para_filtro_usercompany(),
+            ),
+        )
+        col_names = [str(c[0]).strip().lower() for c in (cursor.description or [])]
+        rows = [{col_names[i]: r[i] for i in range(len(col_names))} for r in cursor.fetchall()]
+
+        procesos_por_codigo = {}
+        texto_por_codigo = {}
+        orden_por_codigo = {}
+        for rd in rows:
+            fc = str(rd.get('formulacode') or '').strip()
+            procesos_por_codigo.setdefault(fc, set()).add(str(rd.get('proceso') or '').strip())
+            if fc not in texto_por_codigo:
+                texto_por_codigo[fc] = str(rd.get('printtext') or fc).strip().upper()
+            rep = rd.get('reporden')
+            rep = int(rep) if rep is not None else 9999
+            orden_por_codigo[fc] = min(orden_por_codigo.get(fc, rep), rep)
+
+        def _col_key(fc, proceso):
+            return (fc, proceso) if len(procesos_por_codigo.get(fc, ())) > 1 else (fc, None)
+
+        claves = set()
+        for rd in rows:
+            fc = str(rd.get('formulacode') or '').strip()
+            claves.add(_col_key(fc, str(rd.get('proceso') or '').strip()))
+        claves = sorted(
+            claves,
+            key=lambda k: (orden_por_codigo.get(k[0], 9999), texto_por_codigo.get(k[0], k[0]),
+                           _PROVISION_ORDEN.get(k[1], -1)),
+        )
+        cuenta_texto = {}
+        for fc in {k[0] for k in claves}:
+            cuenta_texto[texto_por_codigo[fc]] = cuenta_texto.get(texto_por_codigo[fc], 0) + 1
+        concept_headers = []
+        for fc, proceso in claves:
+            label = texto_por_codigo[fc]
+            if cuenta_texto.get(label, 0) > 1:
+                label = f"{label} ({fc})"
+            if proceso:
+                label = f"{label} {_PROVISION_SUFIJOS.get(proceso, proceso)}"
+            concept_headers.append(label)
+        idx_col = {k: i for i, k in enumerate(claves)}
+
+        filas = {}
+        orden_filas = []
+        for rd in rows:
+            pk = (str(rd.get('company') or '').strip(), str(rd.get('person') or '').strip())
+            item = filas.get(pk)
+            if item is None:
+                item = {key: _jsonable_value(rd.get(key)) for key in _PLANILLA_VERTICAL_STATIC_KEYS}
+                item['company_name'] = str(rd.get('empresa') or pk[0]).strip()
+                item['_valores'] = [None] * len(claves)
+                filas[pk] = item
+                orden_filas.append(pk)
+            fc = str(rd.get('formulacode') or '').strip()
+            i = idx_col[_col_key(fc, str(rd.get('proceso') or '').strip())]
+            valor = _float_sp_cell(rd.get('valor'))
+            prev = item['_valores'][i]
+            item['_valores'][i] = valor if prev is None else (prev or 0) + (valor or 0)
+
+        orden_filas.sort(key=lambda pk: (
+            filas[pk]['company_name'].upper(), str(filas[pk].get('name') or '').strip().upper(), pk[1],
+        ))
+        headers = ['Empresa'] + list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES) + concept_headers
+        resultado = []
+        for pk in orden_filas:
+            item = filas[pk]
+            fila = [item['company_name']]
+            for key in _PLANILLA_VERTICAL_STATIC_KEYS:
+                fila.append(item.get(key))
+            fila.extend(0.0 if v is None else v for v in item['_valores'])
+            resultado.append(fila)
+        return jsonify({"headers": headers, "data": resultado})
+    except Exception as e:
+        logging.exception("reporte_consolidado_provisiones_post")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

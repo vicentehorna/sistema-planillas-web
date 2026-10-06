@@ -753,6 +753,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script>
 (function () {
     const ES_GARC = {{ 'true' if (sql_database or '')|lower == 'hm_garc' else 'false' }};
@@ -1005,25 +1006,60 @@
         return data;
     }
 
-    async function poblarSelect(url, selectElement, placeholder) {
-        if (!selectElement) return;
-        const valPrev = selectElement.value;
-        selectElement.innerHTML = `<option value="">${placeholder || 'Seleccione...'}</option>`;
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            (data || []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? item.id : item.value;
-                opt.textContent = item.text != null ? item.text : item.label;
-                selectElement.appendChild(opt);
-            });
-            if (valPrev && Array.from(selectElement.options).some((o) => o.value === valPrev)) {
-                selectElement.value = valPrev;
-            }
-        } catch (e) {
-            console.error(e);
+    const poblarSelect = CombosCarga.poblarSelect;
+    const { resetSelect, valorValido, textoValido, seleccionarPorTexto } = CombosCarga;
+
+    /* Cada cambio de compañía/planilla/proceso invalida cascadas, listados y detalles aún en curso. */
+    let generacionFiltros = 0;
+    let seqListado = 0;
+    let seqFormula = 0;
+
+    function opcionExiste(select, valor) {
+        return !!valor && Array.from(select.options).some((o) => o.value === valor);
+    }
+
+    function cerrarEdicionFormula() {
+        seqFormula++;
+        formulaSeleccionada = null;
+        mostrarPanelEdicion(false);
+    }
+
+    async function cargarProcesosFormulas(procesoPreferido) {
+        const cia = valorValido(cboCia);
+        const pt = valorValido(cboPlanilla);
+        if (!cia || !pt) {
+            resetSelect(cboProceso);
+            return false;
         }
+        const ok = await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+            cboProceso,
+            { textoVacio: 'Sin procesos' }
+        );
+        if (ok && procesoPreferido) seleccionarPorTexto(cboProceso, procesoPreferido);
+        return ok;
+    }
+
+    /* Conserva planilla y proceso por nombre al cambiar de compañía. */
+    async function cargarDependientesCompania(planillaPrevia, procesoPrevio) {
+        const gen = ++generacionFiltros;
+        const cia = valorValido(cboCia);
+        resetSelect(cboProceso);
+        if (!cia) {
+            resetSelect(cboPlanilla);
+            return false;
+        }
+        const ok = await poblarSelect(
+            `/api/selectores/planillas?cia=${encodeURIComponent(cia)}`,
+            cboPlanilla,
+            { textoVacio: 'Sin planillas' }
+        );
+        if (gen !== generacionFiltros || !ok) return false;
+        if (planillaPrevia && seleccionarPorTexto(cboPlanilla, planillaPrevia)) {
+            const okProceso = await cargarProcesosFormulas(procesoPrevio);
+            return gen === generacionFiltros && okProceso;
+        }
+        return true;
     }
 
     function guardarFiltros() {
@@ -2094,9 +2130,10 @@
     }
 
     async function cargarListado() {
-        const cia = cboCia.value.trim();
-        const payrolltype = cboPlanilla.value.trim();
-        const processtype = cboProceso.value.trim();
+        const seq = ++seqListado;
+        const cia = valorValido(cboCia);
+        const payrolltype = valorValido(cboPlanilla);
+        const processtype = valorValido(cboProceso);
         guardarFiltros();
 
         if (!cia || !payrolltype || !processtype) {
@@ -2115,12 +2152,14 @@
                 body: JSON.stringify({ cia, payrolltype, processtype }),
             });
             const data = await leerJson(res);
+            if (seq !== seqListado) return;
             formulasCache = data.rows || [];
             const ids = new Set(formulasCache.map((r) => r.formulaheader));
             formulasMarcadas.forEach((fh) => { if (!ids.has(fh)) formulasMarcadas.delete(fh); });
             renderListaFormulas(formulasCache);
             ensureSelectoresCache(cia, payrolltype).catch((e) => console.error(e));
         } catch (err) {
+            if (seq !== seqListado) return;
             formulasCache = [];
             tbodyFormulas.innerHTML = `<tr><td colspan="7" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
         }
@@ -2128,6 +2167,7 @@
 
     async function seleccionarFormula(row) {
         if (!row || !row.formulaheader) return;
+        const seq = ++seqFormula;
         formulaSeleccionada = row;
         renderListaFormulas(formulasCache);
 
@@ -2146,9 +2186,11 @@
                     body: JSON.stringify({ cia, formulaheader: row.formulaheader }),
                 }).then(leerJson),
             ]);
+            if (seq !== seqFormula) return;
             poblarSelectoresCabecera();
             cargarFormulario(data.cabecera, data.detalle || []);
         } catch (err) {
+            if (seq !== seqFormula) return;
             alert(err.message || 'No se pudo cargar la fórmula.');
         }
     }
@@ -2220,6 +2262,7 @@
             alert('Seleccione compañía, planilla y proceso antes de crear una fórmula.');
             return;
         }
+        const seq = ++seqFormula;
         formulaSeleccionada = null;
         renderListaFormulas(formulasCache);
         document.getElementById('hidFormulaHeader').value = '';
@@ -2243,6 +2286,7 @@
         mostrarPanelEdicion(true);
         try {
             await ensureSelectoresCache(cia, payrolltype);
+            if (seq !== seqFormula) return;
             poblarSelectoresCabecera();
         } catch (err) {
             console.error(err);
@@ -2482,27 +2526,34 @@
     });
 
     // Cargar compañías de inmediato (antes de otros bindings que podrían fallar).
+    /* Bloquea compañía mientras se restaura la cascada guardada para que no se crucen cargas. */
     (async function initCompanias() {
         try {
-            await poblarSelect('/api/selectores/companias', cboCia);
+            const companiasOk = await poblarSelect('/api/selectores/companias', cboCia);
             const saved = cargarFiltros();
-            if (saved.cia && Array.from(cboCia.options).some((o) => o.value === saved.cia)) {
-                cboCia.value = saved.cia;
-                await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(saved.cia)}`, cboPlanilla);
-                cboPlanilla.disabled = false;
-                if (saved.payrolltype && Array.from(cboPlanilla.options).some((o) => o.value === saved.payrolltype)) {
-                    cboPlanilla.value = saved.payrolltype;
-                    await poblarSelect(
-                        `/api/selectores/procesos?cia=${encodeURIComponent(saved.cia)}&payrolltype=${encodeURIComponent(saved.payrolltype)}`,
-                        cboProceso
-                    );
-                    cboProceso.disabled = false;
-                    if (saved.processtype && Array.from(cboProceso.options).some((o) => o.value === saved.processtype)) {
-                        cboProceso.value = saved.processtype;
-                        await cargarListado();
-                    }
-                }
+            if (!companiasOk || !opcionExiste(cboCia, saved.cia)) return;
+            cboCia.value = saved.cia;
+            const gen = ++generacionFiltros;
+            cboCia.disabled = true;
+            try {
+                const okPlanilla = await poblarSelect(
+                    `/api/selectores/planillas?cia=${encodeURIComponent(saved.cia)}`,
+                    cboPlanilla,
+                    { textoVacio: 'Sin planillas' }
+                );
+                if (!okPlanilla || gen !== generacionFiltros || !opcionExiste(cboPlanilla, saved.payrolltype)) return;
+                cboPlanilla.value = saved.payrolltype;
+                const okProceso = await poblarSelect(
+                    `/api/selectores/procesos?cia=${encodeURIComponent(saved.cia)}&payrolltype=${encodeURIComponent(saved.payrolltype)}`,
+                    cboProceso,
+                    { textoVacio: 'Sin procesos' }
+                );
+                if (!okProceso || gen !== generacionFiltros || !opcionExiste(cboProceso, saved.processtype)) return;
+                cboProceso.value = saved.processtype;
+            } finally {
+                cboCia.disabled = false;
             }
+            if (gen === generacionFiltros) await cargarListado();
         } catch (err) {
             console.error('Error iniciando Fórmulas:', err);
         }
@@ -2581,34 +2632,33 @@
         multiPickerIdx = -1;
     });
 
+    /* Al cambiar el contexto se cierra la fórmula abierta y el listado se recarga con el nuevo filtro. */
     cboCia.addEventListener('change', async function () {
         invalidarCacheSelectores();
-        const cia = this.value.trim();
-        cboPlanilla.disabled = !cia;
-        cboProceso.disabled = true;
-        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-        if (cia) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-            cboPlanilla.disabled = false;
-        }
-        guardarFiltros();
+        cerrarEdicionFormula();
+        const cascada = cargarDependientesCompania(textoValido(cboPlanilla), textoValido(cboProceso));
+        const gen = generacionFiltros;
+        cargarListado();
+        await cascada;
+        if (gen === generacionFiltros) cargarListado();
     });
 
     cboPlanilla.addEventListener('change', async function () {
         invalidarCacheSelectores();
-        const cia = cboCia.value.trim();
-        const pt = this.value.trim();
-        cboProceso.disabled = !pt;
-        cboProceso.innerHTML = '<option value="">Seleccione...</option>';
-        if (cia && pt) {
-            await poblarSelect(`/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`, cboProceso);
-            cboProceso.disabled = false;
-        }
-        guardarFiltros();
+        cerrarEdicionFormula();
+        const gen = ++generacionFiltros;
+        const procesoPrevio = textoValido(cboProceso);
+        resetSelect(cboProceso);
+        cargarListado();
+        await cargarProcesosFormulas(procesoPrevio);
+        if (gen === generacionFiltros) cargarListado();
     });
 
-    cboProceso.addEventListener('change', guardarFiltros);
+    cboProceso.addEventListener('change', function () {
+        cerrarEdicionFormula();
+        ++generacionFiltros;
+        cargarListado();
+    });
 })();
 </script>
 {% endblock %}

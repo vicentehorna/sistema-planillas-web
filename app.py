@@ -5484,8 +5484,20 @@ def enviar_correo_certificado_quinta(destinatario, nombre_empleado, anio, sexo, 
         return False, str(e)
 
 
+_BOLETA_DOBLE_DBS = frozenset({'hm_ultra', 'hm_lumat'})
+
+
+def _usa_boleta_doble():
+    """Boleta original + copia en una hoja A4 (boleta_doble_ultra.html)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() in _BOLETA_DOBLE_DBS
+    except Exception:
+        return False
+
+
 def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
-    """Días de faltas justificadas y suspensión (no los trae sp_pr_generarboleta_web de hm_ultra)."""
+    """Días de faltas justificadas y suspensión (no los trae sp_pr_generarboleta_web)."""
     extra = {'dias_faltas_justif': 0, 'dias_suspension': 0}
     columnas = {'CANT_DIAS_AUS_JUSTI': 'dias_faltas_justif', 'DIASUSPENSION': 'dias_suspension'}
     try:
@@ -5553,7 +5565,7 @@ def generar_pdf_en_memoria(params):
             'EXEC sp_pr_detalleboletaaportes_web @cia=?, @process=?, @payrolltype=?, @period=?, @person=?',
             (cia, processtype, payroll_type, period, person),
         )
-        boleta_doble = _es_cliente_ultraseguros()
+        boleta_doble = _usa_boleta_doble()
         if boleta_doble:
             cabecera = dict(cabecera or {})
             cabecera.update(_boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person))

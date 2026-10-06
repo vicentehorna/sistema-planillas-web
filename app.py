@@ -28246,7 +28246,8 @@ def _fetch_planilla_vertical_for_company(
                  INNER JOIN PR_Employee ON (
                      PR_AccountProfile.AccountProfile = PR_Employee.AccountProfile
                      AND PR_AccountProfile.company = ?
-                     AND PR_Employee.Person = xx_reporteplanilla.person)) AS profile,
+                     AND PR_Employee.Person = xx_reporteplanilla.person
+                     AND PR_Employee.Company = ?)) AS profile,
                 (SELECT SUM(hourday) FROM PR_REGISTERHOUR
                  WHERE period = ? AND Company = ? AND person = xx_reporteplanilla.person) AS horas,
                 CASE WHEN (
@@ -28257,13 +28258,15 @@ def _fetch_planilla_vertical_for_company(
                     INNER JOIN PR_Employee ON (
                         ERP_Bank.Bank = PR_Employee.CTSBank
                         AND ERP_Bank.company = ?
-                        AND PR_Employee.Person = xx_reporteplanilla.person)
+                        AND PR_Employee.Person = xx_reporteplanilla.person
+                        AND PR_Employee.Company = ?)
                 ) ELSE (
                     SELECT name FROM ERP_Bank
                     INNER JOIN PR_Employee ON (
                         ERP_Bank.Bank = PR_Employee.SalaryBank
                         AND ERP_Bank.company = ?
-                        AND PR_Employee.Person = xx_reporteplanilla.person)
+                        AND PR_Employee.Person = xx_reporteplanilla.person
+                        AND PR_Employee.Company = ?)
                 ) END AS banco,
                 CASE WHEN (
                     SELECT ShortName FROM PR_ProcessType
@@ -28281,10 +28284,13 @@ def _fetch_planilla_vertical_for_company(
         """
         params_datos = (
             cia,
+            cia,
             period,
             cia,
             cia,
             process,
+            cia,
+            cia,
             cia,
             cia,
             cia,

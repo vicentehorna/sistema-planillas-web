@@ -31630,6 +31630,8 @@ def reporte_log_calculo_post():
                         fila.append(float(val))
                     except Exception:
                         fila.append(_jsonable_value(val))
+                elif key == 'fecha' and isinstance(val, datetime):
+                    fila.append(val.strftime('%d/%m/%Y %H:%M'))
                 else:
                     fila.append(_jsonable_value(val))
             resultado.append(fila)

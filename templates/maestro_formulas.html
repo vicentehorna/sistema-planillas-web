@@ -2195,6 +2195,19 @@
         }
     }
 
+    /** El grupo puede venir de otra compañía (réplica copia el código tal cual): se toma el de igual nombre. */
+    function seleccionarGrupoFormula(codigo, nombre) {
+        const sel = document.getElementById('cboGrupoFormula');
+        const cod = String(codigo || '').trim();
+        const opciones = Array.from(sel.options);
+        let opt = opciones.find((o) => o.value && String(o.value).trim() === cod);
+        if (!opt && cod) {
+            const nom = String(nombre || '').trim().toUpperCase();
+            opt = nom ? opciones.find((o) => o.value && o.textContent.trim().toUpperCase() === nom) : null;
+        }
+        sel.value = opt ? opt.value : '';
+    }
+
     function cargarFormulario(cab, detalle) {
         document.getElementById('hidFormulaHeader').value = cab.formulaheader || '';
         document.getElementById('hidModo').value = 'U';
@@ -2205,7 +2218,7 @@
         document.getElementById('cboParametroFormula').value = cab.parametroformula || '';
         document.getElementById('txtOrden').value = cab.orden != null ? cab.orden : '';
         document.getElementById('chkFlagTruncate').checked = String(cab.flagtruncate || 'N').toUpperCase() === 'Y';
-        document.getElementById('cboGrupoFormula').value = cab.grupoformula || '';
+        seleccionarGrupoFormula(cab.grupoformula, cab.grupoformula_desc);
         document.getElementById('hidDescription').value = cab.description || '';
         document.getElementById('hidFormulaCode').value = cab.formulacode || '';
         document.getElementById('tituloEdicionFormula').textContent = cab.concepto_desc || cab.formulacode || 'Editar fórmula';

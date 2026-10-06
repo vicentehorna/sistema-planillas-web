@@ -21,6 +21,7 @@ Sintaxis soportada:
   MES() / MONTH()       -- mes numérico (1-12) del periodo en cálculo (@period)
   ANIO() / YEAR()       -- año (YYYY) del periodo en cálculo
   MES("YYYYMMDD") / ANIO("YYYYMMDD")  -- literal (se resuelve al compilar)
+  ROUND(expr [, decimales]) / REDONDEAR(expr [, decimales])  -- redondeo (por defecto 2 decimales, 0 a 4)
   números, 6.75%, +, -, *, /, paréntesis, comparaciones >, <, >=, <=, =, <>
 """
 from __future__ import annotations
@@ -41,6 +42,7 @@ _KEYWORDS = {
     "EMPLOYEE", "EMPLEADO", "PROC",
     "PAYROLL", "PLANILLA", "PROCESS", "PROCESO",
     "MES", "ANIO", "MONTH", "YEAR",
+    "ROUND", "REDONDEAR",
 }
 
 # Catálogo de SPs invocables desde PROC(). Clave = nombre en mayúsculas.
@@ -74,6 +76,7 @@ _ALIASES = {
     "VAR": "LET",
     "MONTH": "MES",
     "YEAR": "ANIO",
+    "REDONDEAR": "ROUND",
 }
 
 # Campos numéricos/códigos expuestos desde #empleado en SP_PR_EjecutarFormula.
@@ -460,6 +463,19 @@ class _Parser:
             raise FormulaDslError(
                 f'{k}() usa el periodo actual, o {k}("YYYYMMDD") con literal.'
             )
+        if k == "ROUND":
+            self.pop()
+            self.expect("(")
+            inner = self.parse_expr()
+            decimales = 2
+            if self.peek()[0] == ",":
+                self.pop()
+                dk, dv = self.pop()
+                if dk != "NUM" or float(dv) != int(dv) or not 0 <= int(dv) <= 4:
+                    raise FormulaDslError("ROUND(expr, decimales): decimales debe ser un entero de 0 a 4.")
+                decimales = int(dv)
+            self.expect(")")
+            return ("ROUND", inner, decimales)
         if k == "PROC":
             self.pop()
             self.expect("(")
@@ -524,6 +540,8 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return _emit_sql(lets[node[1]], lets)
     if kind == "NEG":
         return f"(0 - ({_emit_sql(node[1], lets)}))"
+    if kind == "ROUND":
+        return f"ROUND({_emit_sql(node[1], lets)}, {int(node[2])})"
     if kind == "BIN":
         op = node[1]
         return f"({_emit_sql(node[2], lets)} {op} {_emit_sql(node[3], lets)})"
@@ -558,7 +576,7 @@ def compile_formula_dsl(source: str) -> CompileResult:
     # Seguridad: charset acotado (sin comillas / punto y coma / comandos).
     if re.search(r"[;'\"\\]", compiled):
         raise FormulaDslError("La expresión compilada contiene caracteres no permitidos.")
-    bad = re.findall(r"[^0-9A-Za-z_#:\.\s\+\-\*/\(\)=<>|]", compiled)
+    bad = re.findall(r"[^0-9A-Za-z_#:\.\s\+\-\*/\(\)=<>|,]", compiled)
     if bad:
         raise FormulaDslError(f"Caracteres no permitidos en expresión: {sorted(set(bad))}")
 

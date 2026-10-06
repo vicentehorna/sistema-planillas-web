@@ -5497,13 +5497,20 @@ def _usa_boleta_doble():
 
 
 def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
-    """Días de faltas justificadas y suspensión (no los trae sp_pr_generarboleta_web)."""
-    extra = {'dias_faltas_justif': 0, 'dias_suspension': 0}
-    columnas = {'CANT_DIAS_AUS_JUSTI': 'dias_faltas_justif', 'DIASUSPENSION': 'dias_suspension'}
+    """Días de la cabecera de la boleta doble tomados directamente de sus nemónicos."""
+    extra = {'dias_faltas_justif': 0, 'dias_suspension': 0, 'dias_subsidio': 0, 'dias_no_subsidiados': 0}
+    columnas = {
+        'CANT_DIAS_AUS_JUSTI': 'dias_faltas_justif',
+        'DIASUSPENSION': 'dias_suspension',
+        'DIAS_DESC_SUBSI_INAF': 'dias_subsidio',
+        'DIAS_DESC_SUBSI_AFEC': 'dias_subsidio',
+        'DIAS_DESCANSO_EMPRES': 'dias_no_subsidiados',
+    }
+    placeholders = ','.join('?' for _ in columnas)
     try:
         cursor.execute(
-            """
-            SELECT LTRIM(RTRIM(c.FormulaCode)), SUM(ISNULL(epc.ConceptValue, 0))
+            f"""
+            SELECT UPPER(LTRIM(RTRIM(c.FormulaCode))), SUM(ISNULL(epc.ConceptValue, 0))
             FROM PR_EmployeePayRollConcept epc (NOLOCK)
                 INNER JOIN PR_Concept c (NOLOCK) ON c.Concept = epc.Concept
             WHERE epc.Company = ?
@@ -5511,15 +5518,15 @@ def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, per
               AND epc.PayRollType = ?
               AND epc.PRPeriod = ?
               AND epc.Person = ?
-              AND LTRIM(RTRIM(c.FormulaCode)) IN ('CANT_DIAS_AUS_JUSTI', 'DIASUSPENSION')
-            GROUP BY LTRIM(RTRIM(c.FormulaCode))
+              AND UPPER(LTRIM(RTRIM(c.FormulaCode))) IN ({placeholders})
+            GROUP BY UPPER(LTRIM(RTRIM(c.FormulaCode)))
             """,
-            (cia, processtype, payroll_type, period, person),
+            (cia, processtype, payroll_type, period, person, *columnas),
         )
         for codigo, valor in cursor.fetchall():
             clave = columnas.get(str(codigo or '').strip().upper())
             if clave:
-                extra[clave] = valor or 0
+                extra[clave] += float(valor or 0)
     except Exception:
         logging.exception('_boleta_ultra_dias_extra person=%s', person)
     return extra

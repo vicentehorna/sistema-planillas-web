@@ -6476,6 +6476,11 @@ def _fetch_formato_liquidacion_formulacodes(cursor, cia, payroll_type, period, p
 
 def _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia):
     """Conceptos tipo Ingreso (I) marcados para el formato de liquidación."""
+    return _fetch_conceptos_formato_liquidacion(cursor, cia, 'I')
+
+
+def _fetch_conceptos_formato_liquidacion(cursor, cia, tipo_concepto):
+    """Conceptos del tipo indicado (PR_ConceptType.ShortName) marcados para el formato de liquidación."""
     try:
         cursor.execute(
             "SELECT COL_LENGTH('dbo.PR_Concept', 'flagformatoliquidacion')"
@@ -6497,7 +6502,7 @@ def _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia):
                 ON C.ConceptType = T.ConceptType
         WHERE C.Company = ?
           AND UPPER(LTRIM(RTRIM(ISNULL(C.flagformatoliquidacion, 'N')))) = 'Y'
-          AND UPPER(LTRIM(RTRIM(ISNULL(T.ShortName, '')))) = 'I'
+          AND UPPER(LTRIM(RTRIM(ISNULL(T.ShortName, '')))) = ?
           AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> ''
           AND UPPER(LTRIM(RTRIM(ISNULL(C.Status, 'A')))) = 'A'
         ORDER BY
@@ -6506,7 +6511,7 @@ def _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia):
             ISNULL(NULLIF(LTRIM(RTRIM(C.PrintText)), ''), C.Description),
             C.FormulaCode
         """,
-        (cia,),
+        (cia, str(tipo_concepto or '').strip().upper()),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
     out = []
@@ -6703,13 +6708,32 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
     }
 
 
-def _build_formato_liquidacion_descuentos(liq, formula_values):
+def _build_formato_liquidacion_descuentos(liq, formula_values, conceptos_extra=None):
+    """conceptos_extra: descuentos (D) con flag Formato Liquidación; se agregan como filas adicionales."""
     resultado = _build_formato_liquidacion_tabla_conceptos(
         _FORMATO_LIQ_DESCUENTOS_DEF, formula_values, liq=liq
     )
     tipo_pension = str((liq or {}).get('type_pension') or '').strip().upper()
     afp_codes = {'AFP_APORTE_PORC_8', 'AFP_COMISION_VARIABL', 'AFP_SEGUROS'}
     filas = list(resultado.get('filas') or [])
+
+    codes_fijos = {str(f.get('formula_code') or '').strip().upper() for f in filas}
+    for item in conceptos_extra or []:
+        fc = str(item.get('formula_code') or '').strip()
+        if not fc or fc.upper() in codes_fijos:
+            continue
+        codes_fijos.add(fc.upper())
+        importe = _formato_liquidacion_fc_valor(formula_values, fc)
+        filas.append({
+            'label': str(item.get('label') or fc).strip() or fc,
+            'pct_fmt': '',
+            'base_fmt': '',
+            'importe_fmt': _formato_liquidacion_moneda(importe),
+            'importe': importe,
+            'formula_code': fc,
+            'base_formula_code': '',
+            'pct_formula_code': '',
+        })
 
     # Formato general: ocultar filas del régimen que no aplica (siempre en cero).
     if tipo_pension == 'ONP':
@@ -6916,6 +6940,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
     conn = None
     formula_values = {}
     ingresos_config_calc = {'filas': [], 'total': 0.0, 'total_fmt': _formato_liquidacion_moneda(0)}
+    descuentos_cfg_conceptos = []
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -6928,13 +6953,17 @@ def _contexto_formato_liquidacion(params, include_images=True):
         ingresos_cfg_conceptos = []
         if _es_cliente_alamo():
             ingresos_cfg_conceptos = _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia)
+        descuentos_cfg_conceptos = _fetch_conceptos_formato_liquidacion(cursor, cia, 'D')
         formula_values = _fetch_formato_liquidacion_formulacodes(
             cursor,
             cia,
             payroll_type,
             period,
             person,
-            extra_codes=[c.get('formula_code') for c in ingresos_cfg_conceptos],
+            extra_codes=[
+                c.get('formula_code')
+                for c in (ingresos_cfg_conceptos + descuentos_cfg_conceptos)
+            ],
         )
         if ingresos_cfg_conceptos:
             ingresos_config_calc = _build_formato_liquidacion_ingresos_configurados(
@@ -7015,7 +7044,9 @@ def _contexto_formato_liquidacion(params, include_images=True):
         total_ingresos += float(vaca_calc.get(valor_key) or 0)
     total_ingresos += float(ingresos_config_calc.get('total') or 0)
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
-    descuentos_calc = _build_formato_liquidacion_descuentos(liq, formula_values)
+    descuentos_calc = _build_formato_liquidacion_descuentos(
+        liq, formula_values, conceptos_extra=descuentos_cfg_conceptos
+    )
     aportaciones_calc = _build_formato_liquidacion_aportaciones(liq, formula_values)
     neto_a_pagar = total_ingresos - float(descuentos_calc.get('total') or 0)
     neto_a_pagar_fmt = _formato_liquidacion_moneda(neto_a_pagar)

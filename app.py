@@ -32715,6 +32715,50 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
     return _validacion_planilla_rows_to_mensajes(rows)
 
 
+def _detalle_error_calculo(msg, cia, payrolltype, processtype, period, person, database=None):
+    """Antepone la causa probable al error del SP: fin de mes sin REM_BASICA vigente en el periodo.
+
+    Solo informa; no bloquea el cálculo (hay planillas que no usan REM_BASICA).
+    """
+    conn = None
+    try:
+        conn = get_db_connection(database=database) if database else get_db_connection()
+        cursor = conn.cursor()
+        if not _proceso_aplica_validacion_post_calculo(cursor, cia, processtype):
+            return msg
+        cursor.execute(
+            """
+            SELECT CASE WHEN EXISTS (
+                SELECT 1
+                FROM PR_EmployeeConcept EC (NOLOCK)
+                    INNER JOIN PR_Concept C (NOLOCK)
+                        ON C.Concept = EC.Concept AND C.Company = EC.Company
+                WHERE EC.Company = ? AND EC.PayRollType = ? AND EC.Person = ?
+                  AND C.FormulaCode = 'REM_BASICA'
+                  AND ISNULL(EC.ConceptValue, 0) <> 0
+                  AND (
+                        (EC.FlagFrecuencyType = 'P' AND EC.PRPeriodStart <= ?)
+                        OR (EC.FlagFrecuencyType = 'T'
+                            AND ? BETWEEN EC.PRPeriodStart AND ISNULL(EC.PRPeriodEnd, EC.PRPeriodStart))
+                  )
+            ) THEN 1 ELSE 0 END
+            """,
+            (cia, payrolltype, person, period, period),
+        )
+        row = cursor.fetchone()
+        if row is not None and not row[0]:
+            return f'No registra Remuneración Básica vigente en el periodo. Detalle: {msg}'
+    except Exception:
+        logging.exception('_detalle_error_calculo person=%s', person)
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    return msg
+
+
 @app.route('/api/procesar-planilla/trabajadores-calculo', methods=['POST'])
 @login_required
 def api_procesar_planilla_trabajadores():
@@ -33123,7 +33167,10 @@ def ejecutar_calculo_planilla():
                             conn.rollback()
                         except Exception:
                             pass
-                        errores.append(f'Error en {pid}: {e_retry}')
+                        detalle = _detalle_error_calculo(
+                            str(e_retry), cia, payroll_type, processtype, period, pid
+                        )
+                        errores.append(f'Error en {pid}: {detalle}')
                         logging.warning(
                             'ejecutar_calculo_planilla persona %s fallo en reintento: %s',
                             pid,
@@ -33138,7 +33185,10 @@ def ejecutar_calculo_planilla():
                         conn.rollback()
                     except Exception:
                         pass
-                    errores.append(f'Error en {pid}: {e_individual}')
+                    detalle = _detalle_error_calculo(
+                        str(e_individual), cia, payroll_type, processtype, period, pid
+                    )
+                    errores.append(f'Error en {pid}: {detalle}')
                     logging.warning('ejecutar_calculo_planilla persona %s: %s', pid, e_individual)
                     try:
                         conn, cursor = _reset_payroll_calc_connection(conn)
@@ -33149,13 +33199,12 @@ def ejecutar_calculo_planilla():
                         )
 
         validaciones = []
-        if exitos > 0:
-            try:
-                validaciones = _validar_calculo_planilla_mensajes(
-                    cursor, cia, payroll_type, processtype, period
-                )
-            except Exception:
-                logging.exception('validar_calculo_planilla tras ejecutar_calculo_planilla')
+        try:
+            validaciones = _validar_calculo_planilla_mensajes(
+                cursor, cia, payroll_type, processtype, period
+            )
+        except Exception:
+            logging.exception('validar_calculo_planilla tras ejecutar_calculo_planilla')
 
         status = 'success' if not errores else 'partial'
         n_errores = len(errores)
@@ -33311,7 +33360,10 @@ def ejecutar_calculo_streaming():
                                 conn.rollback()
                             except Exception:
                                 pass
-                            msg = str(e_retry)
+                            msg = _detalle_error_calculo(
+                                str(e_retry), cia, payroll_type, processtype, period, pid,
+                                database=client_db,
+                            )
                             errores.append(f'Error en {pid}: {msg}')
                             logging.warning(
                                 'ejecutar_calculo_streaming persona %s fallo en reintento: %s',
@@ -33335,7 +33387,10 @@ def ejecutar_calculo_streaming():
                             conn.rollback()
                         except Exception:
                             pass
-                        msg = str(e_individual)
+                        msg = _detalle_error_calculo(
+                            str(e_individual), cia, payroll_type, processtype, period, pid,
+                            database=client_db,
+                        )
                         errores.append(f'Error en {pid}: {msg}')
                         logging.warning('ejecutar_calculo_streaming persona %s: %s', pid, e_individual)
                         evento = {
@@ -33357,13 +33412,12 @@ def ejecutar_calculo_streaming():
                 yield f'data: {json.dumps(evento)}\n\n'
 
             validaciones = []
-            if exitos > 0:
-                try:
-                    validaciones = _validar_calculo_planilla_mensajes(
-                        cursor, cia, payroll_type, processtype, period
-                    )
-                except Exception:
-                    logging.exception('validar_calculo_planilla tras ejecutar_calculo_streaming')
+            try:
+                validaciones = _validar_calculo_planilla_mensajes(
+                    cursor, cia, payroll_type, processtype, period
+                )
+            except Exception:
+                logging.exception('validar_calculo_planilla tras ejecutar_calculo_streaming')
 
             yield (
                 'data: '
@@ -34230,7 +34284,10 @@ def ejecutar_calculo_masivo_streaming():
                                 conn.rollback()
                             except Exception:
                                 pass
-                            msg = str(e_retry)
+                            msg = _detalle_error_calculo(
+                                str(e_retry), cia, payroll_type, processtype, period, pid,
+                                database=client_db,
+                            )
                             errores.append(f'Error en {cia}/{pid}: {msg}')
                             evento = {
                                 'progreso': int(((index + 1) / total) * 100),
@@ -34245,7 +34302,10 @@ def ejecutar_calculo_masivo_streaming():
                             conn.rollback()
                         except Exception:
                             pass
-                        msg = str(e_individual)
+                        msg = _detalle_error_calculo(
+                            str(e_individual), cia, payroll_type, processtype, period, pid,
+                            database=client_db,
+                        )
                         errores.append(f'Error en {cia}/{pid}: {msg}')
                         evento = {
                             'progreso': int(((index + 1) / total) * 100),

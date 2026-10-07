@@ -5496,6 +5496,15 @@ def _usa_boleta_doble():
         return False
 
 
+def _boleta_cabecera_modelo_anterior():
+    """hm_ultra: cabecera con los mismos campos y disposición de su boleta anterior (sin horas)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_ultra'
+    except Exception:
+        return False
+
+
 def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
     """Días de la cabecera de la boleta doble tomados directamente de sus nemónicos."""
     extra = {'dias_faltas_justif': 0, 'dias_suspension': 0, 'dias_subsidio': 0, 'dias_no_subsidiados': 0}
@@ -5609,6 +5618,7 @@ def generar_pdf_en_memoria(params):
             logo_src=logo_src,
             firma_src=firma_src,
             firma_ampliada=_es_cliente_ngservicios(),
+            cabecera_modelo_anterior=boleta_doble and _boleta_cabecera_modelo_anterior(),
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)

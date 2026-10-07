@@ -68,6 +68,8 @@
         .value { width: 22.33%; font-size: 7.3px; }
         .tasas { font-size: 7px; }
         .tasas span { margin-right: 10px; white-space: nowrap; }
+        .datos-4col td.label, .datos-4col td.value { width: auto; }
+        .datos-4col td.value.pct { text-align: right; white-space: nowrap; }
 
         .conceptos-table { border: 1px solid #1a4b84; margin-top: 2px; }
         .conceptos-table th {
@@ -146,6 +148,98 @@
         <span class="periodo"> — Periodo: {{ cabecera.RangoFechas }}</span>
     </div>
 
+    {% if cabecera_modelo_anterior %}
+    <table class="datos-table datos-4col">
+        <colgroup>
+            <col style="width: 9%"><col style="width: 22%">
+            <col style="width: 11%"><col style="width: 7%">
+            <col style="width: 11%"><col style="width: 15%">
+            <col style="width: 10%"><col style="width: 15%">
+        </colgroup>
+        <tr>
+            <td class="label">Empleado:</td>
+            <td class="value" colspan="3"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
+            <td class="label">Banco:</td>
+            <td class="value">{{ cabecera.bancosalario or '---' }}</td>
+            <td class="label">Nro. Cuenta:</td>
+            <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
+        </tr>
+        <tr>
+            <td class="label">{{ cabecera.DocumentType or 'DNI / CE:' }}</td>
+            <td class="value">{{ cabecera.dni }}</td>
+            <td class="label">Días Laborables:</td>
+            <td class="value">{{ cabecera.dias_laborables|dias }}</td>
+            <td class="label">Días Lic. Sin Goce:</td>
+            <td class="value">{{ cabecera.diassingoce|dias }}</td>
+            <td class="label">Aporte:</td>
+            <td class="value pct">{{ cabecera.aporte|importe }} %</td>
+        </tr>
+        <tr>
+            <td class="label">Rem. Básica:</td>
+            <td class="value">{{ (cabecera.salaryconcept or cabecera.sueldobasico or cabecera.rem_basica)|importe }}</td>
+            <td class="label">Días Faltas Injust:</td>
+            <td class="value">{{ cabecera.dias_faltas_injustif|dias }}</td>
+            <td class="label">Días Lic. Con Goce:</td>
+            <td class="value">{{ cabecera.diascongoce|dias }}</td>
+            <td class="label">Com. Flujo:</td>
+            <td class="value pct">{{ cabecera.comisionflujo|importe }} %</td>
+        </tr>
+        <tr>
+            <td class="label">Fecha de Ingreso:</td>
+            <td class="value">{{ cabecera.fecha_ingreso|fecha }}</td>
+            <td class="label">Días Faltas Just:</td>
+            <td class="value">{{ cabecera.dias_faltas_justif|dias }}</td>
+            <td class="label">Días Subsidiados:</td>
+            <td class="value">{{ cabecera.dias_subsidio|dias }}</td>
+            <td class="label">Com. Mixta:</td>
+            <td class="value pct">{{ cabecera.comisionmixta|importe }} %</td>
+        </tr>
+        <tr>
+            <td class="label">Fecha de Cese:</td>
+            <td class="value">{{ cabecera.fecha_cese|fecha if cabecera.fecha_cese else '---' }}</td>
+            <td class="label">Días Fallecimiento:</td>
+            <td class="value">{{ cabecera.dias_fallecimiento|dias }}</td>
+            <td class="label">Días Vacaciones:</td>
+            <td class="value">{{ cabecera.dias_vacaciones|dias }}</td>
+            <td class="label">Seguro:</td>
+            <td class="value pct">{{ cabecera.seguro|importe }} %</td>
+        </tr>
+        <tr>
+            <td class="label">Reg. Pensión:</td>
+            <td class="value">
+                {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
+                    NINGUNO
+                {% else %}
+                    {{ cabecera.afp_description or cabecera.regimenpension or 'SNP' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                {% endif %}
+            </td>
+            <td class="label">Días Suspensión:</td>
+            <td class="value">{{ cabecera.dias_suspension|dias }}</td>
+            <td class="label">Días No Subsid:</td>
+            <td class="value">{{ cabecera.dias_no_subsidiados|dias }}</td>
+            <td class="label">SNP:</td>
+            <td class="value pct">{{ cabecera.snp|importe }} %</td>
+        </tr>
+        <tr>
+            <td class="label">CUSPP:</td>
+            <td class="value">{{ cabecera.cupss or '---' }}</td>
+            <td class="label"></td>
+            <td class="value"></td>
+            <td class="label">Días Paternidad:</td>
+            <td class="value">{{ cabecera.dias_paternidad|dias }}</td>
+            <td class="label"></td>
+            <td class="value"></td>
+        </tr>
+        <tr>
+            <td class="label">Cargo:</td>
+            <td class="value" colspan="3">{{ cabecera.cargo_trabajador }}</td>
+            <td class="label">Clasificación:</td>
+            <td class="value">{{ cabecera.clasificacion or 'Ninguna' }}</td>
+            <td class="label"></td>
+            <td class="value"></td>
+        </tr>
+    </table>
+    {% else %}
     <table class="datos-table">
         <tr>
             <td class="label">Trabajador:</td>
@@ -236,6 +330,7 @@
             <td class="value">{{ cabecera.cant_horas_35|dias }} / {{ cabecera.cant_horas_100|dias }}</td>
         </tr>
     </table>
+    {% endif %}
 
     <table class="conceptos-table">
         <thead>

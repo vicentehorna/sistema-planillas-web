@@ -13,7 +13,7 @@ import uuid
 import threading
 import xml.etree.ElementTree as ET
 from datetime import date, datetime, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 
 import resend
 from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify, Response, send_file, has_request_context, stream_with_context, abort
@@ -6290,12 +6290,16 @@ def _formato_liquidacion_fecha(val):
     return ref.strftime('%d/%m/%Y') if ref else ''
 
 
-def _formato_liquidacion_moneda(val):
+def _formato_liquidacion_r2(val):
+    """Redondeo a 2 decimales (mitad hacia arriba): lo que se muestra es lo que se suma en los totales."""
     try:
-        n = float(val or 0)
-    except (TypeError, ValueError):
-        n = 0.0
-    return f'S/ {n:,.2f}'
+        return float(Decimal(str(float(val or 0))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP))
+    except (TypeError, ValueError, ArithmeticError):
+        return 0.0
+
+
+def _formato_liquidacion_moneda(val):
+    return f'S/ {_formato_liquidacion_r2(val):,.2f}'
 
 
 def _formato_liquidacion_porcentaje(val, mostrar_cero=False):
@@ -6776,10 +6780,7 @@ def _build_formato_liquidacion_descuentos(liq, formula_values, conceptos_extra=N
 
     total = 0.0
     for fila in filas:
-        try:
-            total += float(fila.get('importe') or 0)
-        except (TypeError, ValueError):
-            pass
+        total += _formato_liquidacion_r2(fila.get('importe'))
     resultado['filas'] = filas
     resultado['total'] = total
     resultado['total_fmt'] = _formato_liquidacion_moneda(total)
@@ -7047,25 +7048,26 @@ def _contexto_formato_liquidacion(params, include_images=True):
         if formula_code in cfg_codes:
             vaca_calc[mostrar_key] = False
 
+    r2 = _formato_liquidacion_r2
     total_ingresos = (
-        float(cts_calc.get('total') or 0)
-        + float(grati_calc.get('total') or 0)
-        + float(vaca_calc.get('total') or 0)
-        + float(grati_calc.get('bono_9') or 0)
+        r2(cts_calc.get('total'))
+        + r2(grati_calc.get('total'))
+        + r2(vaca_calc.get('total'))
+        + r2(grati_calc.get('bono_9'))
     )
     for formula_code, mostrar_key, valor_key in _extras_fijos:
         if formula_code in cfg_codes:
             continue
         if formula_code == 'LIQ_OTROS_ING' and not es_elclan:
             continue
-        total_ingresos += float(vaca_calc.get(valor_key) or 0)
-    total_ingresos += float(ingresos_config_calc.get('total') or 0)
+        total_ingresos += r2(vaca_calc.get(valor_key))
+    total_ingresos += r2(ingresos_config_calc.get('total'))
     total_ingresos_fmt = _formato_liquidacion_moneda(total_ingresos)
     descuentos_calc = _build_formato_liquidacion_descuentos(
         liq, formula_values, conceptos_extra=descuentos_cfg_conceptos
     )
     aportaciones_calc = _build_formato_liquidacion_aportaciones(liq, formula_values)
-    neto_a_pagar = total_ingresos - float(descuentos_calc.get('total') or 0)
+    neto_a_pagar = r2(total_ingresos) - r2(descuentos_calc.get('total'))
     neto_a_pagar_fmt = _formato_liquidacion_moneda(neto_a_pagar)
 
     return {

@@ -150,17 +150,18 @@
 
     {% if cabecera_modelo_anterior %}
     <table class="datos-table datos-4col">
+        {# Cada tercio coincide con las columnas Ingresos / Descuentos / Aportes del detalle. #}
         <colgroup>
-            <col style="width: 9%"><col style="width: 22%">
-            <col style="width: 11%"><col style="width: 7%">
-            <col style="width: 11%"><col style="width: 15%">
-            <col style="width: 10%"><col style="width: 15%">
+            <col style="width: 10.5%"><col style="width: 22.83%">
+            <col style="width: 11%"><col style="width: 5%">
+            <col style="width: 11.5%"><col style="width: 5.83%">
+            <col style="width: 11%"><col style="width: 22.34%">
         </colgroup>
         <tr>
             <td class="label">Empleado:</td>
-            <td class="value" colspan="3"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
+            <td class="value"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
             <td class="label">Banco:</td>
-            <td class="value">{{ cabecera.bancosalario or '---' }}</td>
+            <td class="value" colspan="3">{{ cabecera.bancosalario or '---' }}</td>
             <td class="label">Nro. Cuenta:</td>
             <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
         </tr>

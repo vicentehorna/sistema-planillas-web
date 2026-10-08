@@ -123,7 +123,8 @@ BEGIN
             RETURN;
         END;
 
-        SELECT @max_exist = ISNULL(MAX(TRY_CONVERT(NUMERIC(18, 0), RIGHT(RTRIM(AFP), 12))), 0)
+        SELECT @max_exist = ISNULL(MAX(CASE WHEN RIGHT(RTRIM(AFP), 12) <> '' AND RIGHT(RTRIM(AFP), 12) NOT LIKE '%[^0-9]%'
+                                            THEN CONVERT(NUMERIC(18, 0), RIGHT(RTRIM(AFP), 12)) END), 0)
         FROM PR_AFP (NOLOCK)
         WHERE Company = @company;
 
@@ -303,7 +304,8 @@ BEGIN
         )
         BEGIN
             /* Alta en destino: correlativo + insert */
-            SELECT @max_exist = ISNULL(MAX(TRY_CONVERT(NUMERIC(18, 0), RIGHT(RTRIM(AFP), 12))), 0)
+            SELECT @max_exist = ISNULL(MAX(CASE WHEN RIGHT(RTRIM(AFP), 12) <> '' AND RIGHT(RTRIM(AFP), 12) NOT LIKE '%[^0-9]%'
+                                                THEN CONVERT(NUMERIC(18, 0), RIGHT(RTRIM(AFP), 12)) END), 0)
             FROM PR_AFP (NOLOCK)
             WHERE Company = @cia_dest;
 

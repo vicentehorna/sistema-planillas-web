@@ -5400,8 +5400,53 @@ def formatear_periodo_texto(periodo_str):
         return str(periodo_str or "")
 
 
-def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
-    """Envía boleta por Resend API con PDF adjunto."""
+_CONFIRMACION_BOLETA_DBS = frozenset({'hm_prescription'})
+
+
+def _confirmacion_boleta_habilitada():
+    from database import get_active_database
+    return str(get_active_database() or '').strip().lower() in _CONFIRMACION_BOLETA_DBS
+
+
+def _public_base_url():
+    """URL pública de la app para enlaces en correos (PUBLIC_BASE_URL o host del request)."""
+    base = _env_var('PUBLIC_BASE_URL', 'APP_BASE_URL')
+    if base:
+        return base.rstrip('/')
+    proto = (request.headers.get('X-Forwarded-Proto') or request.scheme or 'https').split(',')[0].strip()
+    return f"{proto}://{request.host}".rstrip('/')
+
+
+def _html_botones_confirmacion_boleta(token):
+    base = f"{_public_base_url()}/api/v1/boletas/confirmar?token={token}&respuesta="
+    url_si = f"{base}SI"
+    url_no = f"{base}NO"
+    estilo_a = (
+        "display:inline-block;padding:12px 22px;color:#ffffff;font-weight:bold;"
+        "font-family:Arial,Helvetica,sans-serif;font-size:14px;text-decoration:none;border-radius:6px;"
+    )
+    return f"""
+                <p style="margin-top:22px">Por favor, confirme la recepci&oacute;n de su boleta:</p>
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 18px 0">
+                    <tr>
+                        <td style="background:#16a34a;border-radius:6px;padding:0 0 6px 0">
+                            <a href="{url_si}" target="_blank" style="{estilo_a}background:#16a34a;">&#10004; S&iacute;, recib&iacute; mi boleta conforme</a>
+                        </td>
+                        <td width="12" style="padding:0 0 6px 0">&nbsp;</td>
+                        <td style="background:#dc2626;border-radius:6px;padding:0 0 6px 0">
+                            <a href="{url_no}" target="_blank" style="{estilo_a}background:#dc2626;">&#9888; No, tengo una observaci&oacute;n</a>
+                        </td>
+                    </tr>
+                </table>
+                <p style="font-size:12px;color:#6b7280">Si los botones no funcionan, copie el enlace en su navegador:<br>
+                    Conforme: {url_si}<br>
+                    Con observaci&oacute;n: {url_no}</p>
+    """
+
+
+def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None,
+                         token_confirmacion=None):
+    """Envía boleta por Resend API con PDF adjunto (y botones de confirmación si hay token)."""
     if not destinatario or '@' not in str(destinatario):
         return False, "Sin correo"
 
@@ -5417,6 +5462,7 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
     trato = "Estimada" if sexo_val == 2 else "Estimado"
     periodo_legible = formatear_periodo_texto(periodo)
     pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+    botones = _html_botones_confirmacion_boleta(token_confirmacion) if token_confirmacion else ''
 
     try:
         params = {
@@ -5426,6 +5472,7 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
             "html": f"""
                 <p>{trato} {nombre_empleado},</p>
                 <p>Le hacemos entrega de su boleta de pago correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                {botones}
                 <p>Saludos,<br>Recursos Humanos</p>
             """,
             "attachments": [
@@ -8646,7 +8693,10 @@ def reporte_trabajadores_page():
 @app.route('/reporte-envio-boletas')
 @login_required
 def reporte_envio_boletas_page():
-    return render_template('reporte_envio_boletas.html')
+    return render_template(
+        'reporte_envio_boletas.html',
+        confirmacion_boleta_habilitada=_confirmacion_boleta_habilitada(),
+    )
 
 
 @app.route('/procesar_planilla')
@@ -25835,7 +25885,11 @@ def enviar_boletas_masivo():
     if total == 0:
         return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
 
+    con_confirmacion = _confirmacion_boleta_habilitada()
+
     def generar_progreso_envio():
+        from database import preparar_confirmacion_boleta, revertir_preparacion_confirmacion
+
         enviados = 0
         errores = 0
         for idx, emp_code in enumerate(ids, start=1):
@@ -25849,6 +25903,7 @@ def enviar_boletas_masivo():
                 yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
                 continue
 
+            confirmacion = None
             try:
                 pdf_buffer = generar_pdf_en_memoria(
                     {
@@ -25860,6 +25915,22 @@ def enviar_boletas_masivo():
                         'sin_firma': '1' if sin_firma else '0',
                     }
                 )
+                if con_confirmacion:
+                    confirmacion = preparar_confirmacion_boleta(
+                        company=cia,
+                        person=emp_code,
+                        period=period,
+                        payrolltype=payroll_type,
+                        processtype=process,
+                        userid=_xlastuser_id() or 'WEB',
+                        filename=_boleta_pdf_filename(emp_code, period, nombre=emp_nombre),
+                    )
+                    if not confirmacion:
+                        logging.warning(
+                            'enviar_boletas_masivo: sin token de confirmación person=%s period=%s',
+                            emp_code,
+                            period,
+                        )
                 exito, msg = enviar_correo_boleta(
                     destinatario=emp_email,
                     nombre_empleado=emp_nombre,
@@ -25867,6 +25938,11 @@ def enviar_boletas_masivo():
                     sexo=emp.get('sex', emp.get('sexo', 0)),
                     pdf_io=pdf_buffer,
                     person=emp_code,
+                    token_confirmacion=(
+                        confirmacion['token']
+                        if confirmacion and confirmacion.get('estado') == 0
+                        else None
+                    ),
                 )
                 if exito:
                     enviados += 1
@@ -25901,12 +25977,14 @@ def enviar_boletas_masivo():
                         )
                         detalle = f"{detalle} (aviso: no se guardó FechaEnvio)"
                 else:
+                    revertir_preparacion_confirmacion(cia, emp_code, confirmacion)
                     errores += 1
                     status = 'Error'
                     detalle = msg or 'No se pudo enviar el correo.'
                     motivo = detalle
             except Exception as e:
                 logging.exception('enviar_boletas_masivo persona=%s', emp_code)
+                revertir_preparacion_confirmacion(cia, emp_code, confirmacion)
                 errores += 1
                 status = 'Error'
                 detalle = str(e)
@@ -25925,6 +26003,102 @@ def enviar_boletas_masivo():
             'X-Accel-Buffering': 'no',
         },
     )
+
+
+def _logo_src_compania_publico(cia, database):
+    """Logo de la compañía como data-URI sin sesión (SY_Company blob → static/img)."""
+    branding = get_company_branding(cia, database=database) or {}
+    logo_blob = branding.get('logo_data')
+    if logo_blob:
+        mime = branding.get('logo_contenttype') or _mime_from_filename(branding.get('logoname'))
+        src = _data_uri_from_bytes(logo_blob, mime)
+        if src:
+            return src
+    img_dir = os.path.join(app.root_path, 'static', 'img')
+    return _image_data_uri(_boleta_imagen_ruta(img_dir, branding.get('logoname')))
+
+
+def _ip_cliente_request():
+    reenviada = (request.headers.get('X-Forwarded-For') or '').split(',')[0].strip()
+    return reenviada or (request.remote_addr or '')
+
+
+@app.route('/api/v1/boletas/confirmar', methods=['GET', 'POST'])
+def boleta_confirmar_publico():
+    """
+    Confirmación de recepción de boleta (pública, sin login).
+    GET solo muestra la página: los escáneres de correo (Safe Links, etc.) abren
+    los enlaces y no deben registrar respuestas. El POST del botón registra.
+    """
+    from database import (
+        CONFIRMACION_CONFIRMADO,
+        CONFIRMACION_OBSERVADO,
+        obtener_confirmacion_boleta,
+        registrar_confirmacion_boleta,
+        resolver_bd_token_confirmacion,
+        token_confirmacion_valido,
+    )
+
+    def _pagina(estado_pagina, status=200, **ctx):
+        resp = Response(
+            render_template('boleta_confirmacion.html', estado_pagina=estado_pagina, **ctx),
+            status=status,
+        )
+        resp.headers['Cache-Control'] = 'no-store'
+        resp.headers['X-Robots-Tag'] = 'noindex, nofollow'
+        resp.headers['Referrer-Policy'] = 'no-referrer'
+        return resp
+
+    token = (request.values.get('token') or '').strip().lower()
+    respuesta = (request.values.get('respuesta') or '').strip().upper()
+    if not token_confirmacion_valido(token) or respuesta not in ('SI', 'NO'):
+        return _pagina('invalido', 404)
+
+    database = resolver_bd_token_confirmacion(token)
+    info = obtener_confirmacion_boleta(database, token) if database else None
+    if not info:
+        return _pagina('invalido', 404)
+
+    try:
+        logo_src = _logo_src_compania_publico(info['company'], database)
+    except Exception:
+        logging.exception('boleta_confirmar_publico logo cia=%s', info['company'])
+        logo_src = ''
+    ctx = {
+        'logo_src': logo_src,
+        'empresa': info['empresa'],
+        'nombre': info['nombre'],
+        'periodo_legible': formatear_periodo_texto(info['period']),
+        'token': token,
+        'respuesta': respuesta,
+    }
+
+    def _ya_respondida(datos):
+        return _pagina(
+            'ya_respondida',
+            fecha_confirmacion=datos.get('fecha_confirmacion') or '',
+            estado_previo=datos.get('estado'),
+            **ctx,
+        )
+
+    if info['estado'] != 0:
+        return _ya_respondida(info)
+    if request.method != 'POST':
+        return _pagina('confirmar', **ctx)
+
+    estado = CONFIRMACION_CONFIRMADO if respuesta == 'SI' else CONFIRMACION_OBSERVADO
+    if registrar_confirmacion_boleta(
+        database,
+        token,
+        estado,
+        ip=_ip_cliente_request(),
+        user_agent=request.headers.get('User-Agent'),
+    ):
+        return _pagina('gracias', **ctx)
+    actual = obtener_confirmacion_boleta(database, token)
+    if actual and actual.get('estado') != 0:
+        return _ya_respondida(actual)
+    return _pagina('error', 500, **ctx)
 
 
 @app.route('/subir_boletas_portal', methods=['POST'])
@@ -29462,6 +29636,9 @@ def api_reporte_envio_boletas():
     processtype = str(body.get('processtype') or body.get('process_type') or '0').strip() or '0'
     period = str(body.get('period') or body.get('periodo') or '0').strip() or '0'
     person = str(body.get('person') or body.get('trabajador') or '0').strip() or '0'
+    estado = str(body.get('estado_confirmacion') or '-1').strip()
+    if estado not in ('0', '1', '2'):
+        estado = '-1'
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -29470,11 +29647,15 @@ def api_reporte_envio_boletas():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
+        sql = (
             "EXEC sp_pr_reporteenvioboletas_web "
-            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?",
-            (cia, payrolltype, processtype, period, person),
+            "@cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?"
         )
+        params = [cia, payrolltype, processtype, period, person]
+        if estado != '-1':
+            sql += ", @estado=?"
+            params.append(estado)
+        cursor.execute(sql, params)
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []
         for r in rows:
@@ -29486,6 +29667,9 @@ def api_reporte_envio_boletas():
                 "periodo": _jsonable_value(r.get('periodo')),
                 "nombre_archivo": _jsonable_value(r.get('nombre_archivo')),
                 "fecha_envio": _jsonable_value(r.get('fecha_envio')),
+                "estado_confirmacion": _jsonable_value(r.get('estado_confirmacion')),
+                "fecha_confirmacion": _jsonable_value(r.get('fecha_confirmacion')),
+                "ip_confirmacion": _jsonable_value(r.get('ip_confirmacion')),
             })
         return jsonify({"rows": resultado, "total": len(resultado)})
     except Exception as e:

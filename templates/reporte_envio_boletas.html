@@ -57,6 +57,13 @@
         z-index: 3;
         background-color: #f8f9fa;
     }
+
+    .badge-confirmacion {
+        font-size: 10.5px;
+        font-weight: 600;
+        padding: 0.3em 0.6em;
+        cursor: default;
+    }
 </style>
 {% endblock %}
 
@@ -94,6 +101,17 @@
                     <option value="0">Todos</option>
                 </select>
             </div>
+            {% if confirmacion_boleta_habilitada %}
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboConfirmacion" class="form-label small fw-bold text-muted">Confirmación</label>
+                <select id="cboConfirmacion" class="form-select form-select-sm">
+                    <option value="-1">Todos</option>
+                    <option value="0">Pendiente</option>
+                    <option value="1">Confirmado</option>
+                    <option value="2">Con observación</option>
+                </select>
+            </div>
+            {% endif %}
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
@@ -117,6 +135,7 @@
                         <th>Periodo</th>
                         <th>Nombre archivo</th>
                         <th>Fecha Envío</th>
+                        {% if confirmacion_boleta_habilitada %}<th>Confirmación</th>{% endif %}
                     </tr>
                 </thead>
                 <tbody id="tbody-reporte"></tbody>
@@ -138,7 +157,15 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const DEFAULT_CIA = {{ (session.get('company') or '')|tojson }};
     const URL_REPORTE = {{ url_for('api_reporte_envio_boletas') | tojson }};
-    const HEADERS = ['DNI', 'Nombre trabajador', 'Email', 'Tipo planilla', 'Periodo', 'Nombre archivo', 'Fecha Envío'];
+    const CON_CONFIRMACION = {{ (confirmacion_boleta_habilitada or false)|tojson }};
+    const HEADERS = ['DNI', 'Nombre trabajador', 'Email', 'Tipo planilla', 'Periodo', 'Nombre archivo', 'Fecha Envío']
+        .concat(CON_CONFIRMACION ? ['Confirmación', 'Fecha Confirmación', 'IP Confirmación'] : []);
+    const ESTADOS_CONFIRMACION = {
+        0: { texto: 'Pendiente', clase: 'bg-warning text-dark', icono: 'bi-hourglass-split' },
+        1: { texto: 'Confirmado', clase: 'bg-success', icono: 'bi-check-circle-fill' },
+        2: { texto: 'Con Observación', clase: 'bg-danger', icono: 'bi-exclamation-circle-fill' }
+    };
+    const cboConf = document.getElementById('cboConfirmacion');
 
     const cboCia = document.getElementById('cboCompania');
     const cboPt = document.getElementById('cboTipoPlanilla');
@@ -278,7 +305,31 @@ document.addEventListener('DOMContentLoaded', async function () {
         return s;
     }
 
+    function estadoConfirmacion(row) {
+        const v = row.estado_confirmacion;
+        if (v === null || v === undefined || v === '') return null;
+        return ESTADOS_CONFIRMACION[Number(v)] || null;
+    }
+
+    function badgeConfirmacion(row) {
+        const est = estadoConfirmacion(row);
+        if (!est) return '<span class="text-muted">—</span>';
+        let tip = 'Sin respuesta del trabajador';
+        if (Number(row.estado_confirmacion) !== 0) {
+            tip = `${est.texto} el ${fmtFechaEnvio(row.fecha_confirmacion)}`;
+            if (row.ip_confirmacion) tip += ` (IP ${row.ip_confirmacion})`;
+        }
+        return `<span class="badge rounded-pill badge-confirmacion ${est.clase}" data-bs-toggle="tooltip" title="${escapeHtml(tip)}">`
+            + `<i class="bi ${est.icono}"></i> ${escapeHtml(est.texto)}</span>`;
+    }
+
     function renderizarTabla(rows) {
+        if (window.bootstrap && bootstrap.Tooltip) {
+            tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => {
+                const t = bootstrap.Tooltip.getInstance(el);
+                if (t) t.dispose();
+            });
+        }
         tbody.innerHTML = '';
         (rows || []).forEach((row) => {
             const tr = document.createElement('tr');
@@ -290,9 +341,13 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td>${escapeHtml(row.periodo)}</td>
                 <td>${escapeHtml(row.nombre_archivo)}</td>
                 <td>${escapeHtml(fmtFechaEnvio(row.fecha_envio))}</td>
+                ${CON_CONFIRMACION ? `<td class="text-center">${badgeConfirmacion(row)}</td>` : ''}
             `;
             tbody.appendChild(tr);
         });
+        if (CON_CONFIRMACION && window.bootstrap && bootstrap.Tooltip) {
+            tbody.querySelectorAll('[data-bs-toggle="tooltip"]').forEach((el) => new bootstrap.Tooltip(el));
+        }
         lblCount.textContent = String((rows || []).length);
     }
 
@@ -302,7 +357,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const ws = wb.addWorksheet('Envío de Boletas');
         ws.addRow(HEADERS);
         (payload.rows || []).forEach((row) => {
-            ws.addRow([
+            const fila = [
                 row.dni || '',
                 row.nombre || '',
                 row.email || '',
@@ -310,7 +365,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                 row.periodo || '',
                 row.nombre_archivo || '',
                 fmtFechaEnvio(row.fecha_envio)
-            ]);
+            ];
+            if (CON_CONFIRMACION) {
+                const est = estadoConfirmacion(row);
+                fila.push(
+                    est ? est.texto : '',
+                    fmtFechaEnvio(row.fecha_confirmacion),
+                    row.ip_confirmacion || ''
+                );
+            }
+            ws.addRow(fila);
         });
         ws.getRow(1).font = { bold: true };
         ws.columns.forEach((col) => { col.width = 18; });
@@ -333,6 +397,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const processtype = cboProc.value.trim() || '0';
         const period = cboPer.value.trim() || '0';
         const person = cboTra.value.trim() || '0';
+        const estado_confirmacion = cboConf ? (cboConf.value || '-1') : '-1';
 
         if (!cia) {
             alert('Seleccione una compañía.');
@@ -344,7 +409,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             const res = await fetch(URL_REPORTE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payrolltype, processtype, period, person })
+                body: JSON.stringify({ cia, payrolltype, processtype, period, person, estado_confirmacion })
             });
             const payload = await res.json();
             if (!res.ok || payload.error) {

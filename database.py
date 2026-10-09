@@ -327,14 +327,15 @@ def get_config_empresa(company_id):
     return (branding.get('logoname') or '', branding.get('signaturename') or '')
 
 
-def get_company_branding(company_id):
+def get_company_branding(company_id, database=None):
     """
     Branding por compañía: nombres, content-types y blobs (logo_data / signature_data).
     Fallback de archivos: static/img vía logoname/signaturename en la app.
+    database: BD explícita (páginas públicas sin sesión); por defecto la BD activa.
     """
     conn = None
     try:
-        conn = get_db_connection()
+        conn = get_db_connection(database)
         cursor = conn.cursor()
         cursor.execute(
             """
@@ -1318,6 +1319,363 @@ def registrar_fecha_envio_boleta(
         except Exception:
             pass
         return False
+
+
+# Confirmación de recepción de boletas (PR_DocumentPerson.EstadoConfirmacion)
+CONFIRMACION_PENDIENTE = 0
+CONFIRMACION_CONFIRMADO = 1
+CONFIRMACION_OBSERVADO = 2
+
+
+def token_confirmacion_valido(token):
+    """True si token es un UUID en formato canónico (36 caracteres)."""
+    import uuid
+
+    token = str(token or '').strip()
+    if len(token) != 36:
+        return False
+    try:
+        return str(uuid.UUID(token)) == token.lower()
+    except (ValueError, AttributeError):
+        return False
+
+
+def _confirmacion_boleta_soportada(cursor):
+    cursor.execute("SELECT COL_LENGTH('dbo.PR_DocumentPerson', 'TokenConfirmacion')")
+    row = cursor.fetchone()
+    return bool(row and row[0])
+
+
+def _linea_documento_envio(cursor, company, person, tipodoc, period_portal, payrolltype, processtype):
+    """Line de la fila del envío (misma planilla/proceso, o legacy sin planilla/proceso)."""
+    cursor.execute(
+        """
+        SELECT TOP 1 Line
+        FROM PR_DocumentPerson
+        WHERE Company = ? AND Person = ? AND Tipodocumento = ? AND period = ?
+          AND ISNULL(payrolltype, '') = ISNULL(?, '')
+          AND ISNULL(processtype, '') = ISNULL(?, '')
+        ORDER BY Line DESC
+        """,
+        (company, person, tipodoc, period_portal, payrolltype, processtype),
+    )
+    row = cursor.fetchone()
+    if row:
+        return int(row[0])
+    cursor.execute(
+        """
+        SELECT TOP 1 Line
+        FROM PR_DocumentPerson
+        WHERE Company = ? AND Person = ? AND Tipodocumento = ? AND period = ?
+          AND ISNULL(payrolltype, '') = ''
+          AND ISNULL(processtype, '') = ''
+        ORDER BY Line DESC
+        """,
+        (company, person, tipodoc, period_portal),
+    )
+    row = cursor.fetchone()
+    return int(row[0]) if row else None
+
+
+def _registrar_token_en_router(token, database):
+    """Token → BD cliente en hm_planillas.BOLETA_CONFIRMACION_ROUTER (idempotente)."""
+    conn = DatabaseConfig.get_connection(database=get_router_database())
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            IF NOT EXISTS (SELECT 1 FROM BOLETA_CONFIRMACION_ROUTER WHERE Token = ?)
+                INSERT INTO BOLETA_CONFIRMACION_ROUTER (Token, base_datos_name) VALUES (?, ?)
+            """,
+            (token, token, database),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def preparar_confirmacion_boleta(
+    company,
+    person,
+    period,
+    payrolltype=None,
+    processtype=None,
+    userid=None,
+    filename=None,
+    tipodoc='BOL',
+):
+    """
+    Token de confirmación de recepción para enviar una boleta por correo.
+
+    - Reutiliza el token de la fila BOL del envío si ya existe (reenvíos).
+    - Si la fila existe sin token, le asigna uno nuevo en estado Pendiente.
+    - Si no hay fila, la crea sin FechaEnvio; registrar_fecha_envio_boleta la marca
+      tras enviar y revertir_preparacion_confirmacion la elimina si el envío falla.
+    - Registra token → BD en el router para el endpoint público.
+
+    Retorna dict {token, estado, line, creada} o None si la BD no tiene las columnas
+    o no se pudo preparar (el correo se envía sin botones).
+    """
+    import uuid
+
+    company = str(company or '').strip()
+    person = str(person or '').strip()
+    period_raw = str(period or '').strip()
+    tipodoc = str(tipodoc or 'BOL').strip() or 'BOL'
+    payrolltype = str(payrolltype or '').strip() or None
+    processtype = str(processtype or '').strip() or None
+    userid = str(userid or '').strip() or 'WEB'
+    filename = str(filename or '').strip() or None
+    if not (company and person and period_raw):
+        return None
+
+    database = get_active_database(required=True)
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection(database=database)
+        cursor = conn.cursor()
+        if not _confirmacion_boleta_soportada(cursor):
+            return None
+        period_portal = periodo_clave_envio_boleta(cursor, company, payrolltype, period_raw)
+        line = _linea_documento_envio(
+            cursor, company, person, tipodoc, period_portal, payrolltype, processtype
+        )
+
+        if line is not None:
+            cursor.execute(
+                """
+                SELECT TokenConfirmacion, EstadoConfirmacion
+                FROM PR_DocumentPerson
+                WHERE Company = ? AND Person = ? AND Tipodocumento = ? AND Line = ?
+                """,
+                (company, person, tipodoc, line),
+            )
+            row = cursor.fetchone()
+            token = str(row[0] or '').strip() if row else ''
+            if token:
+                _registrar_token_en_router(token, database)
+                return {
+                    'token': token,
+                    'estado': int(row[1] or 0),
+                    'line': line,
+                    'creada': False,
+                }
+            token = str(uuid.uuid4())
+            _registrar_token_en_router(token, database)
+            cursor.execute(
+                """
+                UPDATE PR_DocumentPerson
+                SET TokenConfirmacion = ?,
+                    EstadoConfirmacion = 0,
+                    FechaConfirmacion = NULL,
+                    IpConfirmacion = NULL,
+                    UserAgentConfirmacion = NULL
+                WHERE Company = ? AND Person = ? AND Tipodocumento = ? AND Line = ?
+                  AND TokenConfirmacion IS NULL
+                """,
+                (token, company, person, tipodoc, line),
+            )
+            conn.commit()
+            return {'token': token, 'estado': CONFIRMACION_PENDIENTE, 'line': line, 'creada': False}
+
+        token = str(uuid.uuid4())
+        _registrar_token_en_router(token, database)
+        cursor.execute(
+            """
+            SELECT ISNULL(MAX(Line), 0)
+            FROM PR_DocumentPerson WITH (UPDLOCK, HOLDLOCK)
+            WHERE Company = ? AND Tipodocumento = ?
+            """,
+            (company, tipodoc),
+        )
+        line = int((cursor.fetchone() or [0])[0] or 0) + 1
+        cursor.execute(
+            """
+            INSERT INTO PR_DocumentPerson (
+                Person, Company, Line, Tipodocumento, Fileroot, Filename,
+                xlastuser, xlastdate, registerdate, period,
+                flagdescarga, fechadescarga, payrolltype, processtype,
+                FechaEnvio, longitud, TokenConfirmacion, EstadoConfirmacion
+            ) VALUES (
+                ?, ?, ?, ?, NULL, ?,
+                ?, CONVERT(varchar(20), GETDATE(), 100), GETDATE(), ?,
+                NULL, NULL, ?, ?,
+                NULL, 0, ?, 0
+            )
+            """,
+            (
+                person,
+                company,
+                line,
+                tipodoc,
+                filename or f"boleta_{person}_{period_portal}.pdf",
+                userid,
+                period_portal,
+                payrolltype,
+                processtype,
+                token,
+            ),
+        )
+        conn.commit()
+        return {'token': token, 'estado': CONFIRMACION_PENDIENTE, 'line': line, 'creada': True}
+    except Exception as e:
+        print(f"Error en preparar_confirmacion_boleta: {e}")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def revertir_preparacion_confirmacion(company, person, info, tipodoc='BOL'):
+    """Elimina la fila creada por preparar_confirmacion_boleta si el correo no se envió."""
+    if not info or not info.get('creada'):
+        return
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM PR_DocumentPerson
+            WHERE Company = ? AND Person = ? AND Tipodocumento = ? AND Line = ?
+              AND FechaEnvio IS NULL AND TokenConfirmacion = ?
+            """,
+            (company, person, tipodoc, info.get('line'), info.get('token')),
+        )
+        conn.commit()
+    except Exception as e:
+        print(f"Error en revertir_preparacion_confirmacion: {e}")
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def resolver_bd_token_confirmacion(token):
+    """BD cliente del token (hm_planillas.BOLETA_CONFIRMACION_ROUTER); None si no existe."""
+    if not token_confirmacion_valido(token):
+        return None
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection(database=get_router_database())
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT base_datos_name FROM BOLETA_CONFIRMACION_ROUTER WHERE Token = ?",
+            (token,),
+        )
+        row = cursor.fetchone()
+        db = str(row[0] or '').strip() if row else ''
+        return db or None
+    except Exception as e:
+        print(f"Error en resolver_bd_token_confirmacion: {e}")
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def obtener_confirmacion_boleta(database, token):
+    """Datos de la boleta del token para la página pública; None si no existe."""
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection(database=database)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT TOP 1
+                dp.Company,
+                dp.Person,
+                LTRIM(RTRIM(ISNULL(dp.period, ''))),
+                dp.EstadoConfirmacion,
+                CONVERT(VARCHAR(10), dp.FechaConfirmacion, 103) + ' a las '
+                    + CONVERT(VARCHAR(5), dp.FechaConfirmacion, 108),
+                LTRIM(RTRIM(ISNULL(p.Name, ''))),
+                LTRIM(RTRIM(ISNULL(c.description, '')))
+            FROM PR_DocumentPerson dp
+                LEFT JOIN SY_Person p ON p.Person = dp.Person
+                LEFT JOIN SY_Company c ON c.Company = dp.Company
+            WHERE dp.TokenConfirmacion = ?
+            """,
+            (token,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            'company': str(row[0] or '').strip(),
+            'person': str(row[1] or '').strip(),
+            'period': str(row[2] or '').strip(),
+            'estado': int(row[3] or 0),
+            'fecha_confirmacion': str(row[4] or '').strip(),
+            'nombre': str(row[5] or '').strip(),
+            'empresa': str(row[6] or '').strip(),
+        }
+    except Exception as e:
+        print(f"Error en obtener_confirmacion_boleta: {e}")
+        return None
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def registrar_confirmacion_boleta(database, token, estado, ip=None, user_agent=None):
+    """
+    Graba la respuesta solo si sigue Pendiente (UPDATE condicional: un único ganador
+    ante clics simultáneos). Retorna True si se registró.
+    """
+    if estado not in (CONFIRMACION_CONFIRMADO, CONFIRMACION_OBSERVADO):
+        return False
+    ip = str(ip or '').strip()[:45] or None
+    user_agent = str(user_agent or '').strip()[:300] or None
+    conn = None
+    try:
+        conn = DatabaseConfig.get_connection(database=database)
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE PR_DocumentPerson
+            SET EstadoConfirmacion = ?,
+                FechaConfirmacion = GETDATE(),
+                IpConfirmacion = ?,
+                UserAgentConfirmacion = ?
+            WHERE TokenConfirmacion = ?
+              AND EstadoConfirmacion = 0
+            """,
+            (estado, ip, user_agent, token),
+        )
+        ok = int(cursor.rowcount or 0) > 0
+        conn.commit()
+        return ok
+    except Exception as e:
+        print(f"Error en registrar_confirmacion_boleta: {e}")
+        try:
+            if conn:
+                conn.rollback()
+        except Exception:
+            pass
+        return False
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def registrar_solicitud_permiso(company, person, userid, controlyear, fechaini, fechafin, comentario):

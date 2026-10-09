@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Confirmación de boleta{% if empresa %} - {{ empresa }}{% endif %}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 24px 16px;
+            background: linear-gradient(135deg, #eef2f7 0%, #dde5f0 100%);
+            font-family: "Segoe UI", Roboto, Arial, Helvetica, sans-serif;
+            color: #1f2937;
+        }
+        .card {
+            width: 100%;
+            max-width: 480px;
+            background: #fff;
+            border-radius: 16px;
+            box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
+            padding: 32px 28px 28px;
+            text-align: center;
+        }
+        .logo {
+            max-width: 200px;
+            max-height: 90px;
+            object-fit: contain;
+            margin-bottom: 12px;
+        }
+        .empresa {
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: .04em;
+            text-transform: uppercase;
+            color: #6b7280;
+            margin-bottom: 20px;
+        }
+        .icono {
+            width: 68px;
+            height: 68px;
+            margin: 4px auto 16px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 34px;
+            font-weight: 700;
+            color: #fff;
+        }
+        .icono.ok { background: #16a34a; }
+        .icono.obs { background: #dc2626; }
+        .icono.info { background: #2563eb; }
+        .icono.warn { background: #d97706; }
+        h1 {
+            font-size: 22px;
+            margin: 0 0 10px;
+            line-height: 1.3;
+        }
+        p {
+            font-size: 15px;
+            line-height: 1.55;
+            margin: 0 0 12px;
+            color: #4b5563;
+        }
+        .detalle {
+            background: #f8fafc;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin: 16px 0 20px;
+            font-size: 14px;
+            text-align: left;
+        }
+        .detalle div + div { margin-top: 4px; }
+        .detalle span { color: #6b7280; }
+        .btn {
+            display: block;
+            width: 100%;
+            border: 0;
+            border-radius: 10px;
+            padding: 14px 18px;
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            cursor: pointer;
+            transition: filter .15s ease;
+        }
+        .btn:hover { filter: brightness(1.08); }
+        .btn:disabled { filter: grayscale(.4); cursor: wait; }
+        .btn-si { background: #16a34a; }
+        .btn-no { background: #dc2626; }
+        .pie {
+            margin-top: 22px;
+            font-size: 12px;
+            color: #9ca3af;
+        }
+        @media (max-width: 420px) {
+            .card { padding: 26px 18px 22px; border-radius: 12px; }
+            h1 { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+<main class="card">
+    {% if logo_src %}
+        <img class="logo" src="{{ logo_src }}" alt="{{ empresa or 'Logo' }}">
+    {% endif %}
+    {% if empresa %}
+        <div class="empresa">{{ empresa }}</div>
+    {% endif %}
+
+    {% if estado_pagina == 'invalido' %}
+        <div class="icono warn">!</div>
+        <h1>Enlace no válido</h1>
+        <p>El enlace de confirmación no es válido o ya no está disponible. Si necesita ayuda, comuníquese con Recursos Humanos.</p>
+
+    {% elif estado_pagina == 'confirmar' %}
+        <div class="icono {{ 'ok' if respuesta == 'SI' else 'obs' }}">{{ '&#10004;'|safe if respuesta == 'SI' else '!' }}</div>
+        {% if respuesta == 'SI' %}
+            <h1>Confirmar recepción de boleta</h1>
+            <p>Confirme que recibió su boleta de pago conforme.</p>
+        {% else %}
+            <h1>Reportar observación</h1>
+            <p>Confirme que tiene una observación sobre su boleta de pago. Recursos Humanos se comunicará con usted.</p>
+        {% endif %}
+        <div class="detalle">
+            {% if nombre %}<div><span>Trabajador:</span> {{ nombre }}</div>{% endif %}
+            {% if periodo_legible %}<div><span>Periodo:</span> {{ periodo_legible }}</div>{% endif %}
+        </div>
+        <form method="post" action="{{ url_for('boleta_confirmar_publico') }}" id="frmConfirmar">
+            <input type="hidden" name="token" value="{{ token }}">
+            <input type="hidden" name="respuesta" value="{{ respuesta }}">
+            {% if respuesta == 'SI' %}
+                <button type="submit" class="btn btn-si">Sí, recibí mi boleta conforme</button>
+            {% else %}
+                <button type="submit" class="btn btn-no">Sí, tengo una observación</button>
+            {% endif %}
+        </form>
+
+    {% elif estado_pagina == 'gracias' %}
+        {% if respuesta == 'SI' %}
+            <div class="icono ok">&#10004;</div>
+            <h1>¡Gracias por confirmar!</h1>
+            <p>Hemos registrado la recepción conforme de su boleta de pago{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}.</p>
+        {% else %}
+            <div class="icono obs">!</div>
+            <h1>Observación registrada</h1>
+            <p>Hemos registrado que tiene una observación sobre su boleta de pago{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}. Recursos Humanos se comunicará con usted.</p>
+        {% endif %}
+        <p>Ya puede cerrar esta ventana.</p>
+
+    {% elif estado_pagina == 'ya_respondida' %}
+        <div class="icono info">i</div>
+        <h1>Boleta ya respondida</h1>
+        <p>Esta boleta ya fue respondida anteriormente{% if fecha_confirmacion %} el <strong>{{ fecha_confirmacion }}</strong>{% endif %}{% if estado_previo == 1 %} como <strong>recibida conforme</strong>{% elif estado_previo == 2 %} <strong>con observación</strong>{% endif %}.</p>
+        <p>Si necesita cambiar su respuesta, comuníquese con Recursos Humanos.</p>
+
+    {% else %}
+        <div class="icono warn">!</div>
+        <h1>No se pudo registrar su respuesta</h1>
+        <p>Ocurrió un problema al registrar su respuesta. Por favor, inténtelo nuevamente en unos minutos.</p>
+    {% endif %}
+
+    <div class="pie">Recursos Humanos{% if empresa %} · {{ empresa }}{% endif %}</div>
+</main>
+<script>
+    (function () {
+        var frm = document.getElementById('frmConfirmar');
+        if (!frm) return;
+        frm.addEventListener('submit', function () {
+            var btn = frm.querySelector('button');
+            if (btn) { btn.disabled = true; btn.textContent = 'Registrando...'; }
+        });
+    })();
+</script>
+</body>
+</html>

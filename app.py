@@ -9415,10 +9415,22 @@ def plantillas_importacion_page():
     return render_template('carga_masiva_plantillas.html')
 
 
+# BDs donde la importación de conceptos permite elegir frecuencia Temporal/Permanente.
+_IMPORTACION_FRECUENCIA_DBS = frozenset({'hm_ngservicios'})
+
+
+def _importacion_frecuencia_habilitada():
+    from database import get_active_database
+    return str(get_active_database() or '').strip().lower() in _IMPORTACION_FRECUENCIA_DBS
+
+
 @app.route('/carga-masiva/importacion-conceptos')
 @login_required
 def importacion_conceptos_page():
-    return render_template('carga_masiva_conceptos.html')
+    return render_template(
+        'carga_masiva_conceptos.html',
+        importacion_frecuencia_habilitada=_importacion_frecuencia_habilitada(),
+    )
 
 
 def _importconcept_lista_dict(r):
@@ -9754,6 +9766,7 @@ def _importacion_conceptos_guardar_fila(
     conceptvalue,
     conceptcurrency,
     xlastuser,
+    frecuencia='T',
 ):
     cursor.execute(
         "EXEC sp_pr_guardarasignacionconcepto_web "
@@ -9768,15 +9781,63 @@ def _importacion_conceptos_guardar_fila(
             payrolltype,
             period,
             costcenter,
-            period,
+            None if frecuencia == 'P' else period,
             conceptvalue,
             conceptcurrency,
             'N',
-            'T',
+            frecuencia,
             xlastuser,
         ),
     )
     _drain_pyodbc_cursor(cursor)
+
+
+def _importacion_conceptos_cerrar_permanente_anterior(
+    cursor, cia, person, concept, payrolltype, period, costcenter, xlastuser
+):
+    """Cierra el permanente vigente iniciado antes de @period (pasa a temporal hasta el periodo previo).
+
+    Devuelve False si hay un permanente anterior pero la planilla no tiene un periodo previo donde cerrarlo.
+    """
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(p.PRPeriod))
+        FROM PR_Period p
+        WHERE p.Company = ? AND p.PayRollType = ? AND p.PRPeriod < ?
+        ORDER BY p.PRPeriod DESC
+        """,
+        (cia, payrolltype, period),
+    )
+    row = cursor.fetchone()
+    periodo_previo = str(row[0]).strip() if row and row[0] else ''
+    cursor.execute(
+        """
+        SELECT COUNT(*)
+        FROM PR_EmployeeConcept ec
+        WHERE ec.Company = ? AND ec.Person = ? AND ec.Concept = ? AND ec.PayRollType = ?
+          AND ec.CostCenter = ? AND ec.PRPeriodStart < ? AND ec.PRPeriodEnd IS NULL
+          AND UPPER(LTRIM(RTRIM(ISNULL(ec.FlagFrecuencyType, 'P')))) = 'P'
+        """,
+        (cia, person, concept, payrolltype, costcenter, period),
+    )
+    if not int(cursor.fetchone()[0] or 0):
+        return True
+    if not periodo_previo:
+        return False
+    cursor.execute(
+        """
+        UPDATE PR_EmployeeConcept
+        SET FlagFrecuencyType = 'T',
+            PRPeriodEnd = CASE WHEN ? < PRPeriodStart THEN PRPeriodStart ELSE ? END,
+            XLastUser = ?,
+            XLastDate = GETDATE()
+        WHERE Company = ? AND Person = ? AND Concept = ? AND PayRollType = ?
+          AND CostCenter = ? AND PRPeriodStart < ? AND PRPeriodEnd IS NULL
+          AND UPPER(LTRIM(RTRIM(ISNULL(FlagFrecuencyType, 'P')))) = 'P'
+        """,
+        (periodo_previo, periodo_previo, xlastuser, cia, person, concept, payrolltype, costcenter, period),
+    )
+    return True
 
 
 def _importacion_conceptos_normalize_dni(raw):
@@ -9988,7 +10049,7 @@ def api_importacion_conceptos_mapa_trabajadores():
 @app.route('/api/importacion-conceptos/procesar', methods=['POST'])
 @login_required
 def api_importacion_conceptos_procesar():
-    """Registra importes del Excel en PR_EmployeeConcept (temporal, upsert)."""
+    """Registra importes del Excel en PR_EmployeeConcept (temporal o permanente, upsert)."""
     body = request.get_json(silent=True) or {}
     todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
     cia = str(body.get('cia') or body.get('company') or '').strip()
@@ -9996,6 +10057,9 @@ def api_importacion_conceptos_procesar():
     period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
     conceptos_tpl = body.get('conceptos') or []
     filas = body.get('rows') or []
+    frecuencia = str(body.get('frecuencia') or 'T').strip().upper()
+    if frecuencia not in ('T', 'P') or not _importacion_frecuencia_habilitada():
+        frecuencia = 'T'
 
     if err:
         return jsonify({"error": err}), 400
@@ -10142,6 +10206,13 @@ def api_importacion_conceptos_procesar():
                 ) else 'I'
 
                 try:
+                    if frecuencia == 'P' and not _importacion_conceptos_cerrar_permanente_anterior(
+                        cursor, cia_fila, person, concept, payrolltype_fila, period, costcenter, xlastuser
+                    ):
+                        errores_fila.append(
+                            f"{concept}: tiene un permanente anterior y no hay periodo previo para cerrarlo."
+                        )
+                        continue
                     _importacion_conceptos_guardar_fila(
                         cursor,
                         modo=modo,
@@ -10154,6 +10225,7 @@ def api_importacion_conceptos_procesar():
                         conceptvalue=conceptvalue,
                         conceptcurrency=meta.get('conceptcurrency') or 'LO',
                         xlastuser=xlastuser,
+                        frecuencia=frecuencia,
                     )
                     conn.commit()
                     ok_conceptos += 1
@@ -10197,6 +10269,7 @@ def api_importacion_conceptos_procesar():
         return jsonify({
             "ok": filas_error == 0,
             "rows": resultado_filas,
+            "frecuencia": frecuencia,
             "resumen": {
                 "filas": len(resultado_filas),
                 "filas_ok": filas_ok,

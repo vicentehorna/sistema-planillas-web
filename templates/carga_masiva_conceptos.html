@@ -123,6 +123,12 @@
         .ic-filtros-row > .ic-filtro-periodo { width: 16%; }
         .ic-filtros-row > .ic-filtro-plantilla { width: 28.25%; }
         .ic-filtros-row > .ic-filtro-empresas { width: 12%; }
+
+        .ic-filtros-row.ic-con-frecuencia > .ic-filtro-frecuencia { flex: 0 0 auto; width: 12%; }
+        .ic-filtros-row.ic-con-frecuencia > .ic-filtro-cia { width: 21%; }
+        .ic-filtros-row.ic-con-frecuencia > .ic-filtro-tipo { width: 16%; }
+        .ic-filtros-row.ic-con-frecuencia > .ic-filtro-periodo { width: 14%; }
+        .ic-filtros-row.ic-con-frecuencia > .ic-filtro-plantilla { width: 25%; }
     }
 </style>
 {% endblock %}
@@ -137,7 +143,7 @@
             </div>
         </div>
 
-        <form id="frmImportacionConceptos" class="row g-2 align-items-end ic-filtros-row">
+        <form id="frmImportacionConceptos" class="row g-2 align-items-end ic-filtros-row{% if importacion_frecuencia_habilitada %} ic-con-frecuencia{% endif %}">
             <div class="col-12 col-md-6 col-lg-3 ic-filtro-cia">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
@@ -162,6 +168,15 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
+            {% if importacion_frecuencia_habilitada %}
+            <div class="col-12 col-md-4 col-lg-1 ic-filtro-frecuencia">
+                <label for="cboFrecuencia" class="form-label small fw-bold text-muted mb-1">Frecuencia</label>
+                <select id="cboFrecuencia" class="form-select form-select-sm">
+                    <option value="T" selected>Temporal</option>
+                    <option value="P">Permanente</option>
+                </select>
+            </div>
+            {% endif %}
             <div class="col-12 col-md-4 col-lg-1 ic-filtro-empresas">
                 <label class="form-label small fw-bold text-muted mb-1 d-block">Empresas</label>
                 <div class="form-check form-switch mt-1">
@@ -1041,9 +1056,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
+        const cboFrecuencia = document.getElementById('cboFrecuencia');
+        const frecuencia = cboFrecuencia && cboFrecuencia.value === 'P' ? 'P' : 'T';
         const confirmar = window.confirm(
             '¿Procesar la importación en Asignación de Conceptos?\n\n'
-            + 'Se registrarán conceptos temporales para el periodo seleccionado. '
+            + (frecuencia === 'P'
+                ? 'Se registrarán conceptos PERMANENTES desde el periodo seleccionado. '
+                  + 'Si el trabajador ya tiene ese concepto como permanente desde un periodo anterior, '
+                  + 'esa asignación se cerrará en el periodo previo. '
+                : 'Se registrarán conceptos temporales para el periodo seleccionado. ')
             + 'Si ya existen, se actualizarán.'
         );
         if (!confirmar) return;
@@ -1060,6 +1081,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 payrolltype: modoTodasEmpresas ? '' : cboTipoPlanilla.value.trim(),
                 payrolltype_por_cia: modoTodasEmpresas ? payrolltypePorCia : undefined,
                 period: cboPeriodo.value.trim(),
+                frecuencia,
                 conceptos: plantillaDetalle.map((ln) => ({
                     concept: ln.concept,
                     formulacode: ln.formulacode,

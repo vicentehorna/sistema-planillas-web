@@ -31514,6 +31514,8 @@ def api_vacaciones_guardar_detalle():
     ).strip().upper()[:1]
     if permitir_exceso not in ('Y', 'N'):
         permitir_exceso = 'N'
+    if vacationtype == 'V':
+        permitir_exceso = 'Y'
 
     conn = None
     try:

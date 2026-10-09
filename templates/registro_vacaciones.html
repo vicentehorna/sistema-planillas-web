@@ -819,6 +819,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('txtFechaFin').classList.remove('is-invalid');
     }
 
+    /* El saldo pendiente solo se valida para vacaciones de descanso; la venta no lo controla. */
+    function esTipoDescanso() {
+        return document.getElementById('cboTipoVacacion').value === 'D';
+    }
+
     function validarDiasFormulario() {
         const btn = document.getElementById('btnGuardarVacaciones');
         const alerta = document.getElementById('alertaDiasExcedidos');
@@ -855,7 +860,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const pendientes = periodoSeleccionado ? Number(periodoSeleccionado.pendientes || 0) : 0;
         lblPend.textContent = fmtDiasVac(pendientes);
 
-        const excede = dias > pendientes;
+        const excede = esTipoDescanso() && dias > pendientes;
         const incompleto = !consumo || !inicio || !fin || !periodoSeleccionado;
 
         alerta.classList.toggle('visible', excede);
@@ -1159,8 +1164,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!dias || dias <= 0) return;
 
         const pendientes = Number(periodoSeleccionado.pendientes || 0);
-        let permitirExceso = false;
-        if (dias > pendientes) {
+        let permitirExceso = !esTipoDescanso();
+        if (!permitirExceso && dias > pendientes) {
             const msg =
                 `Los días solicitados (${dias}) superan el saldo pendiente del periodo (${fmtDiasVac(pendientes)} día(s)).\n` +
                 '¿Desea continuar y grabar de todas formas?';
@@ -1411,6 +1416,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtFechaFin.addEventListener(evt, validarDiasFormulario);
         cboConsumoEfectivo.addEventListener(evt, validarDiasFormulario);
     });
+    document.getElementById('cboTipoVacacion').addEventListener('change', validarDiasFormulario);
 
     if (grillaScrollTrabajadores) {
         grillaScrollTrabajadores.addEventListener('keydown', async function (e) {

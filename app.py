@@ -5543,6 +5543,18 @@ def _usa_boleta_doble():
         return False
 
 
+_BOLETA_ETIQUETA_DIAS_FALLECIMIENTO = {'hm_globaltec': 'Días Ley 31602'}
+
+
+def _boleta_etiqueta_dias_fallecimiento():
+    try:
+        from database import get_active_database
+        db = str(get_active_database() or '').strip().lower()
+    except Exception:
+        db = ''
+    return _BOLETA_ETIQUETA_DIAS_FALLECIMIENTO.get(db, 'Días Fallecimiento')
+
+
 def _boleta_cabecera_modelo_anterior():
     """hm_ultra: cabecera con los mismos campos y disposición de su boleta anterior (sin horas)."""
     try:
@@ -5666,6 +5678,7 @@ def generar_pdf_en_memoria(params):
             firma_src=firma_src,
             firma_ampliada=_es_cliente_ngservicios(),
             cabecera_modelo_anterior=boleta_doble and _boleta_cabecera_modelo_anterior(),
+            etiqueta_dias_fallecimiento=_boleta_etiqueta_dias_fallecimiento(),
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)

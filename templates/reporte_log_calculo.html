@@ -57,6 +57,20 @@
         z-index: 3;
         background-color: #f8f9fa;
     }
+
+    .table-planilla-vertical thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-planilla-vertical thead th.th-sort:hover {
+        background-color: #e4eaf2;
+    }
+
+    .table-planilla-vertical thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+    }
 </style>
 {% endblock %}
 
@@ -136,6 +150,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     const IDX_CENTRO = new Set([2, 8, 9, 10, 11]);
 
     let lastExportLogCalculo = null;
+    let datosLogCalculo = null;
+    const ordenLog = { idx: -1, dir: 1 };
+    const collatorEs = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
 
     function escapeHtml(s) {
         return String(s || '')
@@ -188,10 +205,47 @@ document.addEventListener('DOMContentLoaded', async function () {
         return opt ? opt.textContent.trim() : '';
     }
 
+    function compararValoresLog(a, b) {
+        const vacioA = a === null || a === undefined || a === '';
+        const vacioB = b === null || b === undefined || b === '';
+        if (vacioA || vacioB) return vacioA === vacioB ? 0 : (vacioA ? 1 : -1);
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        return collatorEs.compare(String(a).trim(), String(b).trim());
+    }
+
+    /* Copia ordenada; con orden igual conserva la secuencia original del cálculo. */
+    function filasOrdenadasLog() {
+        const filas = (datosLogCalculo && datosLogCalculo.data) || [];
+        if (ordenLog.idx < 0) return filas.slice();
+        const idx = ordenLog.idx;
+        return filas
+            .map((fila, pos) => ({ fila, pos }))
+            .sort((x, y) => {
+                const va = (x.fila || [])[idx];
+                const vb = (y.fila || [])[idx];
+                const vacio = (v) => v === null || v === undefined || v === '';
+                if (vacio(va) || vacio(vb)) return compararValoresLog(va, vb) || (x.pos - y.pos);
+                return (compararValoresLog(va, vb) * ordenLog.dir) || (x.pos - y.pos);
+            })
+            .map((x) => x.fila);
+    }
+
+    function actualizarIndicadoresOrdenLog() {
+        document.querySelectorAll('#thead-log-calculo th.th-sort').forEach((th) => {
+            const idx = Number(th.getAttribute('data-idx'));
+            const activo = idx === ordenLog.idx;
+            th.querySelector('.sort-ind').textContent = activo ? (ordenLog.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLog.dir === 1 ? 'Orden ascendente (clic para descendente)' : 'Orden descendente (clic para ascendente)')
+                : 'Clic para ordenar por esta columna';
+        });
+    }
+
     function renderizarTablaLogCalculo(response) {
+        datosLogCalculo = response;
         const thead = document.getElementById('thead-log-calculo');
-        const tbody = document.getElementById('tbody-log-calculo');
         const headers = response.headers || [];
+        if (ordenLog.idx >= headers.length) ordenLog.idx = -1;
 
         let htmlHeaders = '<tr>';
         headers.forEach((header, index) => {
@@ -200,12 +254,18 @@ document.addEventListener('DOMContentLoaded', async function () {
             else if (index === IDX_STICKY_2) sticky = 'sticky-col-2';
             const cen = IDX_CENTRO.has(index) ? ' text-center' : '';
             const end = index === IDX_COL_IMPORTE ? ' text-end' : '';
-            htmlHeaders += `<th class="${sticky}${cen}${end}">${escapeHtml(header)}</th>`;
+            htmlHeaders += `<th class="th-sort ${sticky}${cen}${end}" data-idx="${index}">${escapeHtml(header)}<span class="sort-ind"></span></th>`;
         });
         htmlHeaders += '</tr>';
         thead.innerHTML = htmlHeaders;
+        actualizarIndicadoresOrdenLog();
+        renderizarFilasLogCalculo();
+    }
 
-        const filas = response.data || [];
+    function renderizarFilasLogCalculo() {
+        const tbody = document.getElementById('tbody-log-calculo');
+        const filas = filasOrdenadasLog();
+        if (lastExportLogCalculo) lastExportLogCalculo.data = filas;
         let htmlBody = '';
         filas.forEach((rowVals) => {
             htmlBody += '<tr>';
@@ -388,7 +448,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderizarTablaLogCalculo(payload);
             lastExportLogCalculo = {
                 headers: payload.headers,
-                data: payload.data,
+                data: filasOrdenadasLog(),
                 meta: {
                     compania: selectedText('cboCompania'),
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
@@ -510,6 +570,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (filtrosPersist) {
         filtrosPersist.registrarGuardadoEnCambio();
     }
+
+    document.getElementById('thead-log-calculo').addEventListener('click', function (e) {
+        const th = e.target.closest('th.th-sort');
+        if (!th || !datosLogCalculo) return;
+        const idx = Number(th.getAttribute('data-idx'));
+        if (ordenLog.idx === idx) {
+            ordenLog.dir = -ordenLog.dir;
+        } else {
+            ordenLog.idx = idx;
+            ordenLog.dir = 1;
+        }
+        actualizarIndicadoresOrdenLog();
+        renderizarFilasLogCalculo();
+    });
 
     document.getElementById('frmLogCalculo').addEventListener('submit', async function (e) {
         e.preventDefault();

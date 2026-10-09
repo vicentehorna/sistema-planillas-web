@@ -168,8 +168,10 @@
                         <th style="width: 7rem;">Código</th>
                         <th>Nombre del trabajador</th>
                         <th style="width: 14rem;">Email</th>
-                        <th style="width: 7rem;">F. ingreso</th>
                         <th style="width: 8rem;" title="Fecha y hora del último envío por email">F. envío</th>
+                        {% if confirmacion_boleta_habilitada %}
+                        <th style="width: 8rem;" title="Fecha y hora en que el trabajador respondió el correo (verde: conforme, rojo: con observación)">F. confirmación</th>
+                        {% endif %}
                         <th style="width: 8rem;" class="text-center">Acciones</th>
                     </tr>
                 </thead>
@@ -193,6 +195,18 @@ document.addEventListener('DOMContentLoaded', async function () {
     const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.generarBoletas
         ? window.FiltrosPlanillasReportes.generarBoletas()
         : null;
+
+    const CON_CONFIRMACION = {{ (confirmacion_boleta_habilitada or false) | tojson }};
+
+    function pintarConfirmacion(td, t) {
+        const fecha = String((t && t.fecha_confirmacion) || '').trim();
+        const estado = Number(t && t.estado_confirmacion);
+        td.textContent = fecha;
+        td.classList.toggle('text-success', !!fecha && estado === 1);
+        td.classList.toggle('text-danger', !!fecha && estado === 2);
+        td.classList.toggle('fw-semibold', !!fecha);
+        td.title = !fecha ? '' : (estado === 2 ? 'Con observación' : 'Recibida conforme');
+    }
 
     const URL_LISTA = {{ url_for('get_lista_boletas') | tojson }};
     const URL_PREVIEW = {{ url_for('preview_boleta') | tojson }};
@@ -590,11 +604,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             td2.textContent = nombreRaw;
             const td3 = document.createElement('td');
             td3.textContent = String(t.email || '').trim();
-            const td4 = document.createElement('td');
-            td4.textContent = String(t.ingreso || '').trim();
             const td5 = document.createElement('td');
             td5.className = 'col-fecha-envio';
             td5.textContent = String(t.fecha_envio || '').trim();
+            let tdConf = null;
+            if (CON_CONFIRMACION) {
+                tdConf = document.createElement('td');
+                tdConf.className = 'col-fecha-confirmacion';
+                pintarConfirmacion(tdConf, t);
+            }
             const btnPreview = document.createElement('button');
             btnPreview.type = 'button';
             btnPreview.className = 'btn btn-outline-secondary btn-sm py-0 px-2';
@@ -617,8 +635,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             tr.appendChild(td1);
             tr.appendChild(td2);
             tr.appendChild(td3);
-            tr.appendChild(td4);
             tr.appendChild(td5);
+            if (tdConf) tr.appendChild(tdConf);
             tr.appendChild(td6);
             tbody.appendChild(tr);
         });
@@ -1036,14 +1054,22 @@ document.addEventListener('DOMContentLoaded', async function () {
             const data = await res.json();
             const rows = Array.isArray(data) ? data : (Array.isArray(data.rows) ? data.rows : []);
             const fechas = new Map(rows.map((t) => [String(t.person || '').trim(), String(t.fecha_envio || '').trim()]));
+            const filasPorPersona = new Map(rows.map((t) => [String(t.person || '').trim(), t]));
             boletasCache.forEach((t) => {
                 const pid = String(t.person || '').trim();
                 if (fechas.has(pid)) t.fecha_envio = fechas.get(pid);
+                const fila = filasPorPersona.get(pid);
+                if (fila) {
+                    t.fecha_confirmacion = fila.fecha_confirmacion;
+                    t.estado_confirmacion = fila.estado_confirmacion;
+                }
             });
             document.querySelectorAll('#tbodyBoletas tr.boleta-row').forEach((tr) => {
                 const pid = tr.querySelector('.check-persona')?.value || '';
                 const td = tr.querySelector('.col-fecha-envio');
                 if (td && fechas.has(pid)) td.textContent = fechas.get(pid);
+                const tdConf = tr.querySelector('.col-fecha-confirmacion');
+                if (tdConf && filasPorPersona.has(pid)) pintarConfirmacion(tdConf, filasPorPersona.get(pid));
             });
         } catch (e) {
             console.error(e);

@@ -1184,6 +1184,48 @@ def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
         return {}
 
 
+def get_confirmaciones_boletas(cursor, company, payrolltype, processtype, period):
+    """
+    {person: {'fecha': 'dd/mm/yyyy hh:mm', 'estado': 1|2}} de las boletas del periodo
+    con respuesta del trabajador (1 confirmado, 2 con observación).
+    {} si la BD no tiene las columnas de confirmación.
+    """
+    try:
+        if not _confirmacion_boleta_soportada(cursor):
+            return {}
+        clave = periodo_clave_envio_boleta(cursor, company, payrolltype, period)
+        cursor.execute(
+            """
+            SELECT Person, EstadoConfirmacion,
+                   CONVERT(VARCHAR(10), FechaConfirmacion, 103) + ' '
+                       + CONVERT(VARCHAR(5), FechaConfirmacion, 108)
+            FROM (
+                SELECT Person, EstadoConfirmacion, FechaConfirmacion,
+                       ROW_NUMBER() OVER (PARTITION BY Person ORDER BY FechaConfirmacion DESC) AS rn
+                FROM PR_DocumentPerson
+                WHERE Company = ?
+                  AND Tipodocumento = 'BOL'
+                  AND EstadoConfirmacion IN (1, 2)
+                  AND FechaConfirmacion IS NOT NULL
+                  AND period = ?
+                  AND (
+                        (ISNULL(payrolltype, '') = ? AND ISNULL(processtype, '') = ?)
+                     OR (ISNULL(payrolltype, '') = '' AND ISNULL(processtype, '') = '')
+                  )
+            ) x
+            WHERE rn = 1
+            """,
+            (company, clave, str(payrolltype or '').strip(), str(processtype or '').strip()),
+        )
+        return {
+            str(r[0] or '').strip(): {'estado': int(r[1]), 'fecha': str(r[2] or '').strip()}
+            for r in cursor.fetchall()
+        }
+    except Exception as e:
+        print(f"Error en get_confirmaciones_boletas: {e}")
+        return {}
+
+
 def registrar_fecha_envio_boleta(
     company,
     person,

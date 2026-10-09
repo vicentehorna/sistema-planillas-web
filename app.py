@@ -65,7 +65,7 @@ except Exception as _weasy_err:
     WEASYPRINT_AVAILABLE = False
     _WEASYPRINT_IMPORT_ERROR = _weasy_err
 
-from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta, get_fechas_envio_boletas
+from database import User, get_datos_usuario_web, cambiar_password, validar_password_fuerte, get_db_connection, get_config_empresa, get_company_branding, get_listado_generar_boletas, get_listado_certificado_quinta, get_fechas_envio_boletas, get_confirmaciones_boletas
 from tregistro_import import normalizar_num_doc
 from tregistro_pdf_import import construir_resumen_pdf
 from plame_sunat_parser import ARCHIVOS_SUNAT, parse_filename, parse_sunat_xml
@@ -5400,7 +5400,7 @@ def formatear_periodo_texto(periodo_str):
         return str(periodo_str or "")
 
 
-_CONFIRMACION_BOLETA_DBS = frozenset({'hm_prescription'})
+_CONFIRMACION_BOLETA_DBS = frozenset({'hm_prescription', 'hm_credireport'})
 
 
 def _confirmacion_boleta_habilitada():
@@ -23873,6 +23873,7 @@ def generar_boletas_page():
         'generar_boletas.html',
         mostrar_subir_portal=(client_db == 'hm_aci'),
         client_database=client_db,
+        confirmacion_boleta_habilitada=_confirmacion_boleta_habilitada(),
     )
 
 
@@ -25565,6 +25566,11 @@ def get_lista_boletas():
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         fechas_envio = get_fechas_envio_boletas(cursor, cia, payroll_type, processtype, period) if rows else {}
+        confirmaciones = (
+            get_confirmaciones_boletas(cursor, cia, payroll_type, processtype, period)
+            if rows and _confirmacion_boleta_habilitada()
+            else {}
+        )
         trabajadores = []
         for r in rows:
             fi = _jsonable_value(r.get('fechaingreso'))
@@ -25578,6 +25584,8 @@ def get_lista_boletas():
                     'ingreso': fi if fi is not None else '',
                     'cese': fc if fc is not None else '',
                     'fecha_envio': fechas_envio.get(pid, ''),
+                    'fecha_confirmacion': (confirmaciones.get(pid) or {}).get('fecha', ''),
+                    'estado_confirmacion': (confirmaciones.get(pid) or {}).get('estado'),
                 }
             )
 

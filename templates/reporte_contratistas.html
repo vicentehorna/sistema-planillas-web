@@ -1,0 +1,552 @@
+{% extends "layout.html" %}
+
+{% block title %}Planilla de Contratistas{% endblock %}
+
+{% block extra_css %}
+<style>
+    .reporte-contratistas-wrap {
+        max-width: 1100px;
+        margin: 0 auto;
+    }
+
+    .reporte-contratistas-empresa {
+        font-size: 0.95rem;
+        font-weight: 700;
+        line-height: 1.35;
+    }
+
+    .reporte-contratistas-titulo {
+        border: 1px solid #333;
+        box-shadow: 3px 3px 0 #999;
+        text-align: center;
+        font-weight: 700;
+        font-size: 1.35rem;
+        padding: 0.35rem 0;
+        margin: 1rem 0 1.5rem;
+    }
+
+    .table-contratistas {
+        font-size: 12px;
+        margin-bottom: 0;
+    }
+
+    .table-contratistas th,
+    .table-contratistas td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+    }
+
+    .table-contratistas thead th {
+        text-align: center;
+        background-color: #f8f9fa;
+        white-space: pre-line;
+    }
+
+    .table-contratistas tr.fila-titulo td {
+        background-color: #c0c0c0;
+        font-weight: 700;
+        text-align: center;
+        font-size: 13px;
+    }
+
+    .table-contratistas tr.fila-total td {
+        background-color: #d9edf7;
+        font-weight: 700;
+    }
+
+    @media print {
+        .no-print,
+        #sidebar,
+        nav.navbar,
+        .sidebar {
+            display: none !important;
+        }
+
+        #cardResultado {
+            box-shadow: none !important;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4 no-print">
+    <div class="card-body pt-3">
+        <form id="frmContratistas" class="row g-3">
+            <div class="col-md-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Empleado <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTrabajador" class="form-select form-select-sm" disabled>
+                    <option value="">Todos (por defecto)</option>
+                </select>
+            </div>
+            <div class="col-6 col-sm-4 col-md-2 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" id="btnImprimir" disabled><i class="bi bi-printer"></i> Imprimir</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <div class="reporte-contratistas-wrap">
+            <div class="reporte-contratistas-empresa">
+                <div id="lblEmpresa"></div>
+                <div id="lblRuc"></div>
+            </div>
+            <div class="reporte-contratistas-titulo">PLANILLA DE CONTRATISTAS</div>
+            <div class="small text-muted text-center mb-2" id="lblSubtitulo"></div>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm table-contratistas align-middle">
+                    <thead>
+                        <tr>
+                            <th style="width: 30%">Concepto Y Aportaciones</th>
+                            <th style="width: 10%">N° De
+Trabajadores</th>
+                            <th style="width: 12%">Monto Total
+de Planilla</th>
+                            <th style="width: 14%">% de
+Aportaciones</th>
+                            <th style="width: 12%">Entidad Bancaria
+Pago</th>
+                            <th style="width: 10%">Fecha Pago</th>
+                            <th style="width: 12%">Monto Pagado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyContratistas"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    let lastExport = null;
+
+    const MESES_ES = [
+        'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+        'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+    ];
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function fmtMonto(v) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) return '';
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function fmtCantidad(v) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) return '';
+        return v === 0 ? '' : String(Math.round(v));
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function mesAnio(periodRaw) {
+        const s = String(periodRaw || '').replace(/[^0-9]/g, '');
+        if (s.length < 6) return '';
+        const m = parseInt(s.slice(4, 6), 10);
+        return (m >= 1 && m <= 12) ? `${MESES_ES[m - 1]} ${s.slice(0, 4)}` : s.slice(0, 4);
+    }
+
+    function etiquetaCesados(valor) {
+        const v = String(valor || 'T').trim().toUpperCase();
+        if (v === 'Y') return 'Sí';
+        if (v === 'N') return 'No';
+        return 'Todos';
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!select || !want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function etiquetaTrabajadorTodosPorDefecto(selectElement) {
+        if (!selectElement || !selectElement.options.length) return;
+        const o = selectElement.options[0];
+        if (o && o.value === '') o.textContent = 'Todos (por defecto)';
+    }
+
+    function renderizar(payload, meta) {
+        document.getElementById('lblEmpresa').textContent = payload.empresa || '';
+        document.getElementById('lblRuc').textContent = payload.ruc ? `RUC: ${payload.ruc}` : '';
+        document.getElementById('lblSubtitulo').textContent =
+            [meta.tipoPlanilla, meta.proceso, mesAnio(meta.periodoValor)].filter(Boolean).join(' - ');
+
+        let html = '';
+        let totPlanilla = 0;
+        let totPagado = 0;
+        (payload.rows || []).forEach((r) => {
+            if (r.es_titulo) {
+                html += `<tr class="fila-titulo"><td colspan="7">${escapeHtml(r.detalle)}</td></tr>`;
+                return;
+            }
+            totPlanilla += Number(r.montoplanilla) || 0;
+            totPagado += Number(r.montopagado) || 0;
+            html += '<tr>'
+                + `<td>${escapeHtml(r.detalle)}</td>`
+                + `<td class="text-center">${fmtCantidad(r.cantidad)}</td>`
+                + `<td class="text-end">${fmtMonto(r.montoplanilla)}</td>`
+                + `<td class="text-center">${escapeHtml(r.porcentaje)}</td>`
+                + `<td class="text-center">${escapeHtml(r.banco)}</td>`
+                + `<td class="text-center">${escapeHtml(r.fechapago)}</td>`
+                + `<td class="text-end">${fmtMonto(r.montopagado)}</td>`
+                + '</tr>';
+        });
+        html += '<tr class="fila-total">'
+            + '<td>TOTAL</td><td></td>'
+            + `<td class="text-end">${fmtMonto(totPlanilla)}</td>`
+            + '<td></td><td></td><td></td>'
+            + `<td class="text-end">${fmtMonto(totPagado)}</td>`
+            + '</tr>';
+        document.getElementById('tbodyContratistas').innerHTML = html;
+        return { totPlanilla, totPagado };
+    }
+
+    async function exportarExcel(payload, meta) {
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FF999999' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+        const NCOLS = 7;
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Contratistas', { views: [{ showGridLines: false }] });
+        ws.columns = [
+            { width: 40 }, { width: 14 }, { width: 16 }, { width: 26 },
+            { width: 16 }, { width: 13 }, { width: 16 }
+        ];
+
+        ws.addRow([payload.empresa || '']).font = { bold: true, size: 11 };
+        ws.addRow([payload.ruc ? `RUC: ${payload.ruc}` : '']).font = { bold: true, size: 11 };
+        ws.addRow([]);
+
+        const tRow = ws.addRow(['PLANILLA DE CONTRATISTAS']);
+        ws.mergeCells(tRow.number, 1, tRow.number, NCOLS);
+        tRow.getCell(1).font = { bold: true, size: 14 };
+        tRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        tRow.getCell(1).border = allBorders;
+        tRow.height = 24;
+
+        const sRow = ws.addRow([
+            [meta.compania, meta.tipoPlanilla, meta.proceso, mesAnio(meta.periodoValor),
+                `Cesados: ${meta.cesados}`, meta.empleado ? `Empleado: ${meta.empleado}` : '']
+                .filter(Boolean).join(' - ')
+        ]);
+        ws.mergeCells(sRow.number, 1, sRow.number, NCOLS);
+        sRow.getCell(1).alignment = { horizontal: 'center' };
+        sRow.getCell(1).font = { italic: true, size: 9 };
+        ws.addRow([]);
+
+        const hRow = ws.addRow([
+            'Concepto Y Aportaciones', 'N° De Trabajadores', 'Monto Total de Planilla',
+            '% de Aportaciones', 'Entidad Bancaria Pago', 'Fecha Pago', 'Monto Pagado'
+        ]);
+        hRow.height = 30;
+        hRow.eachCell((cell) => {
+            cell.font = { bold: true };
+            cell.fill = fill('FFF8F9FA');
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = allBorders;
+        });
+
+        let totPlanilla = 0;
+        let totPagado = 0;
+        (payload.rows || []).forEach((r) => {
+            if (r.es_titulo) {
+                const row = ws.addRow([r.detalle]);
+                ws.mergeCells(row.number, 1, row.number, NCOLS);
+                const c = row.getCell(1);
+                c.font = { bold: true };
+                c.fill = fill('FFC0C0C0');
+                c.alignment = { horizontal: 'center' };
+                c.border = allBorders;
+                return;
+            }
+            totPlanilla += Number(r.montoplanilla) || 0;
+            totPagado += Number(r.montopagado) || 0;
+            const row = ws.addRow([
+                r.detalle,
+                Number(r.cantidad) || 0,
+                Number(r.montoplanilla) || 0,
+                r.porcentaje || '',
+                r.banco || '',
+                r.fechapago || '',
+                Number(r.montopagado) || 0
+            ]);
+            row.eachCell({ includeEmpty: true }, (cell, col) => {
+                cell.border = allBorders;
+                if (col === 3 || col === 7) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = { horizontal: 'right' };
+                } else if (col > 1) {
+                    cell.alignment = { horizontal: 'center' };
+                }
+            });
+        });
+        const totRow = ws.addRow(['TOTAL', '', totPlanilla, '', '', '', totPagado]);
+        totRow.eachCell({ includeEmpty: true }, (cell, col) => {
+            cell.font = { bold: true };
+            cell.fill = fill('FFD9EDF7');
+            cell.border = allBorders;
+            if (col === 3 || col === 7) {
+                cell.numFmt = '#,##0.00';
+                cell.alignment = { horizontal: 'right' };
+            }
+        });
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        const periodo = String(meta.periodoValor || '').replace(/[^0-9]/g, '');
+        const periodoArchivo = periodo.length >= 6 ? `${periodo.slice(4, 6)}-${periodo.slice(0, 4)}` : 'PERIODO';
+        a.href = url;
+        a.download = `PLANILLA_CONTRATISTAS_${periodoArchivo}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    async function consultar() {
+        lastExport = null;
+        document.getElementById('btnExportExcel').disabled = true;
+        document.getElementById('btnImprimir').disabled = true;
+        const cia = cboCia.value.trim();
+        const payroll_type = cboPlanilla.value.trim();
+        const process = cboProceso.value.trim();
+        const period = cboPeriodo.value.trim();
+        const person = cboTrabajador.value.trim() || '0';
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        try {
+            const res = await fetch('/reporte_contratistas', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type, process, period, person, cesados })
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultado').classList.add('d-none');
+                alert(payload.error || 'Error al generar el reporte.');
+                return;
+            }
+            const meta = {
+                compania: selectedText('cboCompania'),
+                tipoPlanilla: selectedText('cboTipoPlanilla'),
+                proceso: selectedText('cboProceso'),
+                periodoValor: period,
+                cesados: etiquetaCesados(cesados),
+                empleado: person !== '0' ? selectedText('cboTrabajador') : ''
+            };
+            document.getElementById('cardResultado').classList.remove('d-none');
+            renderizar(payload, meta);
+            lastExport = { payload, meta };
+            document.getElementById('btnExportExcel').disabled = false;
+            document.getElementById('btnImprimir').disabled = false;
+        } catch (e) {
+            console.error(e);
+            document.getElementById('cardResultado').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function poblarSelect(url, selectElement, opciones) {
+        opciones = opciones || {};
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            selectElement.innerHTML = '<option value="">Seleccione...</option>';
+            const items = Array.isArray(data) ? data : [];
+            items.forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            if (!items.length && opciones.textoVacio) {
+                selectElement.options[0].textContent = opciones.textoVacio;
+            }
+            selectElement.disabled = false;
+            if (typeof opciones.alCargar === 'function') opciones.alCargar(selectElement);
+            return true;
+        } catch (err) {
+            console.error(err);
+            selectElement.innerHTML = '<option value="">Error al cargar</option>';
+            selectElement.disabled = false;
+            return false;
+        }
+    }
+
+    function resetSelect(selectElement) {
+        selectElement.innerHTML = '<option value="">Seleccione...</option>';
+        selectElement.disabled = true;
+    }
+
+    function seleccionarPorTexto(selectElement, texto) {
+        const want = String(texto || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(selectElement.options).find(
+            (o) => o.value !== '' && o.textContent.trim().toUpperCase() === want
+        );
+        if (!opt) return false;
+        selectElement.value = opt.value;
+        return true;
+    }
+
+    const DEFAULT_CIA = 'BGT';
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+
+    async function cargarPeriodos() {
+        const cia = cboCia.value;
+        const pt = cboPlanilla.value;
+        const proc = cboProceso.value;
+        if (!cia || !pt || !proc) {
+            resetSelect(cboPeriodo);
+            return;
+        }
+        await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
+            cboPeriodo
+        );
+    }
+
+    async function cargarProcesos(procesoPreferido) {
+        const cia = cboCia.value;
+        const pt = cboPlanilla.value;
+        resetSelect(cboPeriodo);
+        if (!cia || !pt) {
+            resetSelect(cboProceso);
+            return;
+        }
+        const ok = await poblarSelect(
+            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
+            cboProceso,
+            { textoVacio: 'Sin procesos' }
+        );
+        if (ok && procesoPreferido && seleccionarPorTexto(cboProceso, procesoPreferido)) {
+            await cargarPeriodos();
+        }
+    }
+
+    async function alCambiarCompania() {
+        const cia = cboCia.value;
+        const planillaPrevia = cboPlanilla.value ? selectedText('cboTipoPlanilla') : '';
+        const procesoPrevio = cboProceso.value ? selectedText('cboProceso') : '';
+        resetSelect(cboProceso);
+        resetSelect(cboPeriodo);
+        if (!cia) {
+            resetSelect(cboPlanilla);
+            resetSelect(cboTrabajador);
+            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+            return;
+        }
+        const cargaTrabajadores = poblarSelect(
+            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
+            cboTrabajador,
+            { alCargar: etiquetaTrabajadorTodosPorDefecto }
+        );
+        const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        if (ok && planillaPrevia && seleccionarPorTexto(cboPlanilla, planillaPrevia)) {
+            await cargarProcesos(procesoPrevio);
+        }
+        await cargaTrabajadores;
+    }
+
+    cboCia.addEventListener('change', alCambiarCompania);
+    cboPlanilla.addEventListener('change', () => cargarProcesos(''));
+    cboProceso.addEventListener('change', cargarPeriodos);
+
+    document.getElementById('frmContratistas').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await consultar();
+    });
+
+    document.getElementById('btnExportExcel').addEventListener('click', async function () {
+        if (!lastExport) {
+            alert('Ejecute primero una búsqueda con resultados.');
+            return;
+        }
+        try {
+            await exportarExcel(lastExport.payload, lastExport.meta);
+        } catch (err) {
+            console.error(err);
+            alert('No se pudo generar el archivo Excel.');
+        }
+    });
+
+    document.getElementById('btnImprimir').addEventListener('click', function () {
+        window.print();
+    });
+
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+    if (!String(cboCia.value || '').trim()) {
+        seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    }
+    if (String(cboCia.value || '').trim()) {
+        await alCambiarCompania();
+    }
+});
+</script>
+{% endblock %}

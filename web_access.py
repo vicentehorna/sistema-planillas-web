@@ -128,6 +128,8 @@ ENDPOINT_MENU_MAP = {
     'api_reporte_lista_trabajadores': 'reporte_trabajadores',
     'reporte_envio_boletas_page': 'reporte_envio_boletas',
     'api_reporte_envio_boletas': 'reporte_envio_boletas',
+    'reporte_contratistas_page': 'reporte_contratistas',
+    'reporte_contratistas_post': 'reporte_contratistas',
     'api_reporte_planilla_anual_concepto': 'reporte_planilla_anual_concepto',
     'generar_boletas_page': 'generar_boletas',
     'formato_utilidades_page': 'formato_utilidades',

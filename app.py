@@ -8646,6 +8646,14 @@ def reporte_planilla_todas_planillas_page():
     return render_template('reporte_planilla_todas_planillas.html')
 
 
+@app.route('/reporte-contratistas')
+@login_required
+def reporte_contratistas_page():
+    if not _es_bd_hm_divisa():
+        abort(404)
+    return render_template('reporte_contratistas.html')
+
+
 @app.route('/reporte-vacaciones-detalle')
 @login_required
 def reporte_vacaciones_detalle_page():
@@ -29455,6 +29463,72 @@ def reporte_planilla_consolidada_post():
     except Exception as e:
         logging.exception("reporte_planilla_consolidada_post")
         return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/reporte_contratistas', methods=['POST'])
+@login_required
+def reporte_contratistas_post():
+    """sp_pr_reportecontratistas_web @cia, @payroll, @process, @period, @person, @cesados (solo hm_divisa)."""
+    if not _es_bd_hm_divisa():
+        return jsonify({"error": "Reporte disponible solo para hm_divisa."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or '').strip()
+    payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
+    process = str(body.get('process') or '').strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not payroll_type or not process or not period:
+        return jsonify({"error": "Debe indicar tipo de planilla, proceso y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Description, ''))), LTRIM(RTRIM(ISNULL(RUC, ''))) "
+            "FROM SY_Company WHERE Company = ?",
+            (cia,),
+        )
+        row_cia = cursor.fetchone()
+        empresa = str(row_cia[0] or '').strip() if row_cia else ''
+        ruc = str(row_cia[1] or '').strip() if row_cia else ''
+
+        cursor.execute(
+            "EXEC sp_pr_reportecontratistas_web "
+            "@cia=?, @payroll=?, @process=?, @period=?, @person=?, @cesados=?",
+            (cia, payroll_type, process, period, person, cesados),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        filas = []
+        for r in rows:
+            fecha = r.get('fechapago')
+            filas.append({
+                'fila': int(r.get('fila') or 0),
+                'es_titulo': str(r.get('es_titulo') or 'N').strip().upper() == 'Y',
+                'detalle': str(r.get('detalle') or '').strip(),
+                'cantidad': _jsonable_value(r.get('cantidad')),
+                'montoplanilla': _jsonable_value(r.get('montoplanilla')),
+                'porcentaje': str(r.get('porcentaje') or '').strip(),
+                'banco': str(r.get('banco') or '').strip(),
+                'fechapago': fecha.strftime('%d-%m-%Y') if hasattr(fecha, 'strftime') else '',
+                'montopagado': _jsonable_value(r.get('montopagado')),
+            })
+        return jsonify({"empresa": empresa, "ruc": ruc, "rows": filas})
+    except Exception as e:
+        logging.exception("reporte_contratistas_post")
+        return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

@@ -9,20 +9,14 @@
         margin: 0 auto;
     }
 
-    .reporte-contratistas-empresa {
-        font-size: 0.95rem;
-        font-weight: 700;
-        line-height: 1.35;
+    .filtro-periodo-contratistas {
+        flex: 0 0 auto;
+        width: 8.5rem;
     }
 
-    .reporte-contratistas-titulo {
-        border: 1px solid #333;
-        box-shadow: 3px 3px 0 #999;
-        text-align: center;
-        font-weight: 700;
-        font-size: 1.35rem;
-        padding: 0.35rem 0;
-        margin: 1rem 0 1.5rem;
+    .filtro-cesados-contratistas {
+        flex: 0 0 auto;
+        width: 6.25rem;
     }
 
     .table-contratistas {
@@ -53,24 +47,11 @@
         background-color: #d9edf7;
         font-weight: 700;
     }
-
-    @media print {
-        .no-print,
-        #sidebar,
-        nav.navbar,
-        .sidebar {
-            display: none !important;
-        }
-
-        #cardResultado {
-            box-shadow: none !important;
-        }
-    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card shadow-sm border-0 mb-4 no-print">
+<div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
         <form id="frmContratistas" class="row g-3">
             <div class="col-md-3">
@@ -91,19 +72,19 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-2">
+            <div class="col-6 col-md-auto filtro-periodo-contratistas">
                 <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
                 <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-12 col-md">
                 <label for="cboTrabajador" class="form-label small fw-bold text-muted">Empleado <span class="fw-normal opacity-75">(opcional)</span></label>
                 <select id="cboTrabajador" class="form-select form-select-sm" disabled>
                     <option value="">Todos (por defecto)</option>
                 </select>
             </div>
-            <div class="col-6 col-sm-4 col-md-2 col-lg-1">
+            <div class="col-6 col-md-auto filtro-cesados-contratistas">
                 <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
                 <select id="cboCesados" class="form-select form-select-sm">
                     <option value="T" selected>Todos</option>
@@ -114,7 +95,6 @@
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm px-4" id="btnImprimir" disabled><i class="bi bi-printer"></i> Imprimir</button>
             </div>
         </form>
     </div>
@@ -122,13 +102,8 @@
 
 <div class="card shadow-sm border-0 d-none" id="cardResultado">
     <div class="card-body">
+        <h4 class="text-center fw-bold mb-3" id="tituloContratistas"></h4>
         <div class="reporte-contratistas-wrap">
-            <div class="reporte-contratistas-empresa">
-                <div id="lblEmpresa"></div>
-                <div id="lblRuc"></div>
-            </div>
-            <div class="reporte-contratistas-titulo">PLANILLA DE CONTRATISTAS</div>
-            <div class="small text-muted text-center mb-2" id="lblSubtitulo"></div>
             <div class="table-responsive">
                 <table class="table table-bordered table-sm table-contratistas align-middle">
                     <thead>
@@ -196,6 +171,22 @@ document.addEventListener('DOMContentLoaded', async function () {
         return (m >= 1 && m <= 12) ? `${MESES_ES[m - 1]} ${s.slice(0, 4)}` : s.slice(0, 4);
     }
 
+    function tituloCasePalabras(text) {
+        return String(text || '').trim().toLowerCase().replace(/_/g, ' ')
+            .split(/\s+/).filter(Boolean)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join(' ');
+    }
+
+    function formatTituloContratistas(tipoPlanilla, proceso, periodValue) {
+        const tipo = tituloCasePalabras(tipoPlanilla);
+        const proc = tituloCasePalabras(proceso);
+        const ma = mesAnio(periodValue);
+        return ma
+            ? `Planilla de Contratistas ${tipo} - ${proc} ${ma}`
+            : `Planilla de Contratistas ${tipo} - ${proc}`;
+    }
+
     function etiquetaCesados(valor) {
         const v = String(valor || 'T').trim().toUpperCase();
         if (v === 'Y') return 'Sí';
@@ -219,10 +210,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function renderizar(payload, meta) {
-        document.getElementById('lblEmpresa').textContent = payload.empresa || '';
-        document.getElementById('lblRuc').textContent = payload.ruc ? `RUC: ${payload.ruc}` : '';
-        document.getElementById('lblSubtitulo').textContent =
-            [meta.tipoPlanilla, meta.proceso, mesAnio(meta.periodoValor)].filter(Boolean).join(' - ');
+        document.getElementById('tituloContratistas').textContent = meta.titulo;
 
         let html = '';
         let totPlanilla = 0;
@@ -271,20 +259,16 @@ document.addEventListener('DOMContentLoaded', async function () {
             { width: 16 }, { width: 13 }, { width: 16 }
         ];
 
-        ws.addRow([payload.empresa || '']).font = { bold: true, size: 11 };
-        ws.addRow([payload.ruc ? `RUC: ${payload.ruc}` : '']).font = { bold: true, size: 11 };
-        ws.addRow([]);
-
-        const tRow = ws.addRow(['PLANILLA DE CONTRATISTAS']);
+        const tRow = ws.addRow([meta.titulo]);
         ws.mergeCells(tRow.number, 1, tRow.number, NCOLS);
         tRow.getCell(1).font = { bold: true, size: 14 };
         tRow.getCell(1).alignment = { horizontal: 'center', vertical: 'middle' };
+        tRow.getCell(1).fill = fill('FFE9ECEF');
         tRow.getCell(1).border = allBorders;
-        tRow.height = 24;
+        tRow.height = 26;
 
         const sRow = ws.addRow([
-            [meta.compania, meta.tipoPlanilla, meta.proceso, mesAnio(meta.periodoValor),
-                `Cesados: ${meta.cesados}`, meta.empleado ? `Empleado: ${meta.empleado}` : '']
+            [meta.compania, `Cesados: ${meta.cesados}`, meta.empleado ? `Empleado: ${meta.empleado}` : '']
                 .filter(Boolean).join(' - ')
         ]);
         ws.mergeCells(sRow.number, 1, sRow.number, NCOLS);
@@ -366,7 +350,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function consultar() {
         lastExport = null;
         document.getElementById('btnExportExcel').disabled = true;
-        document.getElementById('btnImprimir').disabled = true;
         const cia = cboCia.value.trim();
         const payroll_type = cboPlanilla.value.trim();
         const process = cboProceso.value.trim();
@@ -386,6 +369,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             const meta = {
+                titulo: formatTituloContratistas(selectedText('cboTipoPlanilla'), selectedText('cboProceso'), period),
                 compania: selectedText('cboCompania'),
                 tipoPlanilla: selectedText('cboTipoPlanilla'),
                 proceso: selectedText('cboProceso'),
@@ -397,7 +381,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderizar(payload, meta);
             lastExport = { payload, meta };
             document.getElementById('btnExportExcel').disabled = false;
-            document.getElementById('btnImprimir').disabled = false;
         } catch (e) {
             console.error(e);
             document.getElementById('cardResultado').classList.add('d-none');
@@ -534,10 +517,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             console.error(err);
             alert('No se pudo generar el archivo Excel.');
         }
-    });
-
-    document.getElementById('btnImprimir').addEventListener('click', function () {
-        window.print();
     });
 
     await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);

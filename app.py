@@ -29496,15 +29496,6 @@ def reporte_contratistas_post():
         cursor = conn.cursor()
         _set_cursor_timeout_report(cursor)
         cursor.execute(
-            "SELECT TOP 1 LTRIM(RTRIM(ISNULL(Description, ''))), LTRIM(RTRIM(ISNULL(RUC, ''))) "
-            "FROM SY_Company WHERE Company = ?",
-            (cia,),
-        )
-        row_cia = cursor.fetchone()
-        empresa = str(row_cia[0] or '').strip() if row_cia else ''
-        ruc = str(row_cia[1] or '').strip() if row_cia else ''
-
-        cursor.execute(
             "EXEC sp_pr_reportecontratistas_web "
             "@cia=?, @payroll=?, @process=?, @period=?, @person=?, @cesados=?",
             (cia, payroll_type, process, period, person, cesados),
@@ -29525,7 +29516,7 @@ def reporte_contratistas_post():
                 'fechapago': fecha.strftime('%d-%m-%Y') if hasattr(fecha, 'strftime') else '',
                 'montopagado': _jsonable_value(r.get('montopagado')),
             })
-        return jsonify({"empresa": empresa, "ruc": ruc, "rows": filas})
+        return jsonify({"rows": filas})
     except Exception as e:
         logging.exception("reporte_contratistas_post")
         return jsonify({"error": _sp_error_message(e)}), 500

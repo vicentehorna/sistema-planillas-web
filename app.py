@@ -5607,6 +5607,38 @@ def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, per
     return extra
 
 
+def _boleta_titulo_por_proceso(cursor, cia, processtype, titulo_sp):
+    """
+    El SP arma 'BOLETA DE PAGO <tipo periodo> - <MES AÑO>' para todo proceso salvo
+    gratificación; para otros procesos (vacaciones, quincena, liquidación, CTS...)
+    el título debe nombrar el proceso: 'BOLETA DE PAGO VACACIONES - <MES AÑO>'.
+    """
+    titulo_sp = str(titulo_sp or '').strip()
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(ISNULL(ShortName, ''))), LTRIM(RTRIM(ISNULL(Description, '')))
+            FROM PR_ProcessType
+            WHERE ProcessType = ? AND (Company = ? OR Company IS NULL)
+            ORDER BY CASE WHEN Company = ? THEN 0 ELSE 1 END
+            """,
+            (processtype, cia, cia),
+        )
+        row = cursor.fetchone()
+    except Exception:
+        logging.exception('_boleta_titulo_por_proceso processtype=%s', processtype)
+        return titulo_sp
+    if not row:
+        return titulo_sp
+    short_name = str(row[0] or '').strip().upper()
+    if short_name in ('', 'FIN_DE_MES', 'GRATIFICACION'):
+        return titulo_sp
+    nombre_proceso = str(row[1] or '').strip() or short_name.replace('_', ' ')
+    mes_anio = titulo_sp.rsplit(' - ', 1)[1].strip() if ' - ' in titulo_sp else ''
+    titulo = f'BOLETA DE PAGO {nombre_proceso.upper()}'
+    return f'{titulo} - {mes_anio}' if mes_anio else titulo
+
+
 def generar_pdf_en_memoria(params):
     cia_param = str(params.get('cia') or '').strip()
     if not cia_param and has_request_context():
@@ -5630,7 +5662,11 @@ def generar_pdf_en_memoria(params):
             'EXEC sp_pr_generarboleta_web @cia=?, @process=?, @payrolltype=?, @period=?, @person=?',
             (cia, processtype, payroll_type, period, person),
         )
-        cabecera = cab_rows[0] if cab_rows else {}
+        cabecera = dict(cab_rows[0]) if cab_rows else {}
+        if cabecera:
+            cabecera['titulo_boleta'] = _boleta_titulo_por_proceso(
+                cursor, cia, processtype, cabecera.get('titulo_boleta')
+            )
 
         ingresos = _exec_sp_rows_dicts(
             cursor,

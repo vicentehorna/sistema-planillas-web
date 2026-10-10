@@ -65,6 +65,23 @@ BEGIN
         RETURN;
     END
 
+    IF @p = 'SP_PR_OBTENERAUSENCIASVACACIONES'
+    BEGIN
+        IF OBJECT_ID('dbo.sp_pr_obtenerAusenciasVacaciones', 'P') IS NULL
+            RETURN;
+
+        DECLARE @periodo_vac varchar(20) = @period;
+        IF @nargs >= 1 AND ISNULL(@arg1, 0) > 0
+            SET @periodo_vac = CONVERT(varchar(20), CONVERT(bigint, @arg1));
+
+        EXEC dbo.sp_pr_obtenerAusenciasVacaciones
+            @cia = @cia,
+            @person = @person,
+            @period = @periodo_vac,
+            @dias = @result OUTPUT;
+        RETURN;
+    END
+
     RAISERROR('Procedimiento no autorizado en formulador: %s', 16, 1, @procname);
 END
 GO

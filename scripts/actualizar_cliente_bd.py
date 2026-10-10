@@ -89,6 +89,7 @@ def step_consolidado(dst: str, dry: bool):
 
     files = [
         ROOT / "sql" / "deploy_alter_schema_web.sql",
+        ROOT / "sql" / "alter_pr_documentperson_confirmacion.sql",
         ROOT / "sql" / "deploy_planillas_web_completo.sql",
     ]
     if dry:

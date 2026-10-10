@@ -5407,12 +5407,36 @@ def formatear_periodo_texto(periodo_str):
         return str(periodo_str or "")
 
 
-_CONFIRMACION_BOLETA_DBS = frozenset({'hm_prescription', 'hm_credireport'})
+_CONFIRMACION_BOLETA_DBS_OK = set()
 
 
 def _confirmacion_boleta_habilitada():
+    """Activa en toda BD cuya PR_DocumentPerson tenga las columnas (alter_pr_documentperson_confirmacion.sql)."""
     from database import get_active_database
-    return str(get_active_database() or '').strip().lower() in _CONFIRMACION_BOLETA_DBS
+    db = str(get_active_database() or '').strip().lower()
+    if not db:
+        return False
+    if db in _CONFIRMACION_BOLETA_DBS_OK:
+        return True
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT COL_LENGTH('dbo.PR_DocumentPerson', 'TokenConfirmacion')")
+        row = cursor.fetchone()
+        if row and row[0]:
+            _CONFIRMACION_BOLETA_DBS_OK.add(db)
+            return True
+        return False
+    except Exception:
+        logging.exception("_confirmacion_boleta_habilitada")
+        return False
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 def _public_base_url():

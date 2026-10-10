@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Formato de CTS</title>
+<style>
+    @page { size: A4; margin: 18mm 16mm; }
+    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; }
+    .cab { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1a4b84; padding-bottom: 8px; }
+    .cab img { max-height: 55px; max-width: 180px; }
+    .cab .empresa { font-weight: bold; font-size: 11pt; text-align: right; }
+    h1 { text-align: center; font-size: 14pt; color: #1a4b84; margin: 18px 0 4px; }
+    .periodo { text-align: center; font-size: 10pt; margin-bottom: 18px; }
+    table.datos { width: 100%; border-collapse: collapse; }
+    table.datos td { border: 1px solid #ccc; padding: 5px 8px; }
+    table.datos td.lbl { width: 30%; background: #f2f5f9; font-weight: bold; }
+    .nota { margin-top: 30px; padding: 10px; border: 1px dashed #999; color: #666; text-align: center; font-size: 9pt; }
+</style>
+</head>
+<body>
+    <div class="cab">
+        <div>{% if logo_src %}<img src="{{ logo_src }}" alt="Logo">{% endif %}</div>
+        <div class="empresa">{{ empresa }}</div>
+    </div>
+
+    <h1>FORMATO DE CTS</h1>
+    <div class="periodo">Periodo: {{ periodo_texto }}</div>
+
+    <table class="datos">
+        <tr><td class="lbl">Código</td><td>{{ trabajador.person }}</td></tr>
+        <tr><td class="lbl">Trabajador</td><td>{{ trabajador.nombre }}</td></tr>
+        <tr><td class="lbl">Fecha de ingreso</td><td>{{ trabajador.ingreso }}</td></tr>
+        {% if trabajador.cese %}<tr><td class="lbl">Fecha de cese</td><td>{{ trabajador.cese }}</td></tr>{% endif %}
+    </table>
+
+    <div class="nota">Formato de CTS en preparación.</div>
+</body>
+</html>

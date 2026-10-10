@@ -1498,6 +1498,31 @@
                 </li>
                 {% endif %}
 
+                {% set cts_active = request.endpoint in ('formato_cts_page',) %}
+                {% set show_cts = es_ultraseguros and can_menu('formato_cts') %}
+                {% if show_cts %}
+                <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
+                    <a href="#submenuCts"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if cts_active else 'false' }}"
+                       aria-controls="submenuCts"
+                       title="CTS">
+                        <i class="bi bi-piggy-bank"></i><span class="sidebar-link-text">CTS</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if cts_active else '' }}" id="submenuCts">
+                        {% if can_menu('formato_cts') %}
+                        <li class="{{ 'active' if request.endpoint == 'formato_cts_page' else '' }}">
+                            <a href="{{ url_for('formato_cts_page') }}" title="Formato de CTS">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de CTS</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </li>
+                {% endif %}
+
                 {% set es_ngservicios = (sql_database or '')|lower == 'hm_ngservicios' %}
                 {% set tareo_ng_active = request.endpoint in ('tareo_ng_importar_page', 'tareo_ng_reporte_page', 'tareo_ng_reporte_detalle_page', 'tareo_ng_asignacion_page') %}
                 {% set show_tareo_ng = es_ngservicios and (can_menu('tareo_ng_importar') or can_menu('tareo_ng_reporte') or can_menu('tareo_ng_reporte_detalle') or can_menu('tareo_ng_asignacion')) %}

@@ -26,6 +26,7 @@
     const STORAGE_KEY_CERTIFICADO_TRABAJO = 'filtros_certificado_trabajo';
     const STORAGE_KEY_CERTIFICADO_RETIRO_CTS = 'filtros_certificado_retiro_cts';
     const STORAGE_KEY_FORMATO_LIQUIDACION = 'filtros_formato_liquidacion';
+    const STORAGE_KEY_FORMATO_CTS = 'filtros_formato_cts';
     const STORAGE_KEY_FORMATO_UTILIDADES = 'filtros_formato_utilidades';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
     const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
@@ -2498,7 +2499,9 @@
         };
     }
 
-    function crearPersistenciaFormatoLiquidacion() {
+    function crearPersistenciaFormatoLiquidacion(storageKey) {
+        const STORAGE_KEY = storageKey || STORAGE_KEY_FORMATO_LIQUIDACION;
+
         function guardar() {
             try {
                 const estado = {
@@ -2508,7 +2511,7 @@
                     nombre: val('txtBuscarTrabajador'),
                     timestamp: Date.now()
                 };
-                localStorage.setItem(STORAGE_KEY_FORMATO_LIQUIDACION, JSON.stringify(estado));
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros formato liquidacion: no se pudo guardar', e);
             }
@@ -2516,7 +2519,7 @@
 
         function leer() {
             try {
-                const raw = localStorage.getItem(STORAGE_KEY_FORMATO_LIQUIDACION);
+                const raw = localStorage.getItem(STORAGE_KEY);
                 if (!raw) return null;
                 const o = JSON.parse(raw);
                 if (!o || typeof o !== 'object') return null;
@@ -2586,7 +2589,7 @@
         }
 
         return {
-            STORAGE_KEY: STORAGE_KEY_FORMATO_LIQUIDACION,
+            STORAGE_KEY,
             guardar,
             leer,
             aplicarRestauracionCascada,
@@ -3107,6 +3110,7 @@
         STORAGE_KEY_CERTIFICADO_TRABAJO,
         STORAGE_KEY_CERTIFICADO_RETIRO_CTS,
         STORAGE_KEY_FORMATO_LIQUIDACION,
+        STORAGE_KEY_FORMATO_CTS,
         STORAGE_KEY_FORMATO_UTILIDADES,
         STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
         STORAGE_KEY_ENVIO_BOLETAS,
@@ -3217,6 +3221,9 @@
         },
         formatoLiquidacion: function () {
             return crearPersistenciaFormatoLiquidacion();
+        },
+        formatoCts: function () {
+            return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_FORMATO_CTS);
         },
         formatoUtilidades: function () {
             return crearPersistenciaFormatoUtilidades();

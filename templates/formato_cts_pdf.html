@@ -1,101 +1,376 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="utf-8">
-<title>Liquidación de depósito semestral de CTS</title>
-<style>
-    @page { size: A4; margin: 14mm 18mm 14mm 18mm; }
-    body { font-family: Calibri, Carlito, Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #000; }
-    .logo { height: 62px; margin-bottom: 14px; }
-    .logo img { max-height: 62px; max-width: 250px; }
-    h1 {
-        text-align: center; font-size: 14.5pt; font-weight: normal;
-        text-decoration: underline; margin: 0 0 18px; letter-spacing: 0.2px;
-    }
-    .parrafo { text-align: justify; line-height: 1.35; margin: 0 0 4px 22px; }
-    .seccion { margin: 22px 0 0 22px; }
-    .fila { display: flex; margin-bottom: 10px; }
-    .fila .lbl { width: 300px; }
-    .fila .sub { padding-left: 28px; width: 272px; }
-    .conceptos { width: 92%; margin: 10px 0 0 28px; border-collapse: collapse; }
-    .conceptos td { padding: 1px 0; font-weight: bold; }
-    .conceptos td.valor { text-align: right; font-weight: normal; width: 130px; }
-    .conceptos tr.total td { padding-top: 10px; font-weight: bold; }
-    .conceptos tr.total td.lbl-total { padding-left: 120px; }
-    .conceptos tr.total td.valor { font-weight: bold; }
-    .calculo-cab { display: flex; margin-top: 22px; }
-    .calculo-cab .tit { width: 340px; font-weight: bold; }
-    .deposito { width: 76%; margin: 14px 0 0 28px; border-collapse: collapse; table-layout: fixed; }
-    .deposito th, .deposito td { border: 1.3px solid #000; text-align: center; padding: 4px 6px; }
-    .deposito th { background: #c6ffff; font-weight: bold; font-size: 10pt; height: 46px; }
-    .deposito td.num { text-align: right; padding-right: 14px; }
-    .total-pagar { width: 76%; margin: 14px 0 0 28px; display: flex; justify-content: flex-end; font-weight: bold; }
-    .total-pagar .lbl { width: 110px; }
-    .total-pagar .val { width: 120px; text-align: right; padding-right: 14px; font-weight: normal; }
-    .lugar-fecha { margin: 26px 0 0 28px; font-weight: bold; }
-    .firmas { display: flex; justify-content: space-between; margin-top: 10px; }
-    .firma { width: 46%; text-align: center; font-weight: bold; font-size: 10pt; }
-    .firma .img { height: 130px; display: flex; align-items: flex-end; justify-content: center; }
-    .firma .img img { max-height: 130px; max-width: 260px; }
-    .firma .linea { border-top: 2px solid #000; padding-top: 3px; }
-</style>
+    <meta charset="UTF-8">
+    <title>Liquidación de Depósito Semestral de CTS</title>
+    <style>
+        @page { size: A4; margin: 12mm 14mm 12mm 14mm; }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-size: 10px;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            line-height: 1.4;
+        }
+        .doc { width: 100%; box-sizing: border-box; }
+        .encabezado {
+            display: table;
+            width: 100%;
+            margin-bottom: 8px;
+            border-bottom: 2px solid #1a4b84;
+            padding-bottom: 6px;
+        }
+        .encabezado .logo-cell,
+        .encabezado .empresa-cell {
+            display: table-cell;
+            vertical-align: top;
+        }
+        .encabezado .logo-cell { width: 34%; }
+        .encabezado .empresa-cell {
+            width: 66%;
+            text-align: right;
+            font-size: 8.5px;
+            color: #555;
+            padding-top: 2px;
+        }
+        .empresa-nombre {
+            font-size: 11px;
+            font-weight: bold;
+            color: #1a4b84;
+            text-transform: uppercase;
+            margin-bottom: 2px;
+        }
+        .logo-img {
+            max-height: 60px;
+            max-width: 190px;
+            object-fit: contain;
+            display: block;
+        }
+        .titulo {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            text-transform: uppercase;
+            color: #1a4b84;
+            background-color: #f4f6f9;
+            padding: 6px 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            margin: 8px 0 4px;
+        }
+        .subtitulo-legal {
+            text-align: center;
+            font-size: 8px;
+            font-weight: bold;
+            color: #555;
+            margin: 0 0 8px;
+        }
+        .bloque-datos {
+            border: 1px solid #ddd;
+            padding: 6px 10px;
+            margin-bottom: 8px;
+            background: #fff;
+        }
+        .bloque-datos h3 {
+            margin: 0 0 5px;
+            font-size: 9px;
+            text-transform: uppercase;
+            color: #1a4b84;
+            font-weight: bold;
+        }
+        table.meta-grid {
+            width: 100%;
+            border-collapse: collapse;
+            table-layout: fixed;
+        }
+        table.meta-grid td {
+            width: 50%;
+            padding: 2px 8px 2px 0;
+            vertical-align: top;
+            font-size: 9px;
+        }
+        table.meta-grid td.col-der { padding-left: 1cm; }
+        table.meta-grid .lbl {
+            display: inline-block;
+            font-weight: bold;
+            color: #444;
+            min-width: 2.6cm;
+        }
+        .intro {
+            text-align: justify;
+            font-size: 9px;
+            margin: 0 0 4px;
+            line-height: 1.5;
+        }
+        .intro:last-child { margin-bottom: 0; }
+        .seccion { margin-top: 6px; }
+        .seccion-titulo {
+            font-weight: bold;
+            text-transform: uppercase;
+            margin: 0 0 4px;
+            font-size: 9px;
+            color: #fff;
+            background-color: #1a4b84;
+            padding: 4px 8px;
+        }
+        .subseccion-titulo {
+            font-weight: bold;
+            font-size: 9px;
+            color: #1a4b84;
+            margin: 8px 0 3px;
+            padding-left: 5px;
+            border-left: 3px solid #1a4b84;
+        }
+        table.fmt {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 4px;
+            border: 1px solid #1a4b84;
+        }
+        table.fmt th,
+        table.fmt td {
+            border: 1px solid #ddd;
+            padding: 4px 8px;
+            vertical-align: middle;
+            font-size: 9px;
+        }
+        table.fmt th {
+            background: #1a4b84;
+            color: #fff;
+            font-weight: bold;
+            text-align: center;
+            border-color: #1a4b84;
+        }
+        table.fmt td.num {
+            text-align: center;
+            width: 8%;
+            color: #1a4b84;
+            font-weight: bold;
+            background: #f8f9fb;
+        }
+        table.fmt td.concepto { text-align: left; }
+        table.fmt td.centro { text-align: center; }
+        table.fmt td.monto,
+        table.fmt th.monto {
+            text-align: right;
+            white-space: nowrap;
+            width: 22%;
+        }
+        table.fmt tr.destacado td {
+            font-weight: bold;
+            background-color: #f4f6f9;
+        }
+        table.fmt tr.destacado td.monto {
+            border-top: 2px solid #1a4b84;
+            color: #1a4b84;
+        }
+        .total-deposito {
+            display: table;
+            width: 100%;
+            margin-top: 6px;
+            border: 1px solid #1a4b84;
+            background: #f4f6f9;
+        }
+        .total-deposito div {
+            display: table-cell;
+            padding: 6px 8px;
+            font-weight: bold;
+            font-size: 10px;
+            color: #1a4b84;
+            text-transform: uppercase;
+        }
+        .total-deposito .importe {
+            text-align: right;
+            font-size: 11.5px;
+            white-space: nowrap;
+        }
+        .lugar-fecha {
+            margin-top: 12px;
+            text-align: right;
+            font-size: 9px;
+            color: #444;
+        }
+        .firmas {
+            margin-top: 14px;
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .firmas td {
+            width: 50%;
+            vertical-align: bottom;
+            text-align: center;
+            padding: 0 8px;
+        }
+        .firma-spacer { height: 80px; }
+        .firma-img {
+            max-height: 80px;
+            max-width: 230px;
+            object-fit: contain;
+            object-position: center bottom;
+            display: block;
+            margin: 0 auto;
+        }
+        .linea-firma {
+            border-top: 1.5px solid #1a4b84;
+            width: 78%;
+            margin: 0 auto 6px;
+        }
+        .firma-nombre {
+            font-size: 8.5px;
+            font-weight: bold;
+            margin: 0;
+            text-transform: uppercase;
+        }
+        .firma-cargo {
+            font-size: 8px;
+            color: #555;
+            margin: 2px 0 0;
+        }
+    </style>
 </head>
 <body>
-    <div class="logo">{% if logo_src %}<img src="{{ logo_src }}" alt="Logo">{% endif %}</div>
+    <div class="doc">
+        <div class="encabezado">
+            <div class="logo-cell">
+                {% if logo_src %}
+                <img src="{{ logo_src }}" alt="Logo" class="logo-img">
+                {% endif %}
+            </div>
+            <div class="empresa-cell">
+                <div class="empresa-nombre">{{ empresa }}</div>
+                <div>RUC: {{ ruc }}</div>
+                <div>{{ direccion }}</div>
+            </div>
+        </div>
 
-    <h1>LIQUIDACIÓN DE DEPÓSITO SEMESTRAL DE CTS PEQUEÑA EMPRESA</h1>
+        <div class="titulo">Liquidación de Depósito Semestral de CTS — Pequeña Empresa</div>
+        <div class="subtitulo-legal">Art. 24° del TUO del D. Leg. N.° 650 — D.S. N.° 001-97-TR</div>
 
-    <p class="parrafo">{{ empresa }}, con RUC N° {{ ruc }} domiciliado en {{ direccion }}, representado por su {{ representante_cargo }} la Sra. {{ representante }}.</p>
-    <p class="parrafo">En aplicación del artículo 24º del TUO del D.Leg. Nº 650, Ley de Compensación por Tiempo de Servicios aprobado mediante el D.S. Nº 001-97-TR, otorga a: {{ nombre }} con el cargo de {{ cargo }}, la presente constancia del depósito de su Compensación por Tiempo de Servicios realizado el {{ fecha_pago_texto }}, en la cuenta CTS N° {{ cuenta_cts }} de la institución financiera {{ banco_cts }} por los siguientes montos y periodos:</p>
+        <div class="bloque-datos">
+            <h3>Datos del trabajador</h3>
+            <table class="meta-grid">
+                <tr>
+                    <td class="col-izq"><span class="lbl">Trabajador:</span> {{ nombre }}</td>
+                    <td class="col-der"><span class="lbl">{{ tipodocumento or 'Documento' }}:</span> {{ documento }}</td>
+                </tr>
+                <tr>
+                    <td class="col-izq"><span class="lbl">Cargo:</span> {{ cargo }}</td>
+                    <td class="col-der"><span class="lbl">Fecha de ingreso:</span> {{ fecha_ingreso }}</td>
+                </tr>
+                <tr>
+                    <td class="col-izq"><span class="lbl">Entidad financiera:</span> {{ banco_cts }}</td>
+                    <td class="col-der"><span class="lbl">Cuenta CTS N.°:</span> {{ cuenta_cts }}</td>
+                </tr>
+            </table>
+        </div>
 
-    <div class="seccion">
-        <div class="fila"><div class="lbl">1.- PERIODO COMPUTABLE:</div><div>DEL&nbsp;&nbsp; {{ periodo_desde }} &nbsp;&nbsp;AL&nbsp;&nbsp; {{ periodo_hasta }}</div></div>
-        <div class="fila"><div class="sub">FECHA DE INGRESO:</div><div>{{ fecha_ingreso }}</div></div>
-        <div class="fila"><div class="lbl">2.- REMUNERACION COMPUTABLE:</div></div>
-        <table class="conceptos">
+        <div class="bloque-datos">
+            <h3>Declaración</h3>
+            <p class="intro">{{ empresa }}, con RUC N.° {{ ruc }}, domiciliado en {{ direccion }}, representado por su {{ representante_cargo }} la Sra. {{ representante }}.</p>
+            <p class="intro">En aplicación del artículo 24° del TUO del D. Leg. N.° 650, Ley de Compensación por Tiempo de Servicios, aprobado mediante el D.S. N.° 001-97-TR, otorga a {{ nombre }}, con el cargo de {{ cargo }}, la presente constancia del depósito de su Compensación por Tiempo de Servicios realizado el {{ fecha_pago_texto }}, en la cuenta CTS N.° {{ cuenta_cts }} de la institución financiera {{ banco_cts }}, por los siguientes montos y periodos:</p>
+        </div>
+
+        <div class="seccion">
+            <div class="seccion-titulo">Liquidación del depósito</div>
+
+            <div class="subseccion-titulo">1. Periodo computable</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>Desde</th>
+                        <th>Hasta</th>
+                        <th>Fecha de ingreso</th>
+                        <th>Fecha de depósito</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="centro">{{ periodo_desde }}</td>
+                        <td class="centro">{{ periodo_hasta }}</td>
+                        <td class="centro">{{ fecha_ingreso }}</td>
+                        <td class="centro">{{ fecha_pago }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="subseccion-titulo">2. Remuneración computable</div>
             {% for g in grupos %}
-                {% for c in g.conceptos %}
-                <tr><td>{{ c.texto }}</td><td class="valor">{{ c.valor_fmt }}</td></tr>
-                {% endfor %}
-                <tr class="total"><td class="lbl-total">TOTAL REMUNERACION COMPUTABLE</td><td class="valor">{{ g.total_fmt }}</td></tr>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>N.°</th>
+                        <th>Concepto</th>
+                        <th class="monto">Importe ({{ moneda_simbolo }})</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in g.conceptos %}
+                    <tr>
+                        <td class="num">{{ loop.index }}</td>
+                        <td class="concepto">{{ c.texto }}</td>
+                        <td class="monto">{{ c.valor_fmt }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="destacado">
+                        <td class="num"></td>
+                        <td class="concepto">Total remuneración computable</td>
+                        <td class="monto">{{ g.total_fmt }}</td>
+                    </tr>
+                </tbody>
+            </table>
             {% endfor %}
+
+            <div class="subseccion-titulo">3. Cálculo del depósito</div>
+            <table class="fmt">
+                <thead>
+                    <tr>
+                        <th>Remuneración computable</th>
+                        <th>N.° de meses computables</th>
+                        <th>N.° de días computables</th>
+                        <th>Moneda</th>
+                        <th class="monto">Total a pagar</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="centro">{{ remuneracion_fmt }}</td>
+                        <td class="centro">{{ meses_computables }}</td>
+                        <td class="centro">{{ dias_computables }}</td>
+                        <td class="centro">{{ moneda_texto }}</td>
+                        <td class="monto">{{ importe_fmt }}</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <div class="total-deposito">
+                <div>Total depositado</div>
+                <div class="importe">{{ moneda_simbolo }} {{ importe_fmt }}</div>
+            </div>
+        </div>
+
+        <div class="lugar-fecha">{{ ciudad }}, {{ fecha_pago_texto }}</div>
+
+        <table class="firmas">
+            <tr>
+                <td>
+                    {% if firma_src %}
+                    <img src="{{ firma_src }}" alt="Firma" class="firma-img">
+                    {% else %}
+                    <div class="firma-spacer"></div>
+                    {% endif %}
+                    <div class="linea-firma"></div>
+                    <p class="firma-nombre">{{ representante }}</p>
+                    <p class="firma-cargo">{{ representante_cargo or 'Representante legal' }}</p>
+                </td>
+                <td>
+                    <div class="firma-spacer"></div>
+                    <div class="linea-firma"></div>
+                    <p class="firma-nombre">{{ nombre }}</p>
+                    <p class="firma-cargo">{{ tipodocumento or 'Documento' }}: {{ documento }}</p>
+                </td>
+            </tr>
         </table>
-
-        <div class="calculo-cab">
-            <div class="tit">3.- CÁLCULO DEL DEPÓSITO:</div>
-            <div>Moneda:&nbsp;&nbsp;&nbsp; {{ moneda_texto }}</div>
-        </div>
-    </div>
-
-    <table class="deposito">
-        <tr>
-            <th>REMUNERACIÓN COMPUTABLE</th>
-            <th>Nº DE MESES COMPUTABLES</th>
-            <th>Nº DE DÍAS COMPUTABLES</th>
-            <th>TOTAL A PAGAR</th>
-        </tr>
-        <tr>
-            <td>{{ remuneracion_fmt }}</td>
-            <td>{{ meses_computables }}</td>
-            <td>{{ dias_computables }}</td>
-            <td class="num">{{ importe_fmt }}</td>
-        </tr>
-    </table>
-    <div class="total-pagar"><div class="lbl">TOTAL {{ moneda_simbolo }}</div><div class="val">{{ importe_fmt }}</div></div>
-
-    <div class="lugar-fecha">{{ ciudad }}, {{ fecha_pago_texto }}</div>
-
-    <div class="firmas">
-        <div class="firma">
-            <div class="img">{% if firma_src %}<img src="{{ firma_src }}" alt="Firma">{% endif %}</div>
-            <div class="linea">{{ representante }}</div>
-            <div>{{ representante_cargo }}</div>
-        </div>
-        <div class="firma">
-            <div class="img"></div>
-            <div class="linea">{{ nombre }}</div>
-            <div>{{ tipodocumento }}: {{ documento }}</div>
-        </div>
     </div>
 </body>
 </html>

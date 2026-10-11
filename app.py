@@ -7440,6 +7440,7 @@ def _contexto_formato_cts(cia, payroll_type, period, person):
         'cuenta_cts': _txt('cuenta_cts'),
         'banco_cts': _txt('banco_cts'),
         'fecha_pago_texto': fecha_pago_texto,
+        'fecha_pago': _dmy(fecha_pago),
         'periodo_desde': _dmy(desde),
         'periodo_hasta': _dmy(fecha_fin),
         'fecha_ingreso': _dmy(fecha_ingreso),

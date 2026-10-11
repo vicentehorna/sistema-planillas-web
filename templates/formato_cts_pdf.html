@@ -244,7 +244,7 @@
             </div>
         </div>
 
-        <div class="titulo">Liquidación de Depósito Semestral de CTS — Pequeña Empresa</div>
+        <div class="titulo">Liquidación de Depósito Semestral de CTS{% if regimen %} — {{ regimen }}{% endif %}</div>
         <div class="subtitulo-legal">Art. 24° del TUO del D. Leg. N.° 650 — D.S. N.° 001-97-TR</div>
 
         <div class="bloque-datos">
@@ -267,7 +267,7 @@
 
         <div class="bloque-datos">
             <h3>Declaración</h3>
-            <p class="intro">{{ empresa }}, con RUC N.° {{ ruc }}, domiciliado en {{ direccion }}, representado por su {{ representante_cargo }} la Sra. {{ representante }}.</p>
+            <p class="intro">{{ empresa }}, con RUC N.° {{ ruc }}, domiciliado en {{ direccion }}, representado por su {{ representante_cargo }}{% if trato_representante %} {{ trato_representante }}{% else %},{% endif %} {{ representante }}.</p>
             <p class="intro">En aplicación del artículo 24° del TUO del D. Leg. N.° 650, Ley de Compensación por Tiempo de Servicios, aprobado mediante el D.S. N.° 001-97-TR, otorga a {{ nombre }}, con el cargo de {{ cargo }}, la presente constancia del depósito de su Compensación por Tiempo de Servicios realizado el {{ fecha_pago_texto }}, en la cuenta CTS N.° {{ cuenta_cts }} de la institución financiera {{ banco_cts }}, por los siguientes montos y periodos:</p>
         </div>
 

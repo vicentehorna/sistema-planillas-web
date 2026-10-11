@@ -1,8 +1,14 @@
 /*
-    Menú CTS → Formato de CTS (hm_ultra).
+    Menú CTS → Formato de CTS (hm_ultra, hm_ngservicios).
     Idempotente.
 */
 SET NOCOUNT ON;
+
+IF NOT EXISTS (SELECT 1 FROM dbo.WEB_MenuOption WHERE MenuCode = 'cts')
+BEGIN
+    INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint, RoutePrefix, Status)
+    VALUES ('cts', 'CTS', NULL, 505, NULL, NULL, 'A');
+END
 
 IF NOT EXISTS (SELECT 1 FROM dbo.WEB_MenuOption WHERE MenuCode = 'formato_cts')
 BEGIN

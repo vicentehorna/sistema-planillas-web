@@ -7298,16 +7298,21 @@ def _formato_cts_pdf_filename(person, period_raw):
     return f'formato_cts_{person_safe}_{period_safe}.pdf'
 
 
-_FORMATO_CTS_CIUDAD = {'hm_ultra': 'Trujillo'}
+_FORMATO_CTS_CONFIG = {
+    'hm_ultra': {'ciudad': 'Trujillo', 'trato_representante': 'la Sra.', 'regimen': 'Pequeña Empresa'},
+    'hm_ngservicios': {'ciudad': 'Lima', 'trato_representante': 'el Sr.', 'regimen': ''},
+}
 
 
-def _formato_cts_ciudad():
+def _formato_cts_config():
     try:
         from database import get_active_database
         db = str(get_active_database() or '').strip().lower()
     except Exception:
         db = ''
-    return _FORMATO_CTS_CIUDAD.get(db, 'Lima')
+    cfg = {'ciudad': 'Lima', 'trato_representante': '', 'regimen': ''}
+    cfg.update(_FORMATO_CTS_CONFIG.get(db, {}))
+    return cfg
 
 
 def _formato_cts_fecha(val):
@@ -7451,7 +7456,7 @@ def _contexto_formato_cts(cia, payroll_type, period, person):
         'meses_computables': meses_comp,
         'dias_computables': dias_comp,
         'importe_fmt': f'{importe:,.2f}',
-        'ciudad': _formato_cts_ciudad(),
+        **_formato_cts_config(),
     }
 
 

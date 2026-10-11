@@ -7,8 +7,8 @@
     (borra y vuelve a insertar los datos de la persona).
 
     PR_CTSPeriod es interno: si no existe el periodo de CTS para el tipo de planilla y
-    periodo de cálculo, se crea el siguiente correlativo. Solo periodos de mayo (yyyy05..)
-    y noviembre (yyyy11..):
+    periodo de cálculo, se crea el siguiente correlativo (CTSNumber es único en toda la
+    tabla, no por tipo de planilla). Solo periodos de mayo (yyyy05..) y noviembre (yyyy11..):
       mayo      → 01/11 del año anterior al 30/04, pago 15/05
       noviembre → 01/05 al 31/10, pago 15/11
 
@@ -114,8 +114,7 @@ BEGIN
         IF @ctsnumber IS NULL
         BEGIN
             SELECT @ctsnumber = ISNULL(MAX(CTSNumber), 0) + 1
-            FROM PR_CTSPeriod WITH (UPDLOCK, HOLDLOCK)
-            WHERE PayRollType = @payrolltype;
+            FROM PR_CTSPeriod WITH (UPDLOCK, HOLDLOCK);
 
             INSERT INTO PR_CTSPeriod
                 (CTSNumber, PayRollType, PRPeriod, DateBegin, DateEnd, PaymentDate, Status,

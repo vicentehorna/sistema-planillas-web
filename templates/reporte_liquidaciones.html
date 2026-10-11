@@ -408,78 +408,112 @@ document.addEventListener("DOMContentLoaded", async function() {
     /* Cada cambio de compañía/planilla/proceso invalida las cascadas anteriores aún en curso. */
     let generacionFiltros = 0;
 
-    async function cargarPeriodos(periodoPreferido) {
+    function esProcesoLiquidacion(item) {
+        const id = String(item?.id || '').trim().toUpperCase();
+        const text = String(item?.text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .trim().toUpperCase().replace(/\s+/g, ' ');
+        if (text.includes('PROVISION') || text.includes('PROMEDIO')) return false;
+        return id === 'LIQUIDACION' || /\bLIQUIDACION\b/.test(text);
+    }
+
+    function fijarProcesoLiquidacion(id, texto) {
+        cboProceso.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = id || '';
+        opt.textContent = texto || 'LIQUIDACION';
+        opt.selected = true;
+        cboProceso.appendChild(opt);
+        cboProceso.disabled = true;
+    }
+
+    /** Solo trabajadores de la planilla con fecha de cese dentro del periodo. */
+    async function cargarTrabajadoresCesados(personPreferido) {
         const cia = valorValido(cboCia);
         const pt = valorValido(cboPlanilla);
-        const proc = valorValido(cboProceso);
-        if (!cia || !pt || !proc) {
-            resetSelect(cboPeriodo);
+        const per = valorValido(cboPeriodo);
+        if (!cia || !pt || !per) {
+            resetSelect(cboTrabajador);
             return false;
         }
         const ok = await poblarSelect(
-            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(proc)}`,
+            `/api/selectores/trabajadores-cesados-periodo?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&period=${encodeURIComponent(per)}`,
+            cboTrabajador,
+            { textoVacio: 'Sin cesados en el periodo' }
+        );
+        if (ok && personPreferido && Array.from(cboTrabajador.options).some((o) => o.value === personPreferido)) {
+            cboTrabajador.value = personPreferido;
+        }
+        return ok;
+    }
+
+    /** Fija el proceso LIQUIDACION de la planilla y carga sus periodos. */
+    async function cargarProcesoYPeriodos(periodoPreferido, personPreferido) {
+        const cia = valorValido(cboCia);
+        const pt = valorValido(cboPlanilla);
+        const gen = generacionFiltros;
+        fijarProcesoLiquidacion('', 'LIQUIDACION');
+        resetSelect(cboPeriodo);
+        resetSelect(cboTrabajador);
+        if (!cia || !pt) return false;
+        let procesos = [];
+        try {
+            const res = await fetch(`/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            procesos = await res.json();
+        } catch (err) {
+            console.error(err);
+            return false;
+        }
+        if (gen !== generacionFiltros) return false;
+        const liq = (Array.isArray(procesos) ? procesos : []).find(esProcesoLiquidacion);
+        if (!liq) {
+            fijarProcesoLiquidacion('', 'Sin proceso LIQUIDACION');
+            resetSelect(cboPeriodo, 'Sin periodos');
+            return false;
+        }
+        fijarProcesoLiquidacion(String(liq.id || '').trim(), String(liq.text || 'LIQUIDACION').trim());
+        const ok = await poblarSelect(
+            `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(cboProceso.value)}`,
             cboPeriodo,
             { textoVacio: 'Sin periodos' }
         );
-        if (ok && periodoPreferido && Array.from(cboPeriodo.options).some((o) => o.value === periodoPreferido)) {
+        if (gen !== generacionFiltros || !ok) return false;
+        if (periodoPreferido && Array.from(cboPeriodo.options).some((o) => o.value === periodoPreferido)) {
             cboPeriodo.value = periodoPreferido;
         }
-        return ok;
+        if (valorValido(cboPeriodo)) {
+            await cargarTrabajadoresCesados(personPreferido);
+        }
+        return true;
     }
 
-    async function cargarProcesos(procesoPreferido, periodoPreferido) {
-        const cia = valorValido(cboCia);
-        const pt = valorValido(cboPlanilla);
-        resetSelect(cboPeriodo);
-        if (!cia || !pt) {
-            resetSelect(cboProceso);
-            return false;
-        }
-        const ok = await poblarSelect(
-            `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`,
-            cboProceso,
-            { textoVacio: 'Sin procesos' }
-        );
-        if (ok && procesoPreferido && seleccionarPorTexto(cboProceso, procesoPreferido)) {
-            await cargarPeriodos(periodoPreferido);
-        }
-        return ok;
-    }
-
-    /* Al cambiar compañía conserva planilla y proceso por nombre, y periodo y trabajador si existen. */
+    /* Al cambiar compañía conserva planilla por nombre, y periodo y trabajador si existen. */
     cboCia.addEventListener('change', async function () {
         const gen = ++generacionFiltros;
         const cia = valorValido(cboCia);
         const planillaPrevia = textoValido(cboPlanilla);
-        const procesoPrevio = textoValido(cboProceso);
         const periodoPrevio = valorValido(cboPeriodo);
-        resetSelect(cboProceso);
+        const personPrevio = valorValido(cboTrabajador);
+        fijarProcesoLiquidacion('', 'LIQUIDACION');
         resetSelect(cboPeriodo);
+        resetSelect(cboTrabajador);
         if (!cia) {
             resetSelect(cboPlanilla);
-            resetSelect(cboTrabajador);
             return;
         }
-        const cargaTrabajadores = poblarSelect(
-            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-            cboTrabajador,
-            { conservarValor: true }
-        );
         const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
         if (gen === generacionFiltros && ok && planillaPrevia && seleccionarPorTexto(cboPlanilla, planillaPrevia)) {
-            await cargarProcesos(procesoPrevio, periodoPrevio);
+            await cargarProcesoYPeriodos(periodoPrevio, personPrevio);
         }
-        await cargaTrabajadores;
     });
 
     cboPlanilla.addEventListener('change', function () {
         ++generacionFiltros;
-        cargarProcesos();
+        cargarProcesoYPeriodos();
     });
 
-    cboProceso.addEventListener('change', function () {
-        ++generacionFiltros;
-        cargarPeriodos();
+    cboPeriodo.addEventListener('change', function () {
+        cargarTrabajadoresCesados(valorValido(cboTrabajador));
     });
 
     if (filtrosPersist) {
@@ -506,10 +540,20 @@ document.addEventListener("DOMContentLoaded", async function() {
 
     /* Bloquea compañía mientras se restaura la cascada guardada para que no se crucen cargas. */
     const companiasOk = await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-    if (companiasOk && filtrosPersist) {
+    const guardado = filtrosPersist ? filtrosPersist.leer() : null;
+    if (companiasOk && guardado && guardado.cia) {
         cboCia.disabled = true;
         try {
-            await filtrosPersist.aplicarRestauracionCascada({ poblarSelect });
+            const ciaGuardada = String(guardado.cia).trim();
+            if (Array.from(cboCia.options).some((o) => o.value === ciaGuardada)) {
+                cboCia.value = ciaGuardada;
+                const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaGuardada)}`, cboPlanilla);
+                const planilla = String(guardado.payroll || '').trim();
+                if (ok && planilla && Array.from(cboPlanilla.options).some((o) => o.value === planilla)) {
+                    cboPlanilla.value = planilla;
+                    await cargarProcesoYPeriodos(String(guardado.periodo || '').trim(), String(guardado.person || '').trim());
+                }
+            }
         } finally {
             cboCia.disabled = false;
         }

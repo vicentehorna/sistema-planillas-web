@@ -28881,6 +28881,66 @@ def api_trabajadores():
                 pass
 
 
+@app.route('/api/selectores/trabajadores-cesados-periodo')
+@login_required
+def api_trabajadores_cesados_periodo():
+    """Trabajadores de la planilla con fecha de cese dentro del rango del periodo (PR_Period)."""
+    cia = str(request.args.get('cia') or '').strip()
+    payrolltype = str(request.args.get('payrolltype') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    if not (cia and payrolltype and period):
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                e.Person,
+                LTRIM(RTRIM(
+                    CASE
+                        WHEN NULLIF(LTRIM(RTRIM(ISNULL(p.Name, ''))), '') IS NOT NULL THEN LTRIM(RTRIM(p.Name))
+                        ELSE ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' '
+                             + ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
+                    END
+                )) AS Name,
+                CONVERT(VARCHAR(10), e.CeaseDate, 103) AS cese
+            FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK)
+                ON p.Person = e.Person
+            INNER JOIN PR_Period per (NOLOCK)
+                ON per.PayRollType = e.PayRollType
+               AND per.PRPeriod = ?
+               AND (per.Company = e.Company OR per.Company IS NULL)
+            WHERE e.Company = ?
+              AND e.PayRollType = ?
+              AND e.CeaseDate >= per.DateBegin
+              AND e.CeaseDate < DATEADD(DAY, 1, per.DateEnd)
+            ORDER BY Name, e.Person
+            """,
+            (period, cia, payrolltype),
+        )
+        data = []
+        vistos = set()
+        for r in cursor.fetchall():
+            person = str(r[0] or '').strip()
+            if not person or person in vistos:
+                continue
+            vistos.add(person)
+            data.append({'id': person, 'text': f'{str(r[1] or "").strip()} - Cese: {r[2] or ""}'})
+        return jsonify(data)
+    except Exception:
+        logging.exception('api_trabajadores_cesados_periodo')
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/selectores/contractmodality')
 @login_required
 def api_contractmodality():

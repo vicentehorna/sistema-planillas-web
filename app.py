@@ -7298,20 +7298,160 @@ def _formato_cts_pdf_filename(person, period_raw):
     return f'formato_cts_{person_safe}_{period_safe}.pdf'
 
 
-def _descripcion_compania(cia):
+_FORMATO_CTS_CIUDAD = {'hm_ultra': 'Trujillo'}
+
+
+def _formato_cts_ciudad():
+    try:
+        from database import get_active_database
+        db = str(get_active_database() or '').strip().lower()
+    except Exception:
+        db = ''
+    return _FORMATO_CTS_CIUDAD.get(db, 'Lima')
+
+
+def _formato_cts_fecha(val):
+    if isinstance(val, datetime):
+        return val.date()
+    if isinstance(val, date):
+        return val
+    s = str(val or '').strip()
+    if not s:
+        return None
+    try:
+        return datetime.strptime(s[:10], '%Y-%m-%d').date()
+    except ValueError:
+        return None
+
+
+def _control_datos_cts_persona(cia, payroll_type, period, person):
+    """
+    sp_pr_control_datos_cts_persona: pasa el cálculo de Pago de CTS a PR_EmployeeCTS /
+    PR_EmployeeCTSConcept (crea el periodo de CTS si no existe).
+    """
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute('SELECT LTRIM(RTRIM(ISNULL(Description, \'\'))) FROM SY_Company WHERE Company = ?', (cia,))
-        row = cursor.fetchone()
-        return str(row[0] or '').strip() if row else ''
+        try:
+            cursor.execute(
+                'EXEC sp_pr_control_datos_cts_persona @cia=?, @payrolltype=?, @period=?, @person=?, @userid=?',
+                (cia, payroll_type, period, person, _xlastuser_id() or None),
+            )
+            res = cursor.fetchone()
+            conn.commit()
+        except Exception as e:
+            conn.rollback()
+            raise ValueError(_sql_error_message(e))
+        if not res or not res[1]:
+            raise ValueError('El trabajador no tiene el concepto CTS calculado en el periodo.')
     finally:
         if conn:
             try:
                 conn.close()
             except Exception:
                 pass
+
+
+def _contexto_formato_cts(cia, payroll_type, period, person):
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows = _exec_sp_rows_dicts(
+            cursor,
+            'EXEC sp_pr_formatocts_web @cia=?, @payrolltype=?, @period=?, @person=?',
+            (cia, payroll_type, period, person),
+        )
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    if not rows:
+        raise ValueError('No se encontraron datos de CTS del trabajador en el periodo.')
+
+    h = rows[0]
+    moneda_lo = str(h.get('moneda_cts') or 'LO').strip().upper() != 'EX'
+
+    def _num(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    grupos = []
+    for r in rows:
+        if not r.get('concepto'):
+            continue
+        valor = _num(r.get('valor_lo') if moneda_lo else r.get('valor_ex'))
+        grupo = r.get('grupo') or 1
+        if not grupos or grupos[-1]['grupo'] != grupo:
+            grupos.append({'grupo': grupo, 'conceptos': [], 'total': 0.0})
+        grupos[-1]['conceptos'].append(
+            {'texto': str(r.get('concepto_texto') or '').strip(), 'valor_fmt': f'{valor:,.2f}'}
+        )
+        grupos[-1]['total'] += valor
+    for g in grupos:
+        g['total_fmt'] = f"{g['total']:,.2f}"
+    remuneracion = grupos[0]['total'] if grupos else 0.0
+
+    dias = int(round(_num(h.get('dias'))))
+    meses_comp = dias // 30 if dias else 0
+    dias_comp = dias % 30
+
+    importe = _num(h.get('importe'))
+    tipo_cambio = _num(h.get('tipo_cambio'))
+    if not moneda_lo:
+        importe = round(importe / tipo_cambio, 2) if tipo_cambio else 0.0
+
+    fecha_ingreso = _formato_cts_fecha(h.get('fecha_ingreso'))
+    fecha_inicio = _formato_cts_fecha(h.get('fecha_inicio'))
+    fecha_fin = _formato_cts_fecha(h.get('fecha_fin'))
+    fecha_pago = _formato_cts_fecha(h.get('fecha_pago'))
+    desde = fecha_inicio
+    if fecha_ingreso and fecha_inicio and fecha_ingreso > fecha_inicio:
+        desde = fecha_ingreso
+
+    def _dmy(d):
+        return d.strftime('%d/%m/%Y') if d else ''
+
+    fecha_pago_texto = (
+        f'{fecha_pago.day} de {_mes_nombre_es(fecha_pago.month)} del {fecha_pago.year}' if fecha_pago else ''
+    )
+
+    def _txt(key):
+        return str(h.get(key) or '').strip()
+
+    logo_src, firma_src = _boleta_logo_firma_src(cia)
+    return {
+        'logo_src': logo_src,
+        'firma_src': firma_src,
+        'empresa': _txt('empresa'),
+        'ruc': _txt('ruc'),
+        'direccion': _txt('direccion'),
+        'representante': _txt('representante'),
+        'representante_cargo': _txt('representante_cargo'),
+        'nombre': _txt('nombre'),
+        'cargo': _txt('cargo'),
+        'tipodocumento': _txt('tipodocumento'),
+        'documento': _txt('documento'),
+        'cuenta_cts': _txt('cuenta_cts'),
+        'banco_cts': _txt('banco_cts'),
+        'fecha_pago_texto': fecha_pago_texto,
+        'periodo_desde': _dmy(desde),
+        'periodo_hasta': _dmy(fecha_fin),
+        'fecha_ingreso': _dmy(fecha_ingreso),
+        'grupos': grupos,
+        'moneda_texto': 'SOLES' if moneda_lo else 'DOLARES',
+        'moneda_simbolo': 'S/' if moneda_lo else '$',
+        'remuneracion_fmt': f'{remuneracion:,.2f}',
+        'meses_computables': meses_comp,
+        'dias_computables': dias_comp,
+        'importe_fmt': f'{importe:,.2f}',
+        'ciudad': _formato_cts_ciudad(),
+    }
 
 
 def generar_pdf_formato_cts(params):
@@ -7327,15 +7467,12 @@ def generar_pdf_formato_cts(params):
 
     trabajadores = _listar_trabajadores_cts(cia, payroll_type, period, person, None)
     if not trabajadores:
-        raise ValueError('El trabajador no tiene proceso Pago de CTS en el periodo.')
+        raise ValueError('El trabajador no tiene CTS calculada en el periodo.')
 
-    logo_src, _firma_src = _boleta_logo_firma_src(cia)
+    _control_datos_cts_persona(cia, payroll_type, period, person)
     html_renderizado = render_template(
         'formato_cts_pdf.html',
-        trabajador=trabajadores[0],
-        empresa=_descripcion_compania(cia) or cia,
-        periodo_texto=formatear_periodo_texto(period),
-        logo_src=logo_src,
+        **_contexto_formato_cts(cia, payroll_type, period, person),
     )
 
     if WEASYPRINT_AVAILABLE:

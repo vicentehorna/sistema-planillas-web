@@ -2,7 +2,8 @@
     Formato de CTS — listado de trabajadores con proceso Pago de CTS en el periodo.
 
     Misma lógica que sp_pr_listadocertificadotrabajo_web, fijando ProcessType = CTS
-    (PR_ProcessType.ShortName = 'CTS'; no incluye PROVISION_CTS).
+    (PR_ProcessType.ShortName = 'CTS'; no incluye PROVISION_CTS). Solo trabajadores con
+    el concepto CTS (PR_Mapping.CTSConcept) calculado en el periodo.
 
     Usado por: POST /get_lista_formato_cts
 
@@ -42,6 +43,18 @@ BEGIN
       AND pt.ShortName = 'CTS'
       AND PRPeriod = @period
       AND (@person = '0' OR PR_EmployeePayRoll.Person = @person)
+      AND EXISTS (
+            SELECT 1
+            FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+                INNER JOIN PR_Mapping M (NOLOCK)
+                    ON M.Company = EPC.Company
+                   AND M.CTSConcept = EPC.Concept
+            WHERE EPC.Company = PR_EmployeePayRoll.Company
+              AND EPC.PayRollType = PR_EmployeePayRoll.PayRollType
+              AND EPC.ProcessType = PR_EmployeePayRoll.ProcessType
+              AND EPC.PRPeriod = PR_EmployeePayRoll.PRPeriod
+              AND EPC.Person = PR_EmployeePayRoll.Person
+      )
       AND (
             @nombre IS NULL
          OR SY_Person.Name LIKE '%' + @nombre + '%'

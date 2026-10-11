@@ -2,37 +2,100 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Formato de CTS</title>
+<title>Liquidación de depósito semestral de CTS</title>
 <style>
-    @page { size: A4; margin: 18mm 16mm; }
-    body { font-family: Arial, Helvetica, sans-serif; font-size: 10pt; color: #222; }
-    .cab { display: flex; align-items: center; justify-content: space-between; border-bottom: 2px solid #1a4b84; padding-bottom: 8px; }
-    .cab img { max-height: 55px; max-width: 180px; }
-    .cab .empresa { font-weight: bold; font-size: 11pt; text-align: right; }
-    h1 { text-align: center; font-size: 14pt; color: #1a4b84; margin: 18px 0 4px; }
-    .periodo { text-align: center; font-size: 10pt; margin-bottom: 18px; }
-    table.datos { width: 100%; border-collapse: collapse; }
-    table.datos td { border: 1px solid #ccc; padding: 5px 8px; }
-    table.datos td.lbl { width: 30%; background: #f2f5f9; font-weight: bold; }
-    .nota { margin-top: 30px; padding: 10px; border: 1px dashed #999; color: #666; text-align: center; font-size: 9pt; }
+    @page { size: A4; margin: 14mm 18mm 14mm 18mm; }
+    body { font-family: Calibri, Carlito, Arial, Helvetica, sans-serif; font-size: 10.5pt; color: #000; }
+    .logo { height: 62px; margin-bottom: 14px; }
+    .logo img { max-height: 62px; max-width: 250px; }
+    h1 {
+        text-align: center; font-size: 14.5pt; font-weight: normal;
+        text-decoration: underline; margin: 0 0 18px; letter-spacing: 0.2px;
+    }
+    .parrafo { text-align: justify; line-height: 1.35; margin: 0 0 4px 22px; }
+    .seccion { margin: 22px 0 0 22px; }
+    .fila { display: flex; margin-bottom: 10px; }
+    .fila .lbl { width: 300px; }
+    .fila .sub { padding-left: 28px; width: 272px; }
+    .conceptos { width: 92%; margin: 10px 0 0 28px; border-collapse: collapse; }
+    .conceptos td { padding: 1px 0; font-weight: bold; }
+    .conceptos td.valor { text-align: right; font-weight: normal; width: 130px; }
+    .conceptos tr.total td { padding-top: 10px; font-weight: bold; }
+    .conceptos tr.total td.lbl-total { padding-left: 120px; }
+    .conceptos tr.total td.valor { font-weight: bold; }
+    .calculo-cab { display: flex; margin-top: 22px; }
+    .calculo-cab .tit { width: 340px; font-weight: bold; }
+    .deposito { width: 76%; margin: 14px 0 0 28px; border-collapse: collapse; table-layout: fixed; }
+    .deposito th, .deposito td { border: 1.3px solid #000; text-align: center; padding: 4px 6px; }
+    .deposito th { background: #c6ffff; font-weight: bold; font-size: 10pt; height: 46px; }
+    .deposito td.num { text-align: right; padding-right: 14px; }
+    .total-pagar { width: 76%; margin: 14px 0 0 28px; display: flex; justify-content: flex-end; font-weight: bold; }
+    .total-pagar .lbl { width: 110px; }
+    .total-pagar .val { width: 120px; text-align: right; padding-right: 14px; font-weight: normal; }
+    .lugar-fecha { margin: 26px 0 0 28px; font-weight: bold; }
+    .firmas { display: flex; justify-content: space-between; margin-top: 10px; }
+    .firma { width: 46%; text-align: center; font-weight: bold; font-size: 10pt; }
+    .firma .img { height: 130px; display: flex; align-items: flex-end; justify-content: center; }
+    .firma .img img { max-height: 130px; max-width: 260px; }
+    .firma .linea { border-top: 2px solid #000; padding-top: 3px; }
 </style>
 </head>
 <body>
-    <div class="cab">
-        <div>{% if logo_src %}<img src="{{ logo_src }}" alt="Logo">{% endif %}</div>
-        <div class="empresa">{{ empresa }}</div>
+    <div class="logo">{% if logo_src %}<img src="{{ logo_src }}" alt="Logo">{% endif %}</div>
+
+    <h1>LIQUIDACIÓN DE DEPÓSITO SEMESTRAL DE CTS PEQUEÑA EMPRESA</h1>
+
+    <p class="parrafo">{{ empresa }}, con RUC N° {{ ruc }} domiciliado en {{ direccion }}, representado por su {{ representante_cargo }} la Sra. {{ representante }}.</p>
+    <p class="parrafo">En aplicación del artículo 24º del TUO del D.Leg. Nº 650, Ley de Compensación por Tiempo de Servicios aprobado mediante el D.S. Nº 001-97-TR, otorga a: {{ nombre }} con el cargo de {{ cargo }}, la presente constancia del depósito de su Compensación por Tiempo de Servicios realizado el {{ fecha_pago_texto }}, en la cuenta CTS N° {{ cuenta_cts }} de la institución financiera {{ banco_cts }} por los siguientes montos y periodos:</p>
+
+    <div class="seccion">
+        <div class="fila"><div class="lbl">1.- PERIODO COMPUTABLE:</div><div>DEL&nbsp;&nbsp; {{ periodo_desde }} &nbsp;&nbsp;AL&nbsp;&nbsp; {{ periodo_hasta }}</div></div>
+        <div class="fila"><div class="sub">FECHA DE INGRESO:</div><div>{{ fecha_ingreso }}</div></div>
+        <div class="fila"><div class="lbl">2.- REMUNERACION COMPUTABLE:</div></div>
+        <table class="conceptos">
+            {% for g in grupos %}
+                {% for c in g.conceptos %}
+                <tr><td>{{ c.texto }}</td><td class="valor">{{ c.valor_fmt }}</td></tr>
+                {% endfor %}
+                <tr class="total"><td class="lbl-total">TOTAL REMUNERACION COMPUTABLE</td><td class="valor">{{ g.total_fmt }}</td></tr>
+            {% endfor %}
+        </table>
+
+        <div class="calculo-cab">
+            <div class="tit">3.- CÁLCULO DEL DEPÓSITO:</div>
+            <div>Moneda:&nbsp;&nbsp;&nbsp; {{ moneda_texto }}</div>
+        </div>
     </div>
 
-    <h1>FORMATO DE CTS</h1>
-    <div class="periodo">Periodo: {{ periodo_texto }}</div>
-
-    <table class="datos">
-        <tr><td class="lbl">Código</td><td>{{ trabajador.person }}</td></tr>
-        <tr><td class="lbl">Trabajador</td><td>{{ trabajador.nombre }}</td></tr>
-        <tr><td class="lbl">Fecha de ingreso</td><td>{{ trabajador.ingreso }}</td></tr>
-        {% if trabajador.cese %}<tr><td class="lbl">Fecha de cese</td><td>{{ trabajador.cese }}</td></tr>{% endif %}
+    <table class="deposito">
+        <tr>
+            <th>REMUNERACIÓN COMPUTABLE</th>
+            <th>Nº DE MESES COMPUTABLES</th>
+            <th>Nº DE DÍAS COMPUTABLES</th>
+            <th>TOTAL A PAGAR</th>
+        </tr>
+        <tr>
+            <td>{{ remuneracion_fmt }}</td>
+            <td>{{ meses_computables }}</td>
+            <td>{{ dias_computables }}</td>
+            <td class="num">{{ importe_fmt }}</td>
+        </tr>
     </table>
+    <div class="total-pagar"><div class="lbl">TOTAL {{ moneda_simbolo }}</div><div class="val">{{ importe_fmt }}</div></div>
 
-    <div class="nota">Formato de CTS en preparación.</div>
+    <div class="lugar-fecha">{{ ciudad }}, {{ fecha_pago_texto }}</div>
+
+    <div class="firmas">
+        <div class="firma">
+            <div class="img">{% if firma_src %}<img src="{{ firma_src }}" alt="Firma">{% endif %}</div>
+            <div class="linea">{{ representante }}</div>
+            <div>{{ representante_cargo }}</div>
+        </div>
+        <div class="firma">
+            <div class="img"></div>
+            <div class="linea">{{ nombre }}</div>
+            <div>{{ tipodocumento }}: {{ documento }}</div>
+        </div>
+    </div>
 </body>
 </html>

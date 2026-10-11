@@ -1,0 +1,540 @@
+{% extends "layout.html" %}
+
+{% block title %}CTS - Archivo Telecrédito{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 60vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-telecredito {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-telecredito th,
+    .table-telecredito td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-telecredito thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-telecredito .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+        vertical-align: middle;
+    }
+
+    .table-telecredito .col-centro {
+        width: 2.25rem;
+        text-align: center;
+    }
+
+    .table-telecredito .col-importe {
+        min-width: 5.5rem;
+        text-align: right;
+    }
+
+    #cboProceso:disabled {
+        background-color: #e9ecef;
+        cursor: not-allowed;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h4 class="text-center fw-bold mb-3">CTS - TELECREDITO BCP</h4>
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmTelecreditoCts" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" disabled>
+                    <option value="" selected>Pago de CTS</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboMoneda" class="form-label small fw-bold text-muted">Moneda</label>
+                <select id="cboMoneda" class="form-select form-select-sm" required>
+                    <option value="LO" selected>Soles (LO)</option>
+                    <option value="EX">Dólares (EX)</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="txtFechaPago" class="form-label small fw-bold text-muted">Fecha de abono</label>
+                <input type="date" id="txtFechaPago" class="form-control form-control-sm" required>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-6 col-lg-4">
+                <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
+                <input type="text" id="txtReferencia" class="form-control form-control-sm"
+                       maxlength="40" placeholder="DEPOSITO CTS" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnListar"><i class="bi bi-search"></i> Listar trabajadores</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
+                    <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                    · Seleccionados: <span id="lblSeleccionados">0</span>
+                    · Importes totales: <span id="lblImporteTotal">0.00</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body pt-3">
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-telecredito align-middle">
+                <thead>
+                    <tr>
+                        <th class="col-centro"><input type="checkbox" id="checkAll" class="form-check-input" title="Marcar / desmarcar todos"></th>
+                        <th>DNI</th>
+                        <th class="col-centro">Tipo</th>
+                        <th>Nombre</th>
+                        <th>Cuenta CTS</th>
+                        <th class="col-centro">Tipo cta.</th>
+                        <th class="col-importe">Importe</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyTelecredito"></tbody>
+            </table>
+        </div>
+
+        <div class="alert alert-warning small mt-3 mb-0 d-none" id="alertExcluidos">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <i class="bi bi-exclamation-triangle"></i>
+                <span><b id="lblExcluidos">0</b> trabajador(es) con CTS calculada no se incluyen en el archivo del BCP.</span>
+                <button type="button" class="btn btn-link btn-sm p-0 ms-auto" data-bs-toggle="collapse" data-bs-target="#detalleExcluidos">Ver detalle</button>
+            </div>
+            <div class="collapse mt-2" id="detalleExcluidos">
+                <div class="table-scroll-container bg-white" style="max-height: 35vh;">
+                    <table class="table table-bordered table-sm table-telecredito align-middle">
+                        <thead>
+                            <tr>
+                                <th>DNI</th>
+                                <th>Nombre</th>
+                                <th>Banco CTS</th>
+                                <th>Cuenta CTS</th>
+                                <th>Motivo</th>
+                                <th class="col-importe">Importe</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyExcluidos"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.telecreditoCts
+        ? window.FiltrosPlanillasReportes.telecreditoCts()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_telecredito_cts_listado') | tojson }};
+    const URL_GENERAR_TXT = {{ url_for('api_telecredito_cts_generar_txt') | tojson }};
+    const { poblarSelect, poblarConTodos, resetSelect, valorValido, textoValido, seleccionarPorTexto, iniciarCarga, mostrarError } = CombosCarga;
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPt = document.getElementById('cboTipoPlanilla');
+    const cboProc = document.getElementById('cboProceso');
+    const cboPer = document.getElementById('cboPeriodo');
+    const cboUnidad = document.getElementById('cboUnidad');
+    const txtFechaPago = document.getElementById('txtFechaPago');
+    const txtReferencia = document.getElementById('txtReferencia');
+    let filasCache = [];
+
+    function hoyIsoLocal() {
+        const d = new Date();
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function formatearImporte(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function referenciaPorDefecto(periodo) {
+        const p = String(periodo || '').trim();
+        const anio = parseInt(p.slice(0, 4), 10);
+        const mes = p.slice(4, 6);
+        if (!anio) return 'DEPOSITO CTS';
+        if (mes === '05') return `DEPOSITO CTS NOVIEMBRE ${anio - 1} - ABRIL ${anio}`;
+        if (mes === '11') return `DEPOSITO CTS MAYO ${anio} - OCTUBRE ${anio}`;
+        return `DEPOSITO CTS ${p}`;
+    }
+
+    function actualizarReferenciaPlaceholder() {
+        txtReferencia.placeholder = referenciaPorDefecto(valorValido(cboPer));
+    }
+
+    /** Pago de CTS (ShortName CTS); excluye PROVISION CTS. */
+    function esProcesoCts(item) {
+        const id = String(item?.id || '').trim().toUpperCase();
+        const text = String(item?.text || '').trim().toUpperCase().replace(/\s+/g, ' ');
+        if (text.includes('PROVISION')) return false;
+        return id === 'CTS' || text === 'CTS' || text === 'PAGO DE CTS' || /\bCTS\b/.test(text);
+    }
+
+    function fijarProcesoCts(id, texto) {
+        cboProc.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = id || '';
+        opt.textContent = texto || 'Pago de CTS';
+        opt.selected = true;
+        cboProc.appendChild(opt);
+        cboProc.disabled = true;
+    }
+
+    /** Resuelve el proceso Pago de CTS del tipo de planilla y carga sus periodos. */
+    async function cargarPeriodosCts(periodoPreferido) {
+        const cia = valorValido(cboCia);
+        const payroll = valorValido(cboPt);
+        const carga = iniciarCarga(cboPer, () => cargarPeriodosCts(periodoPreferido));
+        fijarProcesoCts('', 'Pago de CTS');
+        cboPer.innerHTML = '<option value="">Seleccione...</option>';
+        cboPer.disabled = true;
+        actualizarReferenciaPlaceholder();
+        if (!cia || !payroll) return false;
+        cboPer.innerHTML = '<option value="">Cargando...</option>';
+        try {
+            const resProc = await fetch(
+                `/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`,
+                { signal: carga.signal }
+            );
+            if (!resProc.ok) throw new Error(`HTTP ${resProc.status}`);
+            const procesos = await resProc.json();
+            if (!carga.vigente()) return false;
+            const match = (Array.isArray(procesos) ? procesos : []).find(esProcesoCts);
+            if (!match) {
+                cboPer.innerHTML = '<option value="">Sin periodos de CTS</option>';
+                return false;
+            }
+            fijarProcesoCts(String(match.id || '').trim(), String(match.text || 'Pago de CTS').trim().replace(/\s+/g, ' '));
+            const res = await fetch(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}&processtype=${encodeURIComponent(cboProc.value)}`,
+                { signal: carga.signal }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (!carga.vigente()) return false;
+            const items = Array.isArray(data) ? data : [];
+            cboPer.innerHTML = '';
+            const def = document.createElement('option');
+            def.value = '';
+            def.textContent = items.length ? 'Seleccione...' : 'Sin periodos de CTS';
+            cboPer.appendChild(def);
+            items.forEach((it) => {
+                const opt = document.createElement('option');
+                opt.value = String(it.id ?? '');
+                opt.textContent = String(it.text ?? opt.value);
+                cboPer.appendChild(opt);
+            });
+            if (periodoPreferido && items.some((it) => String(it.id) === periodoPreferido)) {
+                cboPer.value = periodoPreferido;
+            }
+            cboPer.disabled = false;
+            actualizarReferenciaPlaceholder();
+            return true;
+        } catch (err) {
+            if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
+            console.error(err);
+            mostrarError(cboPer);
+            return false;
+        }
+    }
+
+    function obtenerSeleccionados() {
+        const mapa = new Map(filasCache.map((r) => [r.person, r]));
+        return Array.from(document.querySelectorAll('.check-tele:checked'))
+            .map((cb) => mapa.get(cb.value))
+            .filter(Boolean);
+    }
+
+    function actualizarContadores() {
+        const sel = obtenerSeleccionados();
+        const total = sel.reduce((s, r) => s + (Number(r.importe) || 0), 0);
+        document.getElementById('lblRowCount').textContent = String(filasCache.length);
+        document.getElementById('lblSeleccionados').textContent = String(sel.length);
+        document.getElementById('lblImporteTotal').textContent = formatearImporte(total);
+        document.getElementById('btnGenerarTxt').disabled = sel.length === 0;
+        const all = document.querySelectorAll('.check-tele');
+        const chk = document.getElementById('checkAll');
+        chk.checked = all.length > 0 && sel.length === all.length;
+        chk.indeterminate = sel.length > 0 && sel.length < all.length;
+    }
+
+    function celda(tr, texto, clase) {
+        const td = document.createElement('td');
+        if (clase) td.className = clase;
+        td.textContent = texto;
+        tr.appendChild(td);
+        return td;
+    }
+
+    function renderizar(rows, excluidos) {
+        const tbody = document.getElementById('tbodyTelecredito');
+        tbody.innerHTML = '';
+        rows.forEach((r) => {
+            const tr = document.createElement('tr');
+            const td = document.createElement('td');
+            td.className = 'col-centro';
+            const cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.className = 'check-tele form-check-input';
+            cb.value = r.person;
+            cb.checked = true;
+            td.appendChild(cb);
+            tr.appendChild(td);
+            celda(tr, r.dni);
+            celda(tr, r.tipodoc, 'col-centro');
+            celda(tr, r.nombre);
+            celda(tr, r.cuenta, 'font-monospace');
+            celda(tr, r.tipocuenta, 'col-centro');
+            celda(tr, formatearImporte(r.importe), 'col-importe');
+            tbody.appendChild(tr);
+        });
+
+        const tbodyExc = document.getElementById('tbodyExcluidos');
+        tbodyExc.innerHTML = '';
+        excluidos.forEach((r) => {
+            const tr = document.createElement('tr');
+            celda(tr, r.dni);
+            celda(tr, r.nombre);
+            celda(tr, r.banco);
+            celda(tr, r.cuenta, 'font-monospace');
+            celda(tr, r.motivo);
+            celda(tr, formatearImporte(r.importe), 'col-importe');
+            tbodyExc.appendChild(tr);
+        });
+        document.getElementById('lblExcluidos').textContent = String(excluidos.length);
+        document.getElementById('alertExcluidos').classList.toggle('d-none', excluidos.length === 0);
+        document.getElementById('cardResultado').classList.remove('d-none');
+        actualizarContadores();
+    }
+
+    function filtrosActuales() {
+        return {
+            cia: valorValido(cboCia),
+            payrolltype: valorValido(cboPt),
+            period: valorValido(cboPer),
+            currency: document.getElementById('cboMoneda').value.trim() || 'LO',
+            paydate: txtFechaPago.value.trim(),
+            cesados: document.getElementById('cboCesados').value.trim() || 'T',
+            repunit: String(cboUnidad.value || '0').trim() || '0',
+        };
+    }
+
+    async function ejecutarListado() {
+        const f = filtrosActuales();
+        if (!f.cia || !f.payrolltype || !f.period) {
+            alert('Seleccione compañía, tipo de planilla y periodo.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+        filasCache = [];
+        document.getElementById('cardResultado').classList.add('d-none');
+        actualizarContadores();
+        const btn = document.getElementById('btnListar');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(f)
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                alert(payload.error || 'Error al listar trabajadores.');
+                return;
+            }
+            filasCache = Array.isArray(payload.rows) ? payload.rows : [];
+            renderizar(filasCache, Array.isArray(payload.excluidos) ? payload.excluidos : []);
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            btn.disabled = false;
+        }
+    }
+
+    function nombreArchivoDesdeContentDisposition(header) {
+        if (!header) return null;
+        const m = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(header);
+        const raw = (m && (m[1] || m[2])) || '';
+        try {
+            return decodeURIComponent(raw.trim());
+        } catch (e) {
+            return raw.trim();
+        }
+    }
+
+    async function generarTxt() {
+        const sel = obtenerSeleccionados();
+        if (!sel.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        const f = filtrosActuales();
+        const btn = document.getElementById('btnGenerarTxt');
+        btn.disabled = true;
+        try {
+            const res = await fetch(URL_GENERAR_TXT, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    ...f,
+                    referencia: txtReferencia.value.trim().slice(0, 40),
+                    persons: sel.map((r) => r.person)
+                })
+            });
+            if (!res.ok) {
+                const payload = await res.json().catch(() => ({}));
+                alert(payload.error || 'Error al generar el archivo TXT.');
+                return;
+            }
+            const blob = await res.blob();
+            const filename = nombreArchivoDesdeContentDisposition(res.headers.get('Content-Disposition')) || 'TelecreditoCTS.txt';
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (e) {
+            console.error(e);
+            alert('Error de red o del servidor.');
+        } finally {
+            actualizarContadores();
+        }
+    }
+
+    document.getElementById('checkAll').addEventListener('change', function () {
+        document.querySelectorAll('.check-tele').forEach((cb) => { cb.checked = this.checked; });
+        actualizarContadores();
+    });
+    document.getElementById('tbodyTelecredito').addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('check-tele')) actualizarContadores();
+    });
+    document.getElementById('btnGenerarTxt').addEventListener('click', generarTxt);
+    document.getElementById('frmTelecreditoCts').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarListado();
+    });
+    cboPer.addEventListener('change', actualizarReferenciaPlaceholder);
+
+    let generacionFiltros = 0;
+    cboCia.addEventListener('change', async function () {
+        const gen = ++generacionFiltros;
+        const planillaPrevia = textoValido(cboPt);
+        const periodoPrevio = valorValido(cboPer);
+        fijarProcesoCts('', 'Pago de CTS');
+        resetSelect(cboPer);
+        const cia = valorValido(cboCia);
+        if (!cia) {
+            resetSelect(cboPt);
+            return;
+        }
+        const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
+        if (gen !== generacionFiltros) return;
+        if (ok && planillaPrevia && seleccionarPorTexto(cboPt, planillaPrevia)) {
+            await cargarPeriodosCts(periodoPrevio);
+        }
+    });
+    cboPt.addEventListener('change', function () {
+        ++generacionFiltros;
+        cargarPeriodosCts();
+    });
+
+    if (!txtFechaPago.value) txtFechaPago.value = hoyIsoLocal();
+    if (filtrosPersist) filtrosPersist.registrarGuardadoEnCambio();
+
+    const [companiasOk] = await Promise.all([
+        poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia),
+        poblarConTodos('/api/selectores/unidades', cboUnidad, { valorTodos: '0', textoTodos: 'Todas' }),
+    ]);
+
+    if (companiasOk) {
+        cboCia.disabled = true;
+        try {
+            let restaurado = false;
+            if (filtrosPersist) {
+                restaurado = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarPeriodosLiquidacion: cargarPeriodosCts });
+            }
+            if (!restaurado) {
+                if (!valorValido(cboCia)) {
+                    const opt = Array.from(cboCia.options).find((o) => String(o.value || '').trim().toUpperCase() === 'BGT');
+                    if (opt) cboCia.value = opt.value;
+                }
+                if (valorValido(cboCia)) {
+                    await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(valorValido(cboCia))}`, cboPt);
+                }
+            }
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
+    actualizarReferenciaPlaceholder();
+
+    if (valorValido(cboCia) && valorValido(cboPt) && valorValido(cboPer)) {
+        await ejecutarListado();
+    }
+});
+</script>
+{% endblock %}

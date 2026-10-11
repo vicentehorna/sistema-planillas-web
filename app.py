@@ -25418,6 +25418,149 @@ def enviar_formatos_cts_masivo():
     )
 
 
+def _telecredito_cts_params_from_json(body):
+    body = body or {}
+    return {
+        'cia': str(body.get('cia') or '').strip(),
+        'payrolltype': str(body.get('payrolltype') or body.get('payroll_type') or '').strip(),
+        'period': _normalize_pr_period(body.get('period')),
+        'currency': str(body.get('currency') or 'LO').strip().upper(),
+        'paydate': _parse_report_date(body.get('paydate')),
+    }
+
+
+def _telecredito_cts_validar_params(p):
+    if not p['cia']:
+        return 'Seleccione una compañía.'
+    if not p['payrolltype']:
+        return 'Seleccione tipo de planilla.'
+    if not p['period']:
+        return 'Seleccione periodo.'
+    if p['currency'] not in ('LO', 'EX'):
+        return 'Moneda inválida (use LO o EX).'
+    return None
+
+
+@app.route('/cts/telecredito')
+@login_required
+def telecredito_cts_page():
+    return render_template('telecredito_cts.html')
+
+
+@app.route('/api/cts/telecredito/listado', methods=['POST'])
+@login_required
+def api_telecredito_cts_listado():
+    """sp_pr_listatelecreditocts_web: trabajadores con CTS; separa los que tienen cuenta CTS en el BCP."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_cts_params_from_json(body)
+    err = _telecredito_cts_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listatelecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+            '@par_currency=?, @cesados=?, @repunit=?',
+            (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit),
+        )
+        filas = _dicts_first_nonempty_resultset(cursor)
+        rows, excluidos = [], []
+        for r in filas:
+            item = {
+                'person': str(r.get('person') or '').strip(),
+                'dni': str(r.get('dni') or '').strip(),
+                'tipodoc': str(r.get('tipodoc') or '').strip(),
+                'nombre': str(r.get('nombre') or '').strip(),
+                'banco': str(r.get('banco') or '').strip(),
+                'cuenta': str(r.get('cuenta') or '').strip(),
+                'tipocuenta': str(r.get('tipocuenta') or '').strip(),
+                'importe': float(r.get('importe') or 0),
+            }
+            if str(r.get('elegible') or '').strip() == 'S':
+                rows.append(item)
+            else:
+                item['motivo'] = str(r.get('motivo') or '').strip()
+                excluidos.append(item)
+        return jsonify({
+            'rows': rows,
+            'excluidos': excluidos,
+            'meta': {
+                'total': len(rows),
+                'importe_total': round(sum(r['importe'] for r in rows), 2),
+                'excluidos': len(excluidos),
+            },
+        })
+    except Exception as e:
+        logging.exception('api_telecredito_cts_listado')
+        return jsonify({'error': _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cts/telecredito/generar-txt', methods=['POST'])
+@login_required
+def api_telecredito_cts_generar_txt():
+    """sp_pr_generar_telecreditocts_web → archivo TXT Telecrédito CTS del BCP."""
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_cts_params_from_json(body)
+    err = _telecredito_cts_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({'error': 'Seleccione al menos un trabajador.'}), 400
+    referencia = _normalize_telecredito_referencia(body.get('referencia'))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _telecredito_cargar_personas_temp(cursor, persons)
+        cursor.execute(
+            'EXEC sp_pr_generar_telecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+            '@par_currency=?, @par_paydate=?, @par_referencia=?',
+            (p['cia'], p['payrolltype'], p['period'], p['currency'], p['paydate'], referencia or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        lineas = [str(r.get('linea_txt') or '').rstrip('\r\n') for r in rows]
+        lineas = [x for x in lineas if x]
+        if len(lineas) < 2:
+            return jsonify({
+                'error': 'No se generaron líneas de detalle: ninguno de los seleccionados tiene cuenta CTS en el BCP.',
+            }), 400
+
+        empresa = _company_description(cursor, p['cia'])
+        periodo = re.sub(r'[^0-9]', '', p['period'])[:8]
+        token = _boleta_filename_token(empresa, fallback='')
+        stamp = datetime.now().strftime('%Y%m%d%H%M')
+        filename = f'TelecreditoCTS_{periodo}_{token}_{stamp}.txt' if token else f'TelecreditoCTS_{periodo}_{stamp}.txt'
+
+        resp = Response(
+            ('\r\n'.join(lineas) + '\r\n').encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception('api_telecredito_cts_generar_txt')
+        return jsonify({'error': _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/preview_certificado_trabajo')
 @login_required
 def preview_certificado_trabajo():

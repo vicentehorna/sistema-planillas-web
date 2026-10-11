@@ -27,6 +27,7 @@
     const STORAGE_KEY_CERTIFICADO_RETIRO_CTS = 'filtros_certificado_retiro_cts';
     const STORAGE_KEY_FORMATO_LIQUIDACION = 'filtros_formato_liquidacion';
     const STORAGE_KEY_FORMATO_CTS = 'filtros_formato_cts';
+    const STORAGE_KEY_TELECREDITO_CTS = 'filtros_telecredito_cts';
     const STORAGE_KEY_FORMATO_UTILIDADES = 'filtros_formato_utilidades';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
     const STORAGE_KEY_CALCULO_QUINTA_TRAB = 'filtros_calculo_quinta_trabajador';
@@ -3111,6 +3112,7 @@
         STORAGE_KEY_CERTIFICADO_RETIRO_CTS,
         STORAGE_KEY_FORMATO_LIQUIDACION,
         STORAGE_KEY_FORMATO_CTS,
+        STORAGE_KEY_TELECREDITO_CTS,
         STORAGE_KEY_FORMATO_UTILIDADES,
         STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
         STORAGE_KEY_ENVIO_BOLETAS,
@@ -3224,6 +3226,9 @@
         },
         formatoCts: function () {
             return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_FORMATO_CTS);
+        },
+        telecreditoCts: function () {
+            return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_TELECREDITO_CTS);
         },
         formatoUtilidades: function () {
             return crearPersistenciaFormatoUtilidades();

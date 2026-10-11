@@ -1545,8 +1545,8 @@
                 </li>
                 {% endif %}
 
-                {% set cts_active = request.endpoint in ('formato_cts_page',) %}
-                {% set show_cts = (es_ultraseguros or es_ngservicios) and can_menu('formato_cts') %}
+                {% set cts_active = request.endpoint in ('formato_cts_page', 'telecredito_cts_page') %}
+                {% set show_cts = (es_ultraseguros or es_ngservicios) and (can_menu('formato_cts') or can_menu('telecredito_cts')) %}
                 {% if show_cts %}
                 <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
                     <a href="#submenuCts"
@@ -1563,6 +1563,13 @@
                         <li class="{{ 'active' if request.endpoint == 'formato_cts_page' else '' }}">
                             <a href="{{ url_for('formato_cts_page') }}" title="Formato de CTS">
                                 <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Formato de CTS</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('telecredito_cts') %}
+                        <li class="{{ 'active' if request.endpoint == 'telecredito_cts_page' else '' }}">
+                            <a href="{{ url_for('telecredito_cts_page') }}" title="Archivo Telecrédito">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Telecrédito</span>
                             </a>
                         </li>
                         {% endif %}

@@ -136,6 +136,50 @@
     .table-planilla-vertical tbody tr.planilla-row-located .form-check-input {
         border-color: rgba(255, 255, 255, 0.85);
     }
+
+    .btn-ver-log-calculo {
+        float: right;
+        padding: 0 0.15rem;
+        margin-left: 0.35rem;
+        border: 0;
+        background: transparent;
+        line-height: 1;
+        font-size: 0.85rem;
+        color: #1a4b84;
+    }
+
+    .btn-ver-log-calculo:hover:not(:disabled),
+    .btn-ver-log-calculo:focus-visible {
+        color: #0d6efd;
+    }
+
+    .btn-ver-log-calculo:disabled {
+        opacity: 0.4;
+    }
+
+    .table-planilla-vertical tbody tr.planilla-row-located .btn-ver-log-calculo {
+        color: #fff;
+    }
+
+    .log-trabajador-scroll {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-log-trabajador thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-log-trabajador thead th.th-sort:hover {
+        background-color: #e4eaf2;
+    }
+
+    .table-log-trabajador thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+    }
 </style>
 {% endblock %}
 
@@ -271,7 +315,7 @@
                         <th>Nombre del trabajador</th>
                         <th style="width: 7rem;">F. ingreso</th>
                         <th style="width: 7rem;">F. cese</th>
-                        <th style="width: 8.5rem;">Fecha cálculo</th>
+                        <th style="width: 9.5rem;">Fecha cálculo</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyTrabajadores"></tbody>
@@ -325,6 +369,34 @@
         </div>
     </div>
 </div>
+
+<div class="modal fade" id="modalLogCalculoTrabajador" tabindex="-1" aria-labelledby="modalLogCalculoTrabajadorLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div style="min-width: 0;">
+                    <h6 class="modal-title fw-bold text-truncate" id="modalLogCalculoTrabajadorLabel">
+                        <i class="bi bi-journal-text"></i> Log de cálculo
+                    </h6>
+                    <div class="small text-muted text-truncate" id="lblLogTrabajadorSubtitulo"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="log-trabajador-scroll">
+                    <table class="table table-bordered table-sm table-hover table-planilla-vertical table-log-trabajador align-middle">
+                        <thead id="theadLogTrabajador"></thead>
+                        <tbody id="tbodyLogTrabajador"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <span class="me-auto small text-muted fw-bold">Registros: <span id="lblLogTrabajadorCount">0</span></span>
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -340,6 +412,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_VALIDAR_PRE_CALCULO = {{ url_for('api_procesar_planilla_validar_pre_calculo') | tojson }};
     const URL_ELIMINAR_CALCULO = {{ url_for('api_procesar_planilla_eliminar_calculo') | tojson }};
     const URL_RESUMEN_CALCULO = {{ url_for('api_procesar_planilla_resumen_calculo') | tojson }};
+    const URL_LOG_CALCULO = {{ url_for('reporte_log_calculo_post') | tojson }};
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
@@ -574,6 +647,165 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
         }
     }
+
+    /* Log del último cálculo por trabajador: mismas columnas que el reporte LOG, sin Código/Nombre (van en el título). */
+    const LOG_COLS_OMITIDAS = 2;
+    const LOG_IDX_IMPORTE = 3;
+    const LOG_IDX_CENTRO = new Set([0, 6, 7, 8, 9]);
+    const RE_FECHA_LOG = /^(\d{2})\/(\d{2})\/(\d{4})(?:\s+(\d{2}):(\d{2}))?$/;
+    const collatorEs = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+    const modalLogTrabajadorEl = document.getElementById('modalLogCalculoTrabajador');
+    const modalLogTrabajador = modalLogTrabajadorEl ? new bootstrap.Modal(modalLogTrabajadorEl) : null;
+    const theadLogTrabajador = document.getElementById('theadLogTrabajador');
+    const tbodyLogTrabajador = document.getElementById('tbodyLogTrabajador');
+    const lblLogTrabajadorCount = document.getElementById('lblLogTrabajadorCount');
+    const ordenLogTrabajador = { idx: -1, dir: 1 };
+    let datosLogTrabajador = null;
+    let solicitudLogTrabajador = 0;
+
+    function valorOrdenLog(v) {
+        if (typeof v !== 'string') return v;
+        const m = RE_FECHA_LOG.exec(v.trim());
+        return m ? `${m[3]}${m[2]}${m[1]}${m[4] || '00'}${m[5] || '00'}` : v;
+    }
+
+    function compararValoresLog(a, b) {
+        const vacioA = a === null || a === undefined || a === '';
+        const vacioB = b === null || b === undefined || b === '';
+        if (vacioA || vacioB) return vacioA === vacioB ? 0 : (vacioA ? 1 : -1);
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        return collatorEs.compare(String(valorOrdenLog(a)).trim(), String(valorOrdenLog(b)).trim());
+    }
+
+    /* Copia ordenada; con valores iguales conserva la secuencia original del cálculo. */
+    function filasOrdenadasLogTrabajador() {
+        const filas = (datosLogTrabajador && datosLogTrabajador.data) || [];
+        if (ordenLogTrabajador.idx < 0) return filas.slice();
+        const idx = ordenLogTrabajador.idx;
+        const vacio = (v) => v === null || v === undefined || v === '';
+        return filas
+            .map((fila, pos) => ({ fila, pos }))
+            .sort((x, y) => {
+                const va = (x.fila || [])[idx];
+                const vb = (y.fila || [])[idx];
+                if (vacio(va) || vacio(vb)) return compararValoresLog(va, vb) || (x.pos - y.pos);
+                return (compararValoresLog(va, vb) * ordenLogTrabajador.dir) || (x.pos - y.pos);
+            })
+            .map((x) => x.fila);
+    }
+
+    function actualizarIndicadoresOrdenLogTrabajador() {
+        theadLogTrabajador.querySelectorAll('th.th-sort').forEach((th) => {
+            const idx = Number(th.getAttribute('data-idx'));
+            const activo = idx === ordenLogTrabajador.idx;
+            th.querySelector('.sort-ind').textContent = activo ? (ordenLogTrabajador.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenLogTrabajador.dir === 1 ? 'Orden ascendente (clic para descendente)' : 'Orden descendente (clic para ascendente)')
+                : 'Clic para ordenar por esta columna';
+        });
+    }
+
+    function fmtCeldaLog(valor) {
+        if (valor === null || valor === undefined || valor === '') return '';
+        if (typeof valor === 'number' && Number.isFinite(valor)) return formatearImporteNum(valor);
+        return escapeHtml(String(valor));
+    }
+
+    function renderizarFilasLogTrabajador() {
+        const filas = filasOrdenadasLogTrabajador();
+        const ncols = ((datosLogTrabajador && datosLogTrabajador.headers) || []).length || 1;
+        lblLogTrabajadorCount.textContent = String(filas.length);
+        if (!filas.length) {
+            tbodyLogTrabajador.innerHTML = `<tr><td colspan="${ncols}" class="text-center text-muted py-3">`
+                + 'No hay registros de log para este trabajador en el proceso y periodo seleccionados.</td></tr>';
+            return;
+        }
+        tbodyLogTrabajador.innerHTML = filas.map((fila) => {
+            const celdas = (fila || []).map((valor, idx) => {
+                const isNum = typeof valor === 'number' && Number.isFinite(valor);
+                let cls = '';
+                if (idx === LOG_IDX_IMPORTE && isNum) cls = 'text-end font-monospace';
+                else if (LOG_IDX_CENTRO.has(idx)) cls = 'text-center';
+                return `<td class="${cls}">${fmtCeldaLog(valor)}</td>`;
+            }).join('');
+            return `<tr>${celdas}</tr>`;
+        }).join('');
+    }
+
+    function renderizarTablaLogTrabajador() {
+        const headers = (datosLogTrabajador && datosLogTrabajador.headers) || [];
+        if (ordenLogTrabajador.idx >= headers.length) ordenLogTrabajador.idx = -1;
+        theadLogTrabajador.innerHTML = '<tr>' + headers.map((h, idx) => {
+            const cls = idx === LOG_IDX_IMPORTE ? ' text-end' : (LOG_IDX_CENTRO.has(idx) ? ' text-center' : '');
+            return `<th class="th-sort${cls}" data-idx="${idx}">${escapeHtml(h)}<span class="sort-ind"></span></th>`;
+        }).join('') + '</tr>';
+        actualizarIndicadoresOrdenLogTrabajador();
+        renderizarFilasLogTrabajador();
+    }
+
+    function mensajeTablaLogTrabajador(texto, claseTexto) {
+        theadLogTrabajador.innerHTML = '';
+        tbodyLogTrabajador.innerHTML = `<tr><td class="text-center ${claseTexto} py-3">${escapeHtml(texto)}</td></tr>`;
+    }
+
+    async function verLogCalculoTrabajador(person, nombre) {
+        if (!modalLogTrabajador || !person) return;
+        const cia = cboCia.value.trim();
+        const payroll_type = cboPt.value.trim();
+        const process = cboProc.value.trim();
+        const period = document.getElementById('hidPeriodoCalculo').value.trim();
+        if (!cia || !payroll_type || !process || !period) {
+            alert('Seleccione compañía, tipo de planilla, proceso y periodo.');
+            return;
+        }
+        const solicitud = ++solicitudLogTrabajador;
+        datosLogTrabajador = null;
+        document.getElementById('modalLogCalculoTrabajadorLabel').innerHTML =
+            `<i class="bi bi-journal-text"></i> Log de cálculo — <span class="font-monospace">${escapeHtml(person)}</span> ${escapeHtml(nombre)}`;
+        document.getElementById('lblLogTrabajadorSubtitulo').textContent = [
+            textoOpcionSeleccionada(cboPt),
+            `Proceso: ${textoOpcionSeleccionada(cboProc)}`,
+            `Periodo: ${String(txtPeriodoDesc.value || period).trim()}`,
+        ].filter(Boolean).join(' · ');
+        lblLogTrabajadorCount.textContent = '...';
+        mensajeTablaLogTrabajador('Cargando...', 'text-muted');
+        modalLogTrabajador.show();
+        try {
+            const res = await fetch(URL_LOG_CALCULO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type, process, period, person })
+            });
+            const payload = await res.json();
+            if (solicitud !== solicitudLogTrabajador) return;
+            if (!res.ok || payload.error) throw new Error(payload.error || 'No se pudo cargar la log del cálculo.');
+            if (!Array.isArray(payload.headers) || !Array.isArray(payload.data)) throw new Error('Respuesta inválida del servidor.');
+            datosLogTrabajador = {
+                headers: payload.headers.slice(LOG_COLS_OMITIDAS),
+                data: payload.data.map((fila) => (fila || []).slice(LOG_COLS_OMITIDAS)),
+            };
+            renderizarTablaLogTrabajador();
+        } catch (err) {
+            if (solicitud !== solicitudLogTrabajador) return;
+            console.error(err);
+            lblLogTrabajadorCount.textContent = '0';
+            mensajeTablaLogTrabajador(err && err.message ? err.message : 'Error de red o del servidor.', 'text-danger');
+        }
+    }
+
+    theadLogTrabajador.addEventListener('click', function (e) {
+        const th = e.target.closest('th.th-sort');
+        if (!th || !datosLogTrabajador) return;
+        const idx = Number(th.getAttribute('data-idx'));
+        if (ordenLogTrabajador.idx === idx) {
+            ordenLogTrabajador.dir = -ordenLogTrabajador.dir;
+        } else {
+            ordenLogTrabajador.idx = idx;
+            ordenLogTrabajador.dir = 1;
+        }
+        actualizarIndicadoresOrdenLogTrabajador();
+        renderizarFilasLogTrabajador();
+    });
 
     function esProcesoLiquidacionSeleccionado() {
         if (!cboProc) return false;
@@ -1058,7 +1290,19 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const td4 = document.createElement('td');
                 td4.textContent = String(t.ceasedate || '').trim();
                 const td5 = document.createElement('td');
-                td5.textContent = String(t.calculationdate || '').trim();
+                const fechaCalculo = String(t.calculationdate || '').trim();
+                if (fechaCalculo) {
+                    const btnLog = document.createElement('button');
+                    btnLog.type = 'button';
+                    btnLog.className = 'btn-ver-log-calculo';
+                    btnLog.dataset.person = pid;
+                    btnLog.dataset.nombre = nombreRaw;
+                    btnLog.title = 'Ver log del último cálculo';
+                    btnLog.setAttribute('aria-label', `Ver log del último cálculo de ${nombreRaw || pid}`);
+                    btnLog.innerHTML = '<i class="bi bi-journal-text"></i>';
+                    td5.appendChild(btnLog);
+                }
+                td5.appendChild(document.createTextNode(fechaCalculo));
                 tr.appendChild(td0);
                 tr.appendChild(td1);
                 tr.appendChild(td2);
@@ -1095,8 +1339,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             const el = document.getElementById(id);
             if (el) el.disabled = enCurso;
         });
-        document.querySelectorAll('.check-trabajador').forEach((cb) => {
-            cb.disabled = enCurso;
+        document.querySelectorAll('.check-trabajador, .btn-ver-log-calculo').forEach((el) => {
+            el.disabled = enCurso;
         });
         if (!enCurso) {
             aplicarReglaCesadosPorProceso();
@@ -1531,6 +1775,12 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('btnEliminarCalculo').addEventListener('click', function () {
         eliminarCalculo();
+    });
+
+    document.getElementById('tbodyTrabajadores').addEventListener('click', function (e) {
+        const btn = e.target.closest('.btn-ver-log-calculo');
+        if (!btn || btn.disabled) return;
+        verLogCalculoTrabajador(btn.dataset.person || '', btn.dataset.nombre || '');
     });
 
     document.getElementById('tbodyTrabajadores').addEventListener('change', function (e) {

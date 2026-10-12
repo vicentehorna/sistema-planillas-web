@@ -22,9 +22,6 @@ AS
 BEGIN
     SET NOCOUNT ON;
 
-    DECLARE @remset VARCHAR(20);
-    SELECT TOP 1 @remset = CTSRemSet FROM PR_Mapping WHERE Company = @cia;
-
     SELECT
         LTRIM(RTRIM(
             ISNULL(SP.LastName1, '') + ' ' + ISNULL(SP.LastName2, '') + ' '
@@ -57,8 +54,6 @@ BEGIN
         D.Concept AS concepto,
         ISNULL(NULLIF(LTRIM(RTRIM(CO.PrintText)), ''), CO.Description) AS concepto_texto,
         CO.ConceptOrder AS concepto_orden,
-        ISNULL((SELECT TOP 1 ISNULL(S.Groups, 1) FROM PR_ConceptSetDetail S
-                WHERE S.ConceptSet = @remset AND S.Concept = D.Concept), 1) AS grupo,
         D.ConceptValueLo AS valor_lo,
         D.ConceptValueEx AS valor_ex
     FROM PR_EmployeeCTS H
@@ -81,6 +76,6 @@ BEGIN
       AND H.PayRollType = @payrolltype
       AND H.PRPeriod = @period
       AND H.Person = @person
-    ORDER BY grupo, CO.ConceptOrder, concepto_texto;
+    ORDER BY CO.ConceptOrder, concepto_texto;
 END
 GO

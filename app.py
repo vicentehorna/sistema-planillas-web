@@ -17576,6 +17576,7 @@ def _concepto_detalle_dict(r):
         'flagafectoafp': _jsonable_value(r.get('flagafectoafp')) or 'N',
         'flagafectoutilidad': _jsonable_value(r.get('flagafectoutilidad')) or 'N',
         'flagformatoliquidacion': _jsonable_value(r.get('flagformatoliquidacion')) or 'N',
+        'flagformatocts': _jsonable_value(r.get('flagformatocts')) or 'N',
         'xlastuser': _jsonable_value(r.get('xlastuser')),
         'xlastdate': _jsonable_datetime(r.get('xlastdate')),
     }
@@ -17635,6 +17636,7 @@ _CONCEPTO_CAMPOS_BULK = {
     'flagafecto5ta': 'flagafecto5ta',
     'flagafectoutilidad': 'flagafectoUtilidad',
     'flagformatoliquidacion': 'flagformatoliquidacion',
+    'flagformatocts': 'flagformatocts',
 }
 
 
@@ -17717,6 +17719,8 @@ def _concepto_valor_bulk(campo, body):
         return _normalize_flag_yn(body.get('flagafectoutilidad'))
     if campo == 'flagformatoliquidacion':
         return _normalize_flag_yn(body.get('flagformatoliquidacion'))
+    if campo == 'flagformatocts':
+        return _normalize_flag_yn(body.get('flagformatocts'))
     return None
 
 
@@ -17973,6 +17977,7 @@ def _concepto_guardar_sp_params(body, *, company=None, concept=None, modo=None, 
         _normalize_flag_yn(body.get('flagafecto5ta')),
         _normalize_flag_yn(body.get('flagafectoutilidad')),
         _normalize_flag_yn(body.get('flagformatoliquidacion')),
+        _normalize_flag_yn(body.get('flagformatocts')),
         _xlastuser_id(),
     )
 
@@ -17991,7 +17996,7 @@ def _concepto_guardar_ejecutar(cursor, body, *, company=None, concept=None, modo
         "@conceptcurrency=?, @flagismonetary=?, @printtext=?, @conceptorder=?, @status=?, "
         "@flagassign=?, @flagpayrollticket=?, @flagcontract=?, @pdt=?, @flagconceptdeclare=?, "
         "@reporden=?, @flaginsertar=?, @flagafectoafp=?, @flagafecto5ta=?, @flagafectoutilidad=?, "
-        "@flagformatoliquidacion=?, @xlastuser=?",
+        "@flagformatoliquidacion=?, @flagformatocts=?, @xlastuser=?",
         params,
     )
     rows = _dicts_first_nonempty_resultset(cursor)

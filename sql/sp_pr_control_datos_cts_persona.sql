@@ -15,7 +15,9 @@
     No usa la provisión (PR_CTSProvision / PR_CTSProvisionTxn) ni el interés (queda en 0).
 
     Configuración en PR_Mapping: CTSConcept, CTSYearsConcept, CTSMonthsConcept,
-    CTSDaysConcept, CTSRemSet (PR_ConceptSetDetail), CTSProcessType.
+    CTSDaysConcept, CTSProcessType.
+    Remuneración computable: conceptos del maestro con flag Formato de CTS
+    (PR_Concept.flagformatocts = 'Y') calculados en el proceso.
 
     Usado por: generar_pdf_formato_cts (app.py)
 
@@ -49,20 +51,19 @@ BEGIN
     END
 
     DECLARE @concept VARCHAR(20), @yearsconcept VARCHAR(20), @monthsconcept VARCHAR(20),
-            @daysconcept VARCHAR(20), @remset VARCHAR(20), @processtype VARCHAR(20);
+            @daysconcept VARCHAR(20), @processtype VARCHAR(20);
 
     SELECT TOP 1
         @concept = CTSConcept,
         @yearsconcept = CTSYearsConcept,
         @monthsconcept = CTSMonthsConcept,
         @daysconcept = CTSDaysConcept,
-        @remset = CTSRemSet,
         @processtype = CTSProcessType
     FROM PR_Mapping
     WHERE Company = @cia;
 
     IF @concept IS NULL OR @yearsconcept IS NULL OR @monthsconcept IS NULL
-       OR @daysconcept IS NULL OR @remset IS NULL OR @processtype IS NULL
+       OR @daysconcept IS NULL OR @processtype IS NULL
     BEGIN
         RAISERROR('Debe configurarse los conceptos de CTS de la compañía (PR_Mapping).', 16, 1);
         RETURN;
@@ -202,9 +203,10 @@ BEGIN
               AND C.PRPeriod = @period
               AND C.Person = @person
               AND C.Concept IN (
-                    SELECT S.Concept
-                    FROM PR_ConceptSetDetail S
-                    WHERE S.ConceptSet = @remset
+                    SELECT F.Concept
+                    FROM PR_Concept F
+                    WHERE F.Company = @cia
+                      AND ISNULL(F.flagformatocts, 'N') = 'Y'
               );
 
             SELECT @amount = Amount

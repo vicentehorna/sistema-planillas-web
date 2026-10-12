@@ -379,6 +379,17 @@
                             <input type="text" id="txtNombreCompleto" class="form-control form-control-sm campo-bloqueado text-uppercase"
                                    value="{{ empleado.name or '' }}" readonly disabled>
                         </div>
+                        {% if mostrar_sede %}
+                        <div class="col-md-4">
+                            <label for="cboSede" class="form-label small fw-bold text-muted">Sede</label>
+                            <select id="cboSede" name="sede" class="form-select form-select-sm">
+                                <option value="">Seleccione...</option>
+                                {% for sede in sedes_opciones %}
+                                <option value="{{ sede }}" {% if (empleado.sede or '') == sede %}selected{% endif %}>{{ sede }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        {% endif %}
                     </div>
                 </div>
 </div>

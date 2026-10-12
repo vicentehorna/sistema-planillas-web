@@ -394,6 +394,18 @@ def _printtext_map(cursor, concepts: List[str]) -> Dict[str, str]:
     return out
 
 
+_SEDES_VOUCHER = ("LIMA", "PIURA", "TRUJILLO")
+
+
+def _sede_voucher_normalizada(raw: Optional[str]) -> str:
+    sede = _s(raw).upper()
+    if not sede:
+        return ""
+    if sede not in _SEDES_VOUCHER:
+        raise ValueError("Sede no válida. Elija Todas, LIMA, PIURA o TRUJILLO.")
+    return sede
+
+
 def _load_epc_rows(
     cursor,
     company: str,
@@ -401,9 +413,11 @@ def _load_epc_rows(
     processtype: str,
     period_pr: str,
     person: Optional[str] = None,
+    sede: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     period_pr = _s(period_pr)
     person = _s(person) or None
+    sede = _sede_voucher_normalizada(sede)
     digits = "".join(c for c in period_pr if c.isdigit())
     if len(digits) >= 8:
         period_filter = digits[:8]
@@ -412,17 +426,28 @@ def _load_epc_rows(
         period_filter = _period_ac(period_pr) + "%"
         period_sql = "epc.prperiod LIKE ?"
 
-    person_sql = "AND epc.person = ?" if person else ""
+    clauses: List[str] = []
+    extra: List[str] = []
+    if person:
+        clauses.append("AND epc.person = ?")
+        extra.append(person)
+    if sede:
+        clauses.append(
+            "AND EXISTS ("
+            "SELECT 1 FROM sy_person sp_sede (NOLOCK) "
+            "WHERE sp_sede.person = epc.person "
+            "AND UPPER(LTRIM(RTRIM(ISNULL(sp_sede.sede, '')))) = ?"
+            ")"
+        )
+        extra.append(sede)
     sql = (
         SQL_VOUCHER_DATA.replace("epc.prperiod LIKE ?", period_sql).replace(
-            _PERSON_FILTER_MARK, person_sql
+            _PERSON_FILTER_MARK, "\n      ".join(clauses)
         )
     )
     base = (company, payrolltype, processtype, period_filter)
-    if person:
-        params = base + (person,) + base + (person,) + base + (person,)
-    else:
-        params = base + base + base
+    tail = tuple(extra)
+    params = (base + tail) * 3
     cursor.execute(sql, params)
     cols = [c[0].lower() for c in cursor.description]
     rows = [dict(zip(cols, r)) for r in cursor.fetchall()]
@@ -867,6 +892,7 @@ def generar_voucher_general(
     save: bool = True,
     dni: Optional[str] = None,
     person: Optional[str] = None,
+    sede: Optional[str] = None,
 ) -> VoucherResult:
     company = _s(company)
     payrolltype = _s(payrolltype)
@@ -881,6 +907,10 @@ def generar_voucher_general(
 
     dni = _s(dni)
     person = _s(person)
+    try:
+        sede = _sede_voucher_normalizada(sede)
+    except ValueError as exc:
+        return VoucherResult(ok=False, status="E", message=str(exc), errors=[str(exc)])
     worker_nombre = ""
     if dni or person:
         resolved = resolve_trabajador_voucher(
@@ -934,14 +964,15 @@ def generar_voucher_general(
             _annul_voucher(cursor, _s(existing.get("Voucher")), user_id)
 
     epc_rows = _load_epc_rows(
-        cursor, company, payrolltype, processtype, period_pr, person=person
+        cursor, company, payrolltype, processtype, period_pr, person=person, sede=sede
     )
     if not epc_rows:
-        msg = (
-            "No hay datos contables para ese trabajador en el proceso/periodo."
-            if person
-            else "No hay datos para la generación de voucher."
-        )
+        if person:
+            msg = "No hay datos contables para ese trabajador en el proceso/periodo."
+        elif sede:
+            msg = f"No hay datos para la sede {sede} en el proceso/periodo."
+        else:
+            msg = "No hay datos para la generación de voucher."
         return VoucherResult(
             ok=False,
             status="E",
@@ -957,6 +988,8 @@ def generar_voucher_general(
             title = f"{base_title}-{worker_nombre[:room]}" if room > 0 else base_title[:255]
         else:
             title = base_title[:255]
+    elif sede:
+        title = f"{payroll_desc}-{process_desc}-{period_pr}-SEDE:{sede}"[:255]
     else:
         title = f"{payroll_desc}-{process_desc}-{period_pr}"
 
@@ -974,7 +1007,12 @@ def generar_voucher_general(
         "currency": currency,
         "exchangerate": float(er),
         "voucherdate": voucher_date.strftime("%Y-%m-%d"),
-        "comments": process_desc if not person else f"{process_desc} / {_person_title_tag(dni)}",
+        "comments": (
+            f"{process_desc} / {_person_title_tag(dni)}"
+            if person
+            else (f"{process_desc} / SEDE:{sede}" if sede else process_desc)
+        ),
+        "sede": sede or None,
         "application": "PR",
         "vouchertype": "PR",
         "status": "E" if errors else "A",
@@ -1015,7 +1053,11 @@ def generar_voucher_general(
     voucher_id = _next_voucher_id(cursor, company, replicationunit, user_id)
     voucherno = _next_voucherno(cursor, company, "PR", "PR", period_ac)
     amount = abs(totals["totalcreditlo"])
-    comments_hdr = process_desc if not person else f"{process_desc} / {_person_title_tag(dni)}"
+    comments_hdr = (
+        f"{process_desc} / {_person_title_tag(dni)}"
+        if person
+        else (f"{process_desc} / SEDE:{sede}" if sede else process_desc)
+    )
 
     cursor.execute(
         """

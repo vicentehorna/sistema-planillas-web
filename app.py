@@ -7877,6 +7877,34 @@ def _trabajadores_editar_seccion(raw):
     ) else 'generales'
 
 
+_SEDES_ELCLAN = ('LIMA', 'PIURA', 'TRUJILLO')
+
+
+def _sede_elclan_normalizada(raw):
+    sede = str(raw or '').strip().upper()
+    if not sede:
+        return ''
+    if sede not in _SEDES_ELCLAN:
+        raise ValueError('Sede no válida. Elija LIMA, PIURA o TRUJILLO.')
+    return sede
+
+
+def _cargar_sede_elclan(cursor, person):
+    cursor.execute(
+        "SELECT LTRIM(RTRIM(ISNULL(sede, ''))) FROM sy_person WHERE person = ?",
+        (str(person or '').strip(),),
+    )
+    row = cursor.fetchone()
+    return str(row[0] or '').strip().upper() if row else ''
+
+
+def _guardar_sede_elclan(cursor, person, sede):
+    cursor.execute(
+        "UPDATE sy_person SET sede = ? WHERE person = ?",
+        (sede or None, str(person or '').strip()),
+    )
+
+
 def _empleado_generales_desde_form(form):
     sex = str(form.get('sex') or '').strip()
     return {
@@ -8047,6 +8075,8 @@ def _render_trabajadores_editar(
         careers=careers or [],
         modo_nuevo=bool(modo_nuevo),
         modo_reingreso=bool(modo_reingreso),
+        mostrar_sede=_es_cliente_elclan(),
+        sedes_opciones=list(_SEDES_ELCLAN),
     )
 
 
@@ -8192,6 +8222,9 @@ def trabajadores_editar(person_id):
             datos['employeedocumenttype'] = _resolver_employeedocumenttype_cia(
                 cursor, cia, datos['employeedocumenttype'], tipos_documento_post
             )
+            sede = ''
+            if _es_cliente_elclan():
+                sede = _sede_elclan_normalizada(request.form.get('sede'))
             cursor.execute(
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
@@ -8220,6 +8253,8 @@ def trabajadores_editar(person_id):
                     xlastuser,
                 ),
             )
+            if _es_cliente_elclan():
+                _guardar_sede_elclan(cursor, person_id, sede)
             conn.commit()
             flash('Datos generales actualizados correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales'))
@@ -8398,6 +8433,8 @@ def trabajadores_editar(person_id):
         empleado = rows[0]
         if seccion == 'generales':
             empleado = _empleado_generales_para_form(empleado)
+            if _es_cliente_elclan():
+                empleado['sede'] = _cargar_sede_elclan(cursor, person_id)
         elif seccion == 'pensiones':
             empleado = _empleado_pensiones_para_form(empleado)
         elif seccion == 'laborales':
@@ -8528,6 +8565,7 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'documentnumber': '',
         'replicationunit': unidad_default,
         'userid': '',
+        'sede': '',
         'employeetype': '',
         'employeecategory': '',
         'entrydate': '',
@@ -8772,6 +8810,10 @@ def trabajadores_nuevo():
             )
             rows = _dicts_first_nonempty_resultset(cursor)
             person_out = str((rows[0] if rows else {}).get('person_out') or person).strip()
+            if _es_cliente_elclan() and person_out:
+                _guardar_sede_elclan(
+                    cursor, person_out, _sede_elclan_normalizada(request.form.get('sede'))
+                )
             conn.commit()
             flash('Trabajador registrado correctamente.', 'success')
             return redirect(url_for('trabajadores_editar', person_id=person_out, cia=cia, seccion='generales'))
@@ -9759,7 +9801,11 @@ def asientos_interfaz_page():
 @app.route('/asientos/generar-voucher')
 @login_required
 def asientos_generar_voucher_page():
-    return render_template('asientos_generar_voucher.html')
+    return render_template(
+        'asientos_generar_voucher.html',
+        mostrar_sede=_es_cliente_elclan(),
+        sedes_opciones=list(_SEDES_ELCLAN),
+    )
 
 
 @app.route('/asientos/reporte-contable')
@@ -15560,6 +15606,12 @@ def api_asientos_generar_voucher():
     processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
     period = str(body.get('period') or body.get('periodo') or '').strip()
     dni = str(body.get('dni') or body.get('documento') or '').strip()
+    sede = None
+    if _es_cliente_elclan():
+        try:
+            sede = _sede_elclan_normalizada(body.get('sede')) or None
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
     currency = str(body.get('currency') or 'LO').strip() or 'LO'
     try:
         exchangerate = float(body.get('exchangerate') or body.get('tc') or 1)
@@ -15603,6 +15655,7 @@ def api_asientos_generar_voucher():
             confirm_reverse=confirm_reverse,
             save=save,
             dni=dni or None,
+            sede=sede,
         )
         if result.ok and save and not result.needs_confirm_reverse:
             conn.commit()

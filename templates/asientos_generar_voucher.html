@@ -224,6 +224,17 @@
                         <option value="">Seleccione...</option>
                     </select>
                 </div>
+                {% if mostrar_sede %}
+                <div class="col-6 col-md-3 col-lg-2">
+                    <label for="cboSede" class="form-label small fw-bold text-muted mb-1">Sede</label>
+                    <select id="cboSede" class="form-select form-select-sm">
+                        <option value="">Todas</option>
+                        {% for sede in sedes_opciones %}
+                        <option value="{{ sede }}">{{ sede }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% endif %}
                 <div class="col-6 col-md-3 col-lg-2">
                     <label for="txtDni" class="form-label small fw-bold text-muted mb-1">DNI <span class="fw-normal opacity-75">(opcional)</span></label>
                     <input id="txtDni" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Vacío = toda la planilla" autocomplete="off">
@@ -253,6 +264,9 @@
             <p class="gv-form-hint">
                 <i class="bi bi-info-circle"></i>
                 Si indica un DNI válido, se genera un asiento solo de ese trabajador (no modifica el voucher general de la planilla).
+                {% if mostrar_sede %}
+                Si elige una sede, el asiento incluye solo los trabajadores de esa sede. Con Todas se genera la planilla completa.
+                {% endif %}
             </p>
         </form>
     </div>
@@ -336,6 +350,7 @@
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
     const txtDni = document.getElementById('txtDni');
+    const cboSede = document.getElementById('cboSede');
     const txtTrabajadorNombre = document.getElementById('txtTrabajadorNombre');
     const txtTC = document.getElementById('txtTC');
     const txtFecha = document.getElementById('txtFecha');
@@ -613,6 +628,7 @@
             processtype: cboProceso.value,
             period: cboPeriodo.value,
             dni: (txtDni.value || '').trim(),
+            sede: cboSede ? (cboSede.value || '') : '',
             currency: 'LO',
             exchangerate: Number(txtTC.value || 1),
             voucher_date: txtFecha.value,

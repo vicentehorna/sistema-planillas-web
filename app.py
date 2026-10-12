@@ -7329,6 +7329,51 @@ def _formato_cts_fecha(val):
         return None
 
 
+def _formato_cts_fecha_pago_solicitada(raw):
+    """Fecha de pago del filtro. Vacía: usar la del periodo. Texto inválido: error."""
+    s = str(raw or '').strip()
+    if not s:
+        return None
+    parsed = _formato_cts_fecha(s)
+    if parsed is None:
+        raise ValueError('La fecha de pago no es válida.')
+    return parsed
+
+
+def _formato_cts_fecha_pago_por_defecto(cia, payroll_type, period):
+    """PaymentDate de PR_CTSPeriod. Si el periodo aún no existe, el 15 del mes (mayo o noviembre)."""
+    period = _normalize_pr_period(period)
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT TOP 1 PaymentDate
+            FROM PR_CTSPeriod
+            WHERE Company = ? AND PayRollType = ? AND PRPeriod = ?
+            """,
+            (cia, payroll_type, period),
+        )
+        row = cursor.fetchone()
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+    if row and row[0]:
+        parsed = _formato_cts_fecha(row[0])
+        if parsed:
+            return parsed
+    if len(period) >= 6 and period[4:6] in ('05', '11'):
+        try:
+            return date(int(period[:4]), int(period[4:6]), 15)
+        except ValueError:
+            return None
+    return None
+
+
 def _control_datos_cts_persona(cia, payroll_type, period, person):
     """
     sp_pr_control_datos_cts_persona: pasa el cálculo de Pago de CTS a PR_EmployeeCTS /
@@ -7358,7 +7403,7 @@ def _control_datos_cts_persona(cia, payroll_type, period, person):
                 pass
 
 
-def _contexto_formato_cts(cia, payroll_type, period, person):
+def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None):
     conn = None
     try:
         conn = get_db_connection()
@@ -7414,7 +7459,7 @@ def _contexto_formato_cts(cia, payroll_type, period, person):
     fecha_ingreso = _formato_cts_fecha(h.get('fecha_ingreso'))
     fecha_inicio = _formato_cts_fecha(h.get('fecha_inicio'))
     fecha_fin = _formato_cts_fecha(h.get('fecha_fin'))
-    fecha_pago = _formato_cts_fecha(h.get('fecha_pago'))
+    fecha_pago = fecha_pago_override or _formato_cts_fecha(h.get('fecha_pago'))
     desde = fecha_inicio
     if fecha_ingreso and fecha_inicio and fecha_ingreso > fecha_inicio:
         desde = fecha_ingreso
@@ -7455,6 +7500,7 @@ def _contexto_formato_cts(cia, payroll_type, period, person):
         'remuneracion_fmt': f'{remuneracion:,.2f}',
         'meses_computables': meses_comp,
         'dias_computables': dias_comp,
+        'dias_cts': dias,
         'importe_fmt': f'{importe:,.2f}',
         **_formato_cts_config(),
     }
@@ -7468,6 +7514,7 @@ def generar_pdf_formato_cts(params):
     payroll_type = str(params.get('payroll_type') or '').strip()
     period = _normalize_pr_period(params.get('period'))
     person = str(params.get('person') or '').strip()
+    fecha_pago = _formato_cts_fecha_pago_solicitada(params.get('fecha_pago'))
     if not (cia and payroll_type and period and person):
         raise ValueError('Faltan parámetros para generar el formato de CTS.')
 
@@ -7478,7 +7525,7 @@ def generar_pdf_formato_cts(params):
     _control_datos_cts_persona(cia, payroll_type, period, person)
     html_renderizado = render_template(
         'formato_cts_pdf.html',
-        **_contexto_formato_cts(cia, payroll_type, period, person),
+        **_contexto_formato_cts(cia, payroll_type, period, person, fecha_pago),
     )
 
     if WEASYPRINT_AVAILABLE:
@@ -25186,6 +25233,24 @@ def get_lista_formato_cts():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/api/formato-cts/fecha-pago')
+@login_required
+def api_formato_cts_fecha_pago():
+    """Fecha de pago por defecto del periodo CTS (PR_CTSPeriod.PaymentDate)."""
+    ensure_user_session()
+    cia = str(request.args.get('cia') or session.get('company') or '').strip()
+    payroll_type = str(request.args.get('payroll_type') or request.args.get('payrolltype') or '').strip()
+    period = _normalize_pr_period(request.args.get('period'))
+    if not cia or not payroll_type or not period:
+        return jsonify({'fecha_pago': ''})
+    try:
+        fecha = _formato_cts_fecha_pago_por_defecto(cia, payroll_type, period)
+    except Exception as e:
+        logging.exception('api_formato_cts_fecha_pago')
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'fecha_pago': fecha.isoformat() if fecha else ''})
+
+
 @app.route('/preview_formato_cts')
 @login_required
 def preview_formato_cts():
@@ -25223,6 +25288,10 @@ def procesar_formatos_cts_masivo():
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
         return jsonify({'error': 'Faltan filtros para procesar formatos.'}), 400
+    try:
+        fecha_pago = _formato_cts_fecha_pago_solicitada(body.get('fecha_pago'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     ids = [str(x).strip() for x in seleccionados if str(x).strip()]
     if not ids:
@@ -25243,6 +25312,7 @@ def procesar_formatos_cts_masivo():
                         'cia': cia,
                         'payroll_type': payroll_type,
                         'period': period,
+                        'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
                     }
                 )
                 zf.writestr(_formato_cts_pdf_filename(pid, period), pdf_data.getvalue())
@@ -25277,6 +25347,11 @@ def descargar_zip_formatos_cts():
     if not (cia and payroll_type and period):
         flash('Faltan filtros para generar el ZIP de formatos.', 'warning')
         return redirect(url_for('formato_cts_page'))
+    try:
+        fecha_pago = _formato_cts_fecha_pago_solicitada(request.args.get('fecha_pago'))
+    except ValueError as e:
+        flash(str(e), 'warning')
+        return redirect(url_for('formato_cts_page'))
 
     try:
         empleados = _listar_trabajadores_cts(cia, payroll_type, period, '0', None)
@@ -25308,6 +25383,7 @@ def descargar_zip_formatos_cts():
                         'payroll_type': payroll_type,
                         'period': period,
                         'person': person_id,
+                        'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
                     }
                 )
                 zip_file.writestr(_formato_cts_pdf_filename(person_id, period), pdf_io.getvalue())
@@ -25342,6 +25418,10 @@ def enviar_formatos_cts_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and period):
         return jsonify({'error': 'Faltan filtros para envío de formatos.'}), 400
+    try:
+        fecha_pago = _formato_cts_fecha_pago_solicitada(data.get('fecha_pago'))
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
 
     try:
         empleados_periodo = _listar_trabajadores_cts(cia, payroll_type, period, '0', None)
@@ -25381,6 +25461,7 @@ def enviar_formatos_cts_masivo():
                         'payroll_type': payroll_type,
                         'period': period,
                         'person': emp_code,
+                        'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
                     }
                 )
                 exito, msg = enviar_correo_formato_cts(

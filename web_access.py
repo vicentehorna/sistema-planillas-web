@@ -81,6 +81,7 @@ ENDPOINT_MENU_MAP = {
     'api_mapa_conceptos_liquidacion': 'mapa_conceptos_liquidacion',
     'formato_cts_page': 'formato_cts',
     'get_lista_formato_cts': 'formato_cts',
+    'api_formato_cts_fecha_pago': 'formato_cts',
     'preview_formato_cts': 'formato_cts',
     'procesar_formatos_cts_masivo': 'formato_cts',
     'descargar_zip_formatos_cts': 'formato_cts',

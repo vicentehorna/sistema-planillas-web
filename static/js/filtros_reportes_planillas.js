@@ -2500,7 +2500,7 @@
         };
     }
 
-    function crearPersistenciaFormatoLiquidacion(storageKey) {
+    function crearPersistenciaFormatoLiquidacion(storageKey, incluyeFechaPago) {
         const STORAGE_KEY = storageKey || STORAGE_KEY_FORMATO_LIQUIDACION;
 
         function guardar() {
@@ -2512,6 +2512,9 @@
                     nombre: val('txtBuscarTrabajador'),
                     timestamp: Date.now()
                 };
+                if (incluyeFechaPago) {
+                    estado.fecha_pago = val('txtFechaPago');
+                }
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros formato liquidacion: no se pudo guardar', e);
@@ -2560,17 +2563,23 @@
             }
             cboPt.value = payroll;
 
+            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
             if (typeof cargarPeriodosLiquidacion === 'function') {
-                await cargarPeriodosLiquidacion();
+                await cargarPeriodosLiquidacion(periodo);
             }
 
-            const periodo = filtros.periodo != null ? String(filtros.periodo).trim() : '';
             if (periodo && optionExists(cboPer, periodo)) {
                 cboPer.value = periodo;
             }
 
             if (txtNombre && filtros.nombre != null) {
                 txtNombre.value = String(filtros.nombre);
+            }
+            if (incluyeFechaPago && filtros.fecha_pago) {
+                const txtFechaPago = document.getElementById('txtFechaPago');
+                if (txtFechaPago) {
+                    txtFechaPago.value = String(filtros.fecha_pago).trim();
+                }
             }
 
             guardar();
@@ -2586,6 +2595,10 @@
             if (txtNombre) {
                 txtNombre.addEventListener('change', guardar);
                 txtNombre.addEventListener('input', guardar);
+            }
+            if (incluyeFechaPago) {
+                const txtFechaPago = document.getElementById('txtFechaPago');
+                if (txtFechaPago) txtFechaPago.addEventListener('change', guardar);
             }
         }
 
@@ -3225,7 +3238,7 @@
             return crearPersistenciaFormatoLiquidacion();
         },
         formatoCts: function () {
-            return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_FORMATO_CTS);
+            return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_FORMATO_CTS, true);
         },
         telecreditoCts: function () {
             return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_TELECREDITO_CTS);

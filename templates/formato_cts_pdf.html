@@ -165,10 +165,16 @@
             border-top: 2px solid #1a4b84;
             color: #1a4b84;
         }
+        .detalle-calculo {
+            margin-top: 6px;
+            font-size: 9px;
+            color: #1a4b84;
+            text-align: right;
+        }
         .total-deposito {
             display: table;
             width: 100%;
-            margin-top: 6px;
+            margin-top: 4px;
             border: 1px solid #1a4b84;
             background: #f4f6f9;
         }
@@ -342,6 +348,8 @@
                     </tr>
                 </tbody>
             </table>
+
+            <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>
 
             <div class="total-deposito">
                 <div>Total depositado</div>

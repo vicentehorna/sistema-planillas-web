@@ -84,7 +84,7 @@
     </div>
     <div class="card-body">
         <form id="frmFormatoCts" class="row g-2 align-items-end">
-            <div class="col-12 col-lg-3">
+            <div class="col-12 col-lg-2">
                 <label for="cboCompania" class="form-label small fw-bold text-muted mb-1">Compañía</label>
                 <select id="cboCompania" class="form-select form-select-sm" required>
                     <option value="">Seleccione...</option>
@@ -108,7 +108,11 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-6 col-lg-3">
+            <div class="col-6 col-lg-2">
+                <label for="txtFechaPago" class="form-label small fw-bold text-muted mb-1">Fecha pago</label>
+                <input type="date" id="txtFechaPago" class="form-control form-control-sm" title="Fecha que figura en la constancia. Por defecto, la del periodo de CTS.">
+            </div>
+            <div class="col-12 col-lg-2">
                 <label for="txtBuscarTrabajador" class="form-label small fw-bold text-muted mb-1">Localizar trabajador</label>
                 <input type="text" id="txtBuscarTrabajador" class="form-control form-control-sm" placeholder="Apellido o código..." autocomplete="off" spellcheck="false">
             </div>
@@ -563,6 +567,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (!proceso.id) {
                 cboPer.innerHTML = '<option value="">Sin periodos de CTS</option>';
                 cboPer.disabled = true;
+                const txtFecha = document.getElementById('txtFechaPago');
+                if (txtFecha) txtFecha.value = '';
                 return false;
             }
             const res = await fetch(
@@ -578,6 +584,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboPer.value = periodoPreferido;
             }
             cboPer.disabled = false;
+            await cargarFechaPagoDefecto();
             return true;
         } catch (err) {
             if (!carga.vigente() || (err && err.name === 'AbortError')) return false;
@@ -634,14 +641,62 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    function fechaPagoParam() {
+        return String(document.getElementById('txtFechaPago')?.value || '').trim();
+    }
+
+    function fechaPagoDesdePeriodo(period) {
+        const p = String(period || '').trim();
+        if (p.length < 6) return '';
+        const mm = p.slice(4, 6);
+        if (mm !== '05' && mm !== '11') return '';
+        return `${p.slice(0, 4)}-${mm}-15`;
+    }
+
+    let fechaPagoSeq = 0;
+
+    async function cargarFechaPagoDefecto() {
+        const seq = ++fechaPagoSeq;
+        const txt = document.getElementById('txtFechaPago');
+        if (!txt) return;
+        const cia = cboCia.value.trim();
+        const payroll_type = cboPt.value.trim();
+        const period = cboPer.value.trim();
+        if (!cia || !payroll_type || !period) {
+            txt.value = '';
+            return;
+        }
+        let fecha = '';
+        try {
+            const res = await fetch(
+                `/api/formato-cts/fecha-pago?cia=${encodeURIComponent(cia)}&payroll_type=${encodeURIComponent(payroll_type)}&period=${encodeURIComponent(period)}`
+            );
+            const data = await res.json();
+            if (res.ok) fecha = String(data.fecha_pago || '').trim();
+        } catch (e) {
+            console.error(e);
+        }
+        if (seq !== fechaPagoSeq) return;
+        txt.value = fecha || fechaPagoDesdePeriodo(period);
+        if (filtrosPersist) filtrosPersist.guardar();
+    }
+
+    function exigirFechaPago() {
+        if (fechaPagoParam()) return true;
+        Swal.fire('Atención', 'Indique la fecha de pago.', 'warning');
+        return false;
+    }
+
     function verFormato(data) {
+        if (!exigirFechaPago()) return;
         const params = new URLSearchParams({
             person: data.person || '',
             nombre: data.nombre || '',
             cia: data.cia || cboCia.value.trim(),
             payroll_type: data.payroll_type || cboPt.value.trim(),
             process: procesoFijo(),
-            period: data.period || cboPer.value.trim()
+            period: data.period || cboPer.value.trim(),
+            fecha_pago: fechaPagoParam()
         }).toString();
         window.open(`${URL_PREVIEW}?${params}`, '_blank');
     }
@@ -654,12 +709,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
         const modoEl = document.querySelector('input[name="modoProceso"]:checked');
         const modo = modoEl ? modoEl.value : 'zip';
+        if (!exigirFechaPago()) return;
         const filtros = {
             cia: cboCia.value.trim(),
             company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
             payroll_type: cboPt.value.trim(),
             process: procesoFijo(),
-            period: cboPer.value.trim()
+            period: cboPer.value.trim(),
+            fecha_pago: fechaPagoParam()
         };
         const btn = document.getElementById('btnEjecutarFormatos');
         const prev = btn.innerHTML;
@@ -717,7 +774,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                     empleados: ids,
                     period: filtros.period,
                     payroll_type: filtros.payroll_type,
-                    process: filtros.process
+                    process: filtros.process,
+                    fecha_pago: filtros.fecha_pago
                 })
             });
             if (!resEnv.ok) {
@@ -836,11 +894,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
         const seleccionados = Array.from(document.querySelectorAll('.check-persona:checked')).map((c) => c.value);
+        if (!exigirFechaPago()) return;
         const qs = new URLSearchParams({
             payroll_type: pt,
             process: procesoFijo(),
             period: per,
-            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim()
+            company_name: (cboCia.options[cboCia.selectedIndex]?.textContent || '').trim(),
+            fecha_pago: fechaPagoParam()
         });
         if (seleccionados.length) {
             qs.set('trabajadores', seleccionados.join(','));
@@ -890,6 +950,9 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     cboCia.addEventListener('change', alCambiarCompania);
+    cboPer.addEventListener('change', function () {
+        cargarFechaPagoDefecto();
+    });
     cboPt.addEventListener('change', function () {
         ++generacionFiltros;
         cargarPeriodosCts();

@@ -69,6 +69,13 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "max_args": 1,
         "param_names": ["periodo"],
     },
+    "SP_PR_OBTENERAUSENCIASPAGOCTS": {
+        "display": "sp_pr_obtenerAusenciasPagoCTS",
+        "description": "Faltas + licencia sin goce + suspensión del semestre CTS (noviembre: mayo-octubre; mayo: noviembre-abril; el ingreso acorta el inicio)",
+        "min_args": 0,
+        "max_args": 1,
+        "param_names": ["periodo"],
+    },
 }
 
 _ALIASES = {

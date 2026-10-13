@@ -262,14 +262,16 @@ document.addEventListener('DOMContentLoaded', async function () {
         return String(valor);
     }
 
-    /** Coincide con columnas fijas del backend: 14 detalle / 3 agrupado C.Costo. */
+    /** Coincide con columnas fijas del backend: 14 detalle / 3 agrupado C.Costo.
+        Pago de CTS informa num_cols_fijas (omite AFP, costo, tipo de pago, perfil y horas). */
     const NUM_COLS_FIJAS_DETALLE = 14;
     const NUM_COLS_FIJAS_AGRUPADO = 3;
     const ES_HM_DIVISA = String({{ (sql_database or '')|tojson }}).toLowerCase() === 'hm_divisa';
     let modoAgrupadoActivo = false;
+    let numColsFijasDetalle = NUM_COLS_FIJAS_DETALLE;
 
     function numColsFijasActual() {
-        return modoAgrupadoActivo ? NUM_COLS_FIJAS_AGRUPADO : NUM_COLS_FIJAS_DETALLE;
+        return modoAgrupadoActivo ? NUM_COLS_FIJAS_AGRUPADO : numColsFijasDetalle;
     }
 
     function leerAgruparCCosto() {
@@ -711,6 +713,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             modoAgrupadoActivo = String(payload.agrupar_cc || agrupar_cc).toUpperCase() === 'Y';
+            const nFijas = Number(payload.num_cols_fijas);
+            numColsFijasDetalle = (!modoAgrupadoActivo && Number.isFinite(nFijas) && nFijas > 0)
+                ? nFijas
+                : NUM_COLS_FIJAS_DETALLE;
             document.getElementById('cardResultado').classList.remove('d-none');
             const titulo = actualizarTituloPlanillaVertical(
                 selectedText('cboTipoPlanilla'),

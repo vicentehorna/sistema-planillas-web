@@ -29401,6 +29401,38 @@ _PLANILLA_VERTICAL_AGRUPADO_KEYS = [
     'ccname',
     'cantidad',
 ]
+# Pago de CTS (PR_ProcessType.ShortName = CTS): no se muestran en el detalle.
+_PLANILLA_VERTICAL_CTS_OMIT_KEYS = frozenset({
+    'afp',
+    'ccname',
+    'costcenter',
+    'tipopago',
+    'profile',
+    'horas',
+})
+
+
+def _planilla_vertical_columnas_estaticas(omitir_pago_cts=False):
+    """Cabeceras y claves del detalle. En Pago de CTS omite AFP, costo, tipo de pago, perfil y horas."""
+    headers = []
+    keys = []
+    for header, key in zip(_PLANILLA_VERTICAL_STATIC_HEADERS_ES, _PLANILLA_VERTICAL_STATIC_KEYS):
+        if omitir_pago_cts and key in _PLANILLA_VERTICAL_CTS_OMIT_KEYS:
+            continue
+        headers.append(header)
+        keys.append(key)
+    return headers, keys
+
+
+def _es_proceso_pago_cts(cursor, cia, process):
+    cursor.execute(
+        "SELECT ShortName FROM PR_ProcessType WHERE Company = ? AND ProcessType = ?",
+        (cia, process),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return False
+    return str(row[0]).strip().upper() == 'CTS'
 
 
 def _normalize_agrupar_cc_flag(value):
@@ -29608,12 +29640,13 @@ def _fetch_planilla_vertical_for_company(
     return concept_headers, concept_reporden, filas_dict
 
 
-def _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc='N'):
-    static_keys = (
-        _PLANILLA_VERTICAL_AGRUPADO_KEYS
-        if _normalize_agrupar_cc_flag(agrupar_cc) == 'Y'
-        else _PLANILLA_VERTICAL_STATIC_KEYS
-    )
+def _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc='N', static_keys=None):
+    if static_keys is None:
+        static_keys = (
+            _PLANILLA_VERTICAL_AGRUPADO_KEYS
+            if _normalize_agrupar_cc_flag(agrupar_cc) == 'Y'
+            else _PLANILLA_VERTICAL_STATIC_KEYS
+        )
     resultado = []
     for item in filas_dict:
         fila = []
@@ -29848,15 +29881,21 @@ def reporte_planilla_vertical_post():
             agrupar_cc=agrupar_cc,
             cesados=cesados,
         )
+        omitir_pago_cts = agrupar_cc != 'Y' and _es_proceso_pago_cts(cursor, cia, process)
         if agrupar_cc == 'Y':
-            headers = list(_PLANILLA_VERTICAL_AGRUPADO_HEADERS_ES) + concept_headers
+            static_headers = list(_PLANILLA_VERTICAL_AGRUPADO_HEADERS_ES)
+            static_keys = None
         else:
-            headers = list(_PLANILLA_VERTICAL_STATIC_HEADERS_ES) + concept_headers
-        resultado = _planilla_vertical_rows_to_matrix(filas_dict, concept_headers, agrupar_cc=agrupar_cc)
+            static_headers, static_keys = _planilla_vertical_columnas_estaticas(omitir_pago_cts)
+        headers = static_headers + concept_headers
+        resultado = _planilla_vertical_rows_to_matrix(
+            filas_dict, concept_headers, agrupar_cc=agrupar_cc, static_keys=static_keys,
+        )
         return jsonify({
             "headers": headers,
             "data": resultado,
             "agrupar_cc": agrupar_cc,
+            "num_cols_fijas": len(static_headers),
         })
     except Exception as e:
         logging.exception("reporte_planilla_vertical_post")

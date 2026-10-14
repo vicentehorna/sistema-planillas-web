@@ -23229,6 +23229,44 @@ def _pago_unidad_cargar_unidades_temp(cursor, unidades):
         )
 
 
+def _pago_unidad_nombres(cursor, unidades):
+    """Código de unidad → nombre de SY_ReplicationUnit para el archivo TXT."""
+    codes = []
+    for u in unidades or []:
+        code = str(u or '').strip()
+        if code and code not in codes:
+            codes.append(code[:20])
+    if not codes:
+        return {}
+    placeholders = ','.join(['?'] * len(codes))
+    cursor.execute(
+        f"""
+        SELECT LTRIM(RTRIM(ReplicationUnit)),
+               LTRIM(RTRIM(ISNULL(Name, '')))
+        FROM SY_ReplicationUnit (NOLOCK)
+        WHERE LTRIM(RTRIM(ReplicationUnit)) IN ({placeholders})
+        """,
+        codes,
+    )
+    nombres = {}
+    for row in cursor.fetchall() or []:
+        code = str(row[0] or '').strip()
+        name = str(row[1] or '').strip()
+        if code:
+            nombres[code] = name
+    return nombres
+
+
+def _pago_unidad_filename(unidad, nombre, period, usados):
+    """Telecredito_<nombre de la unidad>_<periodo>.txt. El código solo si el nombre se repite."""
+    token = _boleta_filename_token(nombre or unidad, fallback='UNIDAD')[:60].rstrip('_')
+    if token in usados and usados[token] != unidad:
+        extra = _boleta_filename_token(unidad, fallback='UNIDAD')[:20].rstrip('_')
+        token = f'{token}_{extra}'[:80].rstrip('_')
+    usados[token] = unidad
+    return f'Telecredito_{token}_{period}.txt'
+
+
 @app.route('/api/pago-haberes/pago-unidad/unidades', methods=['POST'])
 @login_required
 def api_pago_haberes_pago_unidad_unidades():
@@ -23458,6 +23496,8 @@ def api_pago_haberes_pago_unidad_generar_zip():
         cursor = conn.cursor()
         archivos = []
         omitidas = []
+        nombres_unidad = _pago_unidad_nombres(cursor, por_unidad.keys())
+        nombres_usados = {}
 
         for unidad, persons in sorted(por_unidad.items(), key=lambda x: x[0]):
             if not persons:
@@ -23484,8 +23524,9 @@ def api_pago_haberes_pago_unidad_generar_zip():
                 omitidas.append({"unidad": unidad, "motivo": "sin líneas de detalle"})
                 continue
             contenido = '\r\n'.join(lineas) + '\r\n'
-            safe_unit = re.sub(r'[^A-Za-z0-9_-]+', '_', unidad)[:20] or 'UNIDAD'
-            fname = f'Telecredito_{safe_unit}_{period}.txt'
+            fname = _pago_unidad_filename(
+                unidad, nombres_unidad.get(unidad), period, nombres_usados
+            )
             archivos.append((fname, contenido.encode('latin-1', errors='replace')))
 
         if not archivos:

@@ -1,5 +1,7 @@
 /*
     Genera líneas del archivo Telecrédito BCP (cabecera tipo 1 + detalle tipo 2).
+    Si SY_Company.FlagBcpCorporativo = Y (columna solo en hm_globaltec), usa el
+    formato corporativo: cabecera #1H (107) y detalle con espacio + 2 (137).
     Requiere tabla temporal #TelecreditoPersonas (person) creada por la app web
     con los trabajadores seleccionados antes de ejecutar este SP.
     @todos_bancos: N = solo cuenta propia BCP/creditobank; Y = propia + interbancarios (CCI).
@@ -47,6 +49,9 @@ BEGIN
     DECLARE @linea_cabecera  VARCHAR(500);
     DECLARE @cta_chk         VARCHAR(20);
     DECLARE @parte_chk       VARCHAR(30);
+    DECLARE @bcp_corporativo CHAR(1) = 'N';
+    DECLARE @moneda_corp     CHAR(2);
+    DECLARE @sql_flag        NVARCHAR(500);
 
     SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN '1001' ELSE '0001' END;
 
@@ -171,6 +176,13 @@ BEGIN
                     END
                 ))
             )), 20) AS refempresa,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) IN ('01', '1') THEN 'DNI'
+                WHEN LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) IN ('06', '6') THEN 'RUC'
+                WHEN LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) IN ('07', '7') THEN 'PAS'
+                WHEN LTRIM(RTRIM(ISNULL(pdt.PDT, ''))) IN ('03', '3', '04', '4') THEN 'CE'
+                ELSE 'DNI'
+            END AS tipodoc_corp,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
@@ -230,6 +242,7 @@ BEGIN
         nombre,
         refbeneficiario,
         refempresa,
+        tipodoc_corp,
         importe,
         RIGHT(REPLICATE('0', 14) + CAST(CAST(ROUND(ISNULL(importe, 0), 2, 0) AS BIGINT) AS VARCHAR(20)), 14) +
         '.' +
@@ -287,6 +300,62 @@ BEGIN
         END
     ), 0)
     FROM #Detalle;
+
+    /* Flag solo existe en hm_globaltec; en el resto de BD se mantiene el formato estándar. */
+    IF COL_LENGTH('dbo.SY_Company', 'FlagBcpCorporativo') IS NOT NULL
+    BEGIN
+        SET @sql_flag = N'
+            SELECT @out = UPPER(LEFT(LTRIM(RTRIM(ISNULL(FlagBcpCorporativo, ''N''))), 1))
+            FROM SY_Company
+            WHERE Company = @cia';
+        EXEC sp_executesql
+            @sql_flag,
+            N'@cia VARCHAR(10), @out CHAR(1) OUTPUT',
+            @cia = @par_company,
+            @out = @bcp_corporativo OUTPUT;
+    END
+    IF ISNULL(@bcp_corporativo, 'N') NOT IN ('Y', 'S', '1')
+        SET @bcp_corporativo = 'N';
+    SET @moneda_corp = CASE WHEN @par_currency = 'EX' THEN 'US' ELSE 'S/' END;
+
+    IF @bcp_corporativo = 'Y'
+    BEGIN
+        SET @linea_cabecera =
+            '#1H' +
+            @tipo_cta_origen +
+            LEFT(ISNULL(@cuenta_origen, '') + REPLICATE(' ', 20), 20) +
+            @moneda_corp +
+            RIGHT(REPLICATE('0', 15) + CAST(CAST(ROUND(ISNULL(@monto_total, 0) * 100, 0) AS BIGINT) AS VARCHAR(20)), 15) +
+            REPLACE(CONVERT(VARCHAR(10), @par_paydate, 103), '/', '') +
+            LEFT(ISNULL(@par_referencia, '') + REPLICATE(' ', 20), 20) +
+            RIGHT(REPLICATE('0', 21) + CAST(ISNULL(@total_reg, 0) AS VARCHAR(20)), 21) +
+            '1' +
+            REPLICATE(' ', 15) +
+            '1';
+
+        SELECT orden, linea_txt
+        FROM (
+            SELECT 0 AS orden, @linea_cabecera AS linea_txt
+            UNION ALL
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY nombre, person) AS orden,
+                ' ' +
+                '2' +
+                tipocuenta +
+                LEFT(cuenta + REPLICATE(' ', 20), 20) +
+                LEFT(UPPER(LTRIM(RTRIM(REPLACE(REPLACE(REPLACE(nombre, '   ', ' '), '  ', ' '), '  ', ' ')))) + REPLICATE(' ', 40), 40) +
+                @moneda_corp +
+                RIGHT(REPLICATE('0', 15) + CAST(CAST(ROUND(ISNULL(importe, 0) * 100, 0) AS BIGINT) AS VARCHAR(20)), 15) +
+                REPLICATE(' ', 40) +
+                '0' +
+                LEFT(tipodoc_corp + REPLICATE(' ', 3), 3) +
+                LEFT(LTRIM(RTRIM(ISNULL(numerodocumento, ''))) + REPLICATE(' ', 12), 12) +
+                '1' AS linea_txt
+            FROM #Detalle
+        ) AS lineas
+        ORDER BY orden;
+        RETURN;
+    END
 
     SET @linea_cabecera =
         '1' +

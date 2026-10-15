@@ -123,6 +123,28 @@
         cursor: not-allowed;
     }
 
+    .pm-overlay-cias {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        background: rgba(255, 255, 255, 0.72);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 1rem;
+    }
+
+    .pm-overlay-cias-card {
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, 0.08);
+        border-radius: 0.75rem;
+        box-shadow: 0 0.75rem 2rem rgba(15, 23, 42, 0.12);
+        padding: 1.1rem 1.25rem;
+        min-width: 18rem;
+        max-width: 28rem;
+        text-align: center;
+    }
+
     @media (max-width: 991.98px) {
         .pm-layout {
             flex-direction: column;
@@ -335,6 +357,60 @@ document.addEventListener('DOMContentLoaded', async function () {
     const txtShortName = document.getElementById('txtShortName');
     const txtValorTexto = document.getElementById('txtValorTexto');
     const txtValorNumero = document.getElementById('txtValorNumero');
+    const btnGuardarParametro = document.getElementById('btnGuardarParametro');
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        const msg = (opciones && (opciones.mensaje || opciones.message)) || '¿Continuar?';
+        return confirm(msg);
+    }
+
+    let overlayCiasEl = null;
+
+    function mostrarEsperaCias(mensaje) {
+        if (!overlayCiasEl) {
+            overlayCiasEl = document.createElement('div');
+            overlayCiasEl.className = 'pm-overlay-cias';
+            overlayCiasEl.innerHTML = (
+                '<div class="pm-overlay-cias-card" role="status" aria-live="polite">' +
+                '<div class="spinner-border text-primary mb-2" role="status" aria-hidden="true"></div>' +
+                '<div class="fw-semibold" data-role="texto">Procesando…</div>' +
+                '<div class="text-muted small mt-1">Puede tardar si hay muchas empresas.</div>' +
+                '</div>'
+            );
+            document.body.appendChild(overlayCiasEl);
+        }
+        const txt = overlayCiasEl.querySelector('[data-role="texto"]');
+        if (txt) txt.textContent = mensaje || 'Actualizando en las demás empresas…';
+        overlayCiasEl.classList.remove('d-none');
+        if (btnGuardarParametro) btnGuardarParametro.disabled = true;
+    }
+
+    function ocultarEsperaCias() {
+        if (overlayCiasEl) overlayCiasEl.classList.add('d-none');
+        if (btnGuardarParametro) btnGuardarParametro.disabled = false;
+    }
+
+    function mostrarResultadoCias(data, fallback) {
+        const mensaje = (data && data.mensaje) || fallback || 'Operación completada.';
+        const errores = (data && data.errores) || [];
+        mostrarMensajeGuardado(mensaje);
+        if (errores.length) {
+            hmAdvertencia(
+                mensaje + '\n' + errores.slice(0, 5).map((e) => `• ${e.company}: ${e.error}`).join('\n')
+            );
+        }
+    }
 
     let parametrosCache = [];
     let seleccionado = null;
@@ -524,25 +600,36 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function replicarParametroEnCias(cia, shortname) {
-        const res = await fetch('/api/parametros/replicar-cias', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ cia, shortname }),
-        });
-        const data = await leerJson(res);
-        mostrarMensajeGuardado(data.mensaje || 'Replicación completada.');
-        return data;
+        mostrarEsperaCias(`Replicando ${shortname} en las demás empresas…`);
+        try {
+            const res = await fetch('/api/parametros/replicar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, shortname }),
+            });
+            const data = await leerJson(res);
+            mostrarResultadoCias(data, 'Replicación completada.');
+            return data;
+        } finally {
+            ocultarEsperaCias();
+        }
     }
 
     async function actualizarParametroEnCias(payload) {
-        const res = await fetch('/api/parametros/guardar-cias', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload),
-        });
-        const data = await leerJson(res);
-        mostrarMensajeGuardado(data.mensaje || 'Actualización en las demás empresas completada.');
-        return data;
+        const etiqueta = payload.shortname || 'parámetro';
+        mostrarEsperaCias(`Actualizando ${etiqueta} en las demás empresas…`);
+        try {
+            const res = await fetch('/api/parametros/guardar-cias', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await leerJson(res);
+            mostrarResultadoCias(data, 'Actualización en las demás empresas completada.');
+            return data;
+        } finally {
+            ocultarEsperaCias();
+        }
     }
 
     async function guardarParametro() {
@@ -631,7 +718,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         txtShortName.focus();
     });
 
-    document.getElementById('btnGuardarParametro').addEventListener('click', () => {
+    btnGuardarParametro.addEventListener('click', () => {
         guardarParametro();
     });
 

@@ -58,6 +58,26 @@
         padding-left: 1.2rem;
         font-size: 0.85rem;
     }
+
+    .btn-eliminar-calculo {
+        background-color: #e8b4b8;
+        border-color: #d4a0a4;
+        color: #5c3d3f;
+    }
+
+    .btn-eliminar-calculo:hover:not(:disabled),
+    .btn-eliminar-calculo:focus:not(:disabled) {
+        background-color: #ddb0b4;
+        border-color: #c89498;
+        color: #4a3032;
+    }
+
+    .btn-eliminar-calculo:disabled {
+        background-color: #e8b4b8;
+        border-color: #d4a0a4;
+        color: #5c3d3f;
+        opacity: 0.55;
+    }
 </style>
 {% endblock %}
 
@@ -108,6 +128,9 @@
                 </button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnCalcular" disabled>
                     <i class="bi bi-calculator"></i> Calcular planilla masivo
+                </button>
+                <button type="button" class="btn btn-eliminar-calculo btn-sm px-4" id="btnEliminarCalculo" disabled>
+                    <i class="bi bi-trash"></i> Eliminar cálculo
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
                     Empresas: <span id="lblEmpresasSel">0</span>
@@ -203,6 +226,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const URL_COMPANIAS = {{ url_for('api_procesar_planilla_masivo_companias') | tojson }};
     const URL_TRABAJADORES = {{ url_for('api_procesar_planilla_masivo_trabajadores') | tojson }};
     const URL_EJECUTAR = {{ url_for('ejecutar_calculo_masivo_streaming') | tojson }};
+    const URL_ELIMINAR = {{ url_for('api_procesar_planilla_masivo_eliminar_calculo') | tojson }};
 
     // Etapa de implementación: quitar en producción.
     const IMPL_MOSTRAR_TIEMPO_PROCESO = true;
@@ -217,6 +241,7 @@ document.addEventListener('DOMContentLoaded', function () {
     const chkTodas = document.getElementById('chkTodasEmpresas');
     const tbody = document.getElementById('tbodyTrabajadores');
     const btnCalcular = document.getElementById('btnCalcular');
+    const btnEliminarCalculo = document.getElementById('btnEliminarCalculo');
     const chkSelTodosTrab = document.getElementById('chkSelTodosTrab');
     let listaTrabajadores = [];
     let trabajadoresMarcados = new Set();
@@ -258,7 +283,9 @@ document.addEventListener('DOMContentLoaded', function () {
         document.getElementById('lblTrabajadores').textContent = nTot
             ? `${nSel} / ${nTot}`
             : '0';
-        btnCalcular.disabled = nSel === 0;
+        const haySel = nSel > 0;
+        btnCalcular.disabled = !haySel;
+        if (btnEliminarCalculo) btnEliminarCalculo.disabled = !haySel;
     }
 
     function sincronizarChkTodosTrab() {
@@ -487,6 +514,7 @@ document.addEventListener('DOMContentLoaded', function () {
         listaTrabajadores = [];
         tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">Consultando...</td></tr>';
         btnCalcular.disabled = true;
+        if (btnEliminarCalculo) btnEliminarCalculo.disabled = true;
 
         try {
             const res = await fetch(URL_TRABAJADORES, {
@@ -556,7 +584,7 @@ document.addEventListener('DOMContentLoaded', function () {
         resetBarra();
     }
 
-    async function consumirStreaming(response) {
+    async function consumirStreaming(response, etiqueta) {
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = '';
@@ -586,7 +614,8 @@ document.addEventListener('DOMContentLoaded', function () {
                             barra.style.width = p + '%';
                             barra.setAttribute('aria-valuenow', String(p));
                             pct.textContent = p + '%';
-                            label.textContent = `Procesando: ${data.actual} de ${data.total}`;
+                            const prefijo = etiqueta || 'Procesando';
+                            label.textContent = `${prefijo}: ${data.actual} de ${data.total}`;
                             if (detalleErr && data.detalle) {
                                 detalleErr.textContent = String(data.detalle);
                                 detalleErr.classList.remove('d-none');
@@ -620,6 +649,7 @@ document.addEventListener('DOMContentLoaded', function () {
         ocultarValidaciones();
         container.classList.remove('d-none');
         btnCalcular.disabled = true;
+        if (btnEliminarCalculo) btnEliminarCalculo.disabled = true;
         document.getElementById('btnConsultar').disabled = true;
         const tInicioProceso = performance.now();
 
@@ -673,6 +703,76 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    async function eliminarCalculoMasivo() {
+        const seleccionados = trabajadoresSeleccionados();
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        const period = cboPer.value.trim();
+        if (!period) {
+            alert('Seleccione tipo de planilla, proceso y periodo antes de eliminar.');
+            return;
+        }
+        const msgConfirm = seleccionados.length === 1
+            ? '¿Eliminar el cálculo del trabajador seleccionado?'
+            : `¿Eliminar el cálculo de ${seleccionados.length} trabajadores seleccionados?`;
+        if (!window.confirm(msgConfirm)) {
+            return;
+        }
+
+        const container = document.getElementById('container-progreso');
+        resetBarra();
+        const label = document.getElementById('progreso-label');
+        if (label) label.textContent = 'Eliminando cálculos…';
+        ocultarValidaciones();
+        container.classList.remove('d-none');
+        btnCalcular.disabled = true;
+        btnEliminarCalculo.disabled = true;
+        document.getElementById('btnConsultar').disabled = true;
+
+        try {
+            const response = await fetch(URL_ELIMINAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    period,
+                    trabajadores: seleccionados.map((t) => ({
+                        company: t.company,
+                        person: t.person,
+                        payrolltype: t.payrolltype,
+                        processtype: t.processtype,
+                    })),
+                }),
+            });
+            if (!response.ok) {
+                let msg = 'No se pudo eliminar el cálculo.';
+                try {
+                    const err = await response.json();
+                    if (err.error) msg = err.error;
+                } catch (ignore) {}
+                alert(msg);
+                return;
+            }
+            const resultado = await consumirStreaming(response, 'Eliminando');
+            if (resultado) {
+                let msg = `Proceso concluido.\nÉxitos: ${resultado.exitos || 0}\nErrores: ${resultado.errores || 0}`;
+                if (resultado.errores > 0 && Array.isArray(resultado.detalles)) {
+                    msg += '\n\n' + resultado.detalles.slice(0, 8).join('\n');
+                }
+                alert(msg);
+            }
+            await consultar();
+        } catch (e) {
+            console.error(e);
+            alert(e.message || 'Error al eliminar el cálculo.');
+        } finally {
+            ocultarBarraProgreso();
+            document.getElementById('btnConsultar').disabled = false;
+            actualizarContadores();
+        }
+    }
+
     chkSelTodosTrab.addEventListener('change', function () {
         const marcar = chkSelTodosTrab.checked;
         trabajadoresMarcados = new Set();
@@ -703,6 +803,7 @@ document.addEventListener('DOMContentLoaded', function () {
         consultar();
     });
     btnCalcular.addEventListener('click', calcularMasivo);
+    btnEliminarCalculo.addEventListener('click', eliminarCalculoMasivo);
 
     cargarCompanias();
     cargarPlanillas();

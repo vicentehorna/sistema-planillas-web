@@ -35832,6 +35832,178 @@ def ejecutar_calculo_masivo_streaming():
     )
 
 
+def _mensaje_error_eliminar_calculo(err):
+    """Deja el texto de RAISERROR del SP, sin el envoltorio de pyodbc."""
+    text = str(err or '').strip()
+    if 'RAISERROR' in text or '50000' in text:
+        parts = text.split(']')
+        if len(parts) > 1:
+            text = parts[-1].strip(" ()'\"")
+    return text
+
+
+@app.route('/api/procesar-planilla-masivo/eliminar-calculo', methods=['POST'])
+@login_required
+def api_procesar_planilla_masivo_eliminar_calculo():
+    """Elimina el cálculo de trabajadores de varias empresas, con progreso SSE.
+
+    Cada fila trae su company, payrolltype y processtype. Llama
+    sp_pr_eliminar_calculo_planilla_web, el mismo SP de Procesar Planilla.
+    """
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    period = _normalize_pr_period(body.get('period'))
+    items = body.get('trabajadores') or body.get('items') or []
+
+    if not isinstance(items, list) or not items:
+        return jsonify({'error': 'Debe seleccionar al menos un trabajador.'}), 400
+    if not period:
+        return jsonify({'error': 'Falta el periodo.'}), 400
+
+    lista = []
+    for raw in items:
+        if not isinstance(raw, dict):
+            continue
+        company = str(raw.get('company') or raw.get('cia') or '').strip()
+        person = str(raw.get('person') or '').strip()
+        payrolltype = str(raw.get('payrolltype') or raw.get('payroll_type') or '').strip()
+        processtype = str(raw.get('processtype') or raw.get('proceso') or '').strip()
+        if company and person and payrolltype and processtype:
+            lista.append({
+                'company': company,
+                'person': person,
+                'payrolltype': payrolltype,
+                'processtype': processtype,
+            })
+
+    total = len(lista)
+    if total == 0:
+        return jsonify({'error': 'No hay trabajadores válidos en la lista.'}), 400
+
+    from database import get_active_database
+    try:
+        client_db = get_active_database(required=True)
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+    def generar_progreso():
+        conn = None
+        try:
+            conn = get_db_connection(database=client_db)
+            cursor = conn.cursor()
+            _set_cursor_timeout_payroll(cursor)
+
+            exitos = 0
+            errores = []
+            sql = (
+                "EXEC sp_pr_eliminar_calculo_planilla_web "
+                "@company=?, @payrolltype=?, @processtype=?, @period=?, @person=?"
+            )
+
+            for index, item in enumerate(lista):
+                cia = item['company']
+                pid = item['person']
+                payroll_type = item['payrolltype']
+                processtype = item['processtype']
+                params = (cia, payroll_type, processtype, period, pid)
+                try:
+                    cursor.execute(sql, params)
+                    _drain_pyodbc_cursor(cursor)
+                    conn.commit()
+                    exitos += 1
+                    evento = {
+                        'progreso': int(((index + 1) / total) * 100),
+                        'actual': index + 1,
+                        'total': total,
+                        'company': cia,
+                        'person': pid,
+                    }
+                except Exception as e_individual:
+                    if _is_transient_sql_error(e_individual):
+                        try:
+                            conn, cursor = _reset_payroll_calc_connection(conn, database=client_db)
+                            cursor.execute(sql, params)
+                            _drain_pyodbc_cursor(cursor)
+                            conn.commit()
+                            exitos += 1
+                            evento = {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'company': cia,
+                                'person': pid,
+                            }
+                        except Exception as e_retry:
+                            try:
+                                conn.rollback()
+                            except Exception:
+                                pass
+                            msg = _mensaje_error_eliminar_calculo(e_retry)
+                            errores.append(f'{cia}/{pid}: {msg}')
+                            logging.warning(
+                                'eliminar_calculo_masivo persona %s/%s: %s', cia, pid, e_retry
+                            )
+                            evento = {
+                                'progreso': int(((index + 1) / total) * 100),
+                                'actual': index + 1,
+                                'total': total,
+                                'detalle': msg,
+                                'company': cia,
+                                'person': pid,
+                            }
+                    else:
+                        try:
+                            conn.rollback()
+                        except Exception:
+                            pass
+                        msg = _mensaje_error_eliminar_calculo(e_individual)
+                        errores.append(f'{cia}/{pid}: {msg}')
+                        logging.warning(
+                            'eliminar_calculo_masivo persona %s/%s: %s', cia, pid, e_individual
+                        )
+                        evento = {
+                            'progreso': int(((index + 1) / total) * 100),
+                            'actual': index + 1,
+                            'total': total,
+                            'detalle': msg,
+                            'company': cia,
+                            'person': pid,
+                        }
+
+                yield f'data: {json.dumps(evento)}\n\n'
+
+            yield (
+                'data: '
+                + json.dumps({
+                    'done': True,
+                    'exitos': exitos,
+                    'errores': len(errores),
+                    'detalles': errores,
+                    'database': client_db,
+                })
+                + '\n\n'
+            )
+        except Exception as e:
+            logging.exception('api_procesar_planilla_masivo_eliminar_calculo')
+            yield f'data: {json.dumps({"error": str(e)})}\n\n'
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+    return Response(
+        stream_with_context(generar_progreso()),
+        mimetype='text/event-stream',
+        headers={
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no',
+        },
+    )
+
+
 # --- Rutas legacy (intranet): recuperar desde control de versiones al implementar Planillas ---
 #
 # @app.route('/datos-personales') → datos_personales

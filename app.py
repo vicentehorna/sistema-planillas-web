@@ -7004,7 +7004,8 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
     x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
-    solo_dias_vaca = _es_cliente_garc()
+    # hm_garc y hm_alamo: el formato solo muestra la fila de días.
+    solo_dias_vaca = _es_cliente_garc() or _es_cliente_alamo()
     total = x_dia if solo_dias_vaca else (x_anio + x_mes + x_dia)
 
     base_fmt = _formato_liquidacion_moneda(base)
@@ -7016,8 +7017,8 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
     indemnizacion_despido = _formato_liquidacion_fc_valor(formula_values, 'INDEMNIZACION_DESPID')
     otros_ingresos = _formato_liquidacion_fc_valor(formula_values, 'LIQ_OTROS_ING')
-    # hm_elclan: en días de vacaciones truncas el divisor mostrado es 30 (no 360).
-    divisor_dias_vaca = 30 if _es_cliente_elclan() else 360
+    # hm_elclan y hm_alamo: en días de vacaciones truncas el divisor mostrado es 30.
+    divisor_dias_vaca = 30 if (_es_cliente_elclan() or _es_cliente_alamo()) else 360
 
     def _mostrar_ingreso(val):
         try:

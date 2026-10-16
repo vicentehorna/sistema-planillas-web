@@ -11,7 +11,7 @@ import shutil
 import subprocess
 import tempfile
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
@@ -156,25 +156,53 @@ def _parse_fecha(iso_or_val):
     return None
 
 
+def _sumar_meses(fecha: datetime, meses: int) -> datetime:
+    """Suma meses de calendario. Si el día no existe, queda en el último del mes."""
+    mes0 = fecha.month - 1 + meses
+    anio = fecha.year + mes0 // 12
+    mes = mes0 % 12 + 1
+    if mes == 12:
+        primero_sig = datetime(anio + 1, 1, 1)
+    else:
+        primero_sig = datetime(anio, mes + 1, 1)
+    ultimo = (primero_sig - timedelta(days=1)).day
+    return datetime(anio, mes, min(fecha.day, ultimo))
+
+
 def periodo_contrato_texto(inicio, fin) -> str:
-    """Texto de plazo (p.ej. '06 meses') a partir de fechas inicio/fin (meses inclusivos)."""
+    """Plazo inclusive: meses completos desde el inicio y los días que sobran.
+
+    El día de fin cuenta. 26/10/2026 al 31/03/2027 es 5 meses 6 días.
+    Si cae justo en el aniversario (01/10/2026 al 31/03/2027) queda en meses.
+    """
     d0 = _parse_fecha(inicio)
     d1 = _parse_fecha(fin)
     if not d0 or not d1 or d1 < d0:
         return str(fin or inicio or "").strip()
-    meses = (d1.year - d0.year) * 12 + (d1.month - d0.month) + 1
-    if d1.day < d0.day:
-        meses = max(0, meses - 1)
-    if meses <= 0:
-        dias = (d1.date() - d0.date()).days
-        if dias <= 0:
-            return "0 días"
-        if dias == 1:
-            return "01 día"
-        return f"{dias:02d} días"
+    limite = d1 + timedelta(days=1)
+    meses = 0
+    cursor = d0
+    while True:
+        siguiente = _sumar_meses(cursor, 1)
+        if siguiente <= limite:
+            meses += 1
+            cursor = siguiente
+        else:
+            break
+    dias = (limite.date() - cursor.date()).days
+    if meses and dias:
+        txt_meses = "1 mes" if meses == 1 else f"{meses} meses"
+        txt_dias = "1 día" if dias == 1 else f"{dias} días"
+        return f"{txt_meses} {txt_dias}"
     if meses == 1:
         return "01 mes"
-    return f"{meses:02d} meses"
+    if meses > 1:
+        return f"{meses:02d} meses"
+    if dias <= 0:
+        return "0 días"
+    if dias == 1:
+        return "01 día"
+    return f"{dias:02d} días"
 
 
 def contexto_desde_fila(row: dict) -> dict:

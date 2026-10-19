@@ -3662,12 +3662,12 @@ def _declaracion_afp_sincronizar_planilla(cursor, conn, p):
 
 
 def _declaracion_afp_validaciones_sync_afp(validaciones, sync):
-    """Incluye advertencia si no hubo planilla/proceso con TOTAL_REM_AFP."""
+    """Incluye advertencia si no hubo planilla AFP ni licencia sin goce del periodo."""
     if sync.get('actualizado') != 0:
         return validaciones
     msg = str(sync.get('mensaje') or '').strip()
     if not msg:
-        msg = 'No hay combinaciones planilla/proceso con concepto TOTAL_REM_AFP para el periodo.'
+        msg = 'No hay combinaciones planilla/proceso con concepto TOTAL_REM_AFP ni licencias sin goce (PDT 05 de 30 días o más) para el periodo.'
     if msg not in (validaciones or []):
         return [msg] + list(validaciones or [])
     return validaciones
@@ -5562,7 +5562,8 @@ def enviar_correo_certificado_quinta(destinatario, nombre_empleado, anio, sexo, 
         return False, str(e)
 
 
-_BOLETA_DOBLE_DBS = frozenset({'hm_ultra', 'hm_lumat'})
+_BOLETA_DOBLE_DBS = frozenset({'hm_ultra', 'hm_lumat', 'hm_maritima'})
+_BOLETA_CABECERA_MODELO_ANTERIOR_DBS = frozenset({'hm_ultra', 'hm_maritima'})
 
 
 def _usa_boleta_doble():
@@ -5587,10 +5588,10 @@ def _boleta_etiqueta_dias_fallecimiento():
 
 
 def _boleta_cabecera_modelo_anterior():
-    """hm_ultra: cabecera con los mismos campos y disposición de su boleta anterior (sin horas)."""
+    """hm_ultra / hm_maritima: cabecera con los mismos campos y disposición de su boleta anterior (sin horas)."""
     try:
         from database import get_active_database
-        return str(get_active_database() or '').strip().lower() == 'hm_ultra'
+        return str(get_active_database() or '').strip().lower() in _BOLETA_CABECERA_MODELO_ANTERIOR_DBS
     except Exception:
         return False
 

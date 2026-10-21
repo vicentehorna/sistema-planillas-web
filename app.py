@@ -17409,6 +17409,112 @@ def api_tipos_planilla_periodos_guardar():
                 pass
 
 
+@app.route('/api/tipos-planilla/periodos/generar-masivo', methods=['POST'])
+@login_required
+def api_tipos_planilla_periodos_generar_masivo():
+    """Genera periodos mensuales en bloque para un tipo de planilla.
+
+    Por cada mes entre @desde y @hasta (inclusive, formato YYYY-MM) crea el
+    periodo con el primer y último día del mes reutilizando
+    sp_pr_guardarperiodo_payrolltype_web (modo I), que asigna el PeriodOrder.
+    Los meses que ya existen se omiten sin abortar el lote.
+    Pensado para planillas mensuales (p. ej. Empleados); no usar en semanales.
+    """
+    import calendar as _calendar
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip()
+    desde = str(body.get('desde') or '').strip()
+    hasta = str(body.get('hasta') or '').strip()
+    xlastuser = _xlastuser_id()
+
+    if not cia or not payrolltype:
+        return jsonify({"error": "Seleccione compañía y tipo de planilla."}), 400
+
+    m_desde = re.match(r'^(\d{4})-(\d{2})', desde)
+    m_hasta = re.match(r'^(\d{4})-(\d{2})', hasta)
+    if not m_desde or not m_hasta:
+        return jsonify({"error": "Indique el periodo inicial y final (YYYY-MM)."}), 400
+
+    y1, m1 = int(m_desde.group(1)), int(m_desde.group(2))
+    y2, m2 = int(m_hasta.group(1)), int(m_hasta.group(2))
+    if not (1 <= m1 <= 12 and 1 <= m2 <= 12):
+        return jsonify({"error": "Mes inicial o final no válido."}), 400
+
+    total_meses = (y2 - y1) * 12 + (m2 - m1) + 1
+    if total_meses < 1:
+        return jsonify({"error": "El periodo inicial no puede ser mayor que el final."}), 400
+    if total_meses > 120:
+        return jsonify({"error": "Genere como máximo 120 meses por operación."}), 400
+
+    meses = []
+    y, m = y1, m1
+    for _ in range(total_meses):
+        ultimo_dia = _calendar.monthrange(y, m)[1]
+        meses.append((
+            f"{y:04d}{m:02d}{m:02d}",
+            f"{y:04d}-{m:02d}-01",
+            f"{y:04d}-{m:02d}-{ultimo_dia:02d}",
+        ))
+        m += 1
+        if m > 12:
+            m = 1
+            y += 1
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        creados, omitidos, errores = [], [], []
+        for prperiod, datebegin, dateend in meses:
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_guardarperiodo_payrolltype_web "
+                    "@modo='I', @company=?, @payrolltype=?, @prperiod=?, "
+                    "@datebegin=?, @dateend=?, @cadatebegin=?, @cadateend=?, @xlastuser=?",
+                    (cia, payrolltype, prperiod, datebegin, dateend,
+                     datebegin, dateend, xlastuser),
+                )
+                _dicts_first_nonempty_resultset(cursor)
+                _drain_pyodbc_cursor(cursor)
+                conn.commit()
+                creados.append(prperiod)
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                err = str(e)
+                if 'ya existe' in err.lower():
+                    omitidos.append(prperiod)
+                else:
+                    if ']' in err:
+                        err = err.split(']')[-1].strip(" ()'\"")
+                    errores.append(f"{prperiod}: {err}")
+        mensaje = (
+            f"Periodos generados: {len(creados)}. "
+            f"Ya existían: {len(omitidos)}. "
+            f"Errores: {len(errores)}."
+        )
+        return jsonify({
+            "ok": not errores,
+            "creados": creados,
+            "omitidos": omitidos,
+            "errores": errores,
+            "mensaje": mensaje,
+        })
+    except Exception as e:
+        logging.exception("api_tipos_planilla_periodos_generar_masivo")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/tipos-planilla/periodos/eliminar', methods=['POST'])
 @login_required
 def api_tipos_planilla_periodos_eliminar():

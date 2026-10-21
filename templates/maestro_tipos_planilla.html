@@ -270,6 +270,9 @@
                             <button type="button" class="btn btn-primary btn-sm" id="btnGuardarPeriodo">
                                 <i class="bi bi-save"></i> Guardar periodo
                             </button>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="btnGenerarPeriodos">
+                                <i class="bi bi-calendar-plus"></i> Generar periodos
+                            </button>
                         </div>
                     </div>
                     <p class="small text-muted mb-2">CA = Control de Asistencia</p>
@@ -297,6 +300,35 @@
             </div>
         </div>
     </section>
+</div>
+
+<div class="modal fade" id="modalGenerarPeriodos" tabindex="-1" aria-labelledby="modalGenerarPeriodosLabel" aria-hidden="true">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="modalGenerarPeriodosLabel">Seleccionar Periodo</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3">
+                    Se creará un periodo por cada mes del rango, con el primer y último día del mes.
+                    Los meses que ya existan se omiten. Opción pensada para planillas mensuales.
+                </p>
+                <div class="mb-3">
+                    <label for="inpGenDesde" class="form-label fw-semibold small">Desde</label>
+                    <input type="month" id="inpGenDesde" class="form-control form-control-sm">
+                </div>
+                <div>
+                    <label for="inpGenHasta" class="form-label fw-semibold small">Hasta</label>
+                    <input type="month" id="inpGenHasta" class="form-control form-control-sm">
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary btn-sm" id="btnConfirmarGenerarPeriodos">Aceptar</button>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}
 
@@ -718,6 +750,56 @@ document.addEventListener('DOMContentLoaded', async function () {
             await cargarDetalleTipo(document.getElementById('hidPayRollType').value.trim());
         } catch (err) {
             alert(err.message || 'Error al guardar periodo.');
+        }
+    });
+
+    const modalGenerarPeriodosEl = document.getElementById('modalGenerarPeriodos');
+    const modalGenerarPeriodos = modalGenerarPeriodosEl && window.bootstrap ? new bootstrap.Modal(modalGenerarPeriodosEl) : null;
+
+    document.getElementById('btnGenerarPeriodos').addEventListener('click', function () {
+        if (document.getElementById('hidModo').value === 'I') {
+            alert('Guarde primero el tipo de planilla antes de generar periodos.');
+            return;
+        }
+        if (modalGenerarPeriodos) modalGenerarPeriodos.show();
+    });
+
+    document.getElementById('btnConfirmarGenerarPeriodos').addEventListener('click', async function () {
+        const desde = document.getElementById('inpGenDesde').value;
+        const hasta = document.getElementById('inpGenHasta').value;
+        if (!desde || !hasta) {
+            alert('Indique el periodo inicial y final.');
+            return;
+        }
+        if (desde > hasta) {
+            alert('El periodo inicial no puede ser mayor que el final.');
+            return;
+        }
+        const [y1, m1] = desde.split('-').map(Number);
+        const [y2, m2] = hasta.split('-').map(Number);
+        if ((y2 - y1) * 12 + (m2 - m1) + 1 > 120) {
+            alert('Genere como máximo 120 meses por operación.');
+            return;
+        }
+        try {
+            const data = await leerJson(await fetch('/api/tipos-planilla/periodos/generar-masivo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    payrolltype: document.getElementById('hidPayRollType').value.trim(),
+                    desde,
+                    hasta,
+                }),
+            }));
+            if (modalGenerarPeriodos) modalGenerarPeriodos.hide();
+            mostrarMensajeGuardado(data.mensaje || 'Periodos generados correctamente.');
+            if (data.errores && data.errores.length) {
+                alert('Algunos periodos no se generaron:\n' + data.errores.join('\n'));
+            }
+            await cargarDetalleTipo(document.getElementById('hidPayRollType').value.trim());
+        } catch (err) {
+            alert(err.message || 'Error al generar periodos.');
         }
     });
 

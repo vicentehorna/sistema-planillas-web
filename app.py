@@ -30796,9 +30796,14 @@ def reporte_saldo_vacaciones_consolidado_post():
     person = str(body.get('person') or '0').strip() or '0'
     fecha_dt = _parse_report_date(body.get('fecha') or body.get('date'))
     cesados = _normalize_cesados_saldo_vacaciones(body.get('cesados'))
+    companies_req = body.get('companies')
+    if companies_req is not None and not isinstance(companies_req, list):
+        companies_req = [companies_req]
 
     if not payroll_desc:
         return jsonify({"error": "Debe indicar tipo de planilla."}), 400
+    if companies_req is not None and not companies_req:
+        return jsonify({"error": "Seleccione al menos una empresa."}), 400
 
     anios = _anios_saldo_vacaciones(fecha_dt)
     headers_es = [
@@ -30835,6 +30840,10 @@ def reporte_saldo_vacaciones_consolidado_post():
         cursor = conn.cursor()
         _set_cursor_timeout_report(cursor)
         companies = _list_active_companies(cursor)
+        if companies_req is not None:
+            # Solo se consultan las pedidas que el usuario realmente tiene asignadas.
+            pedidas = {str(c or '').strip() for c in companies_req if str(c or '').strip()}
+            companies = [(c, n) for c, n in companies if c in pedidas]
 
         merged = []
         empresas_con_datos = set()

@@ -1141,11 +1141,6 @@
                     cia: val('cboCompania'),
                     payroll: val('cboTipoPlanilla'),
                     period: val('cboPeriodoTributario'),
-                    entidad: val('txtEntidadMccp'),
-                    tipoMccp: val('txtTipoPlanillaMccp'),
-                    subtipoMccp: val('txtSubtipoMccp'),
-                    regimenMccp: val('txtRegimenMccp'),
-                    tipoRemunerativo: val('txtTipoRemunerativoMccp'),
                     timestamp: Date.now()
                 };
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
@@ -1167,9 +1162,7 @@
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodoTributario',
-             'txtEntidadMccp', 'txtTipoPlanillaMccp', 'txtSubtipoMccp',
-             'txtRegimenMccp', 'txtTipoRemunerativoMccp'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodoTributario'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

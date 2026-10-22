@@ -20619,28 +20619,101 @@ def _mef_mccp_codigo_numerico(valor, ancho, default=''):
     return s.zfill(ancho)[-ancho:] if len(s) > ancho else s.zfill(ancho)
 
 
+def _mef_mccp_codigos_desde_planilla(nombre_planilla):
+    """Códigos MCCP de presentación a partir del tipo de planilla seleccionado.
+
+    Fijos: entidad 000011, tipo planilla 01.
+    Practicantes → subtipo 06, régimen 0102, tipo rem. 6
+    CAS         → subtipo 03, régimen 0101, tipo rem. 4
+    276 / 728   → subtipo 01, régimen 0104, tipo rem. 1
+    """
+    texto = str(nombre_planilla or '').strip().upper()
+    if 'PRACTICANTE' in texto:
+        return {
+            'entidad': '000011',
+            'tipo_planilla_mccp': '01',
+            'subtipo_mccp': '06',
+            'regimen_mccp': '0102',
+            'tipo_remunerativo': '6',
+        }
+    if 'CAS' in texto:
+        return {
+            'entidad': '000011',
+            'tipo_planilla_mccp': '01',
+            'subtipo_mccp': '03',
+            'regimen_mccp': '0101',
+            'tipo_remunerativo': '4',
+        }
+    if any(tok in texto for tok in ('276', '728', '726')):
+        return {
+            'entidad': '000011',
+            'tipo_planilla_mccp': '01',
+            'subtipo_mccp': '01',
+            'regimen_mccp': '0104',
+            'tipo_remunerativo': '1',
+        }
+    return None
+
+
+def _mef_mccp_resolver_nombre_planilla(cursor, cia, payroll):
+    """ShortName/Description de PR_PayRollType para mapear códigos MCCP."""
+    payroll = str(payroll or '').strip()
+    if not payroll:
+        return ''
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1
+                LTRIM(RTRIM(ISNULL(ShortName, ''))),
+                LTRIM(RTRIM(ISNULL(Description, '')))
+            FROM PR_PayRollType (NOLOCK)
+            WHERE Company = ? AND PayRollType = ?
+            """,
+            (cia, payroll),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return payroll
+        shortname = str(row[0] or '').strip()
+        description = str(row[1] or '').strip()
+        return shortname or description or payroll
+    except Exception:
+        logging.exception('_mef_mccp_resolver_nombre_planilla')
+        return payroll
+
+
 def _mef_mccp_params_from_json(body):
-    """Filtros MCCP: compañía + tipo de planilla (sistema) + periodo + parámetros del archivo."""
+    """Filtros MCCP: compañía + tipo de planilla + periodo.
+
+    Los códigos del archivo (entidad/tipo/subtipo/régimen) se derivan del
+    tipo de planilla; no se editan en pantalla (demo PromPerú).
+    """
     body = body or {}
     base = _plame_params_archivo18_from_json(body)
-    base['entidad'] = _mef_mccp_codigo_numerico(body.get('entidad'), 6, '000011')
-    base['tipo_planilla_mccp'] = _mef_mccp_codigo_numerico(
-        body.get('tipo_planilla_mccp') or body.get('tipo_mccp'), 2, '01')
-    base['subtipo_mccp'] = _mef_mccp_codigo_numerico(
-        body.get('subtipo_mccp') or body.get('subtipo'), 2, '01')
-    base['regimen_mccp'] = _mef_mccp_codigo_numerico(
-        body.get('regimen_mccp') or body.get('regimen'), 4, '0101')
-    tipo_rem = str(body.get('tipo_remunerativo') or body.get('tipo_rem') or '1').strip()
-    base['tipo_remunerativo'] = ''.join(ch for ch in tipo_rem if ch.isdigit())[:2] or '1'
+    # Forzar selección de un tipo de planilla (sin "Todas") para el mapeo MCCP.
+    if base.get('payroll_all') == 'Y' or not base.get('payroll'):
+        base['payroll_all'] = 'N'
     return base
+
+
+def _mef_mccp_aplicar_codigos_planilla(p, nombre_planilla):
+    codigos = _mef_mccp_codigos_desde_planilla(nombre_planilla)
+    if not codigos:
+        return (
+            'No se pudo mapear el tipo de planilla a códigos MCCP. '
+            'Use una planilla CAS, Practicantes, 276 o 728.'
+        )
+    p.update(codigos)
+    p['planilla_nombre'] = str(nombre_planilla or '').strip()
+    return None
 
 
 def _mef_mccp_validar_params(p):
     err = _plame_validar_params(p)
     if err:
         return err
-    if not p.get('entidad'):
-        return 'Indique el código de entidad MEF.'
+    if not p.get('payroll'):
+        return 'Seleccione un tipo de planilla.'
     return None
 
 
@@ -20727,9 +20800,13 @@ def api_mef_interface_mccp_listado():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        nombre_planilla = _mef_mccp_resolver_nombre_planilla(cursor, p['cia'], p['payroll'])
+        err_map = _mef_mccp_aplicar_codigos_planilla(p, nombre_planilla)
+        if err_map:
+            return jsonify({"error": err_map}), 400
         cursor.execute(
             "EXEC sp_pr_listado_mccp_web @cia=?, @period=?, @payroll_all=?, @payroll=?",
-            (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None),
+            (p['cia'], p['period'], 'N', p['payroll']),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []
@@ -20763,7 +20840,12 @@ def api_mef_interface_mccp_listado():
             "cia": p['cia'],
             "period": p['period'],
             "payroll": p['payroll'],
-            "payroll_all": p['payroll_all'],
+            "planilla_nombre": p.get('planilla_nombre'),
+            "archivo": _mef_mccp_filename(p),
+            "entidad": p['entidad'],
+            "tipo_planilla_mccp": p['tipo_planilla_mccp'],
+            "subtipo_mccp": p['subtipo_mccp'],
+            "regimen_mccp": p['regimen_mccp'],
         })
     except Exception as e:
         logging.exception("api_mef_interface_mccp_listado")
@@ -20784,8 +20866,10 @@ def api_mef_interface_mccp_generar_txt():
     Cabecera: ENTIDAD|YYYY|MM|TT|SUB|REGIMEN|N_REGISTROS|TOT_ING|TOT_DESC|TOT_APORTES
     Detalle:  2|DNI|00|CLASE|COD_MEF|DESCRIPCION|MONTO|TIPO_REM|CARGO
     Archivo:  PLL<entidad><YYYYMM><TT><SUB><REGIMEN>.TXT
-    Los parámetros MCCP (entidad/tipo/subtipo/régimen/tipo remunerativo) son
-    editables en la interfaz; su configuración por subtipo vendrá después.
+
+    Códigos MCCP fijos de demo (derivados del tipo de planilla):
+      entidad 000011, tipo 01;
+      CAS → 03/0101; Practicantes → 06/0102; 276|728 → 01/0104.
     """
     denied = _require_hm_lumat2_json('MEF — Interface MCCP')
     if denied:
@@ -20799,6 +20883,24 @@ def api_mef_interface_mccp_generar_txt():
     filas = _mef_mccp_rows_from_json(body)
     if not filas:
         return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        nombre_planilla = _mef_mccp_resolver_nombre_planilla(cursor, p['cia'], p['payroll'])
+        err_map = _mef_mccp_aplicar_codigos_planilla(p, nombre_planilla)
+        if err_map:
+            return jsonify({"error": err_map}), 400
+    except Exception as e:
+        logging.exception("api_mef_interface_mccp_generar_txt.resolve")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
     totales = _mef_mccp_totales(filas)
     periodo = p['period']

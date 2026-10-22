@@ -106,10 +106,9 @@
 <div class="alert alert-light border mccp-info mb-3" role="note">
     <strong>Interface MCCP — Módulo de Control de Planillas de Personal del Sector Público (SUNAT / MEF).</strong>
     Vista única para la validación y carga masiva de planillas de pago (entidades estatales, p. ej. PromPerú), proceso <strong>mensual</strong>.
-    Seleccione <strong>compañía</strong>, <strong>tipo de planilla</strong> y <strong>periodo</strong>, ajuste los parámetros MCCP y pulse <em>Consultar</em>; luego <em>Generar TXT</em>.
-    Nombre del archivo: <code>PLL + Entidad + YYYYMM + Tipo + Subtipo + Régimen + .TXT</code>, p. ej. <code>PLL00001120261001030101.TXT</code>.
-    Cabecera: <code>Entidad|Año|Mes|Tipo|Subtipo|Régimen|N° registros|Total ingresos|Total descuentos|Total aportes</code>.
-    Detalle: <code>2|DNI|00|Clase(1 Ingreso / 2 Descuento / 3 Aporte)|Cód. MEF|Descripción|Monto|Tipo remunerativo|Cargo/Plaza</code>.
+    Seleccione <strong>compañía</strong>, <strong>tipo de planilla</strong> y <strong>periodo</strong>, pulse <em>Consultar</em> y luego <em>Generar TXT</em>.
+    El nombre del archivo se arma solo: <code>PLL + 000011 + YYYYMM + 01 + Subtipo + Régimen + .TXT</code>
+    (CAS → <code>03/0101</code>, Practicantes → <code>06/0102</code>, 276/728 → <code>01/0104</code>).
 </div>
 
 <div class="card shadow-sm border-0 mb-4">
@@ -123,8 +122,8 @@
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo de Planilla</label>
-                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
-                    <option value="">Todas</option>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
                 </select>
             </div>
             <div class="col-12 col-sm-auto mccp-filtro-periodo">
@@ -134,40 +133,12 @@
                 </select>
             </div>
 
-            <div class="col-12 border-top pt-2 mt-1">
-                <span class="small fw-bold text-muted d-block mb-2">Parámetros MCCP del archivo</span>
-                <div class="d-flex flex-wrap gap-2 align-items-end">
-                    <div>
-                        <label for="txtEntidadMccp" class="form-label small text-muted mb-1">Entidad</label>
-                        <input type="text" id="txtEntidadMccp" class="form-control form-control-sm mccp-param" value="000011" maxlength="6" inputmode="numeric">
-                    </div>
-                    <div>
-                        <label for="txtTipoPlanillaMccp" class="form-label small text-muted mb-1">Tipo planilla</label>
-                        <input type="text" id="txtTipoPlanillaMccp" class="form-control form-control-sm mccp-param" value="01" maxlength="2" inputmode="numeric">
-                    </div>
-                    <div>
-                        <label for="txtSubtipoMccp" class="form-label small text-muted mb-1">Subtipo</label>
-                        <input type="text" id="txtSubtipoMccp" class="form-control form-control-sm mccp-param" value="01" maxlength="2" inputmode="numeric">
-                    </div>
-                    <div>
-                        <label for="txtRegimenMccp" class="form-label small text-muted mb-1">Régimen laboral</label>
-                        <input type="text" id="txtRegimenMccp" class="form-control form-control-sm mccp-param" value="0101" maxlength="4" inputmode="numeric">
-                    </div>
-                    <div>
-                        <label for="txtTipoRemunerativoMccp" class="form-label small text-muted mb-1">Tipo remunerativo</label>
-                        <input type="text" id="txtTipoRemunerativoMccp" class="form-control form-control-sm mccp-param" value="1" maxlength="2" inputmode="numeric">
-                    </div>
-                    <div class="ms-auto">
-                        <span class="small text-muted">Archivo: <code id="lblNombreArchivoMccp">PLL000011--------01010101.TXT</code></span>
-                    </div>
-                </div>
-            </div>
-
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarMccp" disabled>
                     <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
                 </button>
+                <span class="text-muted small ms-1">Archivo: <code id="lblNombreArchivoMccp">—</code></span>
                 <span class="ms-auto text-muted small fw-bold">
                     Registros: <span id="lblRowCountMccp">0</span>
                     · Seleccionados: <span id="lblSeleccionadosMccp">0</span>
@@ -260,27 +231,39 @@ document.addEventListener('DOMContentLoaded', async function () {
         return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
-    function soloDigitos(valor, ancho, defecto) {
-        const s = String(valor || '').replace(/\D/g, '');
-        if (!s) return defecto;
-        return s.padStart(ancho, '0').slice(-ancho);
+    function codigosDesdePlanilla(nombrePlanilla) {
+        const texto = String(nombrePlanilla || '').trim().toUpperCase();
+        if (texto.includes('PRACTICANTE')) {
+            return { entidad: '000011', tipo: '01', subtipo: '06', regimen: '0102' };
+        }
+        if (texto.includes('CAS')) {
+            return { entidad: '000011', tipo: '01', subtipo: '03', regimen: '0101' };
+        }
+        if (texto.includes('276') || texto.includes('728') || texto.includes('726')) {
+            return { entidad: '000011', tipo: '01', subtipo: '01', regimen: '0104' };
+        }
+        return null;
     }
 
-    function parametrosMccp() {
-        return {
-            entidad: soloDigitos(document.getElementById('txtEntidadMccp').value, 6, '000011'),
-            tipo_planilla_mccp: soloDigitos(document.getElementById('txtTipoPlanillaMccp').value, 2, '01'),
-            subtipo_mccp: soloDigitos(document.getElementById('txtSubtipoMccp').value, 2, '01'),
-            regimen_mccp: soloDigitos(document.getElementById('txtRegimenMccp').value, 4, '0101'),
-            tipo_remunerativo: (String(document.getElementById('txtTipoRemunerativoMccp').value || '1').replace(/\D/g, '') || '1').slice(0, 2)
-        };
+    function textoPlanillaSeleccionada() {
+        const sel = document.getElementById('cboTipoPlanilla');
+        if (!sel || !sel.value) return '';
+        const opt = sel.options[sel.selectedIndex];
+        return opt ? String(opt.textContent || '').trim() : '';
     }
 
-    function actualizarNombreArchivo() {
-        const p = parametrosMccp();
-        const periodo = periodoEsValido() ? periodoYyyymm() : '------';
-        document.getElementById('lblNombreArchivoMccp').textContent =
-            `PLL${p.entidad}${periodo}${p.tipo_planilla_mccp}${p.subtipo_mccp}${p.regimen_mccp}.TXT`;
+    function actualizarNombreArchivo(nombreArchivo) {
+        const lbl = document.getElementById('lblNombreArchivoMccp');
+        if (nombreArchivo) {
+            lbl.textContent = nombreArchivo;
+            return;
+        }
+        const codigos = codigosDesdePlanilla(textoPlanillaSeleccionada());
+        if (!codigos || !periodoEsValido()) {
+            lbl.textContent = '—';
+            return;
+        }
+        lbl.textContent = `PLL${codigos.entidad}${periodoYyyymm()}${codigos.tipo}${codigos.subtipo}${codigos.regimen}.TXT`;
     }
 
     function claseTexto(clase) {
@@ -391,18 +374,22 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function filtrosActuales() {
         const payroll = document.getElementById('cboTipoPlanilla').value.trim();
-        return Object.assign({
+        return {
             cia: document.getElementById('cboCompania').value.trim(),
             period: periodoYyyymm(),
             payroll,
-            payroll_all: payroll ? 'N' : 'Y'
-        }, parametrosMccp());
+            payroll_all: 'N'
+        };
     }
 
     async function ejecutarConsulta() {
         const f = filtrosActuales();
-        if (!f.cia || !periodoEsValido()) {
-            alert('Seleccione compañía y periodo.');
+        if (!f.cia || !f.payroll || !periodoEsValido()) {
+            alert('Seleccione compañía, tipo de planilla y periodo.');
+            return;
+        }
+        if (!codigosDesdePlanilla(textoPlanillaSeleccionada())) {
+            alert('Seleccione una planilla CAS, Practicantes, 276 o 728.');
             return;
         }
         if (filtrosPersist) filtrosPersist.guardar();
@@ -433,6 +420,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.getElementById('lblTotalAportesMccp').textContent = formatearMonto(payload.total_aportes);
             document.getElementById('filaTotalesMccp').classList.remove('d-none');
             document.getElementById('cardResultadoMccp').classList.remove('d-none');
+            actualizarNombreArchivo(payload.archivo || '');
         } catch (err) {
             console.error(err);
             document.getElementById('cardResultadoMccp').classList.add('d-none');
@@ -442,8 +430,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function generarTxt() {
         const f = filtrosActuales();
-        if (!f.cia || !periodoEsValido()) {
-            alert('Seleccione compañía y periodo.');
+        if (!f.cia || !f.payroll || !periodoEsValido()) {
+            alert('Seleccione compañía, tipo de planilla y periodo.');
             return;
         }
         const seleccionados = obtenerSeleccionados();
@@ -497,13 +485,14 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function onCompaniaChange(cia, restaurar) {
         const planillaRestaurar = restaurar && restaurar.payroll != null ? String(restaurar.payroll).trim() : '';
         const periodoRestaurar = restaurar && restaurar.period != null ? String(restaurar.period).trim() : '';
-        cboPlanilla.innerHTML = '<option value="">Todas</option>';
+        cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
         cboPlanilla.disabled = true;
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.disabled = true;
+        actualizarNombreArchivo();
         if (!cia) return;
         await Promise.all([
-            poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla, '<option value="">Todas</option>'),
+            poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla, '<option value="">Seleccione...</option>'),
             poblarSelect(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`, cboPeriodo)
         ]);
         if (planillaRestaurar && optionExists(cboPlanilla, planillaRestaurar)) {
@@ -518,27 +507,24 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     if (filtrosPersist) {
         const guardado = filtrosPersist.leer();
-        if (guardado) {
-            if (guardado.entidad) document.getElementById('txtEntidadMccp').value = guardado.entidad;
-            if (guardado.tipoMccp) document.getElementById('txtTipoPlanillaMccp').value = guardado.tipoMccp;
-            if (guardado.subtipoMccp) document.getElementById('txtSubtipoMccp').value = guardado.subtipoMccp;
-            if (guardado.regimenMccp) document.getElementById('txtRegimenMccp').value = guardado.regimenMccp;
-            if (guardado.tipoRemunerativo) document.getElementById('txtTipoRemunerativoMccp').value = guardado.tipoRemunerativo;
-            if (guardado.cia) {
-                if (!seleccionarInsensitive(cboCia, guardado.cia) && optionExists(cboCia, guardado.cia)) {
-                    cboCia.value = guardado.cia;
-                }
-                await onCompaniaChange(cboCia.value.trim(), guardado);
+        if (guardado && guardado.cia) {
+            if (!seleccionarInsensitive(cboCia, guardado.cia) && optionExists(cboCia, guardado.cia)) {
+                cboCia.value = guardado.cia;
             }
+            await onCompaniaChange(cboCia.value.trim(), guardado);
         }
         filtrosPersist.registrarGuardadoEnCambio();
     }
     cboCia.addEventListener('change', function () {
         onCompaniaChange(this.value.trim(), null);
     });
-    cboPeriodo.addEventListener('change', actualizarNombreArchivo);
-    ['txtEntidadMccp', 'txtTipoPlanillaMccp', 'txtSubtipoMccp', 'txtRegimenMccp', 'txtTipoRemunerativoMccp'].forEach((id) => {
-        document.getElementById(id).addEventListener('input', actualizarNombreArchivo);
+    cboPlanilla.addEventListener('change', function () {
+        actualizarNombreArchivo();
+        if (filtrosPersist) filtrosPersist.guardar();
+    });
+    cboPeriodo.addEventListener('change', function () {
+        actualizarNombreArchivo();
+        if (filtrosPersist) filtrosPersist.guardar();
     });
     actualizarNombreArchivo();
 

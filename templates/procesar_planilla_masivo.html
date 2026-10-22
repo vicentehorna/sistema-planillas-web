@@ -218,6 +218,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     const URL_PLANILLAS = {{ url_for('api_planillas_consolidada') | tojson }};
@@ -334,84 +335,103 @@ document.addEventListener('DOMContentLoaded', function () {
         sincronizarChkTodas();
     }
 
+    const poblarSelect = CombosCarga.poblarSelect;
+
+    /** Se incrementa en cada cambio de planilla/proceso: corta cascadas obsoletas. */
+    let generacionFiltros = 0;
+    let ctrlCompanias = null;
+
     async function cargarCompanias() {
+        /* Panel (no es <select>): misma idea que CombosCarga, abortar la carga anterior. */
+        if (ctrlCompanias) ctrlCompanias.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        ctrlCompanias = ctrl;
+        const previas = new Set(empresasSeleccionadas());
+        panelEmpresas.innerHTML = '<div class="text-center text-muted small py-3">Cargando...</div>';
         try {
-            const res = await fetch(URL_COMPANIAS + (URL_COMPANIAS.includes('?') ? '&' : '?') + 'filtro_usuario=1');
+            const res = await fetch(
+                URL_COMPANIAS + (URL_COMPANIAS.includes('?') ? '&' : '?') + 'filtro_usuario=1',
+                { signal: ctrl ? ctrl.signal : undefined }
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
+            if (ctrlCompanias !== ctrl) return;
             renderEmpresas(Array.isArray(data) ? data : []);
+            if (previas.size) {
+                panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+                    el.checked = previas.has(String(el.value || '').trim());
+                });
+                sincronizarChkTodas();
+            }
         } catch (e) {
+            if (e && e.name === 'AbortError') return;
             console.error(e);
-            panelEmpresas.innerHTML = '<div class="text-danger small py-3">Error al cargar empresas.</div>';
+            panelEmpresas.innerHTML = '<div class="text-danger small py-3">Error al cargar empresas. '
+                + '<button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnReintentarEmpresas">Reintentar</button></div>';
+            const btn = document.getElementById('btnReintentarEmpresas');
+            if (btn) btn.addEventListener('click', cargarCompanias);
         }
     }
 
     async function cargarPlanillas() {
-        cboPt.innerHTML = '<option value="">Seleccione...</option>';
-        cboProc.innerHTML = '<option value="">Seleccione...</option>';
-        cboProc.disabled = true;
-        cboPer.innerHTML = '<option value="">Seleccione...</option>';
-        cboPer.disabled = true;
-        try {
-            const res = await fetch(URL_PLANILLAS);
-            const data = await res.json();
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = item.text;
-                cboPt.appendChild(opt);
-            });
-        } catch (e) {
-            console.error(e);
-        }
+        CombosCarga.resetSelect(cboProc);
+        CombosCarga.resetSelect(cboPer);
+        return poblarSelect(URL_PLANILLAS, cboPt, { textoVacio: 'Sin planillas' });
     }
 
-    async function cargarProcesos() {
-        const payroll = cboPt.value.trim();
-        cboProc.innerHTML = '<option value="">Seleccione...</option>';
-        cboPer.innerHTML = '<option value="">Seleccione...</option>';
-        cboPer.disabled = true;
+    async function cargarProcesos(procesoTexto) {
+        const payroll = CombosCarga.valorValido(cboPt);
+        CombosCarga.resetSelect(cboPer);
         if (!payroll) {
-            cboProc.disabled = true;
-            return;
+            CombosCarga.resetSelect(cboProc);
+            return false;
         }
-        cboProc.disabled = false;
-        try {
-            const res = await fetch(`${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`);
-            const data = await res.json();
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = item.text;
-                cboProc.appendChild(opt);
-            });
-        } catch (e) {
-            console.error(e);
+        const ok = await poblarSelect(
+            `${URL_PROCESOS}?payroll_desc=${encodeURIComponent(payroll)}`,
+            cboProc,
+            { textoVacio: 'Sin procesos' }
+        );
+        if (!ok) return false;
+        if (procesoTexto) CombosCarga.seleccionarPorTexto(cboProc, procesoTexto);
+        return true;
+    }
+
+    async function cargarPeriodos(periodoTexto) {
+        const payroll = CombosCarga.valorValido(cboPt);
+        const proceso = CombosCarga.valorValido(cboProc);
+        if (!payroll || !proceso) {
+            CombosCarga.resetSelect(cboPer);
+            return false;
+        }
+        const ok = await poblarSelect(
+            `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`,
+            cboPer,
+            { textoVacio: 'Sin periodos' }
+        );
+        if (!ok) return false;
+        if (periodoTexto) CombosCarga.seleccionarPorTexto(cboPer, periodoTexto);
+        return true;
+    }
+
+    async function alCambiarPlanilla() {
+        const gen = ++generacionFiltros;
+        const procesoTexto = CombosCarga.textoValido(cboProc);
+        const periodoTexto = CombosCarga.textoValido(cboPer);
+        listaTrabajadores = [];
+        renderTrabajadores([]);
+        const ok = await cargarProcesos(procesoTexto);
+        if (!ok || gen !== generacionFiltros) return;
+        if (CombosCarga.valorValido(cboProc)) {
+            await cargarPeriodos(periodoTexto);
         }
     }
 
-    async function cargarPeriodos() {
-        const payroll = cboPt.value.trim();
-        const proceso = cboProc.value.trim();
-        cboPer.innerHTML = '<option value="">Seleccione...</option>';
-        if (!payroll || !proceso) {
-            cboPer.disabled = true;
-            return;
-        }
-        cboPer.disabled = false;
-        try {
-            const res = await fetch(
-                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(proceso)}`
-            );
-            const data = await res.json();
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id;
-                opt.textContent = item.text || item.id;
-                cboPer.appendChild(opt);
-            });
-        } catch (e) {
-            console.error(e);
-        }
+    async function alCambiarProceso() {
+        const gen = ++generacionFiltros;
+        const periodoTexto = CombosCarga.textoValido(cboPer);
+        listaTrabajadores = [];
+        renderTrabajadores([]);
+        await cargarPeriodos(periodoTexto);
     }
 
     function ocultarAdvertenciaEmpresas() {
@@ -794,8 +814,9 @@ document.addEventListener('DOMContentLoaded', function () {
         sincronizarChkTodas();
     });
 
-    cboPt.addEventListener('change', () => { cargarProcesos(); listaTrabajadores = []; renderTrabajadores([]); });
-    cboProc.addEventListener('change', () => { cargarPeriodos(); listaTrabajadores = []; renderTrabajadores([]); });
+    /* Listeners antes de la carga inicial: ningún cambio se pierde mientras cargan los combos. */
+    cboPt.addEventListener('change', alCambiarPlanilla);
+    cboProc.addEventListener('change', alCambiarProceso);
     cboPer.addEventListener('change', () => { listaTrabajadores = []; renderTrabajadores([]); });
 
     document.getElementById('frmProcesarMasivo').addEventListener('submit', function (e) {
@@ -805,8 +826,8 @@ document.addEventListener('DOMContentLoaded', function () {
     btnCalcular.addEventListener('click', calcularMasivo);
     btnEliminarCalculo.addEventListener('click', eliminarCalculoMasivo);
 
-    cargarCompanias();
-    cargarPlanillas();
+    /* Sin persistencia: carga inicial en paralelo (empresas y planillas no dependen entre sí). */
+    Promise.allSettled([cargarCompanias(), cargarPlanillas()]);
     actualizarContadores();
 });
 </script>

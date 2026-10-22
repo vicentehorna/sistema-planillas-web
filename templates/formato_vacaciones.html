@@ -118,9 +118,9 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const STORAGE_KEY = 'filtros_formato_vacaciones';
     const URL_LISTA = {{ url_for('get_lista_formato_vacaciones') | tojson }};
     const URL_PREVIEW = {{ url_for('preview_formato_vacaciones') | tojson }};
     const URL_ZIP = {{ url_for('descargar_zip_formato_vacaciones') | tojson }};
@@ -156,59 +156,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         return true;
     }
 
-    function guardarFiltros() {
-        try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify({
-                cia: cboCia.value.trim(),
-                payroll: cboPt.value.trim(),
-                fecha: txtFecha.value.trim(),
-                cesados: cboCesados.value.trim() || 'T',
-                person: cboTrab.value.trim(),
-                anio: txtAnio.value.trim(),
-                timestamp: Date.now()
-            }));
-        } catch (e) { /* ignore */ }
+    const poblarSelect = CombosCarga.poblarSelect;
+
+    function reseleccionarPorTexto(select, texto) {
+        return texto ? CombosCarga.seleccionarPorTexto(select, texto) : false;
     }
 
-    function leerFiltros() {
-        try {
-            const raw = localStorage.getItem(STORAGE_KEY);
-            if (!raw) return null;
-            const o = JSON.parse(raw);
-            return o && typeof o === 'object' ? o : null;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    async function poblarSelect(url, selectElement, opts) {
-        opts = opts || {};
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = opts.defaultValue != null ? String(opts.defaultValue) : '';
-            def.textContent = opts.defaultText || 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const id = item.id != null ? String(item.id) : '';
-                if (opts.skipZero && (!id || id === '0')) return;
-                const opt = document.createElement('option');
-                opt.value = id;
-                opt.textContent = item.text != null ? String(item.text) : id;
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
+    async function poblarTrabajadores(url, trabajadorTexto) {
+        return poblarSelect(url, cboTrab, {
+            incluyeTodos: true, valorTodos: '', textoTodos: 'Todos (por defecto)',
+            alCargar: (sel) => reseleccionarPorTexto(sel, trabajadorTexto)
+        });
     }
 
     function fmtFecha(isoOrSql) {
@@ -326,7 +284,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function buscar() {
-        guardarFiltros();
         const cia = cboCia.value.trim();
         const payroll_type = cboPt.value.trim();
         const fecha = txtFecha.value.trim();
@@ -421,60 +378,48 @@ document.addEventListener('DOMContentLoaded', async function () {
     if (!txtFecha.value) txtFecha.value = hoyIsoLocal();
     if (!txtAnio.value) txtAnio.value = String(new Date().getFullYear());
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-
-    const guardado = leerFiltros();
     const DEFAULT_CIA = 'BGT';
-    if (guardado && guardado.cia && optionExists(cboCia, guardado.cia)) {
-        cboCia.value = guardado.cia;
-    } else if (!cboCia.value) {
-        seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+
+    /** Se incrementa en cada cambio de compañía: corta cascadas obsoletas. */
+    let generacionCompania = 0;
+
+    async function cargarPlanillaYTrabajadores(pref) {
+        const gen = ++generacionCompania;
+        pref = pref || {};
+        const cia = CombosCarga.valorValido(cboCia);
+        if (!cia) {
+            CombosCarga.resetSelect(cboPt);
+            CombosCarga.resetSelect(cboTrab, 'Todos (por defecto)', '');
+            return false;
+        }
+        const q = encodeURIComponent(cia);
+        const [okPlanilla] = await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${q}`, cboPt, { textoVacio: 'Sin planillas' }),
+            poblarTrabajadores(`/api/selectores/trabajadores?cia=${q}`, pref.trabajadorTexto)
+        ]);
+        if (gen !== generacionCompania || !okPlanilla) return false;
+        reseleccionarPorTexto(cboPt, pref.planillaTexto);
+        return gen === generacionCompania;
     }
 
-    async function cargarPlanillaYTrabajadores(preferPayroll, preferPerson) {
-        const cia = cboCia.value.trim();
-        cboPt.innerHTML = '<option value="">Seleccione...</option>';
-        cboPt.disabled = true;
-        cboTrab.innerHTML = '<option value="">Todos (por defecto)</option>';
-        cboTrab.disabled = true;
-        if (!cia) return;
-        await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
-        if (preferPayroll && optionExists(cboPt, preferPayroll)) cboPt.value = preferPayroll;
-        await poblarSelect(
-            `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`,
-            cboTrab,
-            { defaultValue: '', defaultText: 'Todos (por defecto)', skipZero: true }
-        );
-        if (preferPerson && optionExists(cboTrab, preferPerson)) cboTrab.value = preferPerson;
-    }
-
-    await cargarPlanillaYTrabajadores(
-        guardado ? guardado.payroll : '',
-        guardado ? guardado.person : ''
-    );
-    if (guardado) {
-        if (guardado.fecha) txtFecha.value = guardado.fecha;
-        if (guardado.cesados && optionExists(cboCesados, guardado.cesados)) cboCesados.value = guardado.cesados;
-        if (guardado.anio) txtAnio.value = guardado.anio;
-    }
-
+    /* Listeners antes de la carga inicial: ningún cambio se pierde mientras cargan los combos. */
     cboCia.addEventListener('change', async () => {
-        await cargarPlanillaYTrabajadores('', '');
-        guardarFiltros();
+        const pref = {
+            planillaTexto: CombosCarga.textoValido(cboPt),
+            trabajadorTexto: CombosCarga.textoValido(cboTrab)
+        };
+        await cargarPlanillaYTrabajadores(pref);
     });
     cboPt.addEventListener('change', async () => {
-        const cia = cboCia.value.trim();
-        const payroll = cboPt.value.trim();
+        const cia = CombosCarga.valorValido(cboCia);
+        const payroll = CombosCarga.valorValido(cboPt);
         if (cia) {
+            const trabajadorTexto = CombosCarga.textoValido(cboTrab);
             const url = payroll
                 ? `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payroll)}`
                 : `/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`;
-            await poblarSelect(url, cboTrab, { defaultValue: '', defaultText: 'Todos (por defecto)', skipZero: true });
+            await poblarTrabajadores(url, trabajadorTexto);
         }
-        guardarFiltros();
-    });
-    [cboCesados, cboTrab, txtFecha, txtAnio].forEach((el) => {
-        el.addEventListener('change', guardarFiltros);
     });
 
     document.getElementById('checkAllFmtVac').addEventListener('change', function () {
@@ -493,6 +438,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         await buscar();
     });
     document.getElementById('btnDescargarZipFmtVac').addEventListener('click', descargarZip);
+
+    /* Sin persistencia: se parte de la compañía por defecto y la cascada queda manual. */
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+    if (!CombosCarga.valorValido(cboCia)) {
+        seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    }
+    if (CombosCarga.valorValido(cboCia)) {
+        cboCia.disabled = true;
+        try {
+            await cargarPlanillaYTrabajadores({});
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
 });
 </script>
 {% endblock %}

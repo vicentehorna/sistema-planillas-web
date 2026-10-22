@@ -114,14 +114,10 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
-    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.vacacionesDetalle
-        ? window.FiltrosPlanillasReportes.vacacionesDetalle()
-        : null;
-
     const URL_REPORTE = {{ url_for('reporte_vacaciones_detalle_post') | tojson }};
     /** Columnas fijas: índices sticky Código + Nombre (como planilla vertical). */
     const IDX_STICKY_1 = 1;
@@ -349,7 +345,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function ejecutarConsultaVacaciones() {
         lastExportVacaciones = null;
         document.getElementById('btnExportExcelVac').disabled = true;
-        if (filtrosPersist) filtrosPersist.guardar();
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
         const period = document.getElementById('cboPeriodo').value.trim();
@@ -402,146 +397,73 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    const poblarSelect = async (url, selectElement) => {
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(url);
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const def = document.createElement('option');
-            def.value = '';
-            def.textContent = 'Seleccione...';
-            selectElement.appendChild(def);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.disabled = false;
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '<option value="">Error</option>';
-        }
-    };
+    const poblarSelect = CombosCarga.poblarSelect;
 
     /** Periodos del reporte: primera opción «Todos» envía @period = '0' al SP. */
     async function poblarPeriodosVacacionesDetalle(cia, payrolltype, selectElement) {
-        selectElement.innerHTML = '';
-        const loading = document.createElement('option');
-        loading.value = '';
-        loading.textContent = 'Cargando...';
-        selectElement.appendChild(loading);
-        try {
-            const res = await fetch(
-                `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`
-            );
-            const data = await res.json();
-            selectElement.innerHTML = '';
-            const optTodos = document.createElement('option');
-            optTodos.value = '0';
-            optTodos.textContent = 'Todos';
-            selectElement.appendChild(optTodos);
-            (Array.isArray(data) ? data : []).forEach((item) => {
-                const opt = document.createElement('option');
-                opt.value = item.id != null ? String(item.id) : '';
-                opt.textContent = item.text != null ? String(item.text) : '';
-                selectElement.appendChild(opt);
-            });
-            selectElement.value = '0';
-            selectElement.disabled = false;
-        } catch (err) {
-            console.error(err);
-            selectElement.innerHTML = '';
-            const optTodos = document.createElement('option');
-            optTodos.value = '0';
-            optTodos.textContent = 'Todos';
-            selectElement.appendChild(optTodos);
-            selectElement.value = '0';
-            selectElement.disabled = false;
-        }
+        return poblarSelect(
+            `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
+            selectElement,
+            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+        );
+    }
+
+    function reseleccionarPorTexto(select, texto) {
+        return texto ? CombosCarga.seleccionarPorTexto(select, texto) : false;
     }
 
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodo');
     const cboTrabajador = document.getElementById('cboTrabajador');
 
-    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
-    limpiarValorComboSiObsoleto(cboCia);
+    /** Se incrementa en cada cambio de compañía: corta cascadas obsoletas. */
+    let generacionCompania = 0;
 
-    const guardadoObj = filtrosPersist ? filtrosPersist.leer() : null;
-    const ciaGuardada = guardadoObj ? String(guardadoObj.cia || '').trim() : '';
-    if (filtrosPersist && ciaGuardada) {
-        await filtrosPersist.aplicarRestauracionCascada({
-            poblarSelect,
-            poblarPeriodoVacaciones: poblarPeriodosVacacionesDetalle
-        });
-        etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
+    async function cargarDependientesCia(cia, pref) {
+        const gen = ++generacionCompania;
+        pref = pref || {};
+        CombosCarga.resetSelect(cboPeriodo, 'Seleccione tipo de planilla...');
+        if (!cia) {
+            CombosCarga.resetSelect(cboPlanilla);
+            CombosCarga.resetSelect(cboTrabajador, 'Todos (por defecto)', '');
+            return false;
+        }
+        const q = encodeURIComponent(cia);
+        const [okPlanilla] = await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${q}`, cboPlanilla, { textoVacio: 'Sin planillas' }),
+            poblarSelect(`/api/selectores/trabajadores?cia=${q}`, cboTrabajador, {
+                incluyeTodos: true, valorTodos: '', textoTodos: 'Todos (por defecto)',
+                alCargar: (sel) => reseleccionarPorTexto(sel, pref.trabajadorTexto)
+            })
+        ]);
+        if (gen !== generacionCompania || !okPlanilla) return false;
+        reseleccionarPorTexto(cboPlanilla, pref.planillaTexto);
+        const pt = CombosCarga.valorValido(cboPlanilla);
+        if (pt) {
+            await poblarPeriodosVacacionesDetalle(cia, pt, cboPeriodo);
+        }
+        return gen === generacionCompania;
     }
 
-    limpiarValorComboSiObsoleto(cboCia);
-    if (!String(cboCia.value || '').trim()) {
-        if (seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA)) {
-            const ciaNorm = cboCia.value.trim();
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(ciaNorm)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(ciaNorm)}`, cboTrabajador);
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-        }
-    }
-
-    {
-        const cia = cboCia.value.trim();
-        const pt = document.getElementById('cboTipoPlanilla').value.trim();
-        const period = document.getElementById('cboPeriodo').value.trim();
-        if (cia && pt && period) {
-            await ejecutarConsultaVacaciones();
-        }
-    }
-
-    document.getElementById('cboCompania').addEventListener('change', async function () {
-        const cia = this.value;
-        const cboPlanilla = document.getElementById('cboTipoPlanilla');
-        const cboTrabajador = document.getElementById('cboTrabajador');
-
-        document.getElementById('cboPeriodo').innerHTML =
-            '<option value="">Seleccione tipo de planilla...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-
-        if (cia) {
-            await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
-            await poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador);
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-        } else {
-            cboPlanilla.innerHTML = '<option value="">Seleccione...</option>';
-            cboPlanilla.disabled = true;
-            cboTrabajador.innerHTML = '<option value="">Seleccione...</option>';
-            cboTrabajador.disabled = true;
-            etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
-        }
+    /* Listeners antes de la carga inicial: ningún cambio se pierde mientras cargan los combos. */
+    cboCia.addEventListener('change', async function () {
+        const pref = {
+            planillaTexto: CombosCarga.textoValido(cboPlanilla),
+            trabajadorTexto: CombosCarga.textoValido(cboTrabajador)
+        };
+        await cargarDependientesCia(CombosCarga.valorValido(this), pref);
     });
 
-    document.getElementById('cboTipoPlanilla').addEventListener('change', async function () {
-        const cia = document.getElementById('cboCompania').value;
-        const pt = this.value;
-        const cboPeriodo = document.getElementById('cboPeriodo');
-
-        document.getElementById('cboPeriodo').innerHTML =
-            '<option value="">Seleccione tipo de planilla...</option>';
-        document.getElementById('cboPeriodo').disabled = true;
-
+    cboPlanilla.addEventListener('change', async function () {
+        const cia = CombosCarga.valorValido(cboCia);
+        const pt = CombosCarga.valorValido(this);
+        CombosCarga.resetSelect(cboPeriodo, 'Seleccione tipo de planilla...');
         if (pt && cia) {
             await poblarPeriodosVacacionesDetalle(cia, pt, cboPeriodo);
         }
     });
-
-    if (filtrosPersist) {
-        filtrosPersist.registrarGuardadoEnCambio();
-    }
 
     document.getElementById('frmVacacionesDetalle').addEventListener('submit', async function (e) {
         e.preventDefault();
@@ -563,6 +485,21 @@ document.addEventListener('DOMContentLoaded', async function () {
             alert('No se pudo generar el archivo Excel.');
         }
     });
+
+    /* Sin persistencia: se parte de la compañía por defecto y la cascada queda manual. */
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+    if (!CombosCarga.valorValido(cboCia)) {
+        seleccionarCompaniaInsensitive(cboCia, DEFAULT_CIA);
+    }
+    const ciaIni = CombosCarga.valorValido(cboCia);
+    if (ciaIni) {
+        cboCia.disabled = true;
+        try {
+            await cargarDependientesCia(ciaIni, {});
+        } finally {
+            cboCia.disabled = false;
+        }
+    }
 });
 </script>
 {% endblock %}

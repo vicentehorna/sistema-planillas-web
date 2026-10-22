@@ -1351,6 +1351,15 @@ def _es_cliente_zilicom():
         return False
 
 
+def _es_cliente_lumat2():
+    """True cuando la BD activa es hm_lumat2 (empresa del Estado, sin Remuneración Básica)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_lumat2'
+    except Exception:
+        return False
+
+
 _MESES_ES_A_NUM = {
     'enero': 1, 'febrero': 2, 'marzo': 3, 'abril': 4, 'mayo': 5, 'junio': 6,
     'julio': 7, 'agosto': 8, 'septiembre': 9, 'setiembre': 9,
@@ -34437,14 +34446,26 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
         (cia, payrolltype, processtype, period),
     )
     rows = _dicts_first_nonempty_resultset(cursor)
-    return _validacion_planilla_rows_to_mensajes(rows)
+    mensajes = _validacion_planilla_rows_to_mensajes(rows)
+    if _es_cliente_lumat2():
+        # Empresa del Estado sin Remuneración Básica: no exigir REM_BASICA
+        # (respaldo por si el SP desplegado aún trae la validación).
+        mensajes = [
+            m for m in mensajes
+            if 'remuneración básica' not in m.lower()
+            and 'remuneracion basica' not in m.lower()
+        ]
+    return mensajes
 
 
 def _detalle_error_calculo(msg, cia, payrolltype, processtype, period, person, database=None):
     """Antepone la causa probable al error del SP: fin de mes sin REM_BASICA vigente en el periodo.
 
     Solo informa; no bloquea el cálculo (hay planillas que no usan REM_BASICA).
+    En hm_lumat2 no aplica: la empresa del Estado no tiene Remuneración Básica.
     """
+    if _es_cliente_lumat2():
+        return msg
     conn = None
     try:
         conn = get_db_connection(database=database) if database else get_db_connection()

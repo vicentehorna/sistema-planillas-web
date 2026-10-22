@@ -116,25 +116,30 @@ BEGIN
           )
     GROUP BY EC.Person;
 
-    INSERT INTO #errores (person, name, observacion)
-    SELECT
-        E.Person,
-        LTRIM(RTRIM(
-            ISNULL(P.LastName1, '') + ' ' +
-            ISNULL(P.LastName2, '') + ' ' +
-            ISNULL(P.Name1, '') + ' ' +
-            ISNULL(P.Name2, '')
-        )),
-        'No registra Remuneración Básica'
-    FROM PR_Employee E (NOLOCK)
-        INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
-        INNER JOIN #empleados_periodo EP ON E.Person = EP.person
-    WHERE E.Company = @cia
-      AND E.PayRollType = @payrolltype
-      AND E.Status = 'N'
-      AND NOT EXISTS (
-            SELECT 1 FROM #lista_rem_basica L WHERE L.person = E.Person
-      );
+    /* hm_lumat2 (empresa del Estado): no existe Remuneración Básica como tal,
+       por lo que no se exige el concepto REM_BASICA. */
+    IF DB_NAME() <> 'hm_lumat2'
+    BEGIN
+        INSERT INTO #errores (person, name, observacion)
+        SELECT
+            E.Person,
+            LTRIM(RTRIM(
+                ISNULL(P.LastName1, '') + ' ' +
+                ISNULL(P.LastName2, '') + ' ' +
+                ISNULL(P.Name1, '') + ' ' +
+                ISNULL(P.Name2, '')
+            )),
+            'No registra Remuneración Básica'
+        FROM PR_Employee E (NOLOCK)
+            INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
+            INNER JOIN #empleados_periodo EP ON E.Person = EP.person
+        WHERE E.Company = @cia
+          AND E.PayRollType = @payrolltype
+          AND E.Status = 'N'
+          AND NOT EXISTS (
+                SELECT 1 FROM #lista_rem_basica L WHERE L.person = E.Person
+          );
+    END
 
     IF @proceso_shortname = 'FIN_DE_MES'
     BEGIN

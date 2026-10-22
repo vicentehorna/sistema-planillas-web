@@ -8933,6 +8933,14 @@ def reporte_saldo_vacaciones_page():
     return render_template('reporte_saldo_vacaciones.html')
 
 
+@app.route('/reporte-saldo-vacaciones-consolidado')
+@login_required
+def reporte_saldo_vacaciones_consolidado_page():
+    if not _es_bd_hm_alamo():
+        abort(404)
+    return render_template('reporte_saldo_vacaciones_consolidado.html')
+
+
 @app.route('/reporte-formato-vacaciones')
 @login_required
 def reporte_formato_vacaciones_page():
@@ -29966,6 +29974,25 @@ def _list_active_companies(cursor):
     return companies
 
 
+def _resolve_payrolltype_by_description(cursor, cia, payroll_desc):
+    """Código PayRollType de la empresa según la Description elegida (consolidados)."""
+    payroll_desc = (payroll_desc or '').strip()
+    if not payroll_desc:
+        return None
+    cursor.execute(
+        """
+        SELECT TOP 1 PayRollType
+        FROM PR_PayRollType (NOLOCK)
+        WHERE Company = ? AND LTRIM(RTRIM(Description)) = ?
+        """,
+        (cia, payroll_desc),
+    )
+    row = cursor.fetchone()
+    if not row or row[0] is None:
+        return None
+    return str(row[0]).strip()
+
+
 def _resolve_payroll_process_by_description(cursor, cia, payroll_desc, proceso_desc):
     payroll_desc = (payroll_desc or '').strip()
     proceso_desc = (proceso_desc or '').strip()
@@ -30741,6 +30768,112 @@ def reporte_saldo_vacaciones_post():
         })
     except Exception as e:
         logging.exception("reporte_saldo_vacaciones_post")
+        return jsonify({"error": _reporte_sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/reporte_saldo_vacaciones_consolidado', methods=['POST'])
+@login_required
+def reporte_saldo_vacaciones_consolidado_post():
+    """
+    Saldo de vacaciones consolidado (solo hm_alamo): misma salida que
+    reporte_saldo_vacaciones_post pero para todas las empresas del usuario
+    (SY_UserCompany vía _list_active_companies), con Empresa como 1.ª columna.
+    Filtro de planilla por Description: el código se resuelve en cada empresa.
+    """
+    bloqueo = _require_hm_alamo_json('Saldo Consolidado de Vacaciones')
+    if bloqueo is not None:
+        return bloqueo
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(
+        body.get('payroll_desc') or body.get('payroll_description') or body.get('payroll_type') or ''
+    ).strip()
+    person = str(body.get('person') or '0').strip() or '0'
+    fecha_dt = _parse_report_date(body.get('fecha') or body.get('date'))
+    cesados = _normalize_cesados_saldo_vacaciones(body.get('cesados'))
+
+    if not payroll_desc:
+        return jsonify({"error": "Debe indicar tipo de planilla."}), 400
+
+    anios = _anios_saldo_vacaciones(fecha_dt)
+    headers_es = [
+        'Empresa',
+        'Tipo planilla',
+        'Código',
+        'Nombre',
+        'Unidad',
+        'F. ingreso',
+        'F. cese',
+        f'Saldo {anios[0]}',
+        f'Saldo {anios[1]}',
+        f'Saldo {anios[2]}',
+        f'Saldo {anios[3]}',
+        f'Saldo {anios[4]}',
+        'Faltas',
+        'Licencias',
+        'Descansos',
+        'Saldo',
+    ]
+    keys_datos = [
+        'tipoplanillas', 'person', 'name', 'description', 'entrydate', 'ceasedate',
+        'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
+        'faltas', 'licencias', 'descansos', 'saldo',
+    ]
+    keys_numericos = {
+        'saldo1', 'saldo2', 'saldo3', 'saldo4', 'saldo5',
+        'faltas', 'licencias', 'descansos', 'saldo',
+    }
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        companies = _list_active_companies(cursor)
+
+        merged = []
+        empresas_con_datos = set()
+        for cia_code, cia_name in companies:
+            payroll_type = _resolve_payrolltype_by_description(cursor, cia_code, payroll_desc)
+            if not payroll_type:
+                continue
+            cursor.execute(
+                "EXEC sp_pr_saldovacaciones_web @company=?, @payrolltype=?, @date=?, @person=?, @cesados=?",
+                (cia_code, payroll_type, fecha_dt, person, cesados),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            company_label = cia_name or cia_code
+            for r in rows:
+                fila = [company_label]
+                for key in keys_datos:
+                    val = r.get(key)
+                    if key in keys_numericos and val is not None:
+                        try:
+                            fila.append(float(val))
+                        except Exception:
+                            fila.append(_jsonable_value(val))
+                    else:
+                        fila.append(_jsonable_value(val))
+                merged.append((company_label.strip().upper(), str(r.get('name') or '').strip().upper(), fila))
+                empresas_con_datos.add(company_label)
+
+        merged.sort(key=lambda t: (t[0], t[1]))
+        return jsonify({
+            "headers": headers_es,
+            "data": [t[2] for t in merged],
+            "meta": {
+                "fecha": fecha_dt.strftime('%d/%m/%Y'),
+                "anios": anios,
+                "empresas": len(empresas_con_datos),
+            },
+        })
+    except Exception as e:
+        logging.exception("reporte_saldo_vacaciones_consolidado_post")
         return jsonify({"error": _reporte_sql_error_message(e)}), 500
     finally:
         if conn:

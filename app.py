@@ -4151,6 +4151,20 @@ def _require_hm_alamo_json(feature='Esta opción'):
     return None
 
 
+def _es_bd_hm_lumat2():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_lumat2'
+    except Exception:
+        return False
+
+
+def _require_hm_lumat2_json(feature='Esta opción'):
+    if not _es_bd_hm_lumat2():
+        return jsonify({'error': f'{feature} solo está disponible en hm_lumat2.'}), 403
+    return None
+
+
 # BDs con modal "Buscar todos" (lista de trabajadores cross-empresa).
 _BDS_BUSCAR_TODOS_TRABAJADORES = frozenset({'hm_alamo', 'hm_garc'})
 
@@ -20586,6 +20600,231 @@ def plame_archivo15_page():
 @login_required
 def plame_archivo18_page():
     return render_template('plame_archivo18.html')
+
+
+@app.route('/mef/interface-mccp')
+@login_required
+def mef_interface_mccp_page():
+    if not _es_bd_hm_lumat2():
+        flash('MEF — Interface MCCP solo está disponible en hm_lumat2.', 'warning')
+        return redirect(url_for('dashboard'))
+    return render_template('mef_interface_mccp.html')
+
+
+def _mef_mccp_codigo_numerico(valor, ancho, default=''):
+    s = str(valor or '').strip()
+    s = ''.join(ch for ch in s if ch.isdigit())
+    if not s:
+        return default
+    return s.zfill(ancho)[-ancho:] if len(s) > ancho else s.zfill(ancho)
+
+
+def _mef_mccp_params_from_json(body):
+    """Filtros MCCP: compañía + tipo de planilla (sistema) + periodo + parámetros del archivo."""
+    body = body or {}
+    base = _plame_params_archivo18_from_json(body)
+    base['entidad'] = _mef_mccp_codigo_numerico(body.get('entidad'), 6, '000011')
+    base['tipo_planilla_mccp'] = _mef_mccp_codigo_numerico(
+        body.get('tipo_planilla_mccp') or body.get('tipo_mccp'), 2, '01')
+    base['subtipo_mccp'] = _mef_mccp_codigo_numerico(
+        body.get('subtipo_mccp') or body.get('subtipo'), 2, '01')
+    base['regimen_mccp'] = _mef_mccp_codigo_numerico(
+        body.get('regimen_mccp') or body.get('regimen'), 4, '0101')
+    tipo_rem = str(body.get('tipo_remunerativo') or body.get('tipo_rem') or '1').strip()
+    base['tipo_remunerativo'] = ''.join(ch for ch in tipo_rem if ch.isdigit())[:2] or '1'
+    return base
+
+
+def _mef_mccp_validar_params(p):
+    err = _plame_validar_params(p)
+    if err:
+        return err
+    if not p.get('entidad'):
+        return 'Indique el código de entidad MEF.'
+    return None
+
+
+def _mef_mccp_monto(valor):
+    try:
+        return abs(float(valor or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _mef_mccp_linea_detalle(row, tipo_remunerativo='1'):
+    """Detalle MCCP: 2|DNI|00|CLASE|COD_MEF|DESCRIPCION|MONTO|TIPO_REM|CARGO"""
+    doc_num = str(row.get('documentnumber') or '').strip()
+    clase = str(row.get('clase') or '').strip()
+    if clase not in ('1', '2', '3'):
+        clase = '1'
+    codigo = _mef_mccp_codigo_numerico(row.get('codigo_mef'), 4, '0000')
+    descripcion = str(row.get('descripcion') or '').strip().upper().replace('|', ' ')
+    monto = f"{_mef_mccp_monto(row.get('monto')):.2f}"
+    cargo = _mef_mccp_codigo_numerico(row.get('cargo'), 6, '000000')
+    tipo_rem = ''.join(ch for ch in str(tipo_remunerativo or '1') if ch.isdigit())[:2] or '1'
+    return '|'.join(['2', doc_num, '00', clase, codigo, descripcion, monto, tipo_rem, cargo])
+
+
+def _mef_mccp_rows_from_json(body):
+    rows = (body or {}).get('rows')
+    if not isinstance(rows, list):
+        return []
+    resultado = []
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        doc_num = str(r.get('documentnumber') or '').strip()
+        if not doc_num:
+            continue
+        if _mef_mccp_monto(r.get('monto')) <= 0:
+            continue
+        resultado.append({
+            'documentnumber': doc_num,
+            'clase': str(r.get('clase') or '1').strip(),
+            'codigo_mef': str(r.get('codigo_mef') or '').strip(),
+            'descripcion': str(r.get('descripcion') or '').strip(),
+            'monto': _mef_mccp_monto(r.get('monto')),
+            'cargo': str(r.get('cargo') or '').strip(),
+        })
+    return resultado
+
+
+def _mef_mccp_totales(rows):
+    totales = {'1': 0.0, '2': 0.0, '3': 0.0}
+    for r in rows or []:
+        clase = str(r.get('clase') or '').strip()
+        if clase in totales:
+            totales[clase] += _mef_mccp_monto(r.get('monto'))
+    return totales
+
+
+def _mef_mccp_filename(p):
+    """PLL + Entidad(6) + YYYYMM + Tipo(2) + Subtipo(2) + Régimen(4) + .TXT"""
+    return (
+        f"PLL{p['entidad']}{p['period']}"
+        f"{p['tipo_planilla_mccp']}{p['subtipo_mccp']}{p['regimen_mccp']}.TXT"
+    )
+
+
+@app.route('/api/mef/interface-mccp/listado', methods=['POST'])
+@login_required
+def api_mef_interface_mccp_listado():
+    """sp_pr_listado_mccp_web: detalle MCCP del proceso mensual (FIN_DE_MES).
+
+    Una fila por trabajador + concepto: clase (1/2/3), código MEF, descripción,
+    monto y cargo/plaza. Filtros: compañía, tipo de planilla y periodo.
+    """
+    denied = _require_hm_lumat2_json('MEF — Interface MCCP')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _mef_mccp_params_from_json(body)
+    err = _mef_mccp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listado_mccp_web @cia=?, @period=?, @payroll_all=?, @payroll=?",
+            (p['cia'], p['period'], p['payroll_all'], p['payroll'] or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = []
+        trabajadores = set()
+        for r in rows:
+            doc_num = str(r.get('documentnumber') or '').strip()
+            if doc_num:
+                trabajadores.add(doc_num)
+            resultado.append({
+                "person": _jsonable_value(r.get('person')),
+                "documenttype": _jsonable_value(r.get('documenttype')),
+                "documentnumber": _jsonable_value(r.get('documentnumber')),
+                "name": _jsonable_value(r.get('name')),
+                "clase": _jsonable_value(r.get('clase')),
+                "codigo_mef": _jsonable_value(r.get('codigo_mef')),
+                "descripcion": _jsonable_value(r.get('descripcion')),
+                "formulacode": _jsonable_value(r.get('formulacode')),
+                "pdt": _jsonable_value(r.get('pdt')),
+                "monto": _mef_mccp_monto(r.get('monto')),
+                "cargo": _jsonable_value(r.get('cargo')),
+                "selection": _jsonable_value(r.get('selection')),
+            })
+        totales = _mef_mccp_totales(resultado)
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "trabajadores": len(trabajadores),
+            "total_ingresos": round(totales['1'], 2),
+            "total_descuentos": round(totales['2'], 2),
+            "total_aportes": round(totales['3'], 2),
+            "cia": p['cia'],
+            "period": p['period'],
+            "payroll": p['payroll'],
+            "payroll_all": p['payroll_all'],
+        })
+    except Exception as e:
+        logging.exception("api_mef_interface_mccp_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/mef/interface-mccp/generar-txt', methods=['POST'])
+@login_required
+def api_mef_interface_mccp_generar_txt():
+    """Genera el TXT MCCP (proceso mensual) con cabecera de control y detalle.
+
+    Cabecera: ENTIDAD|YYYY|MM|TT|SUB|REGIMEN|N_REGISTROS|TOT_ING|TOT_DESC|TOT_APORTES
+    Detalle:  2|DNI|00|CLASE|COD_MEF|DESCRIPCION|MONTO|TIPO_REM|CARGO
+    Archivo:  PLL<entidad><YYYYMM><TT><SUB><REGIMEN>.TXT
+    Los parámetros MCCP (entidad/tipo/subtipo/régimen/tipo remunerativo) son
+    editables en la interfaz; su configuración por subtipo vendrá después.
+    """
+    denied = _require_hm_lumat2_json('MEF — Interface MCCP')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _mef_mccp_params_from_json(body)
+    err = _mef_mccp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    filas = _mef_mccp_rows_from_json(body)
+    if not filas:
+        return jsonify({"error": "Seleccione al menos un registro."}), 400
+
+    totales = _mef_mccp_totales(filas)
+    periodo = p['period']
+    cabecera = '|'.join([
+        p['entidad'],
+        periodo[:4],
+        periodo[4:6],
+        p['tipo_planilla_mccp'],
+        p['subtipo_mccp'],
+        p['regimen_mccp'],
+        str(len(filas)).zfill(6),
+        f"{totales['1']:.2f}",
+        f"{totales['2']:.2f}",
+        f"{totales['3']:.2f}",
+    ])
+    lineas = [cabecera] + [
+        _mef_mccp_linea_detalle(row, p['tipo_remunerativo']) for row in filas
+    ]
+    contenido = '\r\n'.join(lineas) + '\r\n'
+
+    resp = Response(
+        contenido.encode('latin-1', errors='replace'),
+        mimetype='text/plain; charset=iso-8859-1',
+    )
+    resp.headers['Content-Disposition'] = f'attachment; filename="{_mef_mccp_filename(p)}"'
+    return resp
 
 
 @app.route('/plame/por-trabajador')

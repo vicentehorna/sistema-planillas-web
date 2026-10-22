@@ -1,0 +1,560 @@
+{% extends "layout.html" %}
+
+{% block title %}MEF — Interface MCCP{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-mccp {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-mccp th,
+    .table-mccp td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-mccp thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-mccp .form-check-input {
+        width: 0.85rem;
+        height: 0.85rem;
+        margin: 0;
+    }
+
+    .table-mccp .col-centro {
+        min-width: 3.5rem;
+        text-align: center;
+    }
+
+    .table-mccp .col-monto {
+        min-width: 5.5rem;
+        text-align: right;
+    }
+
+    .mccp-info {
+        font-size: 0.8rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 0.375rem;
+        padding: 0.65rem 0.85rem;
+    }
+
+    .mccp-info code {
+        font-size: 0.78rem;
+    }
+
+    .mccp-filtro-compania {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .mccp-filtro-compania {
+            flex: 0 0 50%;
+            max-width: 50%;
+        }
+    }
+
+    @media (min-width: 768px) {
+        .mccp-filtro-compania {
+            flex: 0 0 35%;
+            max-width: 35%;
+        }
+    }
+
+    @media (min-width: 992px) {
+        .mccp-filtro-compania {
+            flex: 0 0 28%;
+            max-width: 28%;
+        }
+    }
+
+    .mccp-filtro-periodo {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+
+    @media (min-width: 576px) {
+        .mccp-filtro-periodo {
+            flex: 0 0 10rem;
+            max-width: 10rem;
+        }
+    }
+
+    .mccp-param {
+        max-width: 7.5rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="alert alert-light border mccp-info mb-3" role="note">
+    <strong>Interface MCCP — Módulo de Control de Planillas de Personal del Sector Público (SUNAT / MEF).</strong>
+    Vista única para la validación y carga masiva de planillas de pago (entidades estatales, p. ej. PromPerú), proceso <strong>mensual</strong>.
+    Seleccione <strong>compañía</strong>, <strong>tipo de planilla</strong> y <strong>periodo</strong>, ajuste los parámetros MCCP y pulse <em>Consultar</em>; luego <em>Generar TXT</em>.
+    Nombre del archivo: <code>PLL + Entidad + YYYYMM + Tipo + Subtipo + Régimen + .TXT</code>, p. ej. <code>PLL00001120261001030101.TXT</code>.
+    Cabecera: <code>Entidad|Año|Mes|Tipo|Subtipo|Régimen|N° registros|Total ingresos|Total descuentos|Total aportes</code>.
+    Detalle: <code>2|DNI|00|Clase(1 Ingreso / 2 Descuento / 3 Aporte)|Cód. MEF|Descripción|Monto|Tipo remunerativo|Cargo/Plaza</code>.
+</div>
+
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmMefMccp" class="row g-3">
+            <div class="col-12 col-sm-6 mccp-filtro-compania">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo de Planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" disabled>
+                    <option value="">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-auto mccp-filtro-periodo">
+                <label for="cboPeriodoTributario" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodoTributario" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+
+            <div class="col-12 border-top pt-2 mt-1">
+                <span class="small fw-bold text-muted d-block mb-2">Parámetros MCCP del archivo</span>
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div>
+                        <label for="txtEntidadMccp" class="form-label small text-muted mb-1">Entidad</label>
+                        <input type="text" id="txtEntidadMccp" class="form-control form-control-sm mccp-param" value="000011" maxlength="6" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="txtTipoPlanillaMccp" class="form-label small text-muted mb-1">Tipo planilla</label>
+                        <input type="text" id="txtTipoPlanillaMccp" class="form-control form-control-sm mccp-param" value="01" maxlength="2" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="txtSubtipoMccp" class="form-label small text-muted mb-1">Subtipo</label>
+                        <input type="text" id="txtSubtipoMccp" class="form-control form-control-sm mccp-param" value="01" maxlength="2" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="txtRegimenMccp" class="form-label small text-muted mb-1">Régimen laboral</label>
+                        <input type="text" id="txtRegimenMccp" class="form-control form-control-sm mccp-param" value="0101" maxlength="4" inputmode="numeric">
+                    </div>
+                    <div>
+                        <label for="txtTipoRemunerativoMccp" class="form-label small text-muted mb-1">Tipo remunerativo</label>
+                        <input type="text" id="txtTipoRemunerativoMccp" class="form-control form-control-sm mccp-param" value="1" maxlength="2" inputmode="numeric">
+                    </div>
+                    <div class="ms-auto">
+                        <span class="small text-muted">Archivo: <code id="lblNombreArchivoMccp">PLL000011--------01010101.TXT</code></span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarMccp" disabled>
+                    <i class="bi bi-file-earmark-arrow-down"></i> Generar TXT
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCountMccp">0</span>
+                    · Seleccionados: <span id="lblSeleccionadosMccp">0</span>
+                    · Trabajadores: <span id="lblTrabajadoresMccp">0</span>
+                </span>
+            </div>
+            <div class="col-12 d-none" id="filaTotalesMccp">
+                <span class="text-muted small fw-bold">
+                    Ingresos (1): <span id="lblTotalIngresosMccp">0.00</span>
+                    · Descuentos (2): <span id="lblTotalDescuentosMccp">0.00</span>
+                    · Aportes (3): <span id="lblTotalAportesMccp">0.00</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultadoMccp">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center">MEF — Interface MCCP (proceso mensual)</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-mccp align-middle">
+                <thead>
+                    <tr>
+                        <th class="text-center" style="width: 2.5rem;">
+                            <input type="checkbox" id="checkAllMccp" class="form-check-input" title="Marcar / desmarcar todos">
+                        </th>
+                        <th>Documento</th>
+                        <th>Nombre</th>
+                        <th class="col-centro">Clase</th>
+                        <th class="col-centro">Cód. MEF</th>
+                        <th>Descripción</th>
+                        <th class="col-monto">Monto</th>
+                        <th class="col-centro">Cargo/Plaza</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-mccp"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/filtros_reportes_planillas.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const filtrosPersist = window.FiltrosPlanillasReportes && window.FiltrosPlanillasReportes.mefInterfaceMccp
+        ? window.FiltrosPlanillasReportes.mefInterfaceMccp()
+        : null;
+
+    const URL_LISTADO = {{ url_for('api_mef_interface_mccp_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_mef_interface_mccp_generar_txt') | tojson }};
+    let lastRowsMccp = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function periodoYyyymm() {
+        return document.getElementById('cboPeriodoTributario').value.trim();
+    }
+
+    function periodoEsValido() {
+        return /^\d{6}$/.test(periodoYyyymm());
+    }
+
+    function formatearMonto(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function soloDigitos(valor, ancho, defecto) {
+        const s = String(valor || '').replace(/\D/g, '');
+        if (!s) return defecto;
+        return s.padStart(ancho, '0').slice(-ancho);
+    }
+
+    function parametrosMccp() {
+        return {
+            entidad: soloDigitos(document.getElementById('txtEntidadMccp').value, 6, '000011'),
+            tipo_planilla_mccp: soloDigitos(document.getElementById('txtTipoPlanillaMccp').value, 2, '01'),
+            subtipo_mccp: soloDigitos(document.getElementById('txtSubtipoMccp').value, 2, '01'),
+            regimen_mccp: soloDigitos(document.getElementById('txtRegimenMccp').value, 4, '0101'),
+            tipo_remunerativo: (String(document.getElementById('txtTipoRemunerativoMccp').value || '1').replace(/\D/g, '') || '1').slice(0, 2)
+        };
+    }
+
+    function actualizarNombreArchivo() {
+        const p = parametrosMccp();
+        const periodo = periodoEsValido() ? periodoYyyymm() : '------';
+        document.getElementById('lblNombreArchivoMccp').textContent =
+            `PLL${p.entidad}${periodo}${p.tipo_planilla_mccp}${p.subtipo_mccp}${p.regimen_mccp}.TXT`;
+    }
+
+    function claseTexto(clase) {
+        const c = String(clase || '').trim();
+        if (c === '1') return '1 · Ingreso';
+        if (c === '2') return '2 · Descuento';
+        if (c === '3') return '3 · Aporte';
+        return c;
+    }
+
+    function rowKey(row) {
+        return [
+            String(row.documentnumber || '').trim(),
+            String(row.clase || '').trim(),
+            String(row.codigo_mef || '').trim(),
+            String(row.descripcion || '').trim()
+        ].join('|');
+    }
+
+    function obtenerSeleccionados() {
+        const mapa = new Map((lastRowsMccp || []).map((r) => [rowKey(r), r]));
+        const seleccionados = [];
+        document.querySelectorAll('.check-mccp:checked').forEach((cb) => {
+            const row = mapa.get(String(cb.value || '').trim());
+            if (row) seleccionados.push(row);
+        });
+        return seleccionados;
+    }
+
+    function actualizarContadores() {
+        const total = document.querySelectorAll('.check-mccp').length;
+        const sel = obtenerSeleccionados().length;
+        document.getElementById('lblRowCountMccp').textContent = String(total);
+        document.getElementById('lblSeleccionadosMccp').textContent = String(sel);
+        document.getElementById('btnGenerarMccp').disabled = sel === 0;
+    }
+
+    function sincronizarCheckAll() {
+        const all = document.querySelectorAll('.check-mccp');
+        const chk = document.getElementById('checkAllMccp');
+        if (!chk) return;
+        if (!all.length) {
+            chk.checked = false;
+            chk.indeterminate = false;
+            return;
+        }
+        let marcados = 0;
+        all.forEach((x) => { if (x.checked) marcados++; });
+        chk.checked = marcados === all.length;
+        chk.indeterminate = marcados > 0 && marcados < all.length;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-mccp');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+
+        filas.forEach((row) => {
+            const tr = document.createElement('tr');
+            const key = rowKey(row);
+            tr.innerHTML = `
+                <td class="text-center">
+                    <input type="checkbox" class="check-mccp form-check-input" value="${escapeHtml(key)}" checked>
+                </td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.name)}</td>
+                <td class="col-centro">${escapeHtml(claseTexto(row.clase))}</td>
+                <td class="col-centro">${escapeHtml(row.codigo_mef)}</td>
+                <td>${escapeHtml(row.descripcion)}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.monto))}</td>
+                <td class="col-centro">${escapeHtml(row.cargo)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.check-mccp').forEach((cb) => {
+            cb.addEventListener('change', function () {
+                sincronizarCheckAll();
+                actualizarContadores();
+            });
+        });
+
+        sincronizarCheckAll();
+        actualizarContadores();
+    }
+
+    async function poblarSelect(url, selectElement, primeraOpcion) {
+        if (!selectElement) return;
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = primeraOpcion || '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = primeraOpcion || '<option value="">Error</option>';
+            selectElement.disabled = false;
+        }
+    }
+
+    function filtrosActuales() {
+        const payroll = document.getElementById('cboTipoPlanilla').value.trim();
+        return Object.assign({
+            cia: document.getElementById('cboCompania').value.trim(),
+            period: periodoYyyymm(),
+            payroll,
+            payroll_all: payroll ? 'N' : 'Y'
+        }, parametrosMccp());
+    }
+
+    async function ejecutarConsulta() {
+        const f = filtrosActuales();
+        if (!f.cia || !periodoEsValido()) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        if (filtrosPersist) filtrosPersist.guardar();
+
+        document.getElementById('lblRowCountMccp').textContent = '0';
+        document.getElementById('lblSeleccionadosMccp').textContent = '0';
+        document.getElementById('lblTrabajadoresMccp').textContent = '0';
+        document.getElementById('filaTotalesMccp').classList.add('d-none');
+        document.getElementById('btnGenerarMccp').disabled = true;
+
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(f)
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                document.getElementById('cardResultadoMccp').classList.add('d-none');
+                alert(payload.error || 'Error al consultar el listado.');
+                return;
+            }
+            lastRowsMccp = Array.isArray(payload.rows) ? payload.rows : [];
+            renderizarTabla(lastRowsMccp);
+            document.getElementById('lblTrabajadoresMccp').textContent = String(payload.trabajadores != null ? payload.trabajadores : 0);
+            document.getElementById('lblTotalIngresosMccp').textContent = formatearMonto(payload.total_ingresos);
+            document.getElementById('lblTotalDescuentosMccp').textContent = formatearMonto(payload.total_descuentos);
+            document.getElementById('lblTotalAportesMccp').textContent = formatearMonto(payload.total_aportes);
+            document.getElementById('filaTotalesMccp').classList.remove('d-none');
+            document.getElementById('cardResultadoMccp').classList.remove('d-none');
+        } catch (err) {
+            console.error(err);
+            document.getElementById('cardResultadoMccp').classList.add('d-none');
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function generarTxt() {
+        const f = filtrosActuales();
+        if (!f.cia || !periodoEsValido()) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        const seleccionados = obtenerSeleccionados();
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un registro.');
+            return;
+        }
+
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(Object.assign({}, f, { rows: seleccionados }))
+            });
+            if (!res.ok) {
+                let msg = 'No se pudo generar el archivo.';
+                try {
+                    const err = await res.json();
+                    if (err && err.error) msg = err.error;
+                } catch (e) {}
+                alert(msg);
+                return;
+            }
+
+            const blob = await res.blob();
+            let filename = 'PLL00001100000001010101.TXT';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        } catch (err) {
+            console.error(err);
+            alert('Error al generar el archivo TXT.');
+        }
+    }
+
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodoTributario');
+
+    await poblarSelect('/api/selectores/companias?filtro_usuario=1', cboCia);
+
+    async function onCompaniaChange(cia, restaurar) {
+        const planillaRestaurar = restaurar && restaurar.payroll != null ? String(restaurar.payroll).trim() : '';
+        const periodoRestaurar = restaurar && restaurar.period != null ? String(restaurar.period).trim() : '';
+        cboPlanilla.innerHTML = '<option value="">Todas</option>';
+        cboPlanilla.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!cia) return;
+        await Promise.all([
+            poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla, '<option value="">Todas</option>'),
+            poblarSelect(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`, cboPeriodo)
+        ]);
+        if (planillaRestaurar && optionExists(cboPlanilla, planillaRestaurar)) {
+            cboPlanilla.value = planillaRestaurar;
+        }
+        if (periodoRestaurar && optionExists(cboPeriodo, periodoRestaurar)) {
+            cboPeriodo.value = periodoRestaurar;
+        }
+        actualizarNombreArchivo();
+        if (filtrosPersist) filtrosPersist.guardar();
+    }
+
+    if (filtrosPersist) {
+        const guardado = filtrosPersist.leer();
+        if (guardado) {
+            if (guardado.entidad) document.getElementById('txtEntidadMccp').value = guardado.entidad;
+            if (guardado.tipoMccp) document.getElementById('txtTipoPlanillaMccp').value = guardado.tipoMccp;
+            if (guardado.subtipoMccp) document.getElementById('txtSubtipoMccp').value = guardado.subtipoMccp;
+            if (guardado.regimenMccp) document.getElementById('txtRegimenMccp').value = guardado.regimenMccp;
+            if (guardado.tipoRemunerativo) document.getElementById('txtTipoRemunerativoMccp').value = guardado.tipoRemunerativo;
+            if (guardado.cia) {
+                if (!seleccionarInsensitive(cboCia, guardado.cia) && optionExists(cboCia, guardado.cia)) {
+                    cboCia.value = guardado.cia;
+                }
+                await onCompaniaChange(cboCia.value.trim(), guardado);
+            }
+        }
+        filtrosPersist.registrarGuardadoEnCambio();
+    }
+    cboCia.addEventListener('change', function () {
+        onCompaniaChange(this.value.trim(), null);
+    });
+    cboPeriodo.addEventListener('change', actualizarNombreArchivo);
+    ['txtEntidadMccp', 'txtTipoPlanillaMccp', 'txtSubtipoMccp', 'txtRegimenMccp', 'txtTipoRemunerativoMccp'].forEach((id) => {
+        document.getElementById(id).addEventListener('input', actualizarNombreArchivo);
+    });
+    actualizarNombreArchivo();
+
+    document.getElementById('frmMefMccp').addEventListener('submit', function (e) {
+        e.preventDefault();
+        ejecutarConsulta();
+    });
+
+    document.getElementById('checkAllMccp').addEventListener('change', function () {
+        const marcar = this.checked;
+        document.querySelectorAll('.check-mccp').forEach((cb) => { cb.checked = marcar; });
+        this.indeterminate = false;
+        actualizarContadores();
+    });
+
+    document.getElementById('btnGenerarMccp').addEventListener('click', generarTxt);
+});
+</script>
+{% endblock %}

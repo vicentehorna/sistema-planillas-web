@@ -1127,6 +1127,29 @@
                 </li>
                 {% endif %}
 
+                {% set es_lumat2 = (sql_database or '')|lower == 'hm_lumat2' %}
+                {% set mef_active = request.endpoint in ('mef_interface_mccp_page',) %}
+                {% if es_lumat2 and can_menu('mef_interface_mccp') %}
+                <li class="sidebar-menu-parent {{ 'active' if mef_active else '' }}">
+                    <a href="#submenuMef"
+                       class="sidebar-parent-link"
+                       data-bs-toggle="collapse"
+                       aria-expanded="{{ 'true' if mef_active else 'false' }}"
+                       aria-controls="submenuMef"
+                       title="MEF">
+                        <i class="bi bi-bank"></i><span class="sidebar-link-text">MEF</span>
+                        <i class="bi bi-chevron-down sidebar-chevron" aria-hidden="true"></i>
+                    </a>
+                    <ul class="collapse list-unstyled sidebar-submenu {{ 'show' if mef_active else '' }}" id="submenuMef">
+                        <li class="{{ 'active' if request.endpoint == 'mef_interface_mccp_page' else '' }}">
+                            <a href="{{ url_for('mef_interface_mccp_page') }}" title="Interface MCCP">
+                                <i class="bi bi-file-earmark-text"></i><span class="sidebar-link-text">Interface MCCP</span>
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+                {% endif %}
+
                 {% set afp_active = request.endpoint in ('afps_page', 'declaracion_afp_page', 'declaracion_afp_masivo_page', 'control_pagos_afp_page') %}
                 {% set es_alamo = (sql_database or '')|lower == 'hm_alamo' %}
                 {% set show_afp = can_menu('afps') or can_menu('afpnet') or can_menu('afpnet_masivo') or can_menu('control_pagos_afp') %}

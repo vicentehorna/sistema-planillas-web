@@ -1132,6 +1132,57 @@
         };
     }
 
+    function crearPersistenciaMefInterfaceMccp() {
+        const STORAGE_KEY = 'filtros_mef_interface_mccp';
+
+        function guardar() {
+            try {
+                const estado = {
+                    cia: val('cboCompania'),
+                    payroll: val('cboTipoPlanilla'),
+                    period: val('cboPeriodoTributario'),
+                    entidad: val('txtEntidadMccp'),
+                    tipoMccp: val('txtTipoPlanillaMccp'),
+                    subtipoMccp: val('txtSubtipoMccp'),
+                    regimenMccp: val('txtRegimenMccp'),
+                    tipoRemunerativo: val('txtTipoRemunerativoMccp'),
+                    timestamp: Date.now()
+                };
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
+            } catch (e) {
+                console.warn('filtros mef interface mccp: no se pudo guardar', e);
+            }
+        }
+
+        function leer() {
+            try {
+                const raw = localStorage.getItem(STORAGE_KEY);
+                if (!raw) return null;
+                const o = JSON.parse(raw);
+                if (!o || typeof o !== 'object') return null;
+                return o;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        function registrarGuardadoEnCambio() {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodoTributario',
+             'txtEntidadMccp', 'txtTipoPlanillaMccp', 'txtSubtipoMccp',
+             'txtRegimenMccp', 'txtTipoRemunerativoMccp'].forEach((id) => {
+                const el = document.getElementById(id);
+                if (el) el.addEventListener('change', guardar);
+            });
+        }
+
+        return {
+            STORAGE_KEY,
+            guardar,
+            leer,
+            registrarGuardadoEnCambio
+        };
+    }
+
     function crearPersistenciaPlameArchivo26() {
         const STORAGE_KEY = 'filtros_plame_archivo26';
 
@@ -2900,6 +2951,9 @@
         },
         plameArchivo18: function () {
             return crearPersistenciaPlameArchivo18();
+        },
+        mefInterfaceMccp: function () {
+            return crearPersistenciaMefInterfaceMccp();
         },
         plameArchivo26: function () {
             return crearPersistenciaPlameArchivo26();

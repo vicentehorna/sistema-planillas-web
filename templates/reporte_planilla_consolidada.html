@@ -124,6 +124,21 @@
         padding: 0;
         cursor: pointer;
     }
+
+    .empresas-dropdown {
+        min-width: 17rem;
+    }
+
+    .empresas-lista {
+        max-height: 16rem;
+        overflow: auto;
+    }
+
+    .empresas-lista .list-group-item {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+    }
 </style>
 {% endblock %}
 
@@ -131,6 +146,29 @@
 <div class="card shadow-sm border-0 mb-4">
     <div class="card-body pt-3">
         <form id="frmPlanillaConsolidada" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label class="form-label small fw-bold text-muted">Empresas</label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm w-100 d-flex justify-content-between align-items-center"
+                            type="button" id="btnEmpresas" data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside" aria-expanded="false" disabled>
+                        <span id="lblEmpresasBtn" class="text-truncate">Cargando...</span>
+                        <i class="bi bi-chevron-down ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2 empresas-dropdown" aria-labelledby="btnEmpresas">
+                        <div class="form-check d-flex align-items-center gap-1 border-bottom pb-2 mb-2">
+                            <input class="form-check-input mt-0" type="checkbox" id="chkTodasEmpresas" checked>
+                            <label class="form-check-label small fw-bold" for="chkTodasEmpresas">Todas</label>
+                            <span class="ms-auto text-muted small" id="lblEmpresasCount">0/0</span>
+                        </div>
+                        <input type="text" id="txtBuscarEmpresa" class="form-control form-control-sm mb-2"
+                               placeholder="Buscar empresa..." autocomplete="off">
+                        <div id="panelEmpresas" class="empresas-lista list-group list-group-flush">
+                            <div class="text-center text-muted small py-2">Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <div class="col-md-3">
                 <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
                 <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
@@ -626,6 +664,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!person) person = '0';
         const salarybank_name = document.getElementById('cboBancoHaberes').value.trim();
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
+        const companies = empresasSeleccionadas();
+        if (!companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
         const fechaIngreso = leerFiltroFechaIngreso();
         if (fechaIngreso.activo) {
             if (!fechaIngreso.desde || !fechaIngreso.hasta) {
@@ -643,6 +686,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    companies,
                     payroll_desc,
                     proceso_desc,
                     period,
@@ -719,6 +763,111 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
     }
 
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
+    const btnEmpresas = document.getElementById('btnEmpresas');
+    const txtBuscarEmpresa = document.getElementById('txtBuscarEmpresa');
+    let empresasData = [];
+    let ctrlEmpresas = null;
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function actualizarEtiquetaEmpresas() {
+        const total = empresasData.length;
+        const sel = empresasSeleccionadas().length;
+        document.getElementById('lblEmpresasCount').textContent = `${sel}/${total}`;
+        document.getElementById('lblEmpresasBtn').textContent = !total
+            ? 'Sin empresas'
+            : sel === total
+                ? `Todas las empresas (${total})`
+                : sel === 0
+                    ? 'Ninguna empresa'
+                    : `${sel} de ${total} empresas`;
+    }
+
+    function sincronizarChkTodasEmpresas() {
+        const checks = panelEmpresas.querySelectorAll('.chk-empresa');
+        if (!checks.length) {
+            chkTodasEmpresas.checked = false;
+            chkTodasEmpresas.indeterminate = false;
+        } else {
+            const marcados = panelEmpresas.querySelectorAll('.chk-empresa:checked').length;
+            chkTodasEmpresas.checked = marcados === checks.length;
+            chkTodasEmpresas.indeterminate = marcados > 0 && marcados < checks.length;
+        }
+        actualizarEtiquetaEmpresas();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Sin empresas disponibles.</div>';
+            btnEmpresas.disabled = true;
+            sincronizarChkTodasEmpresas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || '').trim();
+            const text = String(e.text || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2">
+                <input class="form-check-input flex-shrink-0 chk-empresa mt-1" type="checkbox" value="${escapeHtml(code)}" checked>
+                <span class="text-truncate" title="${escapeHtml(text)}">${escapeHtml(text)}</span>
+            </label>`;
+        }).join('');
+        btnEmpresas.disabled = false;
+        filtrarEmpresas();
+        sincronizarChkTodasEmpresas();
+    }
+
+    function filtrarEmpresas() {
+        const q = String(txtBuscarEmpresa.value || '').trim().toUpperCase();
+        panelEmpresas.querySelectorAll('.list-group-item').forEach((li) => {
+            li.classList.toggle('d-none', !!q && !li.textContent.toUpperCase().includes(q));
+        });
+    }
+
+    async function cargarEmpresas() {
+        if (ctrlEmpresas) ctrlEmpresas.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        ctrlEmpresas = ctrl;
+        const previas = new Set(empresasSeleccionadas());
+        panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Cargando...</div>';
+        try {
+            const res = await fetch('/api/selectores/companias?filtro_usuario=1', { signal: ctrl ? ctrl.signal : undefined });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (ctrlEmpresas !== ctrl) return;
+            renderEmpresas(Array.isArray(data) ? data : []);
+            if (previas.size) {
+                panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+                    el.checked = previas.has(String(el.value || '').trim());
+                });
+                sincronizarChkTodasEmpresas();
+            }
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            console.error(e);
+            panelEmpresas.innerHTML = '<div class="text-danger small py-2">Error al cargar empresas. '
+                + '<button type="button" class="btn btn-link btn-sm p-0 align-baseline" id="btnReintentarEmpresas">Reintentar</button></div>';
+            const btn = document.getElementById('btnReintentarEmpresas');
+            if (btn) btn.addEventListener('click', cargarEmpresas);
+        }
+    }
+
+    panelEmpresas.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('chk-empresa')) sincronizarChkTodasEmpresas();
+    });
+    chkTodasEmpresas.addEventListener('change', function () {
+        const marcar = chkTodasEmpresas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => { el.checked = marcar; });
+        sincronizarChkTodasEmpresas();
+    });
+    txtBuscarEmpresa.addEventListener('input', filtrarEmpresas);
+
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboProceso = document.getElementById('cboProceso');
     const cboPeriodo = document.getElementById('cboPeriodo');
@@ -791,6 +940,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     });
 
     const [planillasOk] = await Promise.all([
+        cargarEmpresas(),
         poblarSelect('/api/selectores/planillas-consolidada', cboPlanilla),
         cargarUnidades(),
         poblarSelect('/api/selectores/trabajadores-consolidada', cboTrabajador, {

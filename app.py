@@ -8907,6 +8907,8 @@ def reporte_planilla_vertical_page():
 @app.route('/reporte-planilla-consolidada')
 @login_required
 def reporte_planilla_consolidada_page():
+    if not _es_bd_hm_alamo():
+        abort(404)
     return render_template('reporte_planilla_consolidada.html')
 
 
@@ -29983,6 +29985,24 @@ def _list_active_companies(cursor):
     return companies
 
 
+def _companies_seleccionadas_json(body):
+    """Empresas pedidas en el filtro masivo: None si no viene el campo (todas)."""
+    if not isinstance(body, dict) or 'companies' not in body or body.get('companies') is None:
+        return None
+    req = body.get('companies')
+    if not isinstance(req, list):
+        req = [req]
+    return [str(c or '').strip() for c in req if str(c or '').strip()]
+
+
+def _filtrar_companies_seleccionadas(companies, seleccionadas):
+    """Cruza las empresas permitidas con las elegidas (None = sin filtro)."""
+    if seleccionadas is None:
+        return list(companies or [])
+    pedidas = {str(c or '').strip() for c in seleccionadas if str(c or '').strip()}
+    return [(c, n) for c, n in (companies or []) if c in pedidas]
+
+
 def _resolve_payrolltype_by_description(cursor, cia, payroll_desc):
     """Código PayRollType de la empresa según la Description elegida (consolidados)."""
     payroll_desc = (payroll_desc or '').strip()
@@ -30230,9 +30250,13 @@ def reporte_planilla_vertical_post():
 def reporte_planilla_consolidada_post():
     """
     Planilla vertical consolidada: mismas columnas que vertical con Empresa al inicio.
-    Filtros por Description de planilla y proceso (sin selector de compañía).
-    En BD con SY_UserCompany (hm_alamo/hm_garc) solo incluye empresas del usuario.
+    Solo hm_alamo. Filtros por Description de planilla y proceso (sin selector de compañía).
+    Solo incluye empresas del usuario (SY_UserCompany) y, si se manda `companies`,
+    solo las elegidas en el filtro masivo de empresas.
     """
+    bloqueo = _require_hm_alamo_json('Planilla Consolidada')
+    if bloqueo is not None:
+        return bloqueo
     body = request.get_json(silent=True) or {}
     payroll_desc = (
         body.get('payroll_desc')
@@ -30258,7 +30282,11 @@ def reporte_planilla_consolidada_post():
     ).strip()
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    # Filtro masivo de empresas (solo hm_alamo): cruzar con las permitidas.
+    empresas_sel = _companies_seleccionadas_json(body)
 
+    if empresas_sel is not None and not empresas_sel:
+        return jsonify({"error": "Seleccione al menos una empresa."}), 400
     if not payroll_desc or not proceso_desc or not period:
         return jsonify({"error": "Debe indicar tipo de planilla, proceso y periodo."}), 400
     if fecha_ingreso_all == 'N':
@@ -30271,7 +30299,13 @@ def reporte_planilla_consolidada_post():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        companies = _list_active_companies(cursor)
+        permitidas = _list_active_companies(cursor)
+        companies = _filtrar_companies_seleccionadas(permitidas, empresas_sel)
+        if empresas_sel is not None and not companies:
+            return jsonify({
+                "error": "Ninguna de las empresas seleccionadas está disponible. "
+                         "Seleccione al menos una empresa."
+            }), 400
 
         global_concepts = {}
         merged_rows = []

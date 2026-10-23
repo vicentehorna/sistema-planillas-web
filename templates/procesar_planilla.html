@@ -267,7 +267,7 @@
     <div class="card-body py-2">
         <div class="alert alert-danger mb-0 py-2">
             <strong>Validaciones previas al cálculo</strong>
-            <span class="d-block small mt-1">Corrija estas configuraciones antes de calcular la planilla mensual.</span>
+            <span class="d-block small mt-1" id="txtValidacionesPreCalculoHint">Corrija estas configuraciones antes de calcular.</span>
             <ul id="listaValidacionesPreCalculo"></ul>
         </div>
     </div>
@@ -1377,14 +1377,27 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('listaValidacionesCalculo').innerHTML = '';
     }
 
+    function esProcesoLiquidacionSeleccionado() {
+        const opt = cboProc && cboProc.options[cboProc.selectedIndex];
+        const shortName = opt ? String(opt.dataset.shortName || '').trim().toUpperCase() : '';
+        const desc = opt ? String(opt.textContent || '').trim().toUpperCase() : '';
+        return shortName === 'LIQUIDACION' || desc.indexOf('LIQUIDACION') >= 0;
+    }
+
     function renderizarValidacionesPreCalculo(validaciones) {
         const card = document.getElementById('cardValidacionesPreCalculo');
         const lista = document.getElementById('listaValidacionesPreCalculo');
+        const hint = document.getElementById('txtValidacionesPreCalculoHint');
         const items = Array.isArray(validaciones) ? validaciones : [];
         if (!items.length) {
             card.classList.add('d-none');
             lista.innerHTML = '';
             return;
+        }
+        if (hint) {
+            hint.textContent = esProcesoLiquidacionSeleccionado()
+                ? 'Corrija estas configuraciones antes de calcular la liquidación (el concepto no debe estar a la vez en fórmulas y en el procedimiento).'
+                : 'Corrija estas configuraciones antes de calcular la planilla mensual.';
         }
         lista.innerHTML = items.map((msg) => `<li>${escapeHtml(msg)}</li>`).join('');
         card.classList.remove('d-none');
@@ -1592,9 +1605,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         const preValidaciones = await consultarValidacionesPreCalculo();
         if (preValidaciones.length) {
             alert(
-                'No se puede calcular la planilla. Hay conceptos configurados en más de una vía '
-                + '(Insertar en mensual, procedimiento de cálculo o fórmulas del proceso). '
-                + 'Revise las validaciones previas al cálculo.'
+                esProcesoLiquidacionSeleccionado()
+                    ? 'No se puede calcular la liquidación. Hay conceptos que están a la vez en las fórmulas del proceso y en el procedimiento de cálculo. Revise las validaciones previas.'
+                    : 'No se puede calcular la planilla. Hay conceptos configurados en más de una vía '
+                        + '(Insertar en mensual, procedimiento de cálculo o fórmulas del proceso). '
+                        + 'Revise las validaciones previas al cálculo.'
             );
             return;
         }

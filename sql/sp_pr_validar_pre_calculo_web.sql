@@ -5,19 +5,19 @@
        Un trabajador no puede tener el mismo concepto más de una vez
        con FlagFrecuencyType = 'P' en la planilla.
 
-    2) Conceptos en más de una vía (MENSUAL / FIN_DE_MES / LIQUIDACION):
-      M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
-      Q — Maestro de conceptos: Insertar en = Quincena (flaginsertar = 'Q')
-      S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
-      F — Fórmulas del proceso (PR_FormulaHeader)
-      Solo una vía debe estar activa por concepto.
-      En LIQUIDACION aplica igual (p. ej. RENTA_NETA en SP y en fórmulas).
+    2) Conceptos en más de una vía:
+      MENSUAL / FIN_DE_MES:
+        M — Maestro: Insertar en = Mensual (flaginsertar = 'M')
+        Q — Maestro: Insertar en = Quincena (flaginsertar = 'Q')
+        S — Procedimiento de cálculo (literales sp_pr_registrar_concepto)
+        F — Fórmulas del proceso (PR_FormulaHeader)
+      LIQUIDACION:
+        Solo F vs S (p. ej. RENTA_NETA en fórmula y en el SP).
+        No se considera Insertar en mensual/quincena.
 
     Excepción hm_aci / hm_aci2 + MENSUAL/FIN_DE_MES:
       No se incluye F (formulador) en la comparación. Se valida solo M vs S.
-      Las fórmulas pueden permanecer configuradas; el cálculo mensual se rige por el SP.
-      En LIQUIDACION de esas BDs sí se compara F (no aplica la omisión).
-      En el resto de bases de datos F siempre se compara.
+      En LIQUIDACION siempre se compara F vs S.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
     (también al buscar trabajadores) y antes de /ejecutar_calculo_streaming
@@ -137,7 +137,7 @@ BEGIN
             ON P.Person = D.Person
            AND P.Company = @cia;
 
-    /* Vías M/S/F: mensual (FIN_DE_MES / MENSUAL) y liquidación. */
+    /* Vías: mensual (M/F/S) o liquidación (solo F/S). */
     IF @aplica_vias = 0
     BEGIN
         SELECT
@@ -149,15 +149,18 @@ BEGIN
         RETURN;
     END
 
-    /* M — Insertar en mensual */
-    INSERT INTO #vias (formulacode, via)
-    SELECT DISTINCT
-        UPPER(LTRIM(RTRIM(C.FormulaCode))),
-        'M'
-    FROM PR_Concept C (NOLOCK)
-    WHERE C.Company = @cia
-      AND ISNULL(C.flaginsertar, 'N') = 'M'
-      AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    /* M — Insertar en mensual (solo fin de mes / mensual; no aplica en liquidación) */
+    IF @es_mensual = 1
+    BEGIN
+        INSERT INTO #vias (formulacode, via)
+        SELECT DISTINCT
+            UPPER(LTRIM(RTRIM(C.FormulaCode))),
+            'M'
+        FROM PR_Concept C (NOLOCK)
+        WHERE C.Company = @cia
+          AND ISNULL(C.flaginsertar, 'N') = 'M'
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    END
 
     /* F — Fórmulas del proceso (omitido en hm_aci/hm_aci2 + mensual) */
     IF @omitir_formulas = 0
@@ -291,20 +294,21 @@ BEGIN
         NULL,
         D.formulacode
             + CASE WHEN ISNULL(C.Description, '') <> '' THEN ' (' + LTRIM(RTRIM(C.Description)) + ')' ELSE '' END
-            + ': configurado en más de una vía ('
+            + N': configurado en m'
+            + NCHAR(225) + N's de una v' + NCHAR(237) + N'a ('
             + STUFF((
-                SELECT ', ' + CASE V2.via
-                    WHEN 'M' THEN 'Insertar en mensual'
-                    WHEN 'Q' THEN 'Insertar en quincena'
-                    WHEN 'S' THEN 'Procedimiento de cálculo'
-                    WHEN 'F' THEN 'Fórmulas del proceso'
+                SELECT N', ' + CASE V2.via
+                    WHEN 'M' THEN N'Insertar en mensual'
+                    WHEN 'Q' THEN N'Insertar en quincena'
+                    WHEN 'S' THEN N'Procedimiento de c' + NCHAR(225) + N'lculo'
+                    WHEN 'F' THEN N'F' + NCHAR(243) + N'rmulas del proceso'
                 END
                 FROM #vias V2
                 WHERE V2.formulacode = D.formulacode
                 ORDER BY V2.via
                 FOR XML PATH(''), TYPE
-            ).value('.', 'NVARCHAR(MAX)'), 1, 2, '')
-            + '). Solo debe estar en una.'
+            ).value('.', 'NVARCHAR(MAX)'), 1, 2, N'')
+            + N'). Solo debe estar en una.'
     FROM (
         SELECT formulacode
         FROM #vias

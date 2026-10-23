@@ -240,10 +240,29 @@
                     <td class="seccion">5) IMPUESTO TOTAL RETENIDO</td>
                     <td class="monto">{{ cert.importe_impuesto_total_retenido|importe }}</td>
                 </tr>
+                {% if mostrar_devolucion_quinta_liq %}
+                <tr>
+                    <td colspan="2" class="seccion">6) IMPUESTO RETENIDO EN EXCESO Y DEVUELTO</td>
+                </tr>
+                <tr>
+                    <td class="subitem">Importe devuelto en la liquidación de beneficios sociales</td>
+                    <td class="monto">S/ {{ devolucion_quinta_liq|importe }}</td>
+                </tr>
+                <tr>
+                    <td class="subitem" style="font-weight: bold;">Saldo pendiente de devolución</td>
+                    <td class="monto" style="font-weight: bold;">S/ 0.00</td>
+                </tr>
+                <tr>
+                    <td colspan="2" class="subitem">
+                        Devolución efectuada en la liquidación de beneficios sociales {{ texto_trabajador_devol }}.
+                    </td>
+                </tr>
+                {% else %}
                 <tr>
                     <td class="seccion">6) IMPUESTO RETENIDO EN EXCESO</td>
                     <td class="monto">{{ cert.importe_impuesto_retenido_exceso|importe }}</td>
                 </tr>
+                {% endif %}
             </table>
 
             <table class="firmas-table">

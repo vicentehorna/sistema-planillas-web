@@ -5873,6 +5873,16 @@ def generar_pdf_certificado_quinta(params):
     monto_retenido_encabezado = max(0.0, monto_retenido_total - devolucion_quinta_liq)
     texto_retenido = f'S/. {format_importe(monto_retenido_encabezado)}'
 
+    # hm_zilicom: si hubo DEVOLUCION_QUINTA en LIQUIDACION, sección 6 muestra glosa de devolución.
+    mostrar_devolucion_quinta_liq = _es_cliente_zilicom() and devolucion_quinta_liq > 0
+    try:
+        sexo_int = int(cert.get('sexo') or 0)
+    except (TypeError, ValueError):
+        sexo_int = 0
+    texto_trabajador_devol = (
+        'de la trabajadora' if sexo_int == 2 else 'del trabajador'
+    )
+
     html_renderizado = render_template(
         'certificado_quinta_pdf.html',
         cert=cert,
@@ -5883,6 +5893,9 @@ def generar_pdf_certificado_quinta(params):
         texto_retenido=texto_retenido,
         texto_remuneracion=texto_remuneracion,
         fecha_emision_texto=_fecha_emision_certificado_quinta(params.get('fecha_emision')),
+        mostrar_devolucion_quinta_liq=mostrar_devolucion_quinta_liq,
+        devolucion_quinta_liq=devolucion_quinta_liq,
+        texto_trabajador_devol=texto_trabajador_devol,
     )
 
     if WEASYPRINT_AVAILABLE:

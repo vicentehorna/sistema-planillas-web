@@ -77,7 +77,11 @@ BEGIN
                 NULLIF(e.DiasVacaciones, 0),
                 ISNULL(pt.DiasVacaciones, 30)
             ) AS INT
-        ) AS diasvacaciones
+        ) AS diasvacaciones,
+        CASE
+            WHEN UPPER(LTRIM(RTRIM(ISNULL(e.WorkingDaysType, 'S')))) = 'R' THEN 'R'
+            ELSE 'S'
+        END AS workingdaystype
     FROM pr_employee e
         INNER JOIN sy_person sp
             ON sp.person = e.person

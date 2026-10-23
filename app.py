@@ -8137,6 +8137,9 @@ def _empleado_pensiones_para_form(empleado):
 def _empleado_laborales_desde_form(form):
     sueldo_raw = str(form.get('sueldo') or '').strip().replace(',', '')
     dias_vac_raw = str(form.get('diasvacaciones') or '').strip().replace(',', '')
+    workingdaystype = str(form.get('workingdaystype') or 'S').strip().upper()
+    if workingdaystype not in ('S', 'R'):
+        workingdaystype = 'S'
     return {
         'employeetype': str(form.get('employeetype') or '').strip(),
         'employeecategory': str(form.get('employeecategory') or '').strip(),
@@ -8154,6 +8157,7 @@ def _empleado_laborales_desde_form(form):
         'sueldo': sueldo_raw,
         'flagasigfamiliar': 'Y' if form.get('flagasigfamiliar') == 'Y' else 'N',
         'diasvacaciones': dias_vac_raw,
+        'workingdaystype': workingdaystype,
         # Status: N = activo, Y = inactivo (checkbox marcado)
         'status': 'Y' if str(form.get('status') or '').strip().upper() == 'Y' else 'N',
     }
@@ -8184,6 +8188,8 @@ def _empleado_laborales_para_form(empleado):
             out['diasvacaciones'] = '30'
     else:
         out['diasvacaciones'] = '30'
+    wdt = str(out.get('workingdaystype') or 'S').strip().upper()
+    out['workingdaystype'] = 'R' if wdt == 'R' else 'S'
     return out
 
 
@@ -8327,7 +8333,8 @@ def trabajadores_editar(person_id):
                 '@entrydate=?, @reentrydate=?, @ceasedate=?, @ceasereason=?, '
                 '@contractmodality=?, @ocupation=?, '
                 '@specialstatus=?, @position=?, @costcenter=?, @payrolltype=?, '
-                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @diasvacaciones=?, @status=?, '
+                '@accountprofile=?, @sueldo=?, @flagasigfamiliar=?, @diasvacaciones=?, '
+                '@workingdaystype=?, @status=?, '
                 '@xlastuser=?, @modo_reingreso=?',
                 (
                     cia,
@@ -8348,6 +8355,7 @@ def trabajadores_editar(person_id):
                     datos['sueldo'] or None,
                     datos['flagasigfamiliar'],
                     datos.get('diasvacaciones') or None,
+                    datos.get('workingdaystype') or 'S',
                     'N' if modo_reingreso_post else datos['status'],
                     xlastuser,
                     'Y' if modo_reingreso_post else 'N',
@@ -8616,6 +8624,7 @@ def _empleado_vacio_nuevo(cia, tipos_documento=None, unidades=None):
         'sueldo': '',
         'flagasigfamiliar': 'N',
         'diasvacaciones': '30',
+        'workingdaystype': 'S',
         'status': 'N',
         'pensiontype': '',
         'pensioninscriptiondate': '',
@@ -8774,7 +8783,7 @@ def trabajadores_nuevo():
                     @employeetype=?, @employeecategory=?, @entrydate=?,
                     @contractmodality=?, @ocupation=?, @specialstatus=?, @position=?,
                     @costcenter=?, @payrolltype=?, @accountprofile=?, @sueldo=?, @flagasigfamiliar=?,
-                    @diasvacaciones=?,
+                    @diasvacaciones=?, @workingdaystype=?,
                     @pensiontype=?, @pensioninscriptiondate=?, @regimehealth=?, @flagmixta=?,
                     @flagessaludvida=?, @cuspp=?,
                     @collectionform=?, @salarybank=?, @salaryaccounttype=?, @salaryaccount=?,
@@ -8816,6 +8825,7 @@ def trabajadores_nuevo():
                     laborales['sueldo'] or None,
                     laborales['flagasigfamiliar'],
                     laborales.get('diasvacaciones') or None,
+                    laborales.get('workingdaystype') or 'S',
                     pensiones['pensiontype'] or None,
                     _sql_date_str_param(pensiones['pensioninscriptiondate']) or None,
                     pensiones['regimehealth'] or None,

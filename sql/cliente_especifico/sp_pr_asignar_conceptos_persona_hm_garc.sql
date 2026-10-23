@@ -5,11 +5,18 @@ begin
 	declare @dias_vacaciones int, @dias_descanso int, @dias_subsidio int, @dias_lsg int, @dias_falta int
 	declare @vac_normal int, @vac_venta int, @dias_enf int, @dias_mat int, @dias_pat int, @dias_susp int, @dias_lcg int, @dias_fallece int
 	declare @prestamo numeric(19,4), @flag28 int
+	declare @dias_base int, @wdt varchar(1)
 	set @flag28  = 0
 	set @flag28 = case when right((select convert(varchar(8), CeaseDate, 112) from PR_Employee where Person = @person and Company = @company),4) = '0228' then 1 else 0 end
 
-	
-
+	/* S = Standard (base 30); R = Rango (días reales del mes del periodo). */
+	select @wdt = UPPER(LTRIM(RTRIM(ISNULL(WorkingDaysType, 'S'))))
+	from PR_Employee where Person = @person and Company = @company
+	if ISNULL(@wdt, '') not in ('S', 'R') set @wdt = 'S'
+	if @wdt = 'R'
+		set @dias_base = DAY(EOMONTH(CONVERT(datetime, LEFT(@period, 6) + '01', 112)))
+	else
+		set @dias_base = 30
 
 	set @prestamo = isnull((select sum(AmountLo) from PR_EmployeeLoanAmortization where Company = @company and PRperiod = @period and Person = @person),0)
 
@@ -73,33 +80,33 @@ begin
 			where M.Company = @company and isnull(V.Concept,'') <> ''
 	  )
 
-	--DIAS TRABAJADOS
+	--DIAS TRABAJADOS (@dias_base: S=30, R=días del mes; en R no se fuerza 31→30)
 
 	insert into PR_EmployeeConcept (Person, Company,Concept,PayRollType,PRPeriodStart, CostCenter, PRPeriodEnd, ConceptValue, Application,ConceptCurrency,
 	ConceptValueLo,ConceptValueEx,ExchangeRate,Comments,FlagApplyFormula,FlagFrecuencyType, ReplicationUnit,XLastUser,XLastDate,CostCenterCode,PercentageDistribution)
 	select PR_Employee.Person,PR_Employee.Company, 
 	(select Concept from PR_Concept where FormulaCode = 'DIASTRABAJADOS' and Company = @company),
 	PR_Employee.PayRollType,@period,PR_Employee.CostCenter,@period,
-	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) and convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then case when @flag28 = 1 then  30 else datepart(day, CeaseDate) end - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 
-	case when (
+	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) and convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then case when @flag28 = 1 and @wdt = 'S' then  30 else datepart(day, CeaseDate) end - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 
+	case when @wdt = 'S' and (
 	case when convert(varchar(6), CeaseDate, 112) < left(@period,6) then 0 else
-	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 then  30 else datepart(day, CeaseDate) end else
-	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then 30 else 
-		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then 30 - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end) = 31 then 30 else 
+	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 and @wdt = 'S' then  30 else datepart(day, CeaseDate) end else
+	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then @dias_base else 
+		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then @dias_base - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end) = 31 then 30 else 
 		(
 	case when convert(varchar(6), CeaseDate, 112) < left(@period,6) then 0 else
-	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 then  30 else datepart(day, CeaseDate) end else
-	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then 30 else 
-		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then 30 - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end) end end
+	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 and @wdt = 'S' then  30 else datepart(day, CeaseDate) end else
+	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then @dias_base else 
+		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then @dias_base - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end) end end
 	- (@vac_normal + @dias_descanso + @dias_subsidio + @dias_lsg + @dias_falta + @dias_lcg + @dias_fallece),
 	'PR', 'LO',NULL,NULL,NULL,NULL,'N', 'T', SY_Person.ReplicationUnit,@UserID,getdate(),PR_Employee.Costcentername,'A'
 	from PR_Employee inner join SY_Person on (PR_Employee.Person = SY_Person.Person) 
 	where PR_Employee.Status = 'N' and PR_Employee.Company = @company and PR_Employee.PayRollType = @payrolltype and PR_Employee.Person = @person
 	and 
 	(case when convert(varchar(6), CeaseDate, 112) < left(@period,6) then 0 else
-	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 then  30 else datepart(day, CeaseDate) end else
-	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then 30 else 
-		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then 30 - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end
+	case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then case when @flag28 = 1 and @wdt = 'S' then  30 else datepart(day, CeaseDate) end else
+	(case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) < left(@period,6) then @dias_base else 
+		case when convert(varchar(6), ISNULL(Reentrydate, entrydate), 112) = left(@period,6) then @dias_base - DATEPART(day, ISNULL(Reentrydate, entrydate)) + 1 else 0 end end) end end
 	- (@vac_normal + @dias_descanso + @dias_subsidio + @dias_lsg + @dias_falta + @dias_fallece)) > 0
 
 	if @vac_normal > 0 

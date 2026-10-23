@@ -669,6 +669,15 @@
                                    value="{{ empleado.diasvacaciones if empleado.diasvacaciones is not none else 30 }}"
                                    autocomplete="off" title="Días anuales de vacaciones del trabajador">
                         </div>
+                        <div class="col-md-4">
+                            <label for="cboWorkingDaysType" class="form-label small fw-bold text-muted">Tipo de días trabajados</label>
+                            <select id="cboWorkingDaysType" name="workingdaystype" class="form-select form-select-sm"
+                                    title="S = base 30 días; R = días reales del mes del periodo">
+                                {% set wdt = (empleado.workingdaystype or 'S')|upper %}
+                                <option value="S" {% if wdt != 'R' %}selected{% endif %}>S — Standard (30 días)</option>
+                                <option value="R" {% if wdt == 'R' %}selected{% endif %}>R — Rango de periodo</option>
+                            </select>
+                        </div>
                         <div class="col-md-4 d-flex align-items-end">
                             <div class="form-check mb-2">
                                 <input class="form-check-input" type="checkbox" id="chkFlagAsigFamiliar" name="flagasigfamiliar" value="Y"

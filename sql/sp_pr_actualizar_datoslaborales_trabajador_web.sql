@@ -24,6 +24,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @sueldo             VARCHAR(20) = NULL,
     @flagasigfamiliar   VARCHAR(1) = 'N',
     @diasvacaciones     VARCHAR(10) = NULL,
+    @workingdaystype    VARCHAR(1) = 'S',
     @status             VARCHAR(1) = 'N',
     @xlastuser          VARCHAR(20) = NULL,
     @modo_reingreso     VARCHAR(1)  = 'N'
@@ -45,6 +46,8 @@ BEGIN
     IF @status NOT IN ('Y', 'N') SET @status = 'N';
     SET @modo_reingreso = UPPER(LTRIM(RTRIM(ISNULL(@modo_reingreso, 'N'))));
     IF @modo_reingreso NOT IN ('Y', 'N') SET @modo_reingreso = 'N';
+    SET @workingdaystype = UPPER(LTRIM(RTRIM(ISNULL(@workingdaystype, 'S'))));
+    IF @workingdaystype NOT IN ('S', 'R') SET @workingdaystype = 'S';
 
     DECLARE @fecha_ingreso DATETIME = NULL;
     DECLARE @fecha_reingreso DATETIME = NULL;
@@ -207,6 +210,7 @@ BEGIN
         salary = CASE WHEN @rembasica IS NULL THEN salary ELSE @rembasica END,
         flagasigfamiliar = @flagasigfamiliar,
         DiasVacaciones = @dias_vac,
+        WorkingDaysType = @workingdaystype,
         xlastdate = GETDATE(),
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia

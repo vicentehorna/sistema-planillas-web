@@ -53,6 +53,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
     @sueldo                 VARCHAR(20) = NULL,
     @flagasigfamiliar       CHAR(1) = 'N',
     @diasvacaciones         VARCHAR(10) = NULL,
+    @workingdaystype        VARCHAR(1) = 'S',
     @pensiontype            VARCHAR(20) = NULL,
     @pensioninscriptiondate VARCHAR(10) = NULL,
     @regimehealth           VARCHAR(20) = NULL,
@@ -179,6 +180,8 @@ BEGIN
     END
     IF @dias_vac_emp IS NULL OR @dias_vac_emp <= 0
         SET @dias_vac_emp = 30;
+    SET @workingdaystype = UPPER(LTRIM(RTRIM(ISNULL(@workingdaystype, 'S'))));
+    IF @workingdaystype NOT IN ('S', 'R') SET @workingdaystype = 'S';
     SET @pensiontype = NULLIF(LTRIM(RTRIM(ISNULL(@pensiontype, ''))), '');
     SET @pensioninscriptiondate = NULLIF(LTRIM(RTRIM(ISNULL(@pensioninscriptiondate, ''))), '');
     SET @regimehealth = NULLIF(LTRIM(RTRIM(ISNULL(@regimehealth, ''))), '');
@@ -564,7 +567,7 @@ BEGIN
             FlagEssaludVida, Status, XLastDate, XLastUser, ReplicationUnit,
             CostCenterName, FlagDistribution, ContractModality, ConsiderInCalc,
             FlagParticipar, FlagAsigFamiliar, DiasVacaciones,
-            SpecialStatus, CollectionForm, Ocupation, RegimeHealth,
+            SpecialStatus, CollectionForm, WorkingDaysType, Ocupation, RegimeHealth,
             RemBasica, Salary, AFPCard, FlagMixta, AFP,
             CTSBank, CTSAccount, CTSCurrency, SocialAssistanceNumber
         )
@@ -576,7 +579,7 @@ BEGIN
             @flagessaludvida, 'N', GETDATE(), @xlastuser, @replicationunit,
             NULLIF(@costcentername, ''), 'H', @contractmodality, 'Y',
             'Y', @flagasigfamiliar, @dias_vac_emp,
-            @specialstatus, @collectionform, @ocupation, @regimehealth,
+            @specialstatus, @collectionform, @workingdaystype, @ocupation, @regimehealth,
             @rembasica, @rembasica, @cuspp, @flagmixta, @afp_id,
             @ctsbank, @ctsaccount, @ctscurrency, @cci
         );

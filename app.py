@@ -32958,6 +32958,70 @@ def api_prestamos_editar_cuota():
     }), 410
 
 
+@app.route('/api/prestamos/cambiar-estado-cuota', methods=['POST'])
+@login_required
+def api_prestamos_cambiar_estado_cuota():
+    """sp_pr_prestamos_cambiar_estado_cuota_web: cambia Status de una cuota (P/A/N)."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or '').strip()
+    try:
+        amort_secuence = int(
+            body.get('amort_secuence') or body.get('amortsecuence') or body.get('secuence') or 0
+        )
+    except (TypeError, ValueError):
+        amort_secuence = 0
+    nuevo_status = str(body.get('status') or body.get('estado') or '').strip().upper()
+
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not person:
+        return jsonify({"error": "Seleccione un trabajador."}), 400
+    if amort_secuence <= 0:
+        return jsonify({"error": "Indique la cuota."}), 400
+    if nuevo_status not in ('P', 'A', 'N'):
+        return jsonify({"error": "Estado inválido. Use Pendiente, Amortizado o Anulado."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_prestamos_cambiar_estado_cuota_web "
+            "@company=?, @person=?, @amort_secuence=?, @nuevo_status=?, @xlastuser=?",
+            (cia, person, amort_secuence, nuevo_status, _xlastuser_id()),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        result = rows[0] if rows else {}
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        return jsonify({
+            "ok": True,
+            "company": _jsonable_value(result.get('company') or cia),
+            "person": _jsonable_value(result.get('person') or person),
+            "amort_secuence": _jsonable_value(result.get('amort_secuence') or amort_secuence),
+            "loan_secuence": _jsonable_value(result.get('loan_secuence')),
+            "status": _jsonable_value(result.get('status') or nuevo_status),
+            "loan_status": _jsonable_value(result.get('loan_status')),
+        })
+    except Exception as e:
+        logging.exception("api_prestamos_cambiar_estado_cuota")
+        err = str(e)
+        if '42000' in err or 'RAISERROR' in err.upper() or '[SQL Server]' in err:
+            m = re.search(r'\]\[SQL Server\](.+?)(?:\s\(\d+\)|$)', err)
+            if m:
+                err = m.group(1).strip()
+        return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/prestamos/guardar-cuotas', methods=['POST'])
 @login_required
 def api_prestamos_guardar_cuotas():

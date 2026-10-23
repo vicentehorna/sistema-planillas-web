@@ -224,6 +224,13 @@
         padding: 0.1rem 0.35rem;
         line-height: 1;
     }
+    .table-prestamos .select-estado-cuota {
+        min-width: 7.5rem;
+        max-width: 9.5rem;
+        font-size: 0.8rem;
+        padding-top: 0.15rem;
+        padding-bottom: 0.15rem;
+    }
     .table-prestamos .btn-eliminar-cuota:disabled {
         opacity: 0.35;
     }
@@ -461,6 +468,7 @@
                     </div>
                     <p class="prest-hint mb-0 mt-1">
                         Edite montos pendientes, agregue o elimine cuotas y pulse Guardar. La suma debe coincidir con el importe del préstamo.
+                        Puede cambiar el estado (p. ej. Amortizado → Pendiente) para habilitar la edición y luego volver a Amortizado.
                     </p>
                 </div>
             </div>
@@ -856,7 +864,8 @@
             return;
         }
         tbody.innerHTML = rows.map((r) => {
-            const pendiente = String(r.status || '').toUpperCase() === 'P';
+            const st = String(r.status || '').toUpperCase();
+            const pendiente = st === 'P';
             const amt = round2(r.amount);
             const montoCell = pendiente
                 ? `<input type="number" step="0.01" min="0.01"
@@ -875,10 +884,19 @@
                         <i class="bi bi-trash"></i>
                    </button>`
                 : '';
-            return `<tr data-amount="${amt}" data-status="${escHtml(r.status)}" data-sec="${escHtml(r.secuence)}">
+            const estadoCell = `
+                <select class="form-select form-select-sm select-estado-cuota"
+                        data-sec="${escHtml(r.secuence)}"
+                        data-prev="${escHtml(st)}"
+                        title="Cambiar estado de la cuota">
+                    <option value="P"${st === 'P' ? ' selected' : ''}>Pendiente</option>
+                    <option value="A"${st === 'A' ? ' selected' : ''}>Amortizado</option>
+                    <option value="N"${st === 'N' ? ' selected' : ''}>Anulado</option>
+                </select>`;
+            return `<tr data-amount="${amt}" data-status="${escHtml(st)}" data-sec="${escHtml(r.secuence)}">
                 <td>${escHtml(fmtPeriodo(r.prperiod))}</td>
                 <td class="text-end">${montoCell}</td>
-                <td>${badgeEstado(r.status, r.status_texto)}</td>
+                <td>${estadoCell}</td>
                 <td>${escHtml(r.proceso_texto || '—')}</td>
                 <td class="text-center col-accion">${btnElim}</td>
             </tr>`;
@@ -894,7 +912,42 @@
                 eliminarCuotaPorSecuencia(sec);
             });
         });
+        tbody.querySelectorAll('.select-estado-cuota').forEach((sel) => {
+            sel.addEventListener('change', function () {
+                cambiarEstadoCuota(this);
+            });
+        });
         actualizarSumaCuotasUi();
+    }
+
+    async function cambiarEstadoCuota(sel) {
+        if (!sel || !trabajadorSel || !prestamoSel) return;
+        const sec = Number(sel.getAttribute('data-sec') || 0);
+        const prev = String(sel.getAttribute('data-prev') || '').toUpperCase();
+        const nuevo = String(sel.value || '').toUpperCase();
+        if (!(sec > 0) || !nuevo || nuevo === prev) return;
+        mostrarMsgCuotas('');
+        sel.disabled = true;
+        try {
+            const res = await fetch('/api/prestamos/cambiar-estado-cuota', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: cboCia.value.trim(),
+                    person: trabajadorSel.person,
+                    amort_secuence: sec,
+                    status: nuevo,
+                }),
+            });
+            await leerJson(res);
+            mostrarMsgCuotas('Estado de cuota actualizado.', true);
+            await recargarPrestamoSeleccionado();
+        } catch (err) {
+            sel.value = prev;
+            mostrarMsgCuotas(err.message || 'No se pudo cambiar el estado.');
+        } finally {
+            sel.disabled = false;
+        }
     }
 
     async function recargarPrestamoSeleccionado() {

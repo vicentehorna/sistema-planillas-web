@@ -34774,9 +34774,10 @@ def _validacion_planilla_rows_to_mensajes(rows):
 
 
 def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype):
-    """sp_pr_validar_pre_calculo_web → permanentes duplicados + vías (mensual/FIN_DE_MES).
+    """sp_pr_validar_pre_calculo_web → permanentes duplicados + vías (mensual/FIN_DE_MES/LIQUIDACION).
 
     En hm_aci/hm_aci2 + mensual el SP omite el formulador (solo maestro vs procedimiento).
+    Liquidación siempre compara fórmulas del proceso vs nemónicos del SP.
     """
     cursor.execute(
         "EXEC sp_pr_validar_pre_calculo_web "

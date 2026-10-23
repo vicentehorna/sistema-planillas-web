@@ -5,18 +5,19 @@
        Un trabajador no puede tener el mismo concepto más de una vez
        con FlagFrecuencyType = 'P' en la planilla.
 
-    2) Conceptos en más de una vía (solo MENSUAL / FIN_DE_MES):
+    2) Conceptos en más de una vía (MENSUAL / FIN_DE_MES / LIQUIDACION):
       M — Maestro de conceptos: Insertar en = Mensual (flaginsertar = 'M')
       Q — Maestro de conceptos: Insertar en = Quincena (flaginsertar = 'Q')
       S — Procedimiento de cálculo: llamadas literales a sp_pr_registrar_concepto
       F — Fórmulas del proceso (PR_FormulaHeader)
       Solo una vía debe estar activa por concepto.
+      En LIQUIDACION aplica igual (p. ej. RENTA_NETA en SP y en fórmulas).
 
     Excepción hm_aci / hm_aci2 + MENSUAL/FIN_DE_MES:
       No se incluye F (formulador) en la comparación. Se valida solo M vs S.
       Las fórmulas pueden permanecer configuradas; el cálculo mensual se rige por el SP.
-      En esas BDs con otros procesos (p. ej. provisiones), si aplica validación de vías,
-      el formulador sí se considera. En el resto de bases de datos F siempre se compara.
+      En LIQUIDACION de esas BDs sí se compara F (no aplica la omisión).
+      En el resto de bases de datos F siempre se compara.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
     (también al buscar trabajadores) y antes de /ejecutar_calculo_streaming
@@ -48,6 +49,8 @@ BEGIN
     DECLARE @procedure_name VARCHAR(128);
     DECLARE @sp_def NVARCHAR(MAX);
     DECLARE @es_mensual BIT = 0;
+    DECLARE @es_liquidacion BIT = 0;
+    DECLARE @aplica_vias BIT = 0;
     DECLARE @omitir_formulas BIT = 0;
 
     SELECT
@@ -62,6 +65,14 @@ BEGIN
        OR @proceso_desc = 'MENSUAL'
        OR CHARINDEX('FIN DE MES', @proceso_desc) > 0
         SET @es_mensual = 1;
+
+    IF @proceso_shortname = 'LIQUIDACION'
+       OR @proceso_desc = 'LIQUIDACION'
+       OR CHARINDEX('LIQUIDACION', @proceso_desc) > 0
+        SET @es_liquidacion = 1;
+
+    IF @es_mensual = 1 OR @es_liquidacion = 1
+        SET @aplica_vias = 1;
 
     /* hm_aci / hm_aci2 mensual: no confrontar fórmulas; el SP es la vía de cálculo vigente. */
     IF LOWER(DB_NAME()) IN ('hm_aci', 'hm_aci2') AND @es_mensual = 1
@@ -126,8 +137,8 @@ BEGIN
             ON P.Person = D.Person
            AND P.Company = @cia;
 
-    /* Vías M/S/F: solo proceso mensual (FIN_DE_MES / MENSUAL). */
-    IF @es_mensual = 0
+    /* Vías M/S/F: mensual (FIN_DE_MES / MENSUAL) y liquidación. */
+    IF @aplica_vias = 0
     BEGIN
         SELECT
             LTRIM(RTRIM(ISNULL(person, ''))) AS person,

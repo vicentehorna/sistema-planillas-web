@@ -5883,6 +5883,11 @@ def generar_pdf_certificado_quinta(params):
         'de la trabajadora' if sexo_int == 2 else 'del trabajador'
     )
 
+    # hm_zilicom: cesado (con liquidación) → fecha de emisión = fecha de cese.
+    fecha_emision_param = params.get('fecha_emision')
+    if _es_cliente_zilicom() and cert.get('fecha_cese'):
+        fecha_emision_param = cert.get('fecha_cese')
+
     html_renderizado = render_template(
         'certificado_quinta_pdf.html',
         cert=cert,
@@ -5892,7 +5897,7 @@ def generar_pdf_certificado_quinta(params):
         tratamiento=_sexo_tratamiento_certificado(cert.get('sexo')),
         texto_retenido=texto_retenido,
         texto_remuneracion=texto_remuneracion,
-        fecha_emision_texto=_fecha_emision_certificado_quinta(params.get('fecha_emision')),
+        fecha_emision_texto=_fecha_emision_certificado_quinta(fecha_emision_param),
         mostrar_devolucion_quinta_liq=mostrar_devolucion_quinta_liq,
         devolucion_quinta_liq=devolucion_quinta_liq,
         texto_trabajador_devol=texto_trabajador_devol,

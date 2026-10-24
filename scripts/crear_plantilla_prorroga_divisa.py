@@ -168,7 +168,7 @@ def enrich_with_web_markers(path: Path) -> None:
 
 
 def install_for_cia(path: Path, cia: str) -> Path:
-    dest_dir = plantillas_dir(cia)
+    dest_dir = plantillas_dir(cia, database="hm_divisa")
     dest = dest_dir / "PRORROGA_1_VIAMERICA.docx"
     shutil.copy2(path, dest)
     print("Instalada en", dest)

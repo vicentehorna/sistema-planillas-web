@@ -335,7 +335,7 @@ def patch_supervisor_hardcoded(path: Path) -> None:
 
 
 def install(path: Path, filename: str) -> Path:
-    dest = plantillas_dir(CIA) / filename
+    dest = plantillas_dir(CIA, database="hm_divisa") / filename
     shutil.copy2(path, dest)
     print("Instalada:", dest)
     return dest

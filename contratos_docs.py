@@ -351,14 +351,43 @@ def build_zip_contratos(items: list[tuple[str, bytes]], ext: str) -> bytes:
     return buf.getvalue()
 
 
-def plantillas_dir(cia: str) -> Path:
-    d = PLANTILLAS_DIR / re.sub(r"[^\w\-]+", "_", (cia or "").strip())
+def _safe_path_seg(value: str) -> str:
+    return re.sub(r"[^\w\-]+", "_", (value or "").strip()) or "_"
+
+
+def _resolve_plantillas_database(database: str | None = None) -> str:
+    """BD cliente activa (hm_globaltec, hm_divisa, …). Evita mezclar plantillas entre clientes con la misma cia."""
+    db = (database or "").strip()
+    if db:
+        return db
+    try:
+        from database import get_active_database
+
+        db = (get_active_database(required=False) or "").strip()
+    except Exception:
+        db = ""
+    return db
+
+
+def plantillas_dir(cia: str, database: str | None = None) -> Path:
+    """
+    Carpeta de plantillas por BD + compañía.
+    Estructura: uploads/contratos_plantillas/{database}/{cia}/
+    Fallback legacy (sin BD): uploads/contratos_plantillas/{cia}/
+    """
+    cia_seg = _safe_path_seg(cia)
+    db = _resolve_plantillas_database(database)
+    db_seg = _safe_path_seg(db) if db else ""
+    if db_seg and db_seg != "_":
+        d = PLANTILLAS_DIR / db_seg / cia_seg
+    else:
+        d = PLANTILLAS_DIR / cia_seg
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
-def listar_plantillas(cia: str) -> list[dict]:
-    d = plantillas_dir(cia)
+def listar_plantillas(cia: str, database: str | None = None) -> list[dict]:
+    d = plantillas_dir(cia, database=database)
     rows = []
     for p in sorted(d.glob("*.docx"), key=lambda x: x.name.lower()):
         if p.name.startswith("~$"):
@@ -374,22 +403,22 @@ def listar_plantillas(cia: str) -> list[dict]:
     return rows
 
 
-def ruta_plantilla(cia: str, plantilla_id: str) -> Path | None:
+def ruta_plantilla(cia: str, plantilla_id: str, database: str | None = None) -> Path | None:
     name = Path(str(plantilla_id or "")).name
     if not name.lower().endswith(".docx") or name.startswith("~$"):
         return None
-    path = plantillas_dir(cia) / name
+    path = plantillas_dir(cia, database=database) / name
     if not path.is_file():
         return None
     return path
 
 
-def guardar_plantilla(cia: str, filename: str, content: bytes) -> dict:
+def guardar_plantilla(cia: str, filename: str, content: bytes, database: str | None = None) -> dict:
     name = Path(filename or "plantilla.docx").name
     if not name.lower().endswith(".docx"):
         name = f"{Path(name).stem}.docx"
     name = re.sub(r"[^\w\-.\s]+", "_", name).strip() or "plantilla.docx"
-    dest = plantillas_dir(cia) / name
+    dest = plantillas_dir(cia, database=database) / name
     dest.write_bytes(content)
     st = dest.stat()
     return {
@@ -401,22 +430,22 @@ def guardar_plantilla(cia: str, filename: str, content: bytes) -> dict:
     }
 
 
-def eliminar_plantilla(cia: str, plantilla_id: str) -> bool:
-    path = ruta_plantilla(cia, plantilla_id)
+def eliminar_plantilla(cia: str, plantilla_id: str, database: str | None = None) -> bool:
+    path = ruta_plantilla(cia, plantilla_id, database=database)
     if not path:
         return False
     path.unlink(missing_ok=True)
     return True
 
 
-def asegurar_plantilla_ejemplo(cia: str) -> None:
+def asegurar_plantilla_ejemplo(cia: str, database: str | None = None) -> None:
     """Si la cia no tiene plantillas, copia el ejemplo del sistema."""
-    existentes = listar_plantillas(cia)
+    existentes = listar_plantillas(cia, database=database)
     if existentes:
         return
     if not EJEMPLO_STATIC.is_file():
         return
-    dest = plantillas_dir(cia) / "ejemplo_contrato.docx"
+    dest = plantillas_dir(cia, database=database) / "ejemplo_contrato.docx"
     if not dest.exists():
         dest.write_bytes(EJEMPLO_STATIC.read_bytes())
 

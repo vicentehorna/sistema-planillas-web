@@ -239,6 +239,11 @@ def contexto_desde_fila(row: dict) -> dict:
         "modalidad": str(r.get("modalidad") or "").strip(),
         "sueldo": _fmt_sueldo(sueldo),
         "sueldo_letras": numero_a_letras(sueldo),
+        "movilidad": (
+            _fmt_sueldo(r.get("movilidad"))
+            if r.get("movilidad") not in (None, "")
+            else ""
+        ),
         "fecha_ingreso": _fmt_fecha_display(r.get("fecha_ingreso")),
         "inicio_contrato": _fmt_fecha_display(inicio_raw),
         "fin_contrato": _fmt_fecha_display(fin_raw),
@@ -475,6 +480,7 @@ MARCADORES_AYUDA = [
     ("modalidad", "Modalidad de contrato"),
     ("sueldo", "Sueldo numérico"),
     ("sueldo_letras", "Sueldo en letras (… CON 00/100 SOLES)"),
+    ("movilidad", "Movilidad / transporte (importe)"),
     ("fecha_ingreso", "Fecha de ingreso (01 de mayo del 2026)"),
     ("inicio_contrato", "Inicio de contrato (01 de mayo del 2026)"),
     ("fin_contrato", "Fin de contrato (01 de mayo del 2026)"),
@@ -517,5 +523,7 @@ MARCADORES_LEGACY_MAP = {
     "SALARIONUMERO": "sueldo",
     "SALARIO": "sueldo_letras",
     "FIRMACONTRATOTEXTO1": "fecha_firma",
+    "FIRMACONTRATOTEXTO": "fecha_firma",
     "PERFILCONTABLE": "centro_costo",
+    "MOVILIDAD": "movilidad",
 }

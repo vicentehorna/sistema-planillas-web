@@ -89,11 +89,25 @@ BEGIN
             WHEN LTRIM(RTRIM(ISNULL(p.Sex, ''))) = '2' THEN 'Femenino'
             ELSE LTRIM(RTRIM(ISNULL(p.Sex, '')))
         END AS sexo,
+        CONVERT(varchar(10), p.BirthDate, 23) AS fecha_nacimiento,
+        CASE
+            WHEN p.BirthDate IS NULL THEN NULL
+            ELSE DATEDIFF(YEAR, p.BirthDate, GETDATE())
+                - CASE
+                    WHEN DATEADD(
+                        YEAR,
+                        DATEDIFF(YEAR, p.BirthDate, GETDATE()),
+                        p.BirthDate
+                    ) > CONVERT(date, GETDATE()) THEN 1
+                    ELSE 0
+                  END
+        END AS edad,
         LTRIM(RTRIM(ISNULL(pos.Description, ISNULL(pos.Name, '')))) AS cargo,
         LTRIM(RTRIM(ISNULL(e.CostCenterName, ISNULL(e.CostCenter, '')))) AS centro_costo,
         LTRIM(RTRIM(ISNULL(cm.Description, ''))) AS modalidad,
+        /* Sueldo: prioriza REM_BASICA permanente vigente (no e.rembasica,
+           que puede quedar desfasada tras aumentos). */
         CONVERT(decimal(18, 2), COALESCE(
-            e.rembasica,
             (
                 SELECT TOP 1 ec.ConceptValue
                 FROM PR_EmployeeConcept ec (NOLOCK)
@@ -105,7 +119,9 @@ BEGIN
                   AND c.FormulaCode = 'REM_BASICA'
                   AND ec.FlagFrecuencyType = 'P'
                   AND ec.PRPeriodEnd IS NULL
+                ORDER BY ec.PRPeriodStart DESC
             ),
+            e.rembasica,
             e.salary,
             0
         )) AS sueldo,

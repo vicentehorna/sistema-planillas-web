@@ -47,8 +47,8 @@ _SAMPLE_AFTER_MARKER = [
     (r"(\{\{\s*distrito\s*\}\})\s*[A-ZÁÉÍÓÚÑa-záéíóúñ. ]+?(?=\s*[,.])", r"\1"),
     (r"(\{\{\s*provincia\s*\}\})\s*[A-ZÁÉÍÓÚÑa-záéíóúñ. ]+?(?=\s*[,.])", r"\1"),
     (r"(\{\{\s*departamento\s*\}\})\s*[A-ZÁÉÍÓÚÑa-záéíóúñ. ]+?(?=\s*[,.])", r"\1"),
-    (r"(\{\{\s*cargo\s*\}\})\s*[A-ZÁÉÍÓÚÑ][A-ZÁÉÍÓÚÑ0-9 /.\-]*?(?=\s*[,.])", r"\1"),
-    (r"(\{\{\s*cargo\s*\}\})\s*\S+", r"\1"),
+    # Solo limpia cargo de ejemplo en MAYÚSCULAS; no tocar "en razón de..."
+    (r"(\{\{\s*cargo\s*\}\})\s+[A-ZÁÉÍÓÚÑ]{3,}(?:\s+[A-ZÁÉÍÓÚÑ]{2,}){0,6}(?=\s*[,.]|\s+en\s+raz)", r"\1"),
     (r"(\{\{\s*sexo\s*\}\})\s*(?:masculino|femenino|hombre|mujer|M|F)", r"\1"),
     (
         r"(\{\{\s*inicio_contrato\s*\}\})\s*\d{1,2}\s+de\s+[A-Za-zÁÉÍÓÚáéíóúñÑ]+\s+del?\s+\d{2,4}",
@@ -264,6 +264,11 @@ _POST_PATCHES = [
     (
         r"(labores propias y complementarias de)\s+(en raz[oó]n)",
         r"\1 {{ cargo }} \2",
+    ),
+    # Si quedó solo {{ cargo }} sin la coletilla del original
+    (
+        r"(labores propias y complementarias de\s*\{\{\s*cargo\s*\}\})\s*$",
+        r"\1 en razón de las causas objetivas mencionadas en la Cláusula anterior.",
     ),
 ]
 

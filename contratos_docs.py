@@ -131,6 +131,30 @@ def _fmt_sueldo(valor) -> str:
         return str(valor or "0.00")
 
 
+def _calcular_edad(fecha_nac, ref=None) -> int | None:
+    """Edad en años cumplidos a la fecha de referencia (hoy por defecto)."""
+    nac = _parse_fecha(fecha_nac)
+    if nac is None:
+        return None
+    hoy = _parse_fecha(ref) if ref not in (None, "") else datetime.now()
+    if hoy is None:
+        hoy = datetime.now()
+    edad = hoy.year - nac.year
+    if (hoy.month, hoy.day) < (nac.month, nac.day):
+        edad -= 1
+    return edad if edad >= 0 else None
+
+
+def _fmt_edad(edad_val, fecha_nac=None) -> str:
+    if edad_val not in (None, ""):
+        try:
+            return str(int(edad_val))
+        except (TypeError, ValueError):
+            pass
+    calc = _calcular_edad(fecha_nac)
+    return "" if calc is None else str(calc)
+
+
 def _parse_fecha(iso_or_val):
     if iso_or_val is None or iso_or_val == "":
         return None
@@ -234,6 +258,8 @@ def contexto_desde_fila(row: dict) -> dict:
         "ubigeo": str(r.get("ubigeo") or "").strip(),
         "nacionalidad": str(r.get("nacionalidad") or "").strip(),
         "sexo": str(r.get("sexo") or "").strip(),
+        "fecha_nacimiento": _fmt_fecha_display(r.get("fecha_nacimiento")),
+        "edad": _fmt_edad(r.get("edad"), r.get("fecha_nacimiento")),
         "cargo": str(r.get("cargo") or "").strip(),
         "centro_costo": str(r.get("centro_costo") or "").strip(),
         "modalidad": str(r.get("modalidad") or "").strip(),
@@ -475,6 +501,8 @@ MARCADORES_AYUDA = [
     ("ubigeo", "Código ubigeo PDT"),
     ("nacionalidad", "Nacionalidad"),
     ("sexo", "Sexo"),
+    ("fecha_nacimiento", "Fecha de nacimiento"),
+    ("edad", "Edad (años, según fecha de nacimiento)"),
     ("cargo", "Cargo"),
     ("centro_costo", "Centro de costo"),
     ("modalidad", "Modalidad de contrato"),
@@ -526,4 +554,5 @@ MARCADORES_LEGACY_MAP = {
     "FIRMACONTRATOTEXTO": "fecha_firma",
     "PERFILCONTABLE": "centro_costo",
     "MOVILIDAD": "movilidad",
+    "EDAD": "edad",
 }

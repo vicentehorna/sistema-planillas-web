@@ -20957,6 +20957,477 @@ def api_mef_interface_mccp_generar_txt():
     return resp
 
 
+# ---------------------------------------------------------------------------
+# Legajo Digital (demo PromPerú / hm_lumat2)
+# ---------------------------------------------------------------------------
+LEGAJO_UPLOAD_DIR = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    'uploads',
+    'legajos',
+)
+LEGAJO_MAX_BYTES = 8 * 1024 * 1024
+LEGAJO_EXTENSIONES = {'.pdf', '.jpg', '.jpeg', '.png'}
+
+
+def _legajo_safe_name(nombre):
+    base = os.path.basename(str(nombre or 'archivo'))
+    base = re.sub(r'[^A-Za-z0-9._\- ]+', '_', base).strip('._ ') or 'archivo'
+    return base[:180]
+
+
+def _legajo_ruta_absoluta(ruta_rel):
+    root = os.path.normpath(LEGAJO_UPLOAD_DIR)
+    full = os.path.normpath(os.path.join(
+        os.path.dirname(os.path.abspath(__file__)),
+        'uploads',
+        str(ruta_rel or '').replace('/', os.sep).lstrip(os.sep),
+    ))
+    if not full.startswith(root + os.sep) and full != root:
+        return None
+    return full
+
+
+@app.route('/rrhh/legajo-digital')
+@login_required
+def legajo_digital_page():
+    if not _es_bd_hm_lumat2():
+        flash('Legajo Digital solo está disponible en hm_lumat2.', 'warning')
+        return redirect(url_for('dashboard'))
+    return render_template('legajo_digital.html')
+
+
+@app.route('/api/rrhh/legajo-digital/secciones')
+@login_required
+def api_legajo_digital_secciones():
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT SeccionCode AS seccioncode, Nombre AS nombre, Orden AS orden
+            FROM PR_LegajoSeccion (NOLOCK)
+            WHERE Status = 'A'
+            ORDER BY Orden, SeccionCode
+            """
+        )
+        rows = _dicts_first_nonempty_resultset(cur)
+        return jsonify({
+            'rows': [{
+                'seccioncode': _jsonable_value(r.get('seccioncode')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'orden': int(r.get('orden') or 0),
+            } for r in rows]
+        })
+    except Exception as e:
+        logging.exception('api_legajo_digital_secciones')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/trabajadores', methods=['POST'])
+@login_required
+def api_legajo_digital_trabajadores():
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    busqueda = str(body.get('busqueda') or body.get('q') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '0').strip() or '0'
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT TOP 100
+                e.Person AS person,
+                LTRIM(RTRIM(
+                    ISNULL(p.LastName1, '') + ' ' +
+                    ISNULL(p.LastName2, '') + ' ' +
+                    ISNULL(p.Name1, '') + ' ' +
+                    ISNULL(p.Name2, '')
+                )) AS nombre,
+                ISNULL(p.DocumentNumber, e.Person) AS documento,
+                e.PayRollType AS payrolltype,
+                ISNULL(pt.Description, e.PayRollType) AS tipoplanilla
+            FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK) ON p.Person = e.Person
+            LEFT JOIN PR_PayRollType pt (NOLOCK)
+                ON pt.Company = e.Company AND pt.PayRollType = e.PayRollType
+            WHERE e.Company = ?
+              AND e.Status = 'N'
+              AND (? = '0' OR e.PayRollType = ?)
+              AND (
+                    ? = ''
+                    OR e.Person LIKE '%' + ? + '%'
+                    OR ISNULL(p.DocumentNumber, '') LIKE '%' + ? + '%'
+                    OR (
+                        ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' ' +
+                        ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
+                    ) LIKE '%' + ? + '%'
+              )
+            ORDER BY 2, 1
+            """,
+            (cia, payrolltype, payrolltype, busqueda, busqueda, busqueda, busqueda),
+        )
+        rows = _dicts_first_nonempty_resultset(cur)
+        return jsonify({
+            'rows': [{
+                'person': _jsonable_value(r.get('person')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'documento': _jsonable_value(r.get('documento')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+                'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+            } for r in rows],
+            'total': len(rows),
+        })
+    except Exception as e:
+        logging.exception('api_legajo_digital_trabajadores')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/trabajador')
+@login_required
+def api_legajo_digital_trabajador():
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    cia = str(request.args.get('cia') or '').strip()
+    person = str(request.args.get('person') or '').strip()
+    if not cia or not person:
+        return jsonify({'error': 'Indique compañía y trabajador.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT TOP 1
+                e.Person AS person,
+                LTRIM(RTRIM(
+                    ISNULL(p.LastName1, '') + ' ' +
+                    ISNULL(p.LastName2, '') + ' ' +
+                    ISNULL(p.Name1, '') + ' ' +
+                    ISNULL(p.Name2, '')
+                )) AS nombre,
+                ISNULL(p.DocumentNumber, e.Person) AS documento,
+                ISNULL(pos.Description, ISNULL(pos.Name, e.Position)) AS cargo,
+                e.PayRollType AS payrolltype,
+                ISNULL(pt.Description, e.PayRollType) AS tipoplanilla,
+                ISNULL(et.Description, e.EmployeeType) AS tipopersona
+            FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK) ON p.Person = e.Person
+            LEFT JOIN PR_PayRollType pt (NOLOCK)
+                ON pt.Company = e.Company AND pt.PayRollType = e.PayRollType
+            LEFT JOIN PR_Position pos (NOLOCK) ON pos.Position = e.Position
+            LEFT JOIN PR_EmployeeType et (NOLOCK) ON et.EmployeeType = e.EmployeeType
+            WHERE e.Company = ? AND e.Person = ?
+            """,
+            (cia, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cur)
+        if not rows:
+            return jsonify({'error': 'Trabajador no encontrado.'}), 404
+        r = rows[0]
+        return jsonify({
+            'trabajador': {
+                'person': _jsonable_value(r.get('person')),
+                'nombre': _jsonable_value(r.get('nombre')),
+                'documento': _jsonable_value(r.get('documento')),
+                'cargo': _jsonable_value(r.get('cargo')),
+                'payrolltype': _jsonable_value(r.get('payrolltype')),
+                'tipoplanilla': _jsonable_value(r.get('tipoplanilla')),
+                'tipopersona': _jsonable_value(r.get('tipopersona')),
+            }
+        })
+    except Exception as e:
+        logging.exception('api_legajo_digital_trabajador')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/documentos')
+@login_required
+def api_legajo_digital_documentos():
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    cia = str(request.args.get('cia') or '').strip()
+    person = str(request.args.get('person') or '').strip()
+    seccion = str(request.args.get('seccion') or '').strip().upper()
+    if not cia or not person:
+        return jsonify({'error': 'Indique compañía y trabajador.'}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT SeccionCode AS seccioncode, COUNT(*) AS total
+            FROM PR_LegajoDocumento (NOLOCK)
+            WHERE Company = ? AND Person = ?
+            GROUP BY SeccionCode
+            """,
+            (cia, person),
+        )
+        conteos = {
+            str(r.get('seccioncode') or '').upper(): int(r.get('total') or 0)
+            for r in _dicts_first_nonempty_resultset(cur)
+        }
+        rows = []
+        if seccion:
+            cur.execute(
+                """
+                SELECT
+                    IdDocumento AS iddocumento,
+                    SeccionCode AS seccioncode,
+                    TipoDocumento AS tipodocumento,
+                    NombreArchivo AS nombrearchivo,
+                    Institucion AS institucion,
+                    CONVERT(varchar(19), FechaCarga, 120) AS fechacarga,
+                    Estado AS estado,
+                    CONVERT(varchar(10), FechaEmision, 23) AS fechaemision
+                FROM PR_LegajoDocumento (NOLOCK)
+                WHERE Company = ? AND Person = ? AND SeccionCode = ?
+                ORDER BY FechaCarga DESC, IdDocumento DESC
+                """,
+                (cia, person, seccion),
+            )
+            rows = [{
+                'iddocumento': int(r.get('iddocumento') or 0),
+                'seccioncode': _jsonable_value(r.get('seccioncode')),
+                'tipodocumento': _jsonable_value(r.get('tipodocumento')),
+                'nombrearchivo': _jsonable_value(r.get('nombrearchivo')),
+                'institucion': _jsonable_value(r.get('institucion')),
+                'fechacarga': _jsonable_value(r.get('fechacarga')),
+                'estado': _jsonable_value(r.get('estado')),
+                'fechaemision': _jsonable_value(r.get('fechaemision')),
+            } for r in _dicts_first_nonempty_resultset(cur)]
+        return jsonify({'rows': rows, 'conteos': conteos})
+    except Exception as e:
+        logging.exception('api_legajo_digital_documentos')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/adjuntar', methods=['POST'])
+@login_required
+def api_legajo_digital_adjuntar():
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    cia = str(request.form.get('cia') or '').strip()
+    person = str(request.form.get('person') or '').strip()
+    seccion = str(request.form.get('seccion') or '').strip().upper()
+    tipo = str(request.form.get('tipo_documento') or '').strip() or 'Otro'
+    institucion = str(request.form.get('institucion') or '').strip() or None
+    fecha_emision = str(request.form.get('fecha_emision') or '').strip() or None
+    archivo = request.files.get('archivo')
+    if not cia or not person or not seccion:
+        return jsonify({'error': 'Faltan compañía, trabajador o sección.'}), 400
+    if not archivo or not getattr(archivo, 'filename', ''):
+        return jsonify({'error': 'Seleccione un archivo.'}), 400
+
+    nombre_orig = _legajo_safe_name(archivo.filename)
+    ext = os.path.splitext(nombre_orig)[1].lower()
+    if ext not in LEGAJO_EXTENSIONES:
+        return jsonify({'error': 'Solo se permiten PDF, JPG o PNG.'}), 400
+
+    contenido = archivo.read(LEGAJO_MAX_BYTES + 1)
+    if len(contenido) > LEGAJO_MAX_BYTES:
+        return jsonify({'error': 'El archivo supera los 8 MB.'}), 400
+    if not contenido:
+        return jsonify({'error': 'El archivo está vacío.'}), 400
+
+    if fecha_emision and not re.match(r'^\d{4}-\d{2}-\d{2}$', fecha_emision):
+        return jsonify({'error': 'Fecha de emisión inválida.'}), 400
+
+    xlastuser = str(getattr(current_user, 'id', None) or session.get('userid') or '')[:20] or None
+    stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    dest_dir = os.path.join(LEGAJO_UPLOAD_DIR, cia, person, seccion)
+    os.makedirs(dest_dir, exist_ok=True)
+    dest_name = f'{stamp}_{nombre_orig}'
+    dest_path = os.path.join(dest_dir, dest_name)
+    with open(dest_path, 'wb') as fh:
+        fh.write(contenido)
+    ruta_rel = f'legajos/{cia}/{person}/{seccion}/{dest_name}'.replace('\\', '/')
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT 1 FROM PR_Employee (NOLOCK) WHERE Company = ? AND Person = ?",
+            (cia, person),
+        )
+        if not cur.fetchone():
+            return jsonify({'error': 'Trabajador no encontrado.'}), 404
+        cur.execute(
+            "SELECT 1 FROM PR_LegajoSeccion (NOLOCK) WHERE SeccionCode = ? AND Status = 'A'",
+            (seccion,),
+        )
+        if not cur.fetchone():
+            return jsonify({'error': 'Sección de legajo no válida.'}), 400
+        cur.execute(
+            """
+            INSERT INTO PR_LegajoDocumento (
+                Company, Person, SeccionCode, TipoDocumento, NombreArchivo, RutaArchivo,
+                FechaEmision, Institucion, FechaCarga, Estado, XLastUser, XLastDate
+            )
+            OUTPUT INSERTED.IdDocumento AS iddocumento
+            VALUES (
+                ?, ?, ?, ?, ?, ?,
+                ?, ?, GETDATE(), 'VALIDADO', ?, GETDATE()
+            )
+            """,
+            (
+                cia, person, seccion, tipo[:100], nombre_orig, ruta_rel,
+                fecha_emision if fecha_emision else None,
+                (institucion[:200] if institucion else None),
+                xlastuser,
+            ),
+        )
+        row = cur.fetchone()
+        conn.commit()
+        id_doc = int(row[0]) if row and row[0] is not None else 0
+        return jsonify({'ok': True, 'iddocumento': id_doc, 'ruta': ruta_rel})
+    except Exception as e:
+        logging.exception('api_legajo_digital_adjuntar')
+        try:
+            if os.path.isfile(dest_path):
+                os.remove(dest_path)
+        except Exception:
+            pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/archivo/<int:id_documento>')
+@login_required
+def api_legajo_digital_archivo(id_documento):
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT NombreArchivo AS nombrearchivo, RutaArchivo AS rutaarchivo
+            FROM PR_LegajoDocumento (NOLOCK)
+            WHERE IdDocumento = ?
+            """,
+            (id_documento,),
+        )
+        rows = _dicts_first_nonempty_resultset(cur)
+        if not rows:
+            return jsonify({'error': 'Documento no encontrado.'}), 404
+        nombre = str(rows[0].get('nombrearchivo') or 'archivo')
+        ruta_rel = str(rows[0].get('rutaarchivo') or '')
+        full = _legajo_ruta_absoluta(ruta_rel)
+        if not full or not os.path.isfile(full):
+            return jsonify({'error': 'Archivo no encontrado en disco.'}), 404
+        download = str(request.args.get('download') or '').strip() in ('1', 'Y', 'y', 'true')
+        ext = os.path.splitext(nombre)[1].lower()
+        mime = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+        }.get(ext, 'application/octet-stream')
+        return send_file(
+            full,
+            mimetype=mime,
+            as_attachment=download,
+            download_name=nombre if download else None,
+        )
+    except Exception as e:
+        logging.exception('api_legajo_digital_archivo')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/rrhh/legajo-digital/eliminar/<int:id_documento>', methods=['POST'])
+@login_required
+def api_legajo_digital_eliminar(id_documento):
+    denied = _require_hm_lumat2_json('Legajo Digital')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute(
+            """
+            SELECT RutaArchivo AS rutaarchivo
+            FROM PR_LegajoDocumento (NOLOCK)
+            WHERE IdDocumento = ?
+            """,
+            (id_documento,),
+        )
+        rows = _dicts_first_nonempty_resultset(cur)
+        if not rows:
+            return jsonify({'error': 'Documento no encontrado.'}), 404
+        ruta_rel = str(rows[0].get('rutaarchivo') or '')
+        cur.execute('DELETE FROM PR_LegajoDocumento WHERE IdDocumento = ?', (id_documento,))
+        conn.commit()
+        full = _legajo_ruta_absoluta(ruta_rel)
+        if full and os.path.isfile(full):
+            try:
+                os.remove(full)
+            except Exception:
+                logging.exception('legajo: no se pudo borrar archivo físico')
+        return jsonify({'ok': True})
+    except Exception as e:
+        logging.exception('api_legajo_digital_eliminar')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/plame/por-trabajador')
 @login_required
 def plame_por_trabajador_page():

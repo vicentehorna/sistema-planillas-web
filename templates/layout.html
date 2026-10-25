@@ -959,6 +959,19 @@
                 </li>
                 {% endif %}
 
+                {% set es_lumat2_rrhh = (sql_database or '')|lower == 'hm_lumat2' %}
+                {% set show_rrhh = es_lumat2_rrhh and can_menu('legajo_digital') %}
+                {% if show_rrhh %}
+                <li class="py-0">
+                    <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Recursos Humanos</p>
+                </li>
+                <li class="{{ 'active' if request.endpoint == 'legajo_digital_page' else '' }}">
+                    <a href="{{ url_for('legajo_digital_page') }}" title="Legajo Digital">
+                        <i class="bi bi-folder-symlink"></i><span class="sidebar-link-text">Legajo Digital</span>
+                    </a>
+                </li>
+                {% endif %}
+
                 <li class="py-0">
                     <p class="sidebar-section-title px-3 mt-4 mb-0 text-uppercase fw-bold opacity-50">Procesos</p>
                 </li>

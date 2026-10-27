@@ -474,8 +474,14 @@ def _build_detail_lines(
     for r in epc_rows:
         vlo = _r2(r.get("valuelo"))
         vex = _r2(r.get("valueex"))
-        if vlo == 0 or vex == 0:
-            continue
+        # No exigir ambas monedas: conceptos sin ConceptValueEx (NULL/0) igual deben
+        # entrar; el importe en la otra moneda se calcula con el TC del voucher.
+        if currency == "LO":
+            if vlo == 0:
+                continue
+        else:
+            if vex == 0:
+                continue
         credit_acc = _null_if_empty(r.get("creditaccount"))
         debit_acc = _null_if_empty(r.get("debitaccount"))
         common = dict(

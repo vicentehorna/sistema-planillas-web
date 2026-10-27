@@ -33,6 +33,20 @@
         box-shadow: 0 1px 0 #dee2e6;
     }
 
+    .table-ic-import thead th.th-sort {
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .table-ic-import thead th.th-sort:hover {
+        background-color: #e4eaf2;
+    }
+
+    .table-ic-import thead th.th-sort .sort-ind {
+        margin-left: 0.25rem;
+        color: #0d6efd;
+    }
+
     .table-ic-import .col-num {
         text-align: right;
     }
@@ -265,6 +279,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     let plantillaPorCia = {};
     let companiasMap = new Map();
     let listaCompanias = [];
+    const ordenImport = { key: '', dir: 1 };
+    const collatorEs = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -438,6 +454,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function limpiarGrilla(mensaje) {
         filasImportadas = [];
+        ordenImport.key = '';
+        ordenImport.dir = 1;
         archivoActual = '';
         lblArchivoExcel.textContent = 'Ningún archivo seleccionado';
         lblTotalRegistros.textContent = '0';
@@ -448,6 +466,66 @@ document.addEventListener('DOMContentLoaded', async function () {
         placeholderGrilla.textContent = mensaje || 'Seleccione compañía, tipo planilla, periodo y plantilla. Luego importe el archivo Excel.';
         inpArchivoExcel.value = '';
         actualizarEstadoImportar();
+    }
+
+    function compararValoresImport(a, b) {
+        const vacioA = a === null || a === undefined || a === '';
+        const vacioB = b === null || b === undefined || b === '';
+        if (vacioA || vacioB) return vacioA === vacioB ? 0 : (vacioA ? 1 : -1);
+        if (typeof a === 'number' && typeof b === 'number') return a - b;
+        const na = Number(String(a).replace(/,/g, '').trim());
+        const nb = Number(String(b).replace(/,/g, '').trim());
+        if (String(a).trim() !== '' && String(b).trim() !== ''
+            && Number.isFinite(na) && Number.isFinite(nb)
+            && /^-?\d+(\.\d+)?$/.test(String(a).replace(/,/g, '').trim())
+            && /^-?\d+(\.\d+)?$/.test(String(b).replace(/,/g, '').trim())) {
+            return na - nb;
+        }
+        return collatorEs.compare(String(a).trim(), String(b).trim());
+    }
+
+    function valorColumnaImport(row, key, pos) {
+        if (key === 'num') return pos;
+        if (key === 'empresa') return row.company_name || nombreEmpresa(row.company) || row.company || '';
+        if (key === 'dni') return row.dni || '';
+        if (key === 'nombre') return row.nombre || '';
+        if (key === 'estado') return row.estado || '';
+        if (key === 'mensaje') return row.mensaje || '';
+        if (key && key.charAt(0) === 'c') {
+            const idx = Number(key.slice(1));
+            return Number.isFinite(idx) ? ((row.conceptos || [])[idx] || '') : '';
+        }
+        return '';
+    }
+
+    function filasOrdenadasImport() {
+        const filas = filasImportadas || [];
+        if (!ordenImport.key) return filas.map((fila, pos) => ({ fila, pos }));
+        const key = ordenImport.key;
+        return filas
+            .map((fila, pos) => ({ fila, pos }))
+            .sort((x, y) => {
+                const va = valorColumnaImport(x.fila, key, x.pos);
+                const vb = valorColumnaImport(y.fila, key, y.pos);
+                return (compararValoresImport(va, vb) * ordenImport.dir) || (x.pos - y.pos);
+            });
+    }
+
+    function actualizarIndicadoresOrdenImport() {
+        theadImportacion.querySelectorAll('th.th-sort').forEach((th) => {
+            const key = th.getAttribute('data-sort-key') || '';
+            const activo = key && key === ordenImport.key;
+            const ind = th.querySelector('.sort-ind');
+            if (ind) ind.textContent = activo ? (ordenImport.dir === 1 ? '▲' : '▼') : '';
+            th.title = activo
+                ? (ordenImport.dir === 1 ? 'Orden ascendente (clic para descendente)' : 'Orden descendente (clic para ascendente)')
+                : 'Clic para ordenar por esta columna';
+        });
+    }
+
+    function thSort(label, key, extraClass) {
+        const cls = ['th-sort', extraClass || ''].filter(Boolean).join(' ');
+        return `<th class="${cls}" data-sort-key="${escHtml(key)}">${escHtml(label)}<span class="sort-ind"></span></th>`;
     }
 
     function actualizarEstadoImportar() {
@@ -502,23 +580,30 @@ document.addEventListener('DOMContentLoaded', async function () {
             return;
         }
 
+        const keysValidas = new Set(['num', 'dni', 'nombre', 'estado', 'mensaje']);
+        if (modoTodasEmpresas) keysValidas.add('empresa');
+        plantillaDetalle.forEach((_, idx) => keysValidas.add(`c${idx}`));
+        if (ordenImport.key && !keysValidas.has(ordenImport.key)) {
+            ordenImport.key = '';
+            ordenImport.dir = 1;
+        }
+
         const conceptHeaders = plantillaDetalle.map((_, idx) => tituloConcepto(idx));
-        const colEmpresa = modoTodasEmpresas
-            ? '<th>Empresa</th>'
-            : '';
+        const colEmpresa = modoTodasEmpresas ? thSort('Empresa', 'empresa') : '';
         theadImportacion.innerHTML = `
             <tr>
-                <th>#</th>
+                ${thSort('#', 'num', 'text-center')}
                 ${colEmpresa}
-                <th>DNI</th>
-                <th>Nombre</th>
-                <th>Estado</th>
-                <th>Mensaje</th>
-                ${conceptHeaders.map((h) => `<th class="col-num">${escHtml(h)}</th>`).join('')}
+                ${thSort('DNI', 'dni')}
+                ${thSort('Nombre', 'nombre')}
+                ${thSort('Estado', 'estado')}
+                ${thSort('Mensaje', 'mensaje')}
+                ${conceptHeaders.map((h, idx) => thSort(h, `c${idx}`, 'col-num')).join('')}
             </tr>
         `;
+        actualizarIndicadoresOrdenImport();
 
-        tbodyImportacion.innerHTML = filasImportadas.map((row, idx) => {
+        tbodyImportacion.innerHTML = filasOrdenadasImport().map(({ fila: row }, idx) => {
             let estadoClass = 'ic-estado-pendiente';
             if (row.estado === 'OK') estadoClass = 'ic-estado-ok';
             else if (row.estado === 'Procesado') estadoClass = 'ic-estado-procesado';
@@ -1038,6 +1123,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         const hayDuplicados = marcarDuplicadosDni(filasImportadas);
 
+        ordenImport.key = '';
+        ordenImport.dir = 1;
         archivoActual = file.name;
         lblArchivoExcel.textContent = archivoActual;
         renderGrilla();
@@ -1212,6 +1299,20 @@ document.addEventListener('DOMContentLoaded', async function () {
         } catch (err) {
             alert(err.message || 'Error al cargar la plantilla.');
         }
+    });
+
+    theadImportacion.addEventListener('click', (e) => {
+        const th = e.target.closest('th.th-sort');
+        if (!th || !filasImportadas.length) return;
+        const key = th.getAttribute('data-sort-key') || '';
+        if (!key) return;
+        if (ordenImport.key === key) {
+            ordenImport.dir = -ordenImport.dir;
+        } else {
+            ordenImport.key = key;
+            ordenImport.dir = 1;
+        }
+        renderGrilla();
     });
 
     btnImportarExcel.addEventListener('click', () => {

@@ -1,5 +1,5 @@
 /*
-    Menú CTS → Archivo Continental (BBVA).
+    Menú CTS → Archivo Continental (BBVA) — todas las BD cliente.
     Idempotente. Misma audiencia que Archivo Telecrédito CTS.
 */
 SET NOCOUNT ON;

@@ -1,5 +1,5 @@
 /*
-    Menú CTS → Archivo Telecrédito (hm_ultra, hm_ngservicios).
+    Menú CTS → Archivo Telecrédito (todas las BD cliente).
     Idempotente.
 */
 SET NOCOUNT ON;

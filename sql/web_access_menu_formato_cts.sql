@@ -1,5 +1,5 @@
 /*
-    Menú CTS → Formato de CTS (hm_ultra, hm_ngservicios).
+    Menú CTS → Formato de CTS (todas las BD cliente).
     Idempotente.
 */
 SET NOCOUNT ON;

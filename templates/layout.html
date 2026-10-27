@@ -1582,7 +1582,7 @@
                 {% endif %}
 
                 {% set cts_active = request.endpoint in ('formato_cts_page', 'telecredito_cts_page', 'continental_cts_page') %}
-                {% set show_cts = (es_ultraseguros or es_ngservicios) and (can_menu('formato_cts') or can_menu('telecredito_cts') or can_menu('continental_cts')) %}
+                {% set show_cts = can_menu('formato_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') %}
                 {% if show_cts %}
                 <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
                     <a href="#submenuCts"

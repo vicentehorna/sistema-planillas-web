@@ -262,9 +262,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         return String(valor);
     }
 
-    /** Coincide con columnas fijas del backend: 14 detalle / 3 agrupado C.Costo.
-        Pago de CTS informa num_cols_fijas (omite AFP, costo, tipo de pago, perfil y horas). */
-    const NUM_COLS_FIJAS_DETALLE = 14;
+    /** Coincide con columnas fijas del backend: 12 detalle (sin TipoPago/Horas) / 3 agrupado C.Costo.
+        Backend informa num_cols_fijas (CTS y hm_ngservicios omiten columnas adicionales). */
+    const NUM_COLS_FIJAS_DETALLE = 12;
     const NUM_COLS_FIJAS_AGRUPADO = 3;
     const ES_HM_DIVISA = String({{ (sql_database or '')|tojson }}).toLowerCase() === 'hm_divisa';
     let modoAgrupadoActivo = false;

@@ -30550,14 +30550,37 @@ _PLANILLA_VERTICAL_CTS_OMIT_KEYS = frozenset({
     'profile',
     'horas',
 })
+# Todas las BD: no mostrar TipoPago ni Horas en el detalle.
+_PLANILLA_VERTICAL_ALWAYS_OMIT_KEYS = frozenset({
+    'tipopago',
+    'horas',
+})
+# hm_ngservicios: además omitir C.Costo y Cod.Costo.
+_PLANILLA_VERTICAL_NGSERVICIOS_OMIT_KEYS = frozenset({
+    'ccname',
+    'costcenter',
+})
+
+
+def _es_bd_hm_ngservicios():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_ngservicios'
+    except Exception:
+        return False
 
 
 def _planilla_vertical_columnas_estaticas(omitir_pago_cts=False):
-    """Cabeceras y claves del detalle. En Pago de CTS omite AFP, costo, tipo de pago, perfil y horas."""
+    """Cabeceras y claves del detalle (omite TipoPago/Horas siempre; C.Costo/Cod.Costo en ngservicios; más omisiones en CTS)."""
+    omit = set(_PLANILLA_VERTICAL_ALWAYS_OMIT_KEYS)
+    if omitir_pago_cts:
+        omit |= _PLANILLA_VERTICAL_CTS_OMIT_KEYS
+    if _es_bd_hm_ngservicios():
+        omit |= _PLANILLA_VERTICAL_NGSERVICIOS_OMIT_KEYS
     headers = []
     keys = []
     for header, key in zip(_PLANILLA_VERTICAL_STATIC_HEADERS_ES, _PLANILLA_VERTICAL_STATIC_KEYS):
-        if omitir_pago_cts and key in _PLANILLA_VERTICAL_CTS_OMIT_KEYS:
+        if key in omit:
             continue
         headers.append(header)
         keys.append(key)

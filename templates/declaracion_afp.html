@@ -137,6 +137,9 @@
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarAfpnet" disabled>
                     <i class="bi bi-file-earmark-excel"></i> Generar Archivo AFPnet
                 </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelAfp" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
                 <span class="ms-auto text-muted small fw-bold">
                     Registros: <span id="lblRowCountAfp">0</span>
                 </span>
@@ -233,6 +236,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_declaracion_afp_listado') | tojson }};
@@ -421,6 +425,101 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('lblRowCountAfp').textContent = String(total);
         document.getElementById('btnGenerarAfpnet').disabled = !hayRegistros;
         document.getElementById('btnValidarAfpnet').disabled = !hayRegistros;
+        const btnExcel = document.getElementById('btnExportExcelAfp');
+        if (btnExcel) btnExcel.disabled = !hayRegistros;
+    }
+
+    function numExcel(valor) {
+        const n = Number(valor);
+        return Number.isFinite(n) ? n : 0;
+    }
+
+    async function exportarListadoExcel() {
+        if (!lastRowsAfp.length) {
+            alert('Consulte el listado antes de exportar.');
+            return;
+        }
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel.');
+            return;
+        }
+        const btn = document.getElementById('btnExportExcelAfp');
+        const textoOriginal = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Exportando...';
+        }
+        try {
+            const wb = new ExcelJS.Workbook();
+            const ws = wb.addWorksheet('Planilla AFPnet');
+            ws.columns = [
+                { header: 'N°', key: 'nro', width: 6 },
+                { header: 'AFP', key: 'afp', width: 22 },
+                { header: 'Código', key: 'codigo', width: 14 },
+                { header: 'CUSSP', key: 'cuspp', width: 14 },
+                { header: 'DNI', key: 'dni', width: 12 },
+                { header: 'Apellido Paterno', key: 'apepat', width: 18 },
+                { header: 'Apellido Materno', key: 'apemat', width: 18 },
+                { header: 'Nombres', key: 'nombres', width: 22 },
+                { header: 'Mov. de Personal', key: 'mov', width: 14 },
+                { header: 'Remuneración Asegurable', key: 'remuneracion', width: 16 },
+                { header: 'Aporte Obligatorio', key: 'aporte_obl', width: 14 },
+                { header: 'Aporte Empleador', key: 'aporte_emp', width: 14 },
+                { header: 'Total Fondo de Pensiones', key: 'fondo', width: 16 },
+                { header: 'Seguros', key: 'seguro', width: 12 },
+                { header: 'Comisión % sobre RA', key: 'comision', width: 14 },
+                { header: 'Total Ret.', key: 'total_ret', width: 12 },
+                { header: 'Ap. Riesgo Trab', key: 'riesgo_trab', width: 14 },
+                { header: 'Ap. Riesgo Emp', key: 'riesgo_emp', width: 14 },
+            ];
+            ws.getRow(1).font = { bold: true };
+            lastRowsAfp.forEach((row, index) => {
+                ws.addRow({
+                    nro: index + 1,
+                    afp: row.afp_description || '',
+                    codigo: row.person || '',
+                    cuspp: row.cuspp || '',
+                    dni: row.documentnumber || '',
+                    apepat: row.lastname1 || '',
+                    apemat: row.lastname2 || '',
+                    nombres: row.names || '',
+                    mov: row.fecha_cese || '',
+                    remuneracion: numExcel(row.remuneracion),
+                    aporte_obl: numExcel(row.aporte_obligatorio),
+                    aporte_emp: numExcel(row.aporte_empleador),
+                    fondo: numExcel(row.total_fondo_pensiones),
+                    seguro: numExcel(row.seguro),
+                    comision: numExcel(row.comision),
+                    total_ret: numExcel(row.total_retenciones),
+                    riesgo_trab: numExcel(row.aporte_riesgo_trab),
+                    riesgo_emp: numExcel(row.aporte_riesgo_emp),
+                });
+            });
+            [
+                'remuneracion', 'aporte_obl', 'aporte_emp', 'fondo', 'seguro',
+                'comision', 'total_ret', 'riesgo_trab', 'riesgo_emp',
+            ].forEach((col) => {
+                ws.getColumn(col).numFmt = '#,##0.00';
+            });
+            const buf = await wb.xlsx.writeBuffer();
+            const blob = new Blob([buf], {
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            });
+            const a = document.createElement('a');
+            const period = String(document.getElementById('cboPeriodo').value || '').trim() || 'periodo';
+            a.href = URL.createObjectURL(blob);
+            a.download = `planilla_afpnet_${period}.xlsx`;
+            a.click();
+            URL.revokeObjectURL(a.href);
+        } catch (err) {
+            console.error(err);
+            alert('Error al exportar a Excel.');
+        } finally {
+            if (btn) {
+                btn.innerHTML = textoOriginal;
+                actualizarContadores();
+            }
+        }
     }
 
     function resumenTieneDiferencias(resumen) {
@@ -765,6 +864,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('lblRowCountAfp').textContent = '0';
         document.getElementById('btnGenerarAfpnet').disabled = true;
         document.getElementById('btnValidarAfpnet').disabled = true;
+        const btnExcelReset = document.getElementById('btnExportExcelAfp');
+        if (btnExcelReset) btnExcelReset.disabled = true;
         document.getElementById('tfoot-declaracion-afp').innerHTML = '';
         document.getElementById('cardValidacionesAfp').classList.add('d-none');
         document.getElementById('cardResumenAfpnet').classList.add('d-none');
@@ -903,6 +1004,10 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     document.getElementById('btnValidarAfpnet').addEventListener('click', ejecutarValidacion);
     document.getElementById('btnGenerarAfpnet').addEventListener('click', generarArchivoAfpnet);
+    const btnExportExcelAfp = document.getElementById('btnExportExcelAfp');
+    if (btnExportExcelAfp) {
+        btnExportExcelAfp.addEventListener('click', exportarListadoExcel);
+    }
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         await onCompaniaChange(this.value.trim());

@@ -10436,36 +10436,114 @@ def _importacion_conceptos_concept_por_formulacode(cursor, cia, formulacode, con
     return concept
 
 
-def _importacion_conceptos_pairs_from_body(body):
+def _importacion_conceptos_norm_desc(value):
+    s = str(value or '').strip().upper()
+    if not s:
+        return ''
+    # Quitar acentos básicos (mismo criterio que normHeader del front).
+    repl = (
+        ('Á', 'A'), ('É', 'E'), ('Í', 'I'), ('Ó', 'O'), ('Ú', 'U'),
+        ('Ü', 'U'), ('Ñ', 'N'),
+    )
+    for a, b in repl:
+        s = s.replace(a, b)
+    return ' '.join(s.split())
+
+
+def _importacion_conceptos_payroll_desc_from_body(body):
+    """Descripción de tipo planilla (p.ej. EMPLEADO) para modo Todas."""
+    for key in ('payroll_desc', 'payrolltype_desc', 'tipo_planilla', 'tipoplanilla'):
+        desc = _importacion_conceptos_norm_desc(body.get(key))
+        if desc:
+            return desc
+    # En modo Todas el front a veces manda la descripción en payrolltype.
+    pt = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    if pt and not any(ch.isdigit() for ch in pt):
+        return _importacion_conceptos_norm_desc(pt)
+    return ''
+
+
+def _importacion_conceptos_pairs_from_desc(cursor, payroll_desc):
+    desc = _importacion_conceptos_norm_desc(payroll_desc)
+    if not desc:
+        return []
+    cursor.execute(
+        """
+        SELECT
+            LTRIM(RTRIM(pt.Company)) AS company,
+            LTRIM(RTRIM(pt.PayRollType)) AS payrolltype
+        FROM PR_PayRollType pt (NOLOCK)
+        WHERE UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) = ?
+           OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) = ?
+        ORDER BY pt.Company
+        """,
+        (desc, desc),
+    )
+    pairs = []
+    seen = set()
+    for row in cursor.fetchall() or []:
+        comp = str(row[0] or '').strip()
+        pt = str(row[1] or '').strip()
+        if not comp or not pt:
+            continue
+        key = (comp, pt)
+        if key in seen:
+            continue
+        seen.add(key)
+        pairs.append(key)
+    return pairs
+
+
+def _importacion_conceptos_pairs_from_body(body, cursor=None):
     todas = str(body.get('todas_empresas') or body.get('todas') or 'N').strip().upper() in (
         'Y', 'S', '1', 'TRUE', 'SI'
     )
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
     payrolltype_por_cia = body.get('payrolltype_por_cia') or {}
+    payroll_desc = _importacion_conceptos_payroll_desc_from_body(body)
 
     pairs = []
     if todas:
-        if isinstance(payrolltype_por_cia, dict):
+        # Fuente de verdad: resolver en BD por descripción (evita mapa incompleto del browser).
+        if cursor is not None and payroll_desc:
+            pairs = _importacion_conceptos_pairs_from_desc(cursor, payroll_desc)
+        if not pairs and isinstance(payrolltype_por_cia, dict):
             for comp, pt in payrolltype_por_cia.items():
                 comp_s = str(comp or '').strip()
                 pt_s = str(pt or '').strip()
                 if comp_s and pt_s:
                     pairs.append((comp_s, pt_s))
+        if not pairs and cursor is not None and cia and payrolltype:
+            # Derivar descripción desde la compañía de referencia y expandir a todas.
+            cursor.execute(
+                """
+                SELECT TOP 1
+                    LTRIM(RTRIM(ISNULL(Description, ShortName)))
+                FROM PR_PayRollType (NOLOCK)
+                WHERE Company = ? AND LTRIM(RTRIM(PayRollType)) = ?
+                """,
+                (cia, payrolltype),
+            )
+            row = cursor.fetchone()
+            derived = _importacion_conceptos_norm_desc(row[0] if row else '')
+            if derived:
+                pairs = _importacion_conceptos_pairs_from_desc(cursor, derived)
+                payroll_desc = derived
         if not pairs:
-            return todas, [], 'No hay tipos de planilla configurados para las empresas.'
+            return todas, [], payroll_desc, 'No hay tipos de planilla configurados para las empresas.'
     else:
         if not cia:
-            return todas, [], 'Seleccione una compañía.'
+            return todas, [], payroll_desc, 'Seleccione una compañía.'
         if not payrolltype:
-            return todas, [], 'Seleccione un tipo de planilla.'
+            return todas, [], payroll_desc, 'Seleccione un tipo de planilla.'
         pairs = [(cia, payrolltype)]
-    return todas, pairs, None
+    return todas, pairs, payroll_desc, None
 
 
-def _importacion_conceptos_fetch_trabajadores(cursor, pairs):
-    records = []
-    for comp, pt in pairs:
+def _importacion_conceptos_fetch_trabajadores(cursor, pairs, payroll_desc=None):
+    desc = _importacion_conceptos_norm_desc(payroll_desc)
+    if desc:
         cursor.execute(
             """
             SELECT
@@ -10480,8 +10558,35 @@ def _importacion_conceptos_fetch_trabajadores(cursor, pairs):
                     ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' ' +
                     ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
                 )) AS nombre
-            FROM PR_Employee e
-            INNER JOIN SY_Person p ON e.Person = p.Person
+            FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK) ON e.Person = p.Person
+            INNER JOIN PR_PayRollType pt (NOLOCK)
+                ON pt.Company = e.Company AND pt.PayRollType = e.PayRollType
+            WHERE UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) = ?
+               OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) = ?
+            """,
+            (desc, desc),
+        )
+        return _dicts_first_nonempty_resultset(cursor)
+
+    records = []
+    for comp, pt in pairs or []:
+        cursor.execute(
+            """
+            SELECT
+                LTRIM(RTRIM(p.DocumentNumber)) AS dni,
+                e.Company AS company,
+                e.Person AS person,
+                LTRIM(RTRIM(e.EmployeeCode)) AS codigo,
+                e.PayRollType AS payrolltype,
+                e.Status AS status,
+                e.CeaseDate AS ceasedate,
+                LTRIM(RTRIM(
+                    ISNULL(p.LastName1, '') + ' ' + ISNULL(p.LastName2, '') + ' ' +
+                    ISNULL(p.Name1, '') + ' ' + ISNULL(p.Name2, '')
+                )) AS nombre
+            FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person p (NOLOCK) ON e.Person = p.Person
             WHERE e.Company = ? AND e.PayRollType = ?
             """,
             (comp, pt),
@@ -10555,26 +10660,30 @@ def _importacion_conceptos_resolver_mapa_trabajadores(records, company_names=Non
 def api_importacion_conceptos_mapa_trabajadores():
     """Mapa DNI → trabajador con Status activo (N); acepta cesados si no están inactivos."""
     body = request.get_json(silent=True) or {}
-    todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
-    if err:
-        return jsonify({"error": err}), 400
-
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        todas, pairs, payroll_desc, err = _importacion_conceptos_pairs_from_body(body, cursor=cursor)
+        if err:
+            return jsonify({"error": err}), 400
+
         cursor.execute("EXEC sp_pr_selectorcompanias_web")
         company_rows = cursor.fetchall()
         company_names = {
             str(r.Company or '').strip(): str(r.description or r.Company or '').strip()
             for r in company_rows
         }
-        records = _importacion_conceptos_fetch_trabajadores(cursor, pairs)
+        records = _importacion_conceptos_fetch_trabajadores(
+            cursor, pairs, payroll_desc=payroll_desc if todas else None
+        )
         mapa = _importacion_conceptos_resolver_mapa_trabajadores(records, company_names)
         return jsonify({
             "todas_empresas": todas,
             "mapa": mapa,
             "company_names": company_names,
+            "payroll_desc": payroll_desc,
+            "pares": len(pairs or []),
         })
     except Exception as e:
         logging.exception("api_importacion_conceptos_mapa_trabajadores")
@@ -10592,7 +10701,6 @@ def api_importacion_conceptos_mapa_trabajadores():
 def api_importacion_conceptos_procesar():
     """Registra importes del Excel en PR_EmployeeConcept (temporal o permanente, upsert)."""
     body = request.get_json(silent=True) or {}
-    todas, pairs, err = _importacion_conceptos_pairs_from_body(body)
     cia = str(body.get('cia') or body.get('company') or '').strip()
     payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
     period = _normalize_pr_period(body.get('period') or body.get('prperiod'))
@@ -10602,10 +10710,10 @@ def api_importacion_conceptos_procesar():
     if frecuencia not in ('T', 'P') or not _importacion_frecuencia_habilitada():
         frecuencia = 'T'
 
-    if err:
-        return jsonify({"error": err}), 400
-    if not period:
-        return jsonify({"error": "Seleccione un periodo."}), 400
+    # Validación preliminar sin cursor; el armado final de pares se hace con BD.
+    todas_flag = str(body.get('todas_empresas') or body.get('todas') or 'N').strip().upper() in (
+        'Y', 'S', '1', 'TRUE', 'SI'
+    )
     if not period:
         return jsonify({"error": "Seleccione un periodo."}), 400
     if not isinstance(conceptos_tpl, list) or not conceptos_tpl:
@@ -10628,7 +10736,7 @@ def api_importacion_conceptos_procesar():
     if not any(c.get('concept') or c.get('formulacode') for c in conceptos_tpl_norm):
         return jsonify({"error": "La plantilla no tiene conceptos válidos."}), 400
 
-    if not todas:
+    if not todas_flag:
         if not cia:
             return jsonify({"error": "Seleccione una compañía."}), 400
         if not payrolltype:
@@ -10648,6 +10756,12 @@ def api_importacion_conceptos_procesar():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+        todas, pairs, _payroll_desc, err = _importacion_conceptos_pairs_from_body(
+            body, cursor=cursor
+        )
+        if err:
+            return jsonify({"error": err}), 400
+        _ = pairs  # pares resueltos en servidor; las filas ya traen company/payrolltype
 
         for fila in filas:
             if not isinstance(fila, dict):

@@ -277,10 +277,22 @@ document.addEventListener('DOMContentLoaded', async function () {
     let modoTodasEmpresas = false;
     let payrolltypePorCia = {};
     let plantillaPorCia = {};
+    let tiposPlanillaAgregado = new Map();
     let companiasMap = new Map();
     let listaCompanias = [];
+    let cargandoFiltrosTodas = false;
     const ordenImport = { key: '', dir: 1 };
     const collatorEs = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+
+    function payrollDescSeleccionado() {
+        if (modoTodasEmpresas) {
+            const key = cboTipoPlanilla.value.trim();
+            if (key) return key;
+        }
+        const opt = cboTipoPlanilla.selectedOptions[0];
+        const text = opt ? String(opt.textContent || '').trim() : '';
+        return normHeader(text || cboTipoPlanilla.value.trim());
+    }
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -382,7 +394,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     function normalizarDni(value) {
         let s = cellText(value);
         if (/^\d+\.0$/.test(s)) s = s.slice(0, -2);
-        return s.replace(/\s+/g, '').trim();
+        s = s.replace(/\s+/g, '').trim();
+        // Excel a veces deja NBSP u otros no-dígitos invisibles.
+        if (/\d/.test(s) && /[^\d]/.test(s)) {
+            const digits = s.replace(/\D/g, '');
+            if (digits) s = digits;
+        }
+        return s;
     }
 
     function contarColumnasFila(row) {
@@ -529,7 +547,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function actualizarEstadoImportar() {
-        const filtrosOk = modoTodasEmpresas
+        const filtrosOk = !cargandoFiltrosTodas && (modoTodasEmpresas
             ? cboTipoPlanilla.value.trim()
                 && cboPeriodo.value.trim()
                 && cboPlantilla.value.trim()
@@ -538,7 +556,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 && cboTipoPlanilla.value.trim()
                 && cboPeriodo.value.trim()
                 && cboPlantilla.value.trim()
-                && plantillaDetalle.length > 0;
+                && plantillaDetalle.length > 0);
         btnImportarExcel.disabled = !filtrosOk;
 
         const filasValidas = filasImportadas.some((row) => row.estado === 'OK');
@@ -662,6 +680,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             todas_empresas: modoTodasEmpresas ? 'Y' : 'N',
             cia: cboCia.value.trim(),
             payrolltype: cboTipoPlanilla.value.trim(),
+            payroll_desc: payrollDescSeleccionado(),
             payrolltype_por_cia: payrolltypePorCia,
         };
         const data = await leerJson(await fetch(URL_TRABAJADORES_MAPA, {
@@ -676,9 +695,23 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         const mapa = new Map();
         Object.entries(data.mapa || {}).forEach(([dni, info]) => {
-            mapa.set(String(dni).trim(), info);
+            const key = String(dni || '').trim();
+            if (!key) return;
+            mapa.set(key, info);
+            const digits = key.replace(/\D/g, '');
+            if (digits && digits !== key && !mapa.has(digits)) mapa.set(digits, info);
         });
         return mapa;
+    }
+
+    function aplicarPayrolltypeAgregado(descKey) {
+        const key = normHeader(descKey);
+        const info = tiposPlanillaAgregado.get(key);
+        if (info && info.porCia && Object.keys(info.porCia).length) {
+            payrolltypePorCia = { ...info.porCia };
+            return true;
+        }
+        return false;
     }
 
     async function construirPayrolltypePorCiaDesdeSeleccion() {
@@ -688,9 +721,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             ? String(cboTipoPlanilla.selectedOptions[0].textContent || '').trim()
             : '';
 
-        payrolltypePorCia = {};
-        let descKey = normHeader(payrolltypeText);
+        let descKey = normHeader(payrolltypeText) || normHeader(payrolltype);
+        if (aplicarPayrolltypeAgregado(descKey)) return true;
 
+        const nuevoMapa = {};
         if (!descKey && cia && payrolltype) {
             const rows = await fetchTiposPlanillaCia(cia);
             const match = rows.find((item) => String(item.payrolltype || '').trim() === payrolltype);
@@ -698,7 +732,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 descKey = normHeader(String(match.description || match.shortname || '').trim());
             }
         }
-        if (!descKey) return false;
+        if (!descKey) {
+            payrolltypePorCia = {};
+            return false;
+        }
 
         for (const comp of companiasActivas()) {
             const rows = await fetchTiposPlanillaCia(comp);
@@ -707,8 +744,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return normHeader(desc) === descKey;
             });
             if (match) {
-                payrolltypePorCia[comp] = String(match.payrolltype || '').trim();
+                nuevoMapa[comp] = String(match.payrolltype || '').trim();
             }
+        }
+        payrolltypePorCia = nuevoMapa;
+        if (Object.keys(nuevoMapa).length) {
+            tiposPlanillaAgregado.set(descKey, {
+                description: payrolltypeText || descKey,
+                porCia: { ...nuevoMapa },
+            });
         }
         return Object.keys(payrolltypePorCia).length > 0;
     }
@@ -810,6 +854,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 });
             }
 
+            tiposPlanillaAgregado = agregado;
             cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
             Array.from(agregado.entries())
                 .sort((a, b) => a[1].description.localeCompare(b[1].description, 'es'))
@@ -867,25 +912,19 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (modoTodasEmpresas) {
             const key = cboTipoPlanilla.value.trim();
-            const opt = cboTipoPlanilla.selectedOptions[0];
-            if (!key || !opt) {
+            if (!key) {
                 cboPeriodo.disabled = false;
                 actualizarEstadoImportar();
                 return;
             }
-            payrolltypePorCia = {};
+            if (!aplicarPayrolltypeAgregado(key)) {
+                await construirPayrolltypePorCiaDesdeSeleccion();
+            }
             try {
                 const agregado = new Map();
-                const companies = companiasActivas();
-                for (const cia of companies) {
-                    const rows = await fetchTiposPlanillaCia(cia);
-                    const match = rows.find((item) => {
-                        const desc = String(item.description || item.shortname || '').trim();
-                        return normHeader(desc) === key;
-                    });
-                    if (!match) continue;
-                    const pt = String(match.payrolltype || '').trim();
-                    payrolltypePorCia[cia] = pt;
+                const entries = Object.entries(payrolltypePorCia || {});
+                for (const [cia, pt] of entries) {
+                    if (!cia || !pt) continue;
                     const periodos = await fetchPeriodosCia(cia, pt);
                     periodos.forEach((item) => {
                         const prperiod = String(item.prperiod || '').trim();
@@ -1100,7 +1139,9 @@ document.addEventListener('DOMContentLoaded', async function () {
         filasImportadas = dataRows.map((row) => {
             const dni = normalizarDni(row[0]);
             const nombreExcel = String(row[1] ?? '').trim();
-            const trabajador = mapaTrabajadores.get(dni) || null;
+            const trabajador = mapaTrabajadores.get(dni)
+                || (dni ? mapaTrabajadores.get(dni.replace(/\D/g, '')) : null)
+                || null;
             const nombre = nombreExcel || (trabajador && trabajador.ok ? trabajador.nombre : '');
             const conceptos = [];
             for (let i = 0; i < plantillaDetalle.length; i += 1) {
@@ -1166,6 +1207,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 todas_empresas: modoTodasEmpresas ? 'Y' : 'N',
                 cia: cboCia.value.trim(),
                 payrolltype: modoTodasEmpresas ? '' : cboTipoPlanilla.value.trim(),
+                payroll_desc: payrollDescSeleccionado(),
                 payrolltype_por_cia: modoTodasEmpresas ? payrolltypePorCia : undefined,
                 period: cboPeriodo.value.trim(),
                 frecuencia,
@@ -1221,38 +1263,67 @@ document.addEventListener('DOMContentLoaded', async function () {
             : '';
         const seleccionPlantillaValor = cboPlantilla.value.trim();
         const preservePlantilla = seleccionPlantillaTexto || seleccionPlantillaValor;
+        const preserveTipo = payrollDescSeleccionado()
+            || (cboTipoPlanilla.selectedOptions[0]
+                ? String(cboTipoPlanilla.selectedOptions[0].textContent || '').trim()
+                : cboTipoPlanilla.value.trim());
+        const preservePeriodo = cboPeriodo.value.trim();
 
         modoTodasEmpresas = !!chkTodasEmpresas.checked;
         cboCia.disabled = modoTodasEmpresas;
-        if (modoTodasEmpresas) {
-            cboCia.removeAttribute('required');
-            cboTipoPlanilla.disabled = false;
-            cboPeriodo.disabled = false;
-
-            const ok = await construirPayrolltypePorCiaDesdeSeleccion();
-            if (!ok) {
-                alert('No se pudo determinar el tipo de planilla para todas las empresas.');
-            } else {
-                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
-                if (cboPlantilla.value.trim()) {
-                    await cargarDetallePlantilla({ limpiarGrilla: false });
-                }
-            }
-        } else {
-            cboCia.setAttribute('required', 'required');
-            payrolltypePorCia = {};
-            plantillaPorCia = {};
-            plantillaDetallePorCia = {};
-            cboTipoPlanilla.disabled = false;
-            cboPeriodo.disabled = false;
-            if (cboCia.value.trim()) {
-                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
-                if (cboPlantilla.value.trim()) {
-                    await cargarDetallePlantilla({ limpiarGrilla: false });
-                }
-            }
-        }
+        cargandoFiltrosTodas = true;
         actualizarEstadoImportar();
+        try {
+            if (modoTodasEmpresas) {
+                cboCia.removeAttribute('required');
+                cboTipoPlanilla.disabled = false;
+                cboPeriodo.disabled = false;
+
+                await cargarTiposPlanilla();
+                const wantTipo = normHeader(preserveTipo);
+                if (wantTipo && optionExists(cboTipoPlanilla, wantTipo)) {
+                    cboTipoPlanilla.value = wantTipo;
+                } else if (wantTipo) {
+                    const opt = Array.from(cboTipoPlanilla.options).find((o) => {
+                        return normHeader(o.value) === wantTipo
+                            || normHeader(o.textContent) === wantTipo;
+                    });
+                    if (opt) cboTipoPlanilla.value = opt.value;
+                }
+
+                const ok = await construirPayrolltypePorCiaDesdeSeleccion();
+                if (!ok) {
+                    alert('No se pudo determinar el tipo de planilla para todas las empresas.');
+                    return;
+                }
+                await cargarPeriodos();
+                if (preservePeriodo && optionExists(cboPeriodo, preservePeriodo)) {
+                    cboPeriodo.value = preservePeriodo;
+                }
+                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
+                if (cboPlantilla.value.trim()) {
+                    await cargarDetallePlantilla({ limpiarGrilla: false });
+                }
+            } else {
+                cboCia.setAttribute('required', 'required');
+                payrolltypePorCia = {};
+                plantillaPorCia = {};
+                plantillaDetallePorCia = {};
+                tiposPlanillaAgregado = new Map();
+                cboTipoPlanilla.disabled = false;
+                cboPeriodo.disabled = false;
+                if (cboCia.value.trim()) {
+                    await cargarTiposPlanilla();
+                    await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
+                    if (cboPlantilla.value.trim()) {
+                        await cargarDetallePlantilla({ limpiarGrilla: false });
+                    }
+                }
+            }
+        } finally {
+            cargandoFiltrosTodas = false;
+            actualizarEstadoImportar();
+        }
     }
 
     chkTodasEmpresas.addEventListener('change', () => {
@@ -1280,6 +1351,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
             if (modoTodasEmpresas) {
                 await construirPayrolltypePorCiaDesdeSeleccion();
+                await cargarPeriodos();
                 await cargarPlantillas(preservePlantilla);
             } else {
                 await cargarPeriodos();

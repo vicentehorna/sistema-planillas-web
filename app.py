@@ -9960,13 +9960,9 @@ def plantillas_importacion_page():
     return render_template('carga_masiva_plantillas.html')
 
 
-# BDs donde la importación de conceptos permite elegir frecuencia Temporal/Permanente.
-_IMPORTACION_FRECUENCIA_DBS = frozenset({'hm_ngservicios'})
-
-
+# Importación de conceptos: selector Frecuencia (Temporal/Permanente) habilitado en todas las BD.
 def _importacion_frecuencia_habilitada():
-    from database import get_active_database
-    return str(get_active_database() or '').strip().lower() in _IMPORTACION_FRECUENCIA_DBS
+    return True
 
 
 @app.route('/carga-masiva/importacion-conceptos')

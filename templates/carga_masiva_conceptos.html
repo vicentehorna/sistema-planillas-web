@@ -877,22 +877,28 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (modoTodasEmpresas) {
             const companies = companiasActivas();
             if (!companies.length) {
+                cboTipoPlanilla.disabled = false;
+                cboPeriodo.disabled = false;
                 actualizarEstadoImportar();
                 return;
             }
 
             const agregado = new Map();
             for (const cia of companies) {
-                const rows = await fetchTiposPlanillaCia(cia);
-                rows.forEach((item) => {
-                    const desc = String(item.description || item.shortname || '').trim();
-                    const key = normHeader(desc);
-                    if (!key) return;
-                    if (!agregado.has(key)) {
-                        agregado.set(key, { description: desc, porCia: {} });
-                    }
-                    agregado.get(key).porCia[cia] = String(item.payrolltype || '').trim();
-                });
+                try {
+                    const rows = await fetchTiposPlanillaCia(cia);
+                    rows.forEach((item) => {
+                        const desc = String(item.description || item.shortname || '').trim();
+                        const key = normHeader(desc);
+                        if (!key) return;
+                        if (!agregado.has(key)) {
+                            agregado.set(key, { description: desc, porCia: {} });
+                        }
+                        agregado.get(key).porCia[cia] = String(item.payrolltype || '').trim();
+                    });
+                } catch (errCia) {
+                    console.warn('Tipos planilla no disponibles para', cia, errCia);
+                }
             }
 
             tiposPlanillaAgregado = agregado;
@@ -907,13 +913,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                     cboTipoPlanilla.appendChild(opt);
                 });
             payrolltypePorCia = {};
-            cboTipoPlanilla.disabled = agregado.size === 0;
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
             actualizarEstadoImportar();
             return;
         }
 
         const cia = cboCia.value.trim();
         if (!cia) {
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
             actualizarEstadoImportar();
             return;
         }
@@ -928,6 +937,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             },
         });
         cboTipoPlanilla.disabled = false;
+        cboPeriodo.disabled = false;
         actualizarEstadoImportar();
     }
 
@@ -1317,8 +1327,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         try {
             if (modoTodasEmpresas) {
                 cboCia.removeAttribute('required');
-                cboTipoPlanilla.disabled = false;
-                cboPeriodo.disabled = false;
 
                 await cargarTiposPlanilla();
                 const wantTipo = normHeader(preserveTipo);
@@ -1332,15 +1340,21 @@ document.addEventListener('DOMContentLoaded', async function () {
                     if (opt) cboTipoPlanilla.value = opt.value;
                 }
 
-                const ok = await construirPayrolltypePorCiaDesdeSeleccion();
-                if (!ok) {
-                    alert('No se pudo determinar el tipo de planilla para todas las empresas.');
-                    return;
+                /* Sin tipo elegido aún: dejar selects habilitados y esperar al usuario. */
+                if (cboTipoPlanilla.value.trim()) {
+                    const ok = await construirPayrolltypePorCiaDesdeSeleccion();
+                    if (!ok) {
+                        alert('No se pudo determinar el tipo de planilla para todas las empresas.');
+                    } else {
+                        await cargarPeriodos();
+                        if (preservePeriodo && optionExists(cboPeriodo, preservePeriodo)) {
+                            cboPeriodo.value = preservePeriodo;
+                        }
+                    }
+                } else {
+                    cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
                 }
-                await cargarPeriodos();
-                if (preservePeriodo && optionExists(cboPeriodo, preservePeriodo)) {
-                    cboPeriodo.value = preservePeriodo;
-                }
+
                 await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
                 if (cboPlantilla.value.trim()) {
                     await cargarDetallePlantilla({ limpiarGrilla: false });
@@ -1351,18 +1365,20 @@ document.addEventListener('DOMContentLoaded', async function () {
                 plantillaPorCia = {};
                 plantillaDetallePorCia = {};
                 tiposPlanillaAgregado = new Map();
-                cboTipoPlanilla.disabled = false;
-                cboPeriodo.disabled = false;
                 if (cboCia.value.trim()) {
                     await cargarTiposPlanilla();
                     await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
                     if (cboPlantilla.value.trim()) {
                         await cargarDetallePlantilla({ limpiarGrilla: false });
                     }
+                } else {
+                    resetFiltrosDependientes();
                 }
             }
         } finally {
             cargandoFiltrosTodas = false;
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
             actualizarEstadoImportar();
         }
     }

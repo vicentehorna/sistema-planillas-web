@@ -33653,7 +33653,7 @@ def api_prestamos_cambiar_estado_cuota():
 @app.route('/api/prestamos/guardar-cuotas', methods=['POST'])
 @login_required
 def api_prestamos_guardar_cuotas():
-    """sp_pr_prestamos_guardar_cuotas_web: guarda montos pendientes validando suma = préstamo."""
+    """sp_pr_prestamos_guardar_cuotas_web: guarda montos/periodo/proceso pendientes (suma = préstamo)."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or body.get('company') or '').strip()
     person = str(body.get('person') or '').strip()
@@ -33664,6 +33664,10 @@ def api_prestamos_guardar_cuotas():
     raw_cuotas = body.get('cuotas') or body.get('amortizaciones') or []
     if not isinstance(raw_cuotas, list):
         return jsonify({"error": "Indique la lista de cuotas."}), 400
+
+    def _norm_prperiod_cuota(raw):
+        s = re.sub(r'[^0-9]', '', str(raw or '').strip())
+        return s[:8] if len(s) >= 8 else ''
 
     cuotas = []
     for item in raw_cuotas:
@@ -33682,8 +33686,16 @@ def api_prestamos_guardar_cuotas():
         ).strip().upper()[:1]
         if proc not in ('F', 'G', 'V'):
             proc = 'F'
+        prperiod = _norm_prperiod_cuota(
+            item.get('prperiod') or item.get('period') or item.get('periodo') or ''
+        )
         if sec > 0:
-            cuotas.append({"secuence": sec, "amount": round(amt, 2), "proceso": proc})
+            cuotas.append({
+                "secuence": sec,
+                "amount": round(amt, 2),
+                "proceso": proc,
+                "prperiod": prperiod,
+            })
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -33695,6 +33707,8 @@ def api_prestamos_guardar_cuotas():
         return jsonify({"error": "Indique los montos de las cuotas pendientes."}), 400
     if any(c['amount'] <= 0 for c in cuotas):
         return jsonify({"error": "Cada cuota pendiente debe tener monto mayor a cero."}), 400
+    if any(not c['prperiod'] for c in cuotas):
+        return jsonify({"error": "Seleccione el periodo en todas las cuotas pendientes."}), 400
 
     conn = None
     try:
@@ -33708,7 +33722,8 @@ def api_prestamos_guardar_cuotas():
                 person,
                 loan_secuence,
                 '|'.join(
-                    f"{c['secuence']}:{c['amount']:.2f}:{c['proceso']}" for c in cuotas
+                    f"{c['secuence']}:{c['amount']:.2f}:{c['proceso']}:{c['prperiod']}"
+                    for c in cuotas
                 ),
                 _xlastuser_id(),
             ),

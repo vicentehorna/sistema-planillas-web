@@ -1,13 +1,16 @@
 /*
-    Guarda montos y proceso (flagliquidation) de varias cuotas pendientes de un
-    préstamo en una sola operación.
+    Guarda montos, proceso (flagliquidation) y periodo (PRperiod) de varias cuotas
+    pendientes de un préstamo en una sola operación.
     Valida que la suma de TODAS las cuotas (pagadas fijas + pendientes editadas)
     sea exactamente igual al importe del préstamo (LoadAmount).
     No modifica LoadAmount ni la cuenta corriente (solo redistribuye cuotas).
 
-    @cuotas_text: "secuence:amount:proceso|..."  — todas las pendientes
+    @cuotas_text: "secuence:amount:proceso:prperiod|..."  — todas las pendientes
       proceso: F=Fin de Mes, G=Gratificación, V=Vacaciones (default F)
-      Compatible con formato anterior "secuence:amount" (asume F).
+      prperiod: YYYYMMDD (también acepta YYYY-MM-DD)
+      Compatible con formatos anteriores:
+        "secuence:amount" (asume F y conserva periodo actual)
+        "secuence:amount:proceso" (conserva periodo actual)
 
     Usado por: POST /api/prestamos/guardar-cuotas
 */
@@ -32,16 +35,19 @@ BEGIN
         @cnt_edit       INT,
         @now            DATETIME,
         @work           VARCHAR(MAX),
-        @part           VARCHAR(120),
+        @part           VARCHAR(160),
         @pos            INT,
         @colon1         INT,
         @colon2         INT,
+        @colon3         INT,
         @sec_txt        VARCHAR(30),
         @amt_txt        VARCHAR(40),
         @proc_txt       VARCHAR(10),
+        @per_txt        VARCHAR(20),
         @sec_i          INT,
         @amt_n          NUMERIC(19, 4),
         @proc_c         CHAR(1),
+        @per_norm       VARCHAR(8),
         @msg_suma       NVARCHAR(400);
 
     SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
@@ -66,7 +72,8 @@ BEGIN
     CREATE TABLE #cuotas_edit (
         secuence         INT NOT NULL PRIMARY KEY,
         amount           NUMERIC(19, 4) NOT NULL,
-        flagliquidation  CHAR(1) NOT NULL
+        flagliquidation  CHAR(1) NOT NULL,
+        prperiod         VARCHAR(8) NULL
     );
 
     SET @work = @cuotas_text + '|';
@@ -81,19 +88,27 @@ BEGIN
         SET @colon1 = CHARINDEX(':', @part);
         IF @colon1 <= 1
         BEGIN
-            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso|...', 16, 1);
+            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso:periodo|...', 16, 1);
             RETURN;
         END;
 
         SET @sec_txt = LTRIM(RTRIM(SUBSTRING(@part, 1, @colon1 - 1)));
         SET @amt_txt = LTRIM(RTRIM(SUBSTRING(@part, @colon1 + 1, LEN(@part))));
         SET @proc_txt = 'F';
+        SET @per_txt = '';
 
         SET @colon2 = CHARINDEX(':', @amt_txt);
         IF @colon2 > 0
         BEGIN
             SET @proc_txt = LTRIM(RTRIM(SUBSTRING(@amt_txt, @colon2 + 1, LEN(@amt_txt))));
             SET @amt_txt = LTRIM(RTRIM(SUBSTRING(@amt_txt, 1, @colon2 - 1)));
+
+            SET @colon3 = CHARINDEX(':', @proc_txt);
+            IF @colon3 > 0
+            BEGIN
+                SET @per_txt = LTRIM(RTRIM(SUBSTRING(@proc_txt, @colon3 + 1, LEN(@proc_txt))));
+                SET @proc_txt = LTRIM(RTRIM(SUBSTRING(@proc_txt, 1, @colon3 - 1)));
+            END;
         END;
 
         SET @sec_i = NULL;
@@ -107,9 +122,21 @@ BEGIN
         IF @proc_c NOT IN ('F', 'G', 'V')
             SET @proc_c = 'F';
 
+        SET @per_norm = NULL;
+        IF @per_txt <> ''
+        BEGIN
+            SET @per_norm = REPLACE(REPLACE(LTRIM(RTRIM(@per_txt)), '-', ''), '/', '');
+            IF LEN(@per_norm) < 8 OR @per_norm LIKE '%[^0-9]%'
+            BEGIN
+                RAISERROR('Periodo de cuota inválido. Use YYYYMMDD o YYYY-MM-DD.', 16, 1);
+                RETURN;
+            END;
+            SET @per_norm = LEFT(@per_norm, 8);
+        END;
+
         IF @sec_i IS NULL OR @amt_n IS NULL
         BEGIN
-            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso|...', 16, 1);
+            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso:periodo|...', 16, 1);
             RETURN;
         END;
 
@@ -119,8 +146,8 @@ BEGIN
             RETURN;
         END;
 
-        INSERT INTO #cuotas_edit (secuence, amount, flagliquidation)
-        VALUES (@sec_i, @amt_n, @proc_c);
+        INSERT INTO #cuotas_edit (secuence, amount, flagliquidation, prperiod)
+        VALUES (@sec_i, @amt_n, @proc_c, @per_norm);
     END;
 
     IF EXISTS (SELECT 1 FROM #cuotas_edit WHERE amount <= 0)
@@ -234,6 +261,7 @@ BEGIN
                 ELSE e.amount
             END,
             flagliquidation = e.flagliquidation,
+            PRperiod = ISNULL(e.prperiod, ea.PRperiod),
             XLastUser = @xlastuser,
             XLastDate = @now
         FROM PR_EmployeeLoanAmortization ea

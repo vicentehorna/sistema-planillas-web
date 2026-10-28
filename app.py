@@ -1333,6 +1333,20 @@ def _es_cliente_alamo():
         return False
 
 
+def _es_cliente_maritima():
+    """True cuando la BD activa es hm_maritima."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_maritima'
+    except Exception:
+        return False
+
+
+def _usa_ingresos_config_formato_liquidacion():
+    """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima)."""
+    return _es_cliente_alamo() or _es_cliente_maritima()
+
+
 def _es_cliente_garc():
     """True cuando la BD activa es hm_garc (vacaciones truncas solo por días en liquidación)."""
     try:
@@ -7055,8 +7069,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
     x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
-    # hm_garc, hm_alamo y hm_zilicom: el formato solo muestra la fila de días.
-    solo_dias_vaca = _es_cliente_garc() or _es_cliente_alamo() or _es_cliente_zilicom()
+    # hm_garc, hm_alamo, hm_maritima y hm_zilicom: el formato solo muestra la fila de días.
+    solo_dias_vaca = (
+        _es_cliente_garc()
+        or _es_cliente_alamo()
+        or _es_cliente_maritima()
+        or _es_cliente_zilicom()
+    )
     total = x_dia if solo_dias_vaca else (x_anio + x_mes + x_dia)
 
     base_fmt = _formato_liquidacion_moneda(base)
@@ -7068,8 +7087,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
     indemnizacion_despido = _formato_liquidacion_fc_valor(formula_values, 'INDEMNIZACION_DESPID')
     otros_ingresos = _formato_liquidacion_fc_valor(formula_values, 'LIQ_OTROS_ING')
-    # hm_elclan, hm_alamo y hm_zilicom: en días de vacaciones truncas el divisor mostrado es 30.
-    divisor_dias_vaca = 30 if (_es_cliente_elclan() or _es_cliente_alamo() or _es_cliente_zilicom()) else 360
+    # hm_elclan, hm_alamo, hm_maritima y hm_zilicom: en días de vacaciones truncas el divisor mostrado es 30.
+    divisor_dias_vaca = 30 if (
+        _es_cliente_elclan()
+        or _es_cliente_alamo()
+        or _es_cliente_maritima()
+        or _es_cliente_zilicom()
+    ) else 360
 
     def _mostrar_ingreso(val):
         try:
@@ -7148,7 +7172,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
             (cia, payroll_type, period, person),
         )
         ingresos_cfg_conceptos = []
-        if _es_cliente_alamo():
+        if _usa_ingresos_config_formato_liquidacion():
             ingresos_cfg_conceptos = _fetch_conceptos_formato_liquidacion_ingresos(cursor, cia)
         descuentos_cfg_conceptos = _fetch_conceptos_formato_liquidacion(cursor, cia, 'D')
         formula_values = _fetch_formato_liquidacion_formulacodes(
@@ -7283,7 +7307,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'es_ngservicios': _es_cliente_ngservicios(),
         'es_ultraseguros': _es_cliente_ultraseguros(),
         'es_elclan': es_elclan,
-        'es_alamo': _es_cliente_alamo(),
+        'es_alamo': _usa_ingresos_config_formato_liquidacion(),
     }
 
 

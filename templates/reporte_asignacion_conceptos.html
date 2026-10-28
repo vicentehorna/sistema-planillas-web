@@ -1,0 +1,437 @@
+{% extends "layout.html" %}
+
+{% block title %}Asignación de Conceptos{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+    .table-asig-cons {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-asig-cons th,
+    .table-asig-cons td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+    .table-asig-cons thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+    .empresas-dropdown { min-width: 17rem; }
+    .empresas-lista { max-height: 16rem; overflow: auto; }
+    .empresas-lista .list-group-item {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <div class="mb-2">
+            <h5 class="mb-0">Asignación de Conceptos</h5>
+            <div class="small text-muted">Consolidado por empresas (hm_alamo). Misma información que la ventana de asignación.</div>
+        </div>
+        <form id="frmAsigConceptosCons" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label class="form-label small fw-bold text-muted">Empresas</label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm w-100 d-flex justify-content-between align-items-center"
+                            type="button" id="btnEmpresas" data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside" aria-expanded="false" disabled>
+                        <span id="lblEmpresasBtn" class="text-truncate">Cargando...</span>
+                        <i class="bi bi-chevron-down ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2 empresas-dropdown" aria-labelledby="btnEmpresas">
+                        <div class="form-check d-flex align-items-center gap-1 border-bottom pb-2 mb-2">
+                            <input class="form-check-input mt-0" type="checkbox" id="chkTodasEmpresas" checked>
+                            <label class="form-check-label small fw-bold" for="chkTodasEmpresas">Todas</label>
+                            <span class="ms-auto text-muted small" id="lblEmpresasCount">0/0</span>
+                        </div>
+                        <input type="text" id="txtBuscarEmpresa" class="form-control form-control-sm mb-2"
+                               placeholder="Buscar empresa..." autocomplete="off">
+                        <div id="panelEmpresas" class="empresas-lista list-group list-group-flush">
+                            <div class="text-center text-muted small py-2">Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Trabajador <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboTrabajador" class="form-select form-select-sm">
+                    <option value="">Todos (por defecto)</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboConcepto" class="form-label small fw-bold text-muted">Concepto <span class="fw-normal opacity-75">(opcional)</span></label>
+                <select id="cboConcepto" class="form-select form-select-sm" disabled>
+                    <option value="">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboUnidad" class="form-label small fw-bold text-muted">Unidad</label>
+                <select id="cboUnidad" class="form-select form-select-sm">
+                    <option value="0">Todas</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-3">ASIGNACIÓN DE CONCEPTOS</h4>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-asig-cons align-middle">
+                <thead id="theadAsig"></thead>
+                <tbody id="tbodyAsig"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_REPORTE = {{ url_for('reporte_asignacion_conceptos_post') | tojson }};
+    const IDX_MONTO = 6;
+
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+    const cboConcepto = document.getElementById('cboConcepto');
+    const cboUnidad = document.getElementById('cboUnidad');
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
+    const btnEmpresas = document.getElementById('btnEmpresas');
+    const txtBuscarEmpresa = document.getElementById('txtBuscarEmpresa');
+    const btnExportExcel = document.getElementById('btnExportExcel');
+    const cardResultado = document.getElementById('cardResultado');
+
+    let empresasData = [];
+    let ctrlEmpresas = null;
+    let lastExport = null;
+    let ciaConceptos = '';
+
+    const poblarSelect = CombosCarga.poblarSelect;
+
+    function escapeHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function fmtCelda(valor) {
+        if (valor === null || valor === undefined || valor === '') return '';
+        if (typeof valor === 'number' && Number.isFinite(valor)) {
+            return valor.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+        return String(valor);
+    }
+
+    function selectedText(id) {
+        const el = document.getElementById(id);
+        const opt = el && el.options[el.selectedIndex];
+        return opt ? opt.textContent.trim() : '';
+    }
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function primeraEmpresaSeleccionada() {
+        const sels = empresasSeleccionadas();
+        if (sels.length) return sels[0];
+        return empresasData.length ? String(empresasData[0].id || '').trim() : '';
+    }
+
+    function actualizarEtiquetaEmpresas() {
+        const total = empresasData.length;
+        const sel = empresasSeleccionadas().length;
+        document.getElementById('lblEmpresasCount').textContent = `${sel}/${total}`;
+        document.getElementById('lblEmpresasBtn').textContent = !total
+            ? 'Sin empresas'
+            : sel === total
+                ? `Todas las empresas (${total})`
+                : sel === 0
+                    ? 'Ninguna empresa'
+                    : `${sel} de ${total} empresas`;
+    }
+
+    function sincronizarChkTodasEmpresas() {
+        const checks = panelEmpresas.querySelectorAll('.chk-empresa');
+        if (!checks.length) {
+            chkTodasEmpresas.checked = false;
+            chkTodasEmpresas.indeterminate = false;
+        } else {
+            const marcados = panelEmpresas.querySelectorAll('.chk-empresa:checked').length;
+            chkTodasEmpresas.checked = marcados === checks.length;
+            chkTodasEmpresas.indeterminate = marcados > 0 && marcados < checks.length;
+        }
+        actualizarEtiquetaEmpresas();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Sin empresas disponibles.</div>';
+            btnEmpresas.disabled = true;
+            sincronizarChkTodasEmpresas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || '').trim();
+            const text = String(e.text || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2">
+                <input class="form-check-input flex-shrink-0 chk-empresa mt-1" type="checkbox" value="${escapeHtml(code)}" checked>
+                <span class="text-truncate" title="${escapeHtml(text)}">${escapeHtml(text)}</span>
+            </label>`;
+        }).join('');
+        btnEmpresas.disabled = false;
+        filtrarEmpresas();
+        sincronizarChkTodasEmpresas();
+    }
+
+    function filtrarEmpresas() {
+        const q = String(txtBuscarEmpresa.value || '').trim().toUpperCase();
+        panelEmpresas.querySelectorAll('.list-group-item').forEach((li) => {
+            li.classList.toggle('d-none', !!q && !li.textContent.toUpperCase().includes(q));
+        });
+    }
+
+    async function cargarEmpresas() {
+        if (ctrlEmpresas) ctrlEmpresas.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        ctrlEmpresas = ctrl;
+        const previas = new Set(empresasSeleccionadas());
+        panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Cargando...</div>';
+        try {
+            const res = await fetch('/api/selectores/companias?filtro_usuario=1', { signal: ctrl ? ctrl.signal : undefined });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (ctrlEmpresas !== ctrl) return;
+            renderEmpresas(Array.isArray(data) ? data : []);
+            if (previas.size) {
+                panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => {
+                    el.checked = previas.has(String(el.value || '').trim());
+                });
+                sincronizarChkTodasEmpresas();
+            }
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            console.error(e);
+            panelEmpresas.innerHTML = '<div class="text-danger small py-2">Error al cargar empresas.</div>';
+        }
+    }
+
+    async function cargarPeriodos() {
+        const payroll_desc = cboPlanilla.value.trim();
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        cboPeriodo.disabled = true;
+        if (!payroll_desc) return;
+        try {
+            const url = `/api/selectores/periodos-provisiones?payroll_desc=${encodeURIComponent(payroll_desc)}`;
+            await poblarSelect(url, cboPeriodo, { textoVacio: 'Sin periodos' });
+            cboPeriodo.disabled = false;
+        } catch (e) {
+            console.error(e);
+            cboPeriodo.innerHTML = '<option value="">Error</option>';
+        }
+    }
+
+    async function cargarConceptos() {
+        const cia = primeraEmpresaSeleccionada() || 'BGT';
+        ciaConceptos = cia;
+        cboConcepto.disabled = true;
+        cboConcepto.innerHTML = '<option value="">Todos</option>';
+        try {
+            await poblarSelect(
+                `/api/selectores/conceptos?cia=${encodeURIComponent(cia)}`,
+                cboConcepto,
+                { incluyeTodos: true, valorTodos: '', textoTodos: 'Todos' }
+            );
+            cboConcepto.disabled = false;
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    function renderTabla(payload) {
+        const thead = document.getElementById('theadAsig');
+        const tbody = document.getElementById('tbodyAsig');
+        const headers = payload.headers || [];
+        const filas = payload.data || [];
+        thead.innerHTML = '<tr>' + headers.map((h) => `<th>${escapeHtml(h)}</th>`).join('') + '</tr>';
+        tbody.innerHTML = filas.map((row) => {
+            return '<tr>' + (row || []).map((val, idx) => {
+                const isNum = idx === IDX_MONTO && typeof val === 'number';
+                const cls = isNum ? 'text-end' : '';
+                return `<td class="${cls}">${isNum ? fmtCelda(val) : escapeHtml(fmtCelda(val))}</td>`;
+            }).join('') + '</tr>';
+        }).join('');
+        document.getElementById('lblRowCount').textContent = String(filas.length);
+    }
+
+    async function consultar() {
+        lastExport = null;
+        btnExportExcel.disabled = true;
+        const companies = empresasSeleccionadas();
+        if (!companies.length) {
+            alert('Seleccione al menos una empresa.');
+            return;
+        }
+        const payroll_desc = cboPlanilla.value.trim();
+        const period = cboPeriodo.value.trim();
+        if (!payroll_desc || !period) {
+            alert('Seleccione tipo de planilla y periodo.');
+            return;
+        }
+        const person = cboTrabajador.value.trim() || '0';
+        const concept = cboConcepto.value.trim() || '0';
+        const repunit = cboUnidad.value.trim() || '0';
+
+        try {
+            const res = await fetch(URL_REPORTE, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companies,
+                    payroll_desc,
+                    period,
+                    person,
+                    concept,
+                    concept_cia: ciaConceptos || companies[0],
+                    repunit,
+                    cesados: 'T',
+                }),
+            });
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                cardResultado.classList.add('d-none');
+                document.getElementById('lblRowCount').textContent = '0';
+                alert(payload.error || 'Error al generar el reporte.');
+                return;
+            }
+            cardResultado.classList.remove('d-none');
+            renderTabla(payload);
+            lastExport = {
+                headers: payload.headers,
+                data: payload.data,
+                meta: {
+                    tipoPlanilla: selectedText('cboTipoPlanilla'),
+                    periodo: selectedText('cboPeriodo'),
+                    trabajador: selectedText('cboTrabajador'),
+                    concepto: selectedText('cboConcepto'),
+                    unidad: selectedText('cboUnidad'),
+                    empresas: companies.length,
+                },
+            };
+            btnExportExcel.disabled = !(payload.data || []).length;
+        } catch (e) {
+            console.error(e);
+            cardResultado.classList.add('d-none');
+            btnExportExcel.disabled = true;
+            document.getElementById('lblRowCount').textContent = '0';
+            alert('Error de red o del servidor.');
+        }
+    }
+
+    async function exportExcel() {
+        if (!lastExport || !lastExport.headers) {
+            alert('Ejecute primero una búsqueda con resultados.');
+            return;
+        }
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Asignacion');
+        ws.addRow(['Asignación de Conceptos (consolidado)']);
+        ws.addRow([`Tipo planilla: ${lastExport.meta.tipoPlanilla || ''}`]);
+        ws.addRow([`Periodo: ${lastExport.meta.periodo || ''}`]);
+        ws.addRow([`Empresas: ${lastExport.meta.empresas || ''}`]);
+        ws.addRow([]);
+        ws.addRow(lastExport.headers);
+        (lastExport.data || []).forEach((row) => ws.addRow(row));
+        ws.getColumn(7).numFmt = '#,##0.00';
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `asignacion_conceptos_consolidado_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    panelEmpresas.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('chk-empresa')) {
+            sincronizarChkTodasEmpresas();
+            cargarConceptos();
+        }
+    });
+    chkTodasEmpresas.addEventListener('change', function () {
+        const marcar = chkTodasEmpresas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => { el.checked = marcar; });
+        sincronizarChkTodasEmpresas();
+        cargarConceptos();
+    });
+    txtBuscarEmpresa.addEventListener('input', filtrarEmpresas);
+    cboPlanilla.addEventListener('change', cargarPeriodos);
+
+    document.getElementById('frmAsigConceptosCons').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await consultar();
+    });
+    btnExportExcel.addEventListener('click', exportExcel);
+
+    await Promise.all([
+        cargarEmpresas(),
+        poblarSelect('/api/selectores/planillas-consolidada', cboPlanilla, { textoVacio: 'Sin planillas' }),
+        poblarSelect('/api/selectores/trabajadores-consolidada', cboTrabajador, {
+            incluyeTodos: true, valorTodos: '', textoTodos: 'Todos (por defecto)',
+        }),
+        poblarSelect('/api/selectores/unidades', cboUnidad, {
+            incluyeTodos: true, valorTodos: '0', textoTodos: 'Todas',
+        }),
+    ]);
+    await cargarConceptos();
+});
+</script>
+{% endblock %}

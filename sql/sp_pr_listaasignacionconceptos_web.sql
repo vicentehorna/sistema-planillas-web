@@ -83,6 +83,22 @@ BEGIN
             WHERE c.Company = ec.Company
               AND c.Concept = ec.Concept
         ) AS conceptname,
+        (
+            SELECT TOP 1 LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))
+            FROM PR_Concept c
+            WHERE c.Company = ec.Company
+              AND c.Concept = ec.Concept
+        ) AS formulacode,
+        (
+            SELECT TOP 1
+                LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(t.Description)), ''), t.ShortName)))
+            FROM PR_Concept c
+            LEFT JOIN PR_ConceptType t
+                ON t.ConceptType = c.ConceptType
+               AND t.Company = c.Company
+            WHERE c.Company = ec.Company
+              AND c.Concept = ec.Concept
+        ) AS concepttypename,
         ec.PayRollType AS payrolltype,
         ec.PRPeriodStart AS prperiodstart,
         ec.PRPeriodEnd AS prperiodend,

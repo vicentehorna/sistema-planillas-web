@@ -8978,6 +8978,15 @@ def reporte_planilla_consolidada_page():
     return render_template('reporte_planilla_consolidada.html')
 
 
+@app.route('/reporte-asignacion-conceptos')
+@login_required
+def reporte_asignacion_conceptos_page():
+    """Reporte consolidado de asignación de conceptos (solo hm_alamo)."""
+    if not _es_bd_hm_alamo():
+        abort(404)
+    return render_template('reporte_asignacion_conceptos.html')
+
+
 @app.route('/reporte-consolidado-provisiones')
 @login_required
 def reporte_consolidado_provisiones_page():
@@ -31367,6 +31376,202 @@ def reporte_planilla_consolidada_post():
                 pass
 
 
+def _resolve_formulacode_by_concept(cursor, cia, concept):
+    concept = str(concept or '').strip()
+    if not cia or not concept:
+        return ''
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(ISNULL(FormulaCode, '')))
+        FROM PR_Concept (NOLOCK)
+        WHERE Company = ? AND Concept = ?
+        """,
+        (cia, concept),
+    )
+    row = cursor.fetchone()
+    return str(row[0]).strip() if row and row[0] is not None else ''
+
+
+def _resolve_concept_by_formulacode(cursor, cia, formulacode):
+    formulacode = str(formulacode or '').strip()
+    if not cia or not formulacode:
+        return None
+    cursor.execute(
+        """
+        SELECT TOP 1 Concept
+        FROM PR_Concept (NOLOCK)
+        WHERE Company = ?
+          AND LTRIM(RTRIM(FormulaCode)) = ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(Status, 'A')))) = 'A'
+        ORDER BY Concept
+        """,
+        (cia, formulacode),
+    )
+    row = cursor.fetchone()
+    return str(row[0]).strip() if row and row[0] is not None else None
+
+
+def _etiqueta_frecuencia_asig(flag):
+    f = str(flag or '').strip().upper()
+    if f == 'P':
+        return 'Permanente'
+    if f == 'T':
+        return 'Temporal'
+    return f or ''
+
+
+def _etiqueta_aplica_formula_asig(flag):
+    f = str(flag or '').strip().upper()
+    if f in ('Y', 'S', 'SI', '1'):
+        return 'Sí'
+    if f in ('N', '0'):
+        return 'No'
+    return f or 'No'
+
+
+@app.route('/reporte_asignacion_conceptos', methods=['POST'])
+@login_required
+def reporte_asignacion_conceptos_post():
+    """
+    Asignación de conceptos consolidada (solo hm_alamo).
+    Misma lógica que sp_pr_listaasignacionconceptos_web por empresa,
+    con filtro masivo de compañías y planilla por Description.
+    """
+    bloqueo = _require_hm_alamo_json('Asignación de Conceptos')
+    if bloqueo is not None:
+        return bloqueo
+
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(
+        body.get('payroll_desc')
+        or body.get('payroll_description')
+        or body.get('payroll_type_desc')
+        or ''
+    ).strip()
+    period_raw = body.get('period')
+    ps = str(period_raw).strip() if period_raw is not None else ''
+    period = '0' if ps in ('', '0') else _normalize_pr_period(ps) or ps
+    person_raw = body.get('person') or body.get('trabajador') or body.get('empleado') or ''
+    person = '0' if str(person_raw).strip() in ('', '0') else str(person_raw).strip()
+    concept_raw = body.get('concept')
+    concept_ref = '0' if str(concept_raw or '').strip() in ('', '0') else str(concept_raw).strip()
+    formulacode_filter = str(body.get('formulacode') or body.get('formula_code') or '').strip()
+    replicationunit = _normalize_replicationunit_asig(
+        body.get('replicationunit') or body.get('unidad') or body.get('repunit')
+    )
+    cesados = _normalize_cesados_telecredito(body.get('cesados') or 'T')
+    empresas_sel = _companies_seleccionadas_json(body)
+
+    if empresas_sel is not None and not empresas_sel:
+        return jsonify({"error": "Seleccione al menos una empresa."}), 400
+    if not payroll_desc:
+        return jsonify({"error": "Seleccione tipo de planilla."}), 400
+    if period in ('', '0'):
+        return jsonify({"error": "Seleccione periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        permitidas = _list_active_companies(cursor)
+        companies = _filtrar_companies_seleccionadas(permitidas, empresas_sel)
+        if empresas_sel is not None and not companies:
+            return jsonify({
+                "error": "Ninguna de las empresas seleccionadas está disponible. "
+                         "Seleccione al menos una empresa."
+            }), 400
+
+        # Concepto del selector (de una cia de referencia) → FormulaCode para cruzar empresas.
+        concept_cia_ref = str(body.get('concept_cia') or body.get('cia_conceptos') or '').strip()
+        if not formulacode_filter and concept_ref not in ('', '0'):
+            cia_ref = concept_cia_ref or (companies[0][0] if companies else '')
+            if cia_ref:
+                formulacode_filter = _resolve_formulacode_by_concept(
+                    cursor, cia_ref, concept_ref
+                )
+
+        headers = [
+            'Compañía', 'DNI', 'Trabajador', 'Concepto',
+            'Tipo Concepto', 'Frecuencia', 'Monto', 'Aplicar Sobre Fórmula',
+        ]
+        data = []
+        total_valor = 0.0
+
+        for cia_code, cia_name in companies:
+            payroll_type = _resolve_payrolltype_by_description(cursor, cia_code, payroll_desc)
+            if not payroll_type:
+                continue
+
+            concept_param = '0'
+            if formulacode_filter:
+                concept_cia = _resolve_concept_by_formulacode(cursor, cia_code, formulacode_filter)
+                if not concept_cia:
+                    continue
+                concept_param = concept_cia
+
+            cursor.execute(
+                "EXEC sp_pr_listaasignacionconceptos_web "
+                "@par_company=?, @par_payrolltype=?, @par_period=?, @par_concept=?, "
+                "@par_person=?, @nombre=?, @cesados=?, @par_frecuencytype=?, @par_replicationunit=?",
+                (
+                    cia_code,
+                    payroll_type,
+                    period,
+                    concept_param,
+                    person,
+                    '',
+                    cesados,
+                    '0',
+                    replicationunit,
+                ),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            for r in rows:
+                try:
+                    monto = float(r.get('conceptvalue') or 0)
+                except (TypeError, ValueError):
+                    monto = 0.0
+                total_valor += monto
+                data.append([
+                    cia_name or cia_code,
+                    _jsonable_value(r.get('person')),
+                    _jsonable_value(r.get('nombre')),
+                    _jsonable_value(r.get('conceptname')),
+                    _jsonable_value(r.get('concepttypename')),
+                    _etiqueta_frecuencia_asig(r.get('flagfrecuencytype')),
+                    round(monto, 2),
+                    _etiqueta_aplica_formula_asig(r.get('flagapplyformula')),
+                ])
+
+        data.sort(key=lambda row: (
+            str(row[0] or '').upper(),
+            str(row[2] or '').upper(),
+            str(row[1] or ''),
+            str(row[3] or '').upper(),
+        ))
+
+        return jsonify({
+            "headers": headers,
+            "data": data,
+            "total": len(data),
+            "total_valor": round(total_valor, 2),
+            "meta": {
+                "empresas": len(companies),
+                "payroll_desc": payroll_desc,
+                "period": period,
+            },
+        })
+    except Exception as e:
+        logging.exception("reporte_asignacion_conceptos_post")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/reporte_contratistas', methods=['POST'])
 @login_required
 def reporte_contratistas_post():
@@ -32274,6 +32479,8 @@ def api_asignacion_conceptos_listado():
                 "company": _jsonable_value(r.get('company')),
                 "concept": _jsonable_value(r.get('concept')),
                 "conceptname": _jsonable_value(r.get('conceptname')),
+                "formulacode": _jsonable_value(r.get('formulacode')),
+                "concepttypename": _jsonable_value(r.get('concepttypename')),
                 "payrolltype": _jsonable_value(r.get('payrolltype')),
                 "prperiodstart": _jsonable_value(r.get('prperiodstart')),
                 "prperiodend": _jsonable_value(r.get('prperiodend')),

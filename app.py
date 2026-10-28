@@ -31459,6 +31459,9 @@ def reporte_asignacion_conceptos_post():
     replicationunit = _normalize_replicationunit_asig(
         body.get('replicationunit') or body.get('unidad') or body.get('repunit')
     )
+    frecuencytype = _normalize_tipo_concepto_asig(
+        body.get('frecuencytype') or body.get('frecuencia') or body.get('tipo_concepto')
+    )
     cesados = _normalize_cesados_telecredito(body.get('cesados') or 'T')
     empresas_sel = _companies_seleccionadas_json(body)
 
@@ -31521,7 +31524,7 @@ def reporte_asignacion_conceptos_post():
                     person,
                     '',
                     cesados,
-                    '0',
+                    frecuencytype,
                     replicationunit,
                 ),
             )

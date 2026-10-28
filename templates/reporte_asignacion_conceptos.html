@@ -41,7 +41,6 @@
     <div class="card-body pt-3">
         <div class="mb-2">
             <h5 class="mb-0">Asignación de Conceptos</h5>
-            <div class="small text-muted">Consolidado por empresas (hm_alamo). Misma información que la ventana de asignación.</div>
         </div>
         <form id="frmAsigConceptosCons" class="row g-3">
             <div class="col-12 col-sm-6 col-md-4 col-lg-3">
@@ -97,6 +96,14 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboFrecuencia" class="form-label small fw-bold text-muted">Frecuencia</label>
+                <select id="cboFrecuencia" class="form-select form-select-sm">
+                    <option value="0" selected>Todos</option>
+                    <option value="T">Temporal</option>
+                    <option value="P">Permanente</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
                     <i class="bi bi-search"></i> Consultar
@@ -136,6 +143,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboTrabajador = document.getElementById('cboTrabajador');
     const cboConcepto = document.getElementById('cboConcepto');
     const cboUnidad = document.getElementById('cboUnidad');
+    const cboFrecuencia = document.getElementById('cboFrecuencia');
     const panelEmpresas = document.getElementById('panelEmpresas');
     const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
     const btnEmpresas = document.getElementById('btnEmpresas');
@@ -326,6 +334,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const person = cboTrabajador.value.trim() || '0';
         const concept = cboConcepto.value.trim() || '0';
         const repunit = cboUnidad.value.trim() || '0';
+        const frecuencytype = cboFrecuencia.value.trim() || '0';
 
         try {
             const res = await fetch(URL_REPORTE, {
@@ -339,6 +348,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     concept,
                     concept_cia: ciaConceptos || companies[0],
                     repunit,
+                    frecuencytype,
                     cesados: 'T',
                 }),
             });
@@ -360,6 +370,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     trabajador: selectedText('cboTrabajador'),
                     concepto: selectedText('cboConcepto'),
                     unidad: selectedText('cboUnidad'),
+                    frecuencia: selectedText('cboFrecuencia'),
                     empresas: companies.length,
                 },
             };

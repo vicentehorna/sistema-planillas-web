@@ -33650,8 +33650,16 @@ def api_prestamos_guardar_cuotas():
             amt = float(item.get('amount') or item.get('monto') or 0)
         except (TypeError, ValueError):
             continue
+        proc = str(
+            item.get('proceso')
+            or item.get('flagliquidation')
+            or item.get('process')
+            or 'F'
+        ).strip().upper()[:1]
+        if proc not in ('F', 'G', 'V'):
+            proc = 'F'
         if sec > 0:
-            cuotas.append({"secuence": sec, "amount": round(amt, 2)})
+            cuotas.append({"secuence": sec, "amount": round(amt, 2), "proceso": proc})
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -33675,7 +33683,9 @@ def api_prestamos_guardar_cuotas():
                 cia,
                 person,
                 loan_secuence,
-                '|'.join(f"{c['secuence']}:{c['amount']:.2f}" for c in cuotas),
+                '|'.join(
+                    f"{c['secuence']}:{c['amount']:.2f}:{c['proceso']}" for c in cuotas
+                ),
                 _xlastuser_id(),
             ),
         )

@@ -49,6 +49,7 @@ BEGIN
         CASE UPPER(LTRIM(RTRIM(ISNULL(a.flagliquidation, ''))))
             WHEN 'F' THEN 'FIN DE MES'
             WHEN 'G' THEN 'GRATIFICACION'
+            WHEN 'V' THEN 'VACACIONES'
             WHEN 'L' THEN 'LIQUIDACION'
             WHEN 'Q' THEN 'QUINCENA'
             WHEN 'U' THEN 'UTILIDADES'

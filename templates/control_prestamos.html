@@ -224,9 +224,10 @@
         padding: 0.1rem 0.35rem;
         line-height: 1;
     }
-    .table-prestamos .select-estado-cuota {
+    .table-prestamos .select-estado-cuota,
+    .table-prestamos .select-proceso-cuota {
         min-width: 7.5rem;
-        max-width: 9.5rem;
+        max-width: 10.5rem;
         font-size: 0.8rem;
         padding-top: 0.15rem;
         padding-bottom: 0.15rem;
@@ -467,7 +468,7 @@
                         </button>
                     </div>
                     <p class="prest-hint mb-0 mt-1">
-                        Edite montos pendientes, agregue o elimine cuotas y pulse Guardar. La suma debe coincidir con el importe del préstamo.
+                        Edite montos y proceso de cuotas pendientes, agregue o elimine cuotas y pulse Guardar. La suma debe coincidir con el importe del préstamo.
                         Puede cambiar el estado (p. ej. Amortizado → Pendiente) para habilitar la edición y luego volver a Amortizado.
                     </p>
                 </div>
@@ -810,13 +811,30 @@
         btnAgregarCuota.disabled = !prestamoSel || !prestamoTienePendientes(prestamoSel);
     }
 
+    function normalizarProcesoCuota(flag) {
+        const f = String(flag || '').trim().toUpperCase();
+        if (f === 'G' || f === 'V' || f === 'F') return f;
+        return 'F';
+    }
+
+    function procesoCuotaTexto(flag) {
+        switch (normalizarProcesoCuota(flag)) {
+            case 'G': return 'Gratificación';
+            case 'V': return 'Vacaciones';
+            default: return 'Fin de Mes';
+        }
+    }
+
     function leerMontosCuotasPendientes() {
         const inputs = document.querySelectorAll('#tblCuotas .input-monto-cuota');
         const out = [];
         inputs.forEach((inp) => {
             const sec = Number(inp.getAttribute('data-sec') || 0);
             const amt = round2(inp.value);
-            out.push({ secuence: sec, amount: amt, el: inp });
+            const tr = inp.closest('tr');
+            const selProc = tr ? tr.querySelector('.select-proceso-cuota') : null;
+            const proceso = normalizarProcesoCuota(selProc ? selProc.value : inp.getAttribute('data-proceso'));
+            out.push({ secuence: sec, amount: amt, proceso, el: inp });
         });
         return out;
     }
@@ -893,11 +911,21 @@
                     <option value="A"${st === 'A' ? ' selected' : ''}>Amortizado</option>
                     <option value="N"${st === 'N' ? ' selected' : ''}>Anulado</option>
                 </select>`;
+            const procFlag = normalizarProcesoCuota(r.flagliquidation);
+            const procesoCell = pendiente
+                ? `<select class="form-select form-select-sm select-proceso-cuota"
+                        data-sec="${escHtml(r.secuence)}"
+                        title="Proceso de descuento de la cuota">
+                    <option value="F"${procFlag === 'F' ? ' selected' : ''}>Fin de Mes</option>
+                    <option value="G"${procFlag === 'G' ? ' selected' : ''}>Gratificación</option>
+                    <option value="V"${procFlag === 'V' ? ' selected' : ''}>Vacaciones</option>
+                   </select>`
+                : escHtml(r.proceso_texto || procesoCuotaTexto(procFlag));
             return `<tr data-amount="${amt}" data-status="${escHtml(st)}" data-sec="${escHtml(r.secuence)}">
                 <td>${escHtml(fmtPeriodo(r.prperiod))}</td>
                 <td class="text-end">${montoCell}</td>
                 <td>${estadoCell}</td>
-                <td>${escHtml(r.proceso_texto || '—')}</td>
+                <td>${procesoCell}</td>
                 <td class="text-center col-accion">${btnElim}</td>
             </tr>`;
         }).join('');
@@ -916,6 +944,9 @@
             sel.addEventListener('change', function () {
                 cambiarEstadoCuota(this);
             });
+        });
+        tbody.querySelectorAll('.select-proceso-cuota').forEach((sel) => {
+            sel.addEventListener('change', actualizarSumaCuotasUi);
         });
         actualizarSumaCuotasUi();
     }
@@ -1028,7 +1059,11 @@
                     cia: cboCia.value.trim(),
                     person: personId,
                     loan_secuence: loanSec,
-                    cuotas: pendientes.map((c) => ({ secuence: c.secuence, amount: c.amount })),
+                    cuotas: pendientes.map((c) => ({
+                        secuence: c.secuence,
+                        amount: c.amount,
+                        proceso: c.proceso || 'F',
+                    })),
                 }),
             });
             await leerJson(res);

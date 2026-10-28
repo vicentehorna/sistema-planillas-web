@@ -1,10 +1,13 @@
 /*
-    Guarda montos de varias cuotas pendientes de un préstamo en una sola operación.
+    Guarda montos y proceso (flagliquidation) de varias cuotas pendientes de un
+    préstamo en una sola operación.
     Valida que la suma de TODAS las cuotas (pagadas fijas + pendientes editadas)
     sea exactamente igual al importe del préstamo (LoadAmount).
     No modifica LoadAmount ni la cuenta corriente (solo redistribuye cuotas).
 
-    @cuotas_text: "secuence:amount|secuence:amount|..."  — todas las pendientes
+    @cuotas_text: "secuence:amount:proceso|..."  — todas las pendientes
+      proceso: F=Fin de Mes, G=Gratificación, V=Vacaciones (default F)
+      Compatible con formato anterior "secuence:amount" (asume F).
 
     Usado por: POST /api/prestamos/guardar-cuotas
 */
@@ -29,13 +32,16 @@ BEGIN
         @cnt_edit       INT,
         @now            DATETIME,
         @work           VARCHAR(MAX),
-        @part           VARCHAR(100),
+        @part           VARCHAR(120),
         @pos            INT,
-        @colon          INT,
+        @colon1         INT,
+        @colon2         INT,
         @sec_txt        VARCHAR(30),
         @amt_txt        VARCHAR(40),
+        @proc_txt       VARCHAR(10),
         @sec_i          INT,
         @amt_n          NUMERIC(19, 4),
+        @proc_c         CHAR(1),
         @msg_suma       NVARCHAR(400);
 
     SET @company = LTRIM(RTRIM(ISNULL(@company, '')));
@@ -58,8 +64,9 @@ BEGIN
 
     IF OBJECT_ID('tempdb..#cuotas_edit') IS NOT NULL DROP TABLE #cuotas_edit;
     CREATE TABLE #cuotas_edit (
-        secuence INT NOT NULL PRIMARY KEY,
-        amount   NUMERIC(19, 4) NOT NULL
+        secuence         INT NOT NULL PRIMARY KEY,
+        amount           NUMERIC(19, 4) NOT NULL,
+        flagliquidation  CHAR(1) NOT NULL
     );
 
     SET @work = @cuotas_text + '|';
@@ -71,15 +78,23 @@ BEGIN
         SET @work = SUBSTRING(@work, @pos + 1, LEN(@work));
         IF @part = '' CONTINUE;
 
-        SET @colon = CHARINDEX(':', @part);
-        IF @colon <= 1
+        SET @colon1 = CHARINDEX(':', @part);
+        IF @colon1 <= 1
         BEGIN
-            RAISERROR('Formato de cuotas inválido. Use secuence:monto|...', 16, 1);
+            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso|...', 16, 1);
             RETURN;
         END;
 
-        SET @sec_txt = LTRIM(RTRIM(SUBSTRING(@part, 1, @colon - 1)));
-        SET @amt_txt = LTRIM(RTRIM(SUBSTRING(@part, @colon + 1, LEN(@part))));
+        SET @sec_txt = LTRIM(RTRIM(SUBSTRING(@part, 1, @colon1 - 1)));
+        SET @amt_txt = LTRIM(RTRIM(SUBSTRING(@part, @colon1 + 1, LEN(@part))));
+        SET @proc_txt = 'F';
+
+        SET @colon2 = CHARINDEX(':', @amt_txt);
+        IF @colon2 > 0
+        BEGIN
+            SET @proc_txt = LTRIM(RTRIM(SUBSTRING(@amt_txt, @colon2 + 1, LEN(@amt_txt))));
+            SET @amt_txt = LTRIM(RTRIM(SUBSTRING(@amt_txt, 1, @colon2 - 1)));
+        END;
 
         SET @sec_i = NULL;
         SET @amt_n = NULL;
@@ -88,9 +103,13 @@ BEGIN
         IF @amt_txt <> '' AND ISNUMERIC(@amt_txt) = 1
             SET @amt_n = ROUND(CONVERT(NUMERIC(19, 4), @amt_txt), 2);
 
+        SET @proc_c = UPPER(LEFT(LTRIM(RTRIM(ISNULL(@proc_txt, 'F'))), 1));
+        IF @proc_c NOT IN ('F', 'G', 'V')
+            SET @proc_c = 'F';
+
         IF @sec_i IS NULL OR @amt_n IS NULL
         BEGIN
-            RAISERROR('Formato de cuotas inválido. Use secuence:monto|...', 16, 1);
+            RAISERROR('Formato de cuotas inválido. Use secuence:monto:proceso|...', 16, 1);
             RETURN;
         END;
 
@@ -100,7 +119,8 @@ BEGIN
             RETURN;
         END;
 
-        INSERT INTO #cuotas_edit (secuence, amount) VALUES (@sec_i, @amt_n);
+        INSERT INTO #cuotas_edit (secuence, amount, flagliquidation)
+        VALUES (@sec_i, @amt_n, @proc_c);
     END;
 
     IF EXISTS (SELECT 1 FROM #cuotas_edit WHERE amount <= 0)
@@ -213,6 +233,7 @@ BEGIN
                     THEN ROUND(e.amount / ISNULL(NULLIF(ea.ExchangeRate, 0), @loan_rate), 2)
                 ELSE e.amount
             END,
+            flagliquidation = e.flagliquidation,
             XLastUser = @xlastuser,
             XLastDate = @now
         FROM PR_EmployeeLoanAmortization ea

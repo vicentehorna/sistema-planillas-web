@@ -47,6 +47,15 @@
         color: #0d6efd;
     }
 
+    .table-ic-import tfoot td {
+        position: sticky;
+        bottom: 0;
+        background: #eef2f7;
+        z-index: 2;
+        box-shadow: 0 -1px 0 #dee2e6;
+        font-weight: 700;
+    }
+
     .table-ic-import .col-num {
         text-align: right;
     }
@@ -233,6 +242,7 @@
                 <table class="table table-bordered table-sm table-hover table-ic-import align-middle mb-0">
                     <thead id="theadImportacion"></thead>
                     <tbody id="tbodyImportacion"></tbody>
+                    <tfoot id="tfootImportacion"></tfoot>
                 </table>
             </div>
         </div>
@@ -269,6 +279,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const panelGrilla = document.getElementById('panelGrilla');
     const theadImportacion = document.getElementById('theadImportacion');
     const tbodyImportacion = document.getElementById('tbodyImportacion');
+    const tfootImportacion = document.getElementById('tfootImportacion');
 
     let plantillaDetalle = [];
     let plantillaDetallePorCia = {};
@@ -479,6 +490,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         lblTotalRegistros.textContent = '0';
         theadImportacion.innerHTML = '';
         tbodyImportacion.innerHTML = '';
+        tfootImportacion.innerHTML = '';
         panelGrilla.classList.add('d-none');
         placeholderGrilla.classList.remove('d-none');
         placeholderGrilla.textContent = mensaje || 'Seleccione compañía, tipo planilla, periodo y plantilla. Luego importe el archivo Excel.';
@@ -643,6 +655,35 @@ document.addEventListener('DOMContentLoaded', async function () {
                 </tr>
             `;
         }).join('');
+
+        /* Solo filas OK (y Procesado tras cargar, para no perder el total en pantalla). */
+        const filasOk = filasImportadas.filter(
+            (row) => row.estado === 'OK' || row.estado === 'Procesado'
+        );
+        const totalesConcepto = plantillaDetalle.map((_, idx) => {
+            let sum = 0;
+            filasOk.forEach((row) => {
+                const raw = String((row.conceptos || [])[idx] ?? '').replace(/,/g, '').trim();
+                if (!raw) return;
+                const n = Number(raw);
+                if (Number.isFinite(n)) sum += n;
+            });
+            return sum;
+        });
+        const fmtTotal = (n) => Number(n || 0).toLocaleString('es-PE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+        const colspanFijas = modoTodasEmpresas ? 6 : 5;
+        const totalesHtml = totalesConcepto
+            .map((n) => `<td class="col-num">${escHtml(fmtTotal(n))}</td>`)
+            .join('');
+        tfootImportacion.innerHTML = `
+            <tr>
+                <td colspan="${colspanFijas}">Total (OK: ${filasOk.length})</td>
+                ${totalesHtml}
+            </tr>
+        `;
 
         placeholderGrilla.classList.add('d-none');
         panelGrilla.classList.remove('d-none');

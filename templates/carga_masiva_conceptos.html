@@ -778,16 +778,20 @@ document.addEventListener('DOMContentLoaded', async function () {
             return false;
         }
 
-        for (const comp of companiasActivas()) {
-            const rows = await fetchTiposPlanillaCia(comp);
-            const match = rows.find((item) => {
-                const desc = String(item.description || item.shortname || '').trim();
-                return normHeader(desc) === descKey;
-            });
-            if (match) {
-                nuevoMapa[comp] = String(match.payrolltype || '').trim();
+        await mapPool(companiasActivas(), 10, async (comp) => {
+            try {
+                const rows = await fetchTiposPlanillaCia(comp);
+                const match = rows.find((item) => {
+                    const desc = String(item.description || item.shortname || '').trim();
+                    return normHeader(desc) === descKey;
+                });
+                if (match) {
+                    nuevoMapa[comp] = String(match.payrolltype || '').trim();
+                }
+            } catch (errCia) {
+                console.warn('Mapa planilla no disponible para', comp, errCia);
             }
-        }
+        });
         payrolltypePorCia = nuevoMapa;
         if (Object.keys(nuevoMapa).length) {
             tiposPlanillaAgregado.set(descKey, {
@@ -826,9 +830,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         return true;
     }
 
-    function resetFiltrosDependientes() {
-        cboTipoPlanilla.disabled = true;
-        cboPeriodo.disabled = true;
+    function resetFiltrosDependientes(opts) {
+        const options = opts || {};
+        /* En modo Todas no bloquear: hm_alamo/garc tienen muchas empresas y la carga tarda. */
+        const mantenerHabilitados = !!options.keepEnabled || modoTodasEmpresas;
+        if (!mantenerHabilitados) {
+            cboTipoPlanilla.disabled = true;
+            cboPeriodo.disabled = true;
+        }
         cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
         cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
         cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
@@ -842,6 +851,52 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     function companiasActivas() {
         return listaCompanias.map((c) => String(c.id || c.company || '').trim()).filter(Boolean);
+    }
+
+    async function mapPool(items, limit, worker) {
+        const list = Array.from(items || []);
+        const results = new Array(list.length);
+        let next = 0;
+        const runners = Array.from({ length: Math.min(limit || 8, Math.max(list.length, 1)) }, async () => {
+            while (next < list.length) {
+                const idx = next;
+                next += 1;
+                results[idx] = await worker(list[idx], idx);
+            }
+        });
+        await Promise.all(runners);
+        return results;
+    }
+
+    function pintarTiposPlanillaAgregado(agregado, preserveValue) {
+        const prev = String(preserveValue || cboTipoPlanilla.value || '').trim();
+        cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
+        Array.from(agregado.entries())
+            .sort((a, b) => a[1].description.localeCompare(b[1].description, 'es'))
+            .forEach(([key, info]) => {
+                const opt = document.createElement('option');
+                opt.value = key;
+                opt.textContent = info.description;
+                opt.dataset.description = info.description;
+                cboTipoPlanilla.appendChild(opt);
+            });
+        if (prev && optionExists(cboTipoPlanilla, prev)) {
+            cboTipoPlanilla.value = prev;
+        }
+        cboTipoPlanilla.disabled = false;
+        cboPeriodo.disabled = false;
+    }
+
+    function acumularTiposPlanilla(agregado, cia, rows) {
+        (rows || []).forEach((item) => {
+            const desc = String(item.description || item.shortname || '').trim();
+            const key = normHeader(desc);
+            if (!key) return;
+            if (!agregado.has(key)) {
+                agregado.set(key, { description: desc, porCia: {} });
+            }
+            agregado.get(key).porCia[cia] = String(item.payrolltype || '').trim();
+        });
     }
 
     async function fetchTiposPlanillaCia(cia) {
@@ -872,50 +927,48 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function cargarTiposPlanilla() {
-        resetFiltrosDependientes();
+        resetFiltrosDependientes({ keepEnabled: modoTodasEmpresas });
 
         if (modoTodasEmpresas) {
             const companies = companiasActivas();
+            cboTipoPlanilla.disabled = false;
+            cboPeriodo.disabled = false;
             if (!companies.length) {
-                cboTipoPlanilla.disabled = false;
-                cboPeriodo.disabled = false;
                 actualizarEstadoImportar();
                 return;
             }
 
             const agregado = new Map();
-            for (const cia of companies) {
-                try {
-                    const rows = await fetchTiposPlanillaCia(cia);
-                    rows.forEach((item) => {
-                        const desc = String(item.description || item.shortname || '').trim();
-                        const key = normHeader(desc);
-                        if (!key) return;
-                        if (!agregado.has(key)) {
-                            agregado.set(key, { description: desc, porCia: {} });
-                        }
-                        agregado.get(key).porCia[cia] = String(item.payrolltype || '').trim();
-                    });
-                } catch (errCia) {
-                    console.warn('Tipos planilla no disponibles para', cia, errCia);
-                }
+            const seedCia = cboCia.value.trim() || companies[0];
+
+            /* Semilla inmediata con la compañía actual para poder seleccionar al toque. */
+            try {
+                const seedRows = await fetchTiposPlanillaCia(seedCia);
+                acumularTiposPlanilla(agregado, seedCia, seedRows);
+            } catch (errSeed) {
+                console.warn('Semilla tipos planilla falló', seedCia, errSeed);
             }
 
             tiposPlanillaAgregado = agregado;
-            cboTipoPlanilla.innerHTML = '<option value="">Seleccione...</option>';
-            Array.from(agregado.entries())
-                .sort((a, b) => a[1].description.localeCompare(b[1].description, 'es'))
-                .forEach(([key, info]) => {
-                    const opt = document.createElement('option');
-                    opt.value = key;
-                    opt.textContent = info.description;
-                    opt.dataset.description = info.description;
-                    cboTipoPlanilla.appendChild(opt);
-                });
+            pintarTiposPlanillaAgregado(agregado);
             payrolltypePorCia = {};
-            cboTipoPlanilla.disabled = false;
-            cboPeriodo.disabled = false;
             actualizarEstadoImportar();
+
+            /* Completa el resto en background (hm_alamo/garc: muchas empresas). */
+            const resto = companies.filter((c) => c !== seedCia);
+            mapPool(resto, 10, async (cia) => {
+                try {
+                    const rows = await fetchTiposPlanillaCia(cia);
+                    acumularTiposPlanilla(agregado, cia, rows);
+                } catch (errCia) {
+                    console.warn('Tipos planilla no disponibles para', cia, errCia);
+                }
+            }).then(() => {
+                if (!modoTodasEmpresas) return;
+                tiposPlanillaAgregado = agregado;
+                pintarTiposPlanillaAgregado(agregado);
+                actualizarEstadoImportar();
+            }).catch((errBg) => console.warn('Agregación tipos planilla', errBg));
             return;
         }
 
@@ -963,8 +1016,8 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         if (modoTodasEmpresas) {
             const key = cboTipoPlanilla.value.trim();
+            cboPeriodo.disabled = false;
             if (!key) {
-                cboPeriodo.disabled = false;
                 actualizarEstadoImportar();
                 return;
             }
@@ -973,15 +1026,47 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             try {
                 const agregado = new Map();
-                const entries = Object.entries(payrolltypePorCia || {});
-                for (const [cia, pt] of entries) {
-                    if (!cia || !pt) continue;
-                    const periodos = await fetchPeriodosCia(cia, pt);
-                    periodos.forEach((item) => {
-                        const prperiod = String(item.prperiod || '').trim();
-                        if (prperiod) agregado.set(prperiod, item);
-                    });
+                const entries = Object.entries(payrolltypePorCia || {}).filter(([cia, pt]) => cia && pt);
+
+                /* Primero una empresa semilla para habilitar el combo al instante. */
+                const seedEntry = entries.find(([cia]) => cia === cboCia.value.trim()) || entries[0];
+                if (seedEntry) {
+                    try {
+                        const periodosSeed = await fetchPeriodosCia(seedEntry[0], seedEntry[1]);
+                        periodosSeed.forEach((item) => {
+                            const prperiod = String(item.prperiod || '').trim();
+                            if (prperiod) agregado.set(prperiod, item);
+                        });
+                        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+                        Array.from(agregado.keys())
+                            .sort((a, b) => b.localeCompare(a))
+                            .forEach((prperiod) => {
+                                const optP = document.createElement('option');
+                                optP.value = prperiod;
+                                optP.textContent = fmtPeriodoDisplay(prperiod);
+                                cboPeriodo.appendChild(optP);
+                            });
+                        cboPeriodo.disabled = false;
+                        actualizarEstadoImportar();
+                    } catch (errSeed) {
+                        console.warn('Semilla periodos falló', seedEntry[0], errSeed);
+                    }
                 }
+
+                const resto = entries.filter((e) => e !== seedEntry);
+                await mapPool(resto, 10, async ([cia, pt]) => {
+                    try {
+                        const periodos = await fetchPeriodosCia(cia, pt);
+                        periodos.forEach((item) => {
+                            const prperiod = String(item.prperiod || '').trim();
+                            if (prperiod) agregado.set(prperiod, item);
+                        });
+                    } catch (errCia) {
+                        console.warn('Periodos no disponibles para', cia, errCia);
+                    }
+                });
+
+                const prevPeriodo = cboPeriodo.value.trim();
                 cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
                 Array.from(agregado.keys())
                     .sort((a, b) => b.localeCompare(a))
@@ -991,6 +1076,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                         optP.textContent = fmtPeriodoDisplay(prperiod);
                         cboPeriodo.appendChild(optP);
                     });
+                if (prevPeriodo && optionExists(cboPeriodo, prevPeriodo)) {
+                    cboPeriodo.value = prevPeriodo;
+                }
                 await seleccionarPeriodoAbiertoTodas();
             } catch (err) {
                 console.error(err);
@@ -1322,6 +1410,9 @@ document.addEventListener('DOMContentLoaded', async function () {
 
         modoTodasEmpresas = !!chkTodasEmpresas.checked;
         cboCia.disabled = modoTodasEmpresas;
+        /* Habilitar de inmediato: en hm_alamo la agregación tarda y antes quedaban bloqueados. */
+        cboTipoPlanilla.disabled = false;
+        cboPeriodo.disabled = false;
         cargandoFiltrosTodas = true;
         actualizarEstadoImportar();
         try {
@@ -1350,14 +1441,14 @@ document.addEventListener('DOMContentLoaded', async function () {
                         if (preservePeriodo && optionExists(cboPeriodo, preservePeriodo)) {
                             cboPeriodo.value = preservePeriodo;
                         }
+                        await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
+                        if (cboPlantilla.value.trim()) {
+                            await cargarDetallePlantilla({ limpiarGrilla: false });
+                        }
                     }
                 } else {
                     cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
-                }
-
-                await cargarPlantillas(preservePlantilla, { limpiarGrilla: false });
-                if (cboPlantilla.value.trim()) {
-                    await cargarDetallePlantilla({ limpiarGrilla: false });
+                    cboPlantilla.innerHTML = '<option value="">Seleccione...</option>';
                 }
             } else {
                 cboCia.setAttribute('required', 'required');

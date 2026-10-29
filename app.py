@@ -1342,9 +1342,18 @@ def _es_cliente_maritima():
         return False
 
 
+def _es_cliente_lumat():
+    """True cuando la BD activa es hm_lumat."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_lumat'
+    except Exception:
+        return False
+
+
 def _usa_ingresos_config_formato_liquidacion():
-    """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima)."""
-    return _es_cliente_alamo() or _es_cliente_maritima()
+    """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima / hm_lumat)."""
+    return _es_cliente_alamo() or _es_cliente_maritima() or _es_cliente_lumat()
 
 
 def _es_cliente_garc():
@@ -7069,12 +7078,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     x_anio = _formato_liquidacion_fc_valor(formula_values, 'VACACIONANIO')
     x_mes = _formato_liquidacion_fc_valor(formula_values, 'VACXMES')
     x_dia = _formato_liquidacion_fc_valor(formula_values, 'VACXDIA')
-    # hm_garc, hm_alamo, hm_maritima y hm_zilicom: el formato solo muestra la fila de días.
+    # hm_garc, hm_alamo, hm_maritima, hm_zilicom y hm_lumat: el formato solo muestra la fila de días.
     solo_dias_vaca = (
         _es_cliente_garc()
         or _es_cliente_alamo()
         or _es_cliente_maritima()
         or _es_cliente_zilicom()
+        or _es_cliente_lumat()
     )
     total = x_dia if solo_dias_vaca else (x_anio + x_mes + x_dia)
 
@@ -7087,12 +7097,13 @@ def _build_formato_liquidacion_vaca(total_remuneracion_vaca, formula_values):
     otros_ingresos_afectos = _formato_liquidacion_fc_valor(formula_values, 'LIQINGRESOAFECTO')
     indemnizacion_despido = _formato_liquidacion_fc_valor(formula_values, 'INDEMNIZACION_DESPID')
     otros_ingresos = _formato_liquidacion_fc_valor(formula_values, 'LIQ_OTROS_ING')
-    # hm_elclan, hm_alamo, hm_maritima y hm_zilicom: en días de vacaciones truncas el divisor mostrado es 30.
+    # hm_elclan, hm_alamo, hm_maritima, hm_zilicom y hm_lumat: en días de vacaciones truncas el divisor mostrado es 30.
     divisor_dias_vaca = 30 if (
         _es_cliente_elclan()
         or _es_cliente_alamo()
         or _es_cliente_maritima()
         or _es_cliente_zilicom()
+        or _es_cliente_lumat()
     ) else 360
 
     def _mostrar_ingreso(val):

@@ -37290,6 +37290,43 @@ def ejecutar_calculo_masivo_streaming():
             cursor = conn.cursor()
             _set_cursor_timeout_payroll(cursor)
 
+            # Misma pre-validación que el cálculo regular (permanentes duplicados + vías).
+            pre_validaciones = []
+            grupos_pre = []
+            vistos_pre = set()
+            for item in lista:
+                key_pre = (item['company'], item['payrolltype'], item['processtype'])
+                if key_pre in vistos_pre:
+                    continue
+                vistos_pre.add(key_pre)
+                grupos_pre.append(key_pre)
+
+            for cia, payroll_type, processtype in grupos_pre:
+                try:
+                    msgs = _validar_pre_calculo_planilla_mensajes(
+                        cursor, cia, payroll_type, processtype
+                    )
+                    for m in msgs:
+                        pre_validaciones.append(f'[{cia}] {m}')
+                except Exception:
+                    logging.exception(
+                        'validar_pre_calculo_masivo empresa %s', cia
+                    )
+
+            if pre_validaciones:
+                yield (
+                    'data: '
+                    + json.dumps({
+                        'error': (
+                            'No se puede calcular: hay conceptos configurados en más de una vía '
+                            'o permanentes duplicados. Revise las validaciones previas.'
+                        ),
+                        'validaciones_pre': pre_validaciones,
+                    })
+                    + '\n\n'
+                )
+                return
+
             exitos = 0
             errores = []
             empresas_ok = set()

@@ -53,6 +53,7 @@
     }
 
     #cardEmpresasExcluidas ul,
+    #cardValidacionesPreCalculo ul,
     #cardValidacionesCalculo ul {
         margin-bottom: 0;
         padding-left: 1.2rem;
@@ -147,6 +148,18 @@
             <strong>Empresas excluidas de la consulta</strong>
             <p id="textoEmpresasExcluidas" class="mb-2 small"></p>
             <ul id="listaEmpresasExcluidas" class="mt-0 mb-0"></ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none mb-3" id="cardValidacionesPreCalculo">
+    <div class="card-body py-2">
+        <div class="alert alert-danger mb-0 py-2">
+            <strong>Validaciones previas al cálculo</strong>
+            <span class="d-block small mt-1">
+                Corrija estas configuraciones antes de calcular (permanentes duplicados o conceptos en más de una vía).
+            </span>
+            <ul id="listaValidacionesPreCalculo" class="mt-2 mb-0"></ul>
         </div>
     </div>
 </div>
@@ -460,16 +473,34 @@ document.addEventListener('DOMContentLoaded', function () {
         card.classList.remove('d-none');
     }
 
+    function ocultarValidacionesPreCalculo() {
+        document.getElementById('cardValidacionesPreCalculo').classList.add('d-none');
+        document.getElementById('listaValidacionesPreCalculo').innerHTML = '';
+    }
+
+    function renderValidacionesPreCalculo(items) {
+        const card = document.getElementById('cardValidacionesPreCalculo');
+        const lista = document.getElementById('listaValidacionesPreCalculo');
+        if (!items || !items.length) {
+            ocultarValidacionesPreCalculo();
+            return;
+        }
+        lista.innerHTML = items.map((m) => `<li>${esc(m)}</li>`).join('');
+        card.classList.remove('d-none');
+    }
+
     function ocultarValidaciones() {
         document.getElementById('cardValidacionesCalculo').classList.add('d-none');
         document.getElementById('listaValidacionesCalculo').innerHTML = '';
+        ocultarValidacionesPreCalculo();
     }
 
     function renderValidaciones(items) {
         const card = document.getElementById('cardValidacionesCalculo');
         const lista = document.getElementById('listaValidacionesCalculo');
         if (!items || !items.length) {
-            ocultarValidaciones();
+            document.getElementById('cardValidacionesCalculo').classList.add('d-none');
+            document.getElementById('listaValidacionesCalculo').innerHTML = '';
             return;
         }
         lista.innerHTML = items.map((m) => `<li>${esc(m)}</li>`).join('');
@@ -627,7 +658,12 @@ document.addEventListener('DOMContentLoaded', function () {
                     let data = null;
                     try { data = JSON.parse(linea.slice(6)); } catch (ignore) {}
                     if (data) {
-                        if (data.error) throw new Error(data.error);
+                        if (data.error) {
+                            if (Array.isArray(data.validaciones_pre) && data.validaciones_pre.length) {
+                                renderValidacionesPreCalculo(data.validaciones_pre);
+                            }
+                            throw new Error(data.error);
+                        }
                         if (data.done) finalData = data;
                         else if (typeof data.actual === 'number' && data.total > 0) {
                             const p = Math.round((data.actual / data.total) * 100);

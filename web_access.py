@@ -140,7 +140,7 @@ ENDPOINT_MENU_MAP = {
     'reporte_planilla_todas_planillas_post': 'reporte_planilla_todas_planillas',
     'reporte_consolidado_provisiones_page': 'reporte_consolidado_provisiones',
     'reporte_consolidado_provisiones_post': 'reporte_consolidado_provisiones',
-    'api_periodos_provisiones': 'reporte_consolidado_provisiones',
+    # periodos-provisiones es /api/selectores (compartido; p.ej. Asignación Conceptos)
     'reporte_listado_pagos_page': 'reporte_listado_pagos',
     'reporte_liquidaciones': 'reporte_promedio_liquidaciones',
     'reporte_planilla_por_conceptos_page': 'reporte_planilla_por_conceptos',

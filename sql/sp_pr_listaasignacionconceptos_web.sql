@@ -75,6 +75,9 @@ BEGIN
             ISNULL(sp.Name2, '')
         )) AS nombre,
         ISNULL(e.EmployeeCode, ec.Person) AS employeecode,
+        LTRIM(RTRIM(ISNULL(pos.Description, ISNULL(e.POSITION_DESC, '')))) AS cargo,
+        LTRIM(RTRIM(ISNULL(ru.Description, ''))) AS unidad,
+        sp.ReplicationUnit AS replicationunit,
         ec.Company AS company,
         ec.Concept AS concept,
         (
@@ -125,6 +128,10 @@ BEGIN
            AND e.Company = ec.Company
         INNER JOIN SY_Person sp WITH (NOLOCK)
             ON sp.Person = e.Person
+        LEFT JOIN PR_Position pos WITH (NOLOCK)
+            ON pos.Position = e.Position
+        LEFT JOIN SY_ReplicationUnit ru WITH (NOLOCK)
+            ON ru.ReplicationUnit = sp.ReplicationUnit
         OUTER APPLY (
             SELECT TOP 1 LTRIM(RTRIM(ISNULL(ap.Name, ''))) AS nombre
             FROM SY_User u (NOLOCK)

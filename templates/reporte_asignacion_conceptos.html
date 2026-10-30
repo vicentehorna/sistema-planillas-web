@@ -144,7 +144,7 @@
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const URL_REPORTE = {{ url_for('reporte_asignacion_conceptos_post') | tojson }};
-    const IDX_MONTO = 6;
+    const IDX_MONTO = 8;
 
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
     const cboPeriodo = document.getElementById('cboPeriodo');
@@ -410,7 +410,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         ws.addRow([]);
         ws.addRow(lastExport.headers);
         (lastExport.data || []).forEach((row) => ws.addRow(row));
-        ws.getColumn(7).numFmt = '#,##0.00';
+        ws.getColumn(9).numFmt = '#,##0.00';
         const buffer = await wb.xlsx.writeBuffer();
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);

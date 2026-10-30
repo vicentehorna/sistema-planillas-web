@@ -31505,7 +31505,7 @@ def reporte_asignacion_conceptos_post():
                 )
 
         headers = [
-            'Compañía', 'DNI', 'Trabajador', 'Concepto',
+            'Compañía', 'DNI', 'Trabajador', 'Cargo', 'Unidad', 'Concepto',
             'Tipo Concepto', 'Frecuencia', 'Monto', 'Aplicar Sobre Fórmula',
         ]
         data = []
@@ -31550,6 +31550,8 @@ def reporte_asignacion_conceptos_post():
                     cia_name or cia_code,
                     _jsonable_value(r.get('person')),
                     _jsonable_value(r.get('nombre')),
+                    _jsonable_value(r.get('cargo')),
+                    _jsonable_value(r.get('unidad')),
                     _jsonable_value(r.get('conceptname')),
                     _jsonable_value(r.get('concepttypename')),
                     _etiqueta_frecuencia_asig(r.get('flagfrecuencytype')),
@@ -31561,7 +31563,7 @@ def reporte_asignacion_conceptos_post():
             str(row[0] or '').upper(),
             str(row[2] or '').upper(),
             str(row[1] or ''),
-            str(row[3] or '').upper(),
+            str(row[5] or '').upper(),
         ))
 
         return jsonify({
@@ -32490,6 +32492,9 @@ def api_asignacion_conceptos_listado():
                 "person": _jsonable_value(r.get('person')),
                 "nombre": _jsonable_value(r.get('nombre')),
                 "employeecode": _jsonable_value(r.get('employeecode')),
+                "cargo": _jsonable_value(r.get('cargo')),
+                "unidad": _jsonable_value(r.get('unidad')),
+                "replicationunit": _jsonable_value(r.get('replicationunit')),
                 "company": _jsonable_value(r.get('company')),
                 "concept": _jsonable_value(r.get('concept')),
                 "conceptname": _jsonable_value(r.get('conceptname')),

@@ -99,6 +99,18 @@ BEGIN
         RETURN;
     END
 
+    IF @p = 'SP_PR_OBTENERJORNAL'
+    BEGIN
+        IF OBJECT_ID('dbo.sp_pr_obtenerJornal', 'P') IS NULL
+            RETURN;
+
+        EXEC dbo.sp_pr_obtenerJornal
+            @cia = @cia,
+            @person = @person,
+            @jornal = @result OUTPUT;
+        RETURN;
+    END
+
     RAISERROR('Procedimiento no autorizado en formulador: %s', 16, 1, @procname);
 END
 GO

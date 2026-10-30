@@ -104,6 +104,14 @@
                     <option value="P">Permanente</option>
                 </select>
             </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-1">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnConsultar">
                     <i class="bi bi-search"></i> Consultar
@@ -144,6 +152,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboConcepto = document.getElementById('cboConcepto');
     const cboUnidad = document.getElementById('cboUnidad');
     const cboFrecuencia = document.getElementById('cboFrecuencia');
+    const cboCesados = document.getElementById('cboCesados');
     const panelEmpresas = document.getElementById('panelEmpresas');
     const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
     const btnEmpresas = document.getElementById('btnEmpresas');
@@ -335,6 +344,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         const concept = cboConcepto.value.trim() || '0';
         const repunit = cboUnidad.value.trim() || '0';
         const frecuencytype = cboFrecuencia.value.trim() || '0';
+        const cesados = (cboCesados.value || 'T').trim() || 'T';
 
         try {
             const res = await fetch(URL_REPORTE, {
@@ -349,7 +359,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     concept_cia: ciaConceptos || companies[0],
                     repunit,
                     frecuencytype,
-                    cesados: 'T',
+                    cesados,
                 }),
             });
             const payload = await res.json();
@@ -371,6 +381,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     concepto: selectedText('cboConcepto'),
                     unidad: selectedText('cboUnidad'),
                     frecuencia: selectedText('cboFrecuencia'),
+                    cesados: selectedText('cboCesados'),
                     empresas: companies.length,
                 },
             };
@@ -394,6 +405,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         ws.addRow(['Asignación de Conceptos (consolidado)']);
         ws.addRow([`Tipo planilla: ${lastExport.meta.tipoPlanilla || ''}`]);
         ws.addRow([`Periodo: ${lastExport.meta.periodo || ''}`]);
+        ws.addRow([`Cesados: ${lastExport.meta.cesados || ''}`]);
         ws.addRow([`Empresas: ${lastExport.meta.empresas || ''}`]);
         ws.addRow([]);
         ws.addRow(lastExport.headers);

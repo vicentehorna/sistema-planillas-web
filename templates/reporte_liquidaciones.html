@@ -80,25 +80,29 @@
                         <th class="bg-warning bg-opacity-10">Bono</th>
                         <th class="bg-warning bg-opacity-10">Feriado</th>
                         <th class="bg-warning bg-opacity-10">Comisión</th>
-                        <th class="bg-warning bg-opacity-10">Faltas</th>
+                        <th class="bg-warning bg-opacity-10">Ausencias*</th>
                         <th class="bg-success bg-opacity-10">Horas Ex</th>
                         <th class="bg-success bg-opacity-10">Bono</th>
                         <th class="bg-success bg-opacity-10">Feriado</th>
                         <th class="bg-success bg-opacity-10">Comisión</th>
-                        <th class="bg-success bg-opacity-10">Faltas</th>
+                        <th class="bg-success bg-opacity-10">Ausencias*</th>
                         <th class="bg-info bg-opacity-10">Horas Ex</th>
                         <th class="bg-info bg-opacity-10">Bono</th>
                         <th class="bg-info bg-opacity-10">Feriado</th>
                         <th class="bg-info bg-opacity-10">Comisión</th>
-                        <th class="bg-info bg-opacity-10">Faltas</th>
+                        <th class="bg-info bg-opacity-10">Ausencias*</th>
                     </tr>
                 </thead>
                 <tbody id="tblBody">
                 </tbody>
             </table>
         </div>
-        <div class="mt-2 text-muted small fw-bold">
-            No. de Registros: <span id="lblRowCount">0</span>
+        <div class="mt-2 text-muted small">
+            <span class="fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
+            <div class="mt-1">
+                * Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION
+                (días de ausencia + licencia sin goce + suspensión).
+            </div>
         </div>
     </div>
 </div>
@@ -122,10 +126,11 @@ document.addEventListener("DOMContentLoaded", async function() {
 
     const EXCEL_HEADER = [
         'Periodo',
-        'Horas Ex Vac', 'Bono Vac', 'Feriado Vac', 'Comisión Vac', 'Faltas Vac',
-        'Horas Ex CTS', 'Bono CTS', 'Feriado CTS', 'Comisión CTS', 'Faltas CTS',
-        'Horas Ex Grat', 'Bono Grat', 'Feriado Grat', 'Comisión Grat', 'Faltas Grat'
+        'Horas Ex Vac', 'Bono Vac', 'Feriado Vac', 'Comisión Vac', 'Ausencias* Vac',
+        'Horas Ex CTS', 'Bono CTS', 'Feriado CTS', 'Comisión CTS', 'Ausencias* CTS',
+        'Horas Ex Grat', 'Bono Grat', 'Feriado Grat', 'Comisión Grat', 'Ausencias* Grat'
     ];
+    const EXCEL_NOTA_AUSENCIAS = '* Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION (días de ausencia + licencia sin goce + suspensión).';
 
     let lastPromedioExport = null;
 
@@ -322,6 +327,15 @@ document.addEventListener("DOMContentLoaded", async function() {
             ...Array(5).fill(Math.round(num(mesesGra)))
         ], false);
         addResumen('Promedio', promedios, true);
+
+        ws.addRow([]);
+        rowIdx++;
+        ws.mergeCells(rowIdx, 1, rowIdx, NCOLS);
+        const notaCell = ws.getCell(rowIdx, 1);
+        notaCell.value = EXCEL_NOTA_AUSENCIAS;
+        notaCell.font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+        notaCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        ws.getRow(rowIdx).height = 28;
 
         ws.getColumn(1).width = 18;
         for (let c = 2; c <= NCOLS; c++) {

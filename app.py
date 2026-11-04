@@ -15665,7 +15665,7 @@ def api_asientos_interfaz_periodos():
 @app.route('/api/asientos/interfaz/generar-archivo', methods=['POST'])
 @login_required
 def api_asientos_interfaz_generar_archivo():
-    """Genera archivo del asiento: Alvisoft TXT, Excel SAP Divisa o Excel El Clan."""
+    """Genera archivo del asiento: Alvisoft / SAP Quimica ZIP / Excel Divisa / Excel El Clan."""
     from database import get_active_database
     from alvisoft_export import generar_txt_alvisoft
 
@@ -15684,9 +15684,6 @@ def api_asientos_interfaz_generar_archivo():
         logging.exception("api_asientos_interfaz_generar_archivo get_active_database")
         return jsonify({"error": _sp_error_message(e)}), 500
 
-    es_divisa = active_db == 'hm_divisa'
-    es_elclan = active_db == 'hm_elclan'
-    es_aci = active_db == 'hm_aci'
     forzar = str(body.get('forzar') or body.get('force') or '').strip().lower() in (
         '1', 'true', 'y', 'yes', 's', 'si',
     )
@@ -15695,6 +15692,33 @@ def api_asientos_interfaz_generar_archivo():
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Preferir BD real de la conexión (sesión a veces desfasada / proceso sin reload).
+        try:
+            cursor.execute('SELECT DB_NAME()')
+            conn_db = str((cursor.fetchone() or [''])[0] or '').strip().lower()
+        except Exception:
+            conn_db = ''
+        active_db = conn_db or active_db
+
+        es_divisa = active_db == 'hm_divisa'
+        es_elclan = active_db == 'hm_elclan'
+        es_aci = active_db == 'hm_aci'
+        es_quimica = active_db == 'hm_quimica'
+
+        # hm_quimica primero: nunca debe caer al TXT Alvisoft (SPs de hm_aci).
+        if es_quimica:
+            from sap_quimica_export import generar_zip_sap_quimica
+            filename, contenido = generar_zip_sap_quimica(cursor, cia, voucher)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            resp = Response(contenido, mimetype='application/zip')
+            resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+            resp.headers['X-Asiento-Export'] = 'sap-quimica-cab-det'
+            return resp
+
         if es_elclan:
             try:
                 from elclan_asiento_export import generar_xls_asiento_elclan

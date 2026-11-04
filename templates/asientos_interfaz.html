@@ -449,6 +449,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             if (m) filename = m[1];
             const ctype = (res.headers.get('Content-Type') || '').toLowerCase();
             if (!m && ctype.includes('excel')) filename = 'asiento.xls';
+            if (!m && ctype.includes('zip')) filename = 'asiento_sap.zip';
 
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
@@ -459,7 +460,14 @@ document.addEventListener('DOMContentLoaded', async function () {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
 
-            if (window.HmUi) HmUi.exito('Archivo generado.');
+            const exportKind = (res.headers.get('X-Asiento-Export') || '').toLowerCase();
+            if (window.HmUi) {
+                HmUi.exito(
+                    exportKind === 'sap-quimica-cab-det'
+                        ? 'ZIP generado (cabecera + detalle SAP).'
+                        : 'Archivo generado.'
+                );
+            }
         } catch (err) {
             toastErr(err.message || String(err));
         } finally {

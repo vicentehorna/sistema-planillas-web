@@ -153,6 +153,16 @@
         confirmResolve = null;
     }
 
+    function waitConfirmModalHidden() {
+        return new Promise((resolve) => {
+            if (!confirmModalEl || !confirmModalEl.classList.contains('show')) {
+                resolve();
+                return;
+            }
+            confirmModalEl.addEventListener('hidden.bs.modal', () => resolve(), { once: true });
+        });
+    }
+
     function confirmar(opts) {
         const options = opts || {};
         const titulo = String(options.titulo || options.title || 'Confirmar').trim();
@@ -177,19 +187,29 @@
         }
         if (btnOk) {
             btnOk.textContent = textoOk;
-            btnOk.className = `btn btn-sm px-3 ${variant === 'danger' ? 'btn-danger' : 'btn-primary'}`;
+            btnOk.className = `btn btn-sm px-3 ${
+                variant === 'danger' ? 'btn-danger'
+                    : (variant === 'warning' ? 'btn-warning' : 'btn-primary')
+            }`;
         }
         if (btnCancel) btnCancel.textContent = textoCancelar;
         if (iconEl) {
             iconEl.className = variant === 'danger'
                 ? 'bi bi-exclamation-triangle-fill text-danger'
-                : 'bi bi-question-circle text-primary';
+                : (variant === 'warning'
+                    ? 'bi bi-exclamation-triangle-fill text-warning'
+                    : 'bi bi-question-circle text-primary');
         }
 
         cleanupConfirmHandlers();
 
+        // Resolver SOLO tras hidden.bs.modal: si se resuelve al clic, un segundo
+        // confirmar() seguido (p. ej. eliminar fórmula + todas las cias) llama
+        // show() mientras Bootstrap aún anima el hide y el 2.º modal no aparece.
         return new Promise((resolve) => {
             let settled = false;
+            let answer = false;
+
             const finish = (value) => {
                 if (settled) return;
                 settled = true;
@@ -199,22 +219,24 @@
 
             confirmResolve = finish;
             confirmOkHandler = () => {
+                answer = true;
                 confirmModalInstance.hide();
-                finish(true);
             };
             confirmCancelHandler = () => {
+                answer = false;
                 confirmModalInstance.hide();
-                finish(false);
             };
             confirmHiddenHandler = () => {
-                if (!settled) finish(false);
+                finish(answer);
             };
 
-            btnOk.addEventListener('click', confirmOkHandler);
-            btnCancel.addEventListener('click', confirmCancelHandler);
-            confirmModalEl.addEventListener('hidden.bs.modal', confirmHiddenHandler, { once: false });
-
-            confirmModalInstance.show();
+            waitConfirmModalHidden().then(() => {
+                if (settled) return;
+                btnOk.addEventListener('click', confirmOkHandler);
+                btnCancel.addEventListener('click', confirmCancelHandler);
+                confirmModalEl.addEventListener('hidden.bs.modal', confirmHiddenHandler);
+                confirmModalInstance.show();
+            });
         });
     }
 

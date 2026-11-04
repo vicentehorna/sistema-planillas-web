@@ -76,6 +76,13 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "max_args": 1,
         "param_names": ["periodo"],
     },
+    "SP_PR_OBTENERJORNAL": {
+        "display": "sp_pr_obtenerJornal",
+        "description": "Jornal del cargo del trabajador (PR_Position.jornal). Sin argumentos; usa compañía y persona del cálculo",
+        "min_args": 0,
+        "max_args": 0,
+        "param_names": [],
+    },
 }
 
 _ALIASES = {

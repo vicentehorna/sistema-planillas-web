@@ -240,7 +240,7 @@ BEGIN
                 'DIASTRABAJADOS', 'C_HORASTRABAJADAS', 'CANT_HORAS_25', 'CANT_HORAS_35',
                 'CANT_HORAS_NOC', 'DIAS_DESC_SUBSI_INAF', 'DIAS_PATERNIDAD', 'H_FERIADOS_TRAB',
                 'CANT_DIAS_AUSENCIA', 'DIASUSPENSION', 'DIAS_LICENCIA_GOCE', 'DIAS_LIC_SINGOCE',
-                'DIAS_DESCANSO_EMPRES', 'DIAS_DESC_SUBSI_AFEC'
+                'DIAS_DESCANSO_EMPRES', 'DIAS_DESC_SUBSI_AFEC', 'C_DIASVACACIONES'
           );
 
         IF OBJECT_ID('tempdb..#concept_vals') IS NOT NULL DROP TABLE #concept_vals;
@@ -266,7 +266,8 @@ BEGIN
                 ('DIAS_LICENCIA_GOCE', A.lcg),
                 ('DIAS_LIC_SINGOCE', A.lsg),
                 ('DIAS_DESCANSO_EMPRES', A.dm),
-                ('DIAS_DESC_SUBSI_AFEC', A.sub)
+                ('DIAS_DESC_SUBSI_AFEC', A.sub),
+                ('C_DIASVACACIONES', A.vacas)
         ) V (FormulaCode, ConceptValue)
         INNER JOIN #concept_map M ON M.FormulaCode = V.FormulaCode
         WHERE V.ConceptValue > 0;

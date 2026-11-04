@@ -5,8 +5,11 @@
 
     Basado en: AUXILIARES/control de datos AFP.txt (PowerBuilder w_pr_afp_calc_list).
 
-    Solo procesa combinaciones planilla/proceso que tengan concepto formulacode = TOTAL_REM_AFP
-    en PR_EmployeePayRollConcept para el periodo indicado. El proceso QUINCENA (adelanto) nunca
+    Procesa combinaciones planilla/proceso que tengan concepto formulacode = TOTAL_REM_AFP
+    en PR_EmployeePayRollConcept para el periodo indicado. También incluye al trabajador
+    con licencia sin goce (descanso médico PDT 05 de 30 días o más) y sin TOTAL_REM_AFP:
+    se graba en PR_EmployeeAFP con remuneración y aportes en cero para que el listado
+    lo declare con excepción de aportar L. El proceso QUINCENA (adelanto) nunca
     se incluye en AFPnet: sus aportes se declaran con el FIN DE MES.
 
     CUSPP: prioriza PR_Employee.AFPCard (ficha); si falta, usa PR_EmployeePayRoll.AFPCard.
@@ -96,13 +99,129 @@ BEGIN
               AND LTRIM(RTRIM(PTQ.ShortName)) = 'QUINCENA'
       );
 
+    /*
+      Licencia sin goce de todo el mes (PDT 05, 30 días o más) y sin remuneración AFP.
+      El listado ya marca excepción L, pero solo si existe fila en PR_EmployeeAFP.
+    */
+    CREATE TABLE #LicenciaSinGoce (
+        person VARCHAR(20) NOT NULL PRIMARY KEY,
+        payrolltype VARCHAR(20) NOT NULL,
+        processtype VARCHAR(20) NOT NULL,
+        prperiod VARCHAR(20) NOT NULL,
+        afp VARCHAR(20) NULL,
+        afpcard VARCHAR(20) NULL,
+        ceasedate DATETIME NULL,
+        entrydate DATETIME NULL,
+        costcenter VARCHAR(20) NULL,
+        costcentername VARCHAR(20) NULL,
+        replicationunit VARCHAR(4) NULL,
+        conceptcurrency CHAR(2) NULL,
+        exchangerate NUMERIC(18, 4) NULL
+    );
+
+    INSERT INTO #LicenciaSinGoce (
+        person, payrolltype, processtype, prperiod, afp, afpcard,
+        ceasedate, entrydate, costcenter, costcentername, replicationunit,
+        conceptcurrency, exchangerate
+    )
+    SELECT
+        Q.person, Q.payrolltype, Q.processtype, Q.prperiod, Q.afp, Q.afpcard,
+        Q.ceasedate, Q.entrydate, Q.costcenter, Q.costcentername, Q.replicationunit,
+        Q.conceptcurrency, Q.exchangerate
+    FROM (
+        SELECT
+            LTRIM(RTRIM(EP.Person)) AS person,
+            LTRIM(RTRIM(EP.PayRollType)) AS payrolltype,
+            LTRIM(RTRIM(EP.ProcessType)) AS processtype,
+            LTRIM(RTRIM(EP.PRPeriod)) AS prperiod,
+            LTRIM(RTRIM(EP.AFP)) AS afp,
+            LTRIM(RTRIM(COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(EP.AFPCard, ''))), ''),
+                ''
+            ))) AS afpcard,
+            EP.CeaseDate AS ceasedate,
+            EP.EntryDate AS entrydate,
+            LTRIM(RTRIM(ISNULL(EP.CostCenter, ''))) AS costcenter,
+            LTRIM(RTRIM(ISNULL(EP.CostCenterName, ''))) AS costcentername,
+            LTRIM(RTRIM(ISNULL(EP.ReplicationUnit, ''))) AS replicationunit,
+            CUR.conceptcurrency,
+            CUR.exchangerate,
+            ROW_NUMBER() OVER (
+                PARTITION BY LTRIM(RTRIM(EP.Person))
+                ORDER BY
+                    CASE LTRIM(RTRIM(PT.ShortName))
+                        WHEN 'FIN_DE_MES' THEN 1
+                        WHEN 'LIQUIDACION' THEN 2
+                        WHEN 'SEMANAL' THEN 3
+                        ELSE 9
+                    END,
+                    EP.PayRollType
+            ) AS rn
+        FROM PR_EmployeePayRoll EP (NOLOCK)
+            INNER JOIN PR_ProcessType PT (NOLOCK)
+                ON PT.ProcessType = EP.ProcessType
+               AND PT.Company = EP.Company
+            INNER JOIN PR_Employee EM (NOLOCK)
+                ON EM.person = EP.Person
+               AND EM.company = EP.Company
+            OUTER APPLY (
+                SELECT TOP 1
+                    EPC.ConceptCurrency AS conceptcurrency,
+                    EPC.ExchangeRate AS exchangerate
+                FROM PR_EmployeePayRollConcept EPC (NOLOCK)
+                WHERE EPC.Company = EP.Company
+                  AND EPC.Person = EP.Person
+                  AND EPC.PayRollType = EP.PayRollType
+                  AND EPC.ProcessType = EP.ProcessType
+                  AND EPC.PRPeriod = EP.PRPeriod
+            ) CUR
+        WHERE EP.Company = @cia
+          AND LEFT(EP.PRPeriod, 6) = @period
+          AND ISNULL(LTRIM(RTRIM(EP.AFP)), '') <> ''
+          AND LTRIM(RTRIM(PT.ShortName)) IN ('FIN_DE_MES', 'LIQUIDACION', 'SEMANAL')
+          AND (@payroll_all = 'Y' OR EP.PayRollType = @payroll)
+          AND ISNULL((
+                SELECT SUM(MR.Days)
+                FROM PR_EmployeeMedicalRest MR (NOLOCK)
+                    INNER JOIN PR_MedicalRestType MT (NOLOCK)
+                        ON MR.MedicalRestType = MT.MedicalRestType
+                       AND MT.pdt = '05'
+                WHERE LTRIM(RTRIM(MR.person)) = LTRIM(RTRIM(EP.Person))
+                  AND MR.Company = @cia
+                  AND LEFT(MR.PRPeriod, 6) = @period
+          ), 0) >= 30
+          AND NOT EXISTS (
+                SELECT 1
+                FROM PR_EmployeePayRollConcept X (NOLOCK)
+                    INNER JOIN PR_Concept Y (NOLOCK)
+                        ON X.Concept = Y.Concept
+                       AND Y.Company = X.Company
+                WHERE Y.FormulaCode = 'TOTAL_REM_AFP'
+                  AND LTRIM(RTRIM(X.Person)) = LTRIM(RTRIM(EP.Person))
+                  AND X.Company = @cia
+                  AND LEFT(X.PRPeriod, 6) = @period
+          )
+    ) Q
+    WHERE Q.rn = 1;
+
+    INSERT INTO #PlanillasProcesar (payrolltype, processtype)
+    SELECT DISTINCT S.payrolltype, S.processtype
+    FROM #LicenciaSinGoce S
+    WHERE NOT EXISTS (
+        SELECT 1
+        FROM #PlanillasProcesar P
+        WHERE P.payrolltype = S.payrolltype
+          AND P.processtype = S.processtype
+    );
+
     IF NOT EXISTS (SELECT 1 FROM #PlanillasProcesar)
     BEGIN
         SELECT
             0 AS actualizado,
             0 AS filas_afp,
             0 AS filas_header,
-            'No hay combinaciones planilla/proceso con concepto TOTAL_REM_AFP para el periodo.' AS mensaje;
+            'No hay combinaciones planilla/proceso con concepto TOTAL_REM_AFP ni licencias sin goce (PDT 05 de 30 días o más) para el periodo.' AS mensaje;
         RETURN;
     END
 
@@ -416,6 +535,69 @@ BEGIN
         WHERE S.tiene_aportes > 0
           AND ISNULL(LTRIM(RTRIM(S.afp)), '') <> '';
 
+        /* Reemplaza una fila AFP previa de quien ahora solo tiene licencia sin goce. */
+        DELETE A
+        FROM PR_EmployeeAFP A
+        WHERE A.Company = @cia
+          AND LEFT(A.PRPeriod, 6) = @period
+          AND A.Person IN (SELECT person FROM #LicenciaSinGoce)
+          AND NOT EXISTS (
+                SELECT 1
+                FROM #ConceptosAfp C
+                WHERE C.person = LTRIM(RTRIM(A.Person))
+          );
+
+        INSERT INTO PR_EmployeeAFP (
+            Person, Company, PRPeriod, AFP, AFPCurrency, AFPExchangeRate,
+            AssureableRemAmount, AssureableRemAmountLo, AssureableRemAmountEx,
+            FixedAmount, FixedAmountLo, FixedAmountEx,
+            VariableAmount, VariableAmountLo, VariableAmountEx,
+            InsuredAmount, InsuredAmountLo, InsuredAmountEx,
+            ARComisionAmount, ARComisionAmountLo, ARComisionAmountEx,
+            EmployerContribution, EmployerContributionLo, EmployerContributionEx,
+            ReplicationUnit, XLastUser, XLastDate,
+            Costcenter, Costcentername, payrolltype, ceasedate, afpcard, entrydate
+        )
+        SELECT
+            S.person,
+            @cia,
+            S.prperiod,
+            S.afp,
+            ISNULL(S.conceptcurrency, 'LO'),
+            ISNULL(S.exchangerate, 0),
+            0, 0, 0,
+            0, 0, 0,
+            0, 0, 0,
+            0, 0, 0,
+            0, 0, 0,
+            0, 0, 0,
+            CASE
+                WHEN ISNULL(S.replicationunit, '') = '' THEN @DefaultReplicationUnit
+                ELSE S.replicationunit
+            END,
+            @xlastuser,
+            GETDATE(),
+            S.costcenter,
+            S.costcentername,
+            S.payrolltype,
+            S.ceasedate,
+            LTRIM(RTRIM(COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(EM.AFPCard, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(S.afpcard, ''))), ''),
+                ''
+            ))),
+            S.entrydate
+        FROM #LicenciaSinGoce S
+            INNER JOIN pr_employee EM (NOLOCK)
+                ON EM.person = S.person
+               AND EM.company = @cia
+        WHERE ISNULL(LTRIM(RTRIM(S.afp)), '') <> ''
+          AND NOT EXISTS (
+                SELECT 1
+                FROM #ConceptosAfp C
+                WHERE C.person = S.person
+          );
+
         INSERT INTO PR_EmployeeAFPHeader (
             Company, ReplicationUnit, PRPeriod, PayRollType, AFP, costcenter,
             costcentername, PaymentStatus, XLastUser, XLastDate
@@ -434,7 +616,10 @@ BEGIN
         FROM PR_EmployeeAFP A (NOLOCK)
         WHERE A.Company = @cia
           AND LEFT(A.PRPeriod, 6) = @period
-          AND A.Person IN (SELECT DISTINCT person FROM #ConceptosAfp)
+          AND (
+                A.Person IN (SELECT person FROM #ConceptosAfp)
+             OR A.Person IN (SELECT person FROM #LicenciaSinGoce)
+          )
           AND ISNULL(A.ReplicationUnit, '') <> ''
         GROUP BY
             A.Company, A.ReplicationUnit, A.PRPeriod, A.PayRollType, A.AFP, A.Costcenter;
@@ -450,12 +635,16 @@ BEGIN
             1 AS actualizado,
             (SELECT COUNT(*) FROM PR_EmployeeAFP (NOLOCK)
              WHERE Company = @cia AND LEFT(PRPeriod, 6) = @period
-               AND Person IN (SELECT DISTINCT person FROM #ConceptosAfp)) AS filas_afp,
+               AND (
+                    Person IN (SELECT person FROM #ConceptosAfp)
+                 OR Person IN (SELECT person FROM #LicenciaSinGoce)
+               )) AS filas_afp,
             (SELECT COUNT(*) FROM PR_EmployeeAFPHeader (NOLOCK)
              WHERE Company = @cia AND LEFT(PRPeriod, 6) = @period
                AND (
                     @payroll_all = 'Y'
                  OR PayRollType IN (SELECT DISTINCT payrolltype FROM #ConceptosAfp)
+                 OR PayRollType IN (SELECT DISTINCT payrolltype FROM #LicenciaSinGoce)
                )) AS filas_header,
             'Control de datos AFP ejecutado correctamente.' AS mensaje;
     END TRY

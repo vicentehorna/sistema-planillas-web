@@ -558,21 +558,21 @@
             <div class="conceptos-grilla-scroll" id="grillaScrollConceptos" tabindex="0"
                  role="listbox" aria-label="Lista de conceptos. Use flechas arriba y abajo para navegar.">
                 <table class="table table-sm table-hover table-conceptos-lista align-middle mb-0">
-                    <thead>
-                        <tr>
+                <thead>
+                    <tr>
                             <th class="col-nombre th-sort" data-sort="description">Concepto<span class="sort-ind"></span></th>
                             <th class="col-pdt th-sort" data-sort="pdt">PDT<span class="sort-ind"></span></th>
                             <th class="col-tipo th-sort" data-sort="tiposhortname">Tipo<span class="sort-ind"></span></th>
                             <th class="col-codigo th-sort" data-sort="formulacode">Código<span class="sort-ind"></span></th>
                             <th class="col-fecha th-sort" data-sort="xlastdate">Últ. cambio<span class="sort-ind"></span></th>
-                            <th class="col-acciones" title="Acciones"> </th>
-                        </tr>
-                    </thead>
-                    <tbody id="tbodyConceptos">
+                        <th class="col-acciones" title="Acciones"> </th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyConceptos">
                         <tr><td colspan="6" class="text-center text-muted py-3">Seleccione una compañía</td></tr>
-                    </tbody>
-                </table>
-            </div>
+                </tbody>
+            </table>
+        </div>
             <div id="lblConteoConceptos" class="conceptos-grilla-footer">0 registros</div>
         </div>
     </aside>
@@ -1699,7 +1699,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (eliminarEnCias) {
                     try {
                         await eliminarConceptoEnCias(cboCia.value.trim(), formulacode);
-                    } catch (err) {
+        } catch (err) {
                         hmError(err.message || 'No se pudo eliminar el concepto en las demás empresas.');
                     }
                 }
@@ -1886,7 +1886,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (replicar) {
                     try {
                         await replicarConceptoEnCias(payload.cia, payload.formulacode);
-                    } catch (err) {
+        } catch (err) {
                         hmError(err.message || 'No se pudo replicar el concepto.');
                     }
                 }

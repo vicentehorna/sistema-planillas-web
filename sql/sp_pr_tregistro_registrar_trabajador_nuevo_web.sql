@@ -1009,10 +1009,11 @@ BEGIN
         END;
 
         /*
-            Asignación permanente AFP_FLUJO (=1) desde el periodo de ingreso.
-            Aplica a todo trabajador con AFP, sin excepción por tipo de planilla.
+            Asignación permanente AFP_FLUJO (=1) solo si comisión mixta (flag_mixta=Y).
+            Flujo no crea el concepto (en UI se muestra como AFP_COMISION_MIXTA).
         */
         IF @tiene_afp = 'Y'
+           AND @flag_mixta = 'Y'
            AND @payroll_type_id IS NOT NULL
            AND @entrydate_dt IS NOT NULL
         BEGIN
@@ -1020,9 +1021,18 @@ BEGIN
             SELECT TOP 1 @concept_afp_flujo = c.concept
             FROM pr_concept c (NOLOCK)
             WHERE c.company = @cia
-              AND c.formulacode = 'AFP_FLUJO'
               AND c.status = 'A'
-            ORDER BY c.concept;
+              AND (
+                    LTRIM(RTRIM(ISNULL(c.formulacode, ''))) IN ('AFP_FLUJO', 'AFP_COMISION_MIXTA')
+                 OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'AFP_COMISION_MIXTA'
+              )
+            ORDER BY
+                CASE LTRIM(RTRIM(ISNULL(c.formulacode, '')))
+                    WHEN 'AFP_FLUJO' THEN 0
+                    WHEN 'AFP_COMISION_MIXTA' THEN 1
+                    ELSE 2
+                END,
+                c.concept;
 
             IF @period_start IS NULL
             BEGIN

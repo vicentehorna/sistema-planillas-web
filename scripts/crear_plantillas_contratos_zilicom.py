@@ -7,9 +7,14 @@ Fuente: AUXILIARES/ZILICOM/
   - Renovacion Administrativos Lima.rtf.doc
   - Renovacion Contratos  ANALISTAS - No Fiscalizado.rtf.doc
   - Renovacion Contratos  Jefaturas - CONFIANZA.rtf.doc
+  - Renovacion Ejecutivos Comerciales.rtf.doc
 
 Instala en: uploads/contratos_plantillas/hm_zilicom/SB01/
   (ZILICOM INVESTMENTS S.A.C. en hm_zilicom)
+
+Uso:
+  python scripts/crear_plantillas_contratos_zilicom.py
+  python scripts/crear_plantillas_contratos_zilicom.py --only EJECUTIVOS
 
 Word 12: una sola apertura por archivo (SaveAs docx + quit), luego bookmarks
 en word/document.xml y parches de texto.
@@ -90,6 +95,16 @@ PLANTILLAS = [
             "MOVILIDAD": "movilidad",
         },
     },
+    {
+        "src": AUX / "Renovacion Ejecutivos Comerciales.rtf.doc",
+        "nombre": "RENOVACION_ZILICOM_EJECUTIVOS_COMERCIALES.docx",
+        # FECHAINICONTRATO (en “se renueva el”) = inicio; FECHAINICONTRATO1 = firma.
+        "extra": {
+            "FECHAINICONTRATO": "inicio_contrato",
+            "FECHAINICONTRATO1": "fecha_firma",
+            "MOVILIDAD": "movilidad",
+        },
+    },
 ]
 
 _POST_PATCHES = [
@@ -152,6 +167,59 @@ _POST_PATCHES = [
     (
         r"se inicia el \{\{\s*fecha_firma\s*\}\} al \{\{\s*fin_contrato\s*\}\}",
         "se inicia el {{ inicio_contrato }} al {{ fin_contrato }}",
+    ),
+    # Ejecutivos Comerciales: limpiar MERGEFIELD huérfanos del RTF
+    (
+        r"se\s+renueva\s+el\s+\{\{\s*fecha_firma\s*\}\}",
+        "se renueva el {{ inicio_contrato }}",
+    ),
+    (
+        r"MERGEFIELD\s+Incio_Renov_Oct_20232\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+Fin_Renov_Oct_20233\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+TRANSPORTE\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+SUELDO_B\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+TRABAJADOR\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+PUESTO\s*",
+        "",
+    ),
+    (
+        r"MERGEFIELD\s+CODIGO\s*",
+        "",
+    ),
+    (
+        r"S/\s*\.\s*\{\{\s*sueldo\s*\}\}",
+        "S/ {{ sueldo }}",
+    ),
+    (
+        r"remuneraci[oó]n\s+b[aá]sica\s+de\s+a\s+S/\s*\{\{\s*sueldo\s*\}\}",
+        "remuneración básica de S/ {{ sueldo }}",
+    ),
+    (
+        r"se\s+desempe[nñ]e\s+como\s+\{\{\s*cargo\s*\}\}\s+Asumiendo",
+        "se desempeñe como {{ cargo }}. Asumiendo",
+    ),
+    (
+        r"S/\.\s*\.?\s*\{\{\s*movilidad\s*\}\}",
+        "S/. {{ movilidad }}",
+    ),
+    (
+        r"importe\s+de\s+S/\.\s+\{\{\s*movilidad\s*\}\}",
+        "importe de S/. {{ movilidad }}",
     ),
 ]
 
@@ -326,6 +394,35 @@ def apply_post_patches(path: Path) -> list[str]:
     )
 
 
+def strip_mergefield_leftovers_xml(path: Path) -> None:
+    """Elimina textos MERGEFIELD huérfanos que quedan en word/document.xml."""
+    with zipfile.ZipFile(path, "r") as zin:
+        payload = {name: zin.read(name) for name in zin.namelist()}
+    xml = payload["word/document.xml"].decode("utf-8")
+    names = (
+        "Incio_Renov_Oct_20232",
+        "Fin_Renov_Oct_20233",
+        "TRANSPORTE",
+        "SUELDO_B",
+        "SEDE",
+        "TRABAJADOR",
+        "PUESTO",
+        "CODIGO",
+    )
+    xml2 = xml
+    for name in names:
+        xml2 = re.sub(rf"MERGEFIELD\s+{re.escape(name)}\s*", "", xml2, flags=re.I)
+    xml2 = xml2.replace("{{ inicio_contrato }}  y", "{{ inicio_contrato }} y")
+    xml2 = xml2.replace("{{ fin_contrato }} .Asimismo", "{{ fin_contrato }}. Asimismo")
+    if xml2 == xml:
+        return
+    payload["word/document.xml"] = xml2.encode("utf-8")
+    with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as zout:
+        for name, data in payload.items():
+            zout.writestr(name, data)
+    print("  XML: MERGEFIELD huérfanos limpiados")
+
+
 def install(path: Path, nombre: str) -> Path:
     dest = plantillas_dir(CIA, database=DATABASE) / nombre
     shutil.copy2(path, dest)
@@ -349,11 +446,27 @@ def process_one(item: dict) -> None:
     print("  Tras enrich:", marks1)
     marks2 = apply_post_patches(out)
     print("  Marcadores finales:", marks2)
+    strip_mergefield_leftovers_xml(out)
     install(out, nombre)
 
 
-def main():
-    for item in PLANTILLAS:
+def main(argv: list[str] | None = None):
+    args = list(argv if argv is not None else sys.argv[1:])
+    only = ""
+    if "--only" in args:
+        i = args.index("--only")
+        only = str(args[i + 1] if i + 1 < len(args) else "").strip().upper()
+    items = PLANTILLAS
+    if only:
+        items = [
+            it
+            for it in PLANTILLAS
+            if only in str(it.get("nombre") or "").upper()
+            or only in str(it.get("src") or "").upper()
+        ]
+        if not items:
+            raise SystemExit(f"No hay plantilla que coincida con --only {only}")
+    for item in items:
         process_one(item)
         time.sleep(1.5)
     print("\nLISTO")

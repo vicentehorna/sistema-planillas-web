@@ -16,9 +16,9 @@ BEGIN
         LTRIM(RTRIM(
             CASE
                 WHEN LTRIM(RTRIM(ISNULL(cc.Name, ''))) <> ''
-                    THEN LTRIM(RTRIM(cc.Abbrev)) + ' — ' + LTRIM(RTRIM(cc.Name))
+                    THEN LTRIM(RTRIM(cc.Abbrev)) + ' - ' + LTRIM(RTRIM(cc.Name))
                 WHEN LTRIM(RTRIM(ISNULL(cc.Description, ''))) <> ''
-                    THEN LTRIM(RTRIM(cc.Abbrev)) + ' — ' + LTRIM(RTRIM(cc.Description))
+                    THEN LTRIM(RTRIM(cc.Abbrev)) + ' - ' + LTRIM(RTRIM(cc.Description))
                 ELSE LTRIM(RTRIM(cc.Abbrev))
             END
         )) AS text

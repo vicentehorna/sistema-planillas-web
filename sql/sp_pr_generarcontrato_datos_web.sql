@@ -125,6 +125,29 @@ BEGIN
             e.salary,
             0
         )) AS sueldo,
+        /* Movilidad / transporte: permanente vigente (MOVILIDAD o MOVILIDAD1). */
+        CONVERT(decimal(18, 2), (
+            SELECT TOP 1 ec.ConceptValue
+            FROM PR_EmployeeConcept ec (NOLOCK)
+            INNER JOIN PR_Concept c (NOLOCK)
+                ON c.Concept = ec.Concept
+               AND c.Company = ec.Company
+            WHERE ec.Company = e.Company
+              AND ec.Person = e.Person
+              AND (
+                    UPPER(LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))) IN ('MOVILIDAD', 'MOVILIDAD1')
+                 OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'MOVILIDAD'
+              )
+              AND UPPER(LTRIM(RTRIM(ISNULL(ec.FlagFrecuencyType, 'P')))) = 'P'
+              AND ec.PRPeriodEnd IS NULL
+            ORDER BY
+                CASE UPPER(LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))))
+                    WHEN 'MOVILIDAD' THEN 0
+                    WHEN 'MOVILIDAD1' THEN 1
+                    ELSE 2
+                END,
+                ec.PRPeriodStart DESC
+        )) AS movilidad,
         CONVERT(varchar(10), ISNULL(e.ReEntryDate, e.EntryDate), 23) AS fecha_ingreso,
         CONVERT(varchar(10), ISNULL(ca.startdate, ISNULL(e.ReEntryDate, e.EntryDate)), 23) AS inicio_contrato,
         CONVERT(varchar(10), ca.enddate, 23) AS fin_contrato,

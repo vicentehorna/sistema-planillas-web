@@ -1026,7 +1026,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         actualizarFiltroFechaIngreso(false);
     } else if (!esRetornoListado) {
         document.getElementById('chkFechaIngreso').checked = false;
-        actualizarFiltroFechaIngreso(false);
+            actualizarFiltroFechaIngreso(false);
     }
 
     limpiarValorComboSiObsoleto(cboCia);
@@ -1138,7 +1138,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || 'No se pudo eliminar el trabajador.');
                 hmExito(data.mensaje || 'Trabajador eliminado.');
-                await ejecutarConsultaTrabajadores();
+        await ejecutarConsultaTrabajadores();
             } catch (err) {
                 console.error(err);
                 hmError(err.message || String(err));

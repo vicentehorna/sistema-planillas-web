@@ -39,6 +39,8 @@ BEGIN
     DECLARE @nerr       INT = 0;
     DECLARE @msg        NVARCHAR(2048);
     DECLARE @propia     BIT;
+    DECLARE @pref_id    VARCHAR(8);
+    DECLARE @max_exist  INT;
 
     SET @cia_destino = NULLIF(LTRIM(RTRIM(ISNULL(@cia_destino, ''))), '');
 
@@ -164,7 +166,40 @@ BEGIN
         DELETE FD FROM PR_FormulaDetail FD INNER JOIN @fh_borrar B ON B.FormulaHeader = FD.FormulaHeader;
         DELETE FH FROM PR_FormulaHeader FH INNER JOIN @fh_borrar B ON B.FormulaHeader = FH.FormulaHeader;
 
+        /* Alinea correlativo si quedó atrás respecto a IDs ya usados (p. ej. réplicas
+           fallidas o altas con otro Object de secuencia). */
+        SET @pref_id = LEFT('LIMA' + SPACE(3), 4) + LEFT(@company + SPACE(3), 4);
+        SET @max_exist = NULL;
+        SELECT @max_exist = MAX(CONVERT(INT, RIGHT(RTRIM(x.FormulaHeader), 12)))
+        FROM (
+            SELECT fh.FormulaHeader
+            FROM PR_FormulaHeader fh
+            WHERE fh.FormulaHeader LIKE @pref_id + '%'
+              AND ISNUMERIC(RIGHT(RTRIM(fh.FormulaHeader), 12)) = 1
+            UNION ALL
+            SELECT fd.FormulaHeader
+            FROM PR_FormulaDetail fd
+            WHERE fd.FormulaHeader LIKE @pref_id + '%'
+              AND ISNUMERIC(RIGHT(RTRIM(fd.FormulaHeader), 12)) = 1
+        ) x;
+        IF ISNULL(@max_exist, 0) > 0
+        BEGIN
+            UPDATE SY_ObjectSecuence
+            SET Secuence = @max_exist,
+                XLastUser = 'REPL_FORM_CIA',
+                XLastDate = GETDATE()
+            WHERE Object = 'PRA_FORM2024'
+              AND Company = @company
+              AND ReplicationUnit = 'LIMA'
+              AND ISNULL(Secuence, 0) < @max_exist;
+        END;
+
         EXEC SP_SY_ObjectSecuence_Edit 'PRA_FORM2024', @company, 'LIMA', @id OUTPUT;
+
+        /* Evita PK duplicado si quedó detalle/cabecera huérfana de un intento previo
+           con el mismo correlativo (secuencia desfasada vs datos). */
+        DELETE FROM PR_FormulaDetail WHERE FormulaHeader = @id;
+        DELETE FROM PR_FormulaHeader WHERE FormulaHeader = @id;
 
         INSERT INTO PR_FormulaHeader (
             FormulaHeader, Company, Payrolltype, Proccestype, Concept, Description,

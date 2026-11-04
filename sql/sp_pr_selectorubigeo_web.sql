@@ -25,15 +25,15 @@ BEGIN
     IF @cia_filtro IS NOT NULL
        AND NOT EXISTS (
             SELECT 1 FROM SY_Localite l0 (NOLOCK)
-            WHERE l0.Company = @cia_filtro
+            WHERE LTRIM(RTRIM(l0.Company)) = @cia_filtro
        )
     BEGIN
-        IF EXISTS (SELECT 1 FROM SY_Localite (NOLOCK) WHERE Company = 'BGT')
+        IF EXISTS (SELECT 1 FROM SY_Localite (NOLOCK) WHERE LTRIM(RTRIM(Company)) = 'BGT')
             SET @cia_filtro = 'BGT';
         ELSE
-            SELECT TOP 1 @cia_filtro = Company
+            SELECT TOP 1 @cia_filtro = LTRIM(RTRIM(Company))
             FROM SY_Localite (NOLOCK)
-            WHERE ISNULL(Company, '') <> ''
+            WHERE ISNULL(LTRIM(RTRIM(Company)), '') <> ''
             ORDER BY Company;
     END
 
@@ -62,19 +62,19 @@ BEGIN
       AND (
             @cia_filtro IS NULL
          OR LTRIM(RTRIM(ISNULL(l.Company, ''))) = ''
-         OR l.Company = @cia_filtro
+         OR LTRIM(RTRIM(l.Company)) = @cia_filtro
       )
       AND (
             @busqueda = ''
-         OR l.Name LIKE '%' + @busqueda + '%'
-         OR p.Name LIKE '%' + @busqueda + '%'
-         OR d.Name LIKE '%' + @busqueda + '%'
+         OR l.Name COLLATE Latin1_General_CI_AI LIKE '%' + @busqueda + '%'
+         OR p.Name COLLATE Latin1_General_CI_AI LIKE '%' + @busqueda + '%'
+         OR d.Name COLLATE Latin1_General_CI_AI LIKE '%' + @busqueda + '%'
          OR LTRIM(RTRIM(ISNULL(l.pdt, ''))) LIKE @busqueda + '%'
          OR (
                 ISNULL(d.Name, '') + ' / ' +
                 ISNULL(p.Name, '') + ' / ' +
                 ISNULL(l.Name, '')
-            ) LIKE '%' + @busqueda + '%'
+            ) COLLATE Latin1_General_CI_AI LIKE '%' + @busqueda + '%'
       )
     ORDER BY d.Name, p.Name, l.Name;
 END

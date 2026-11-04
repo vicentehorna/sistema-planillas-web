@@ -1,8 +1,11 @@
 /*
     SC_CTS: suma de un concepto en un proceso desde el inicio del ciclo de provisión CTS
-    hasta @period_end. El ciclo depende del periodo en proceso (@period):
-      - Mayo a Octubre  -> inicio Mayo del mismo año
-      - Noviembre a Abril -> inicio Noviembre (año anterior si ene-abr)
+    hasta @period_end. El ciclo depende del periodo FIN del rango (@period_end):
+      - Fin en Mayo a Octubre     -> inicio Mayo del mismo año
+      - Fin en Noviembre a Abril  -> inicio Noviembre
+        (año anterior si el fin es ene-abr; mismo año si nov-dic)
+    Así, en el pago de CTS de Noviembre con Per. fin ACTUAL -1 (Octubre) el
+    rango es May–Oct, y en el de Mayo (fin Abril) es Nov–Abr.
     Si @period_end es anterior al periodo de inicio del ciclo, devuelve 0.
     Respeta fecha de ingreso/reingreso: no suma periodos anteriores al mes de alta.
 */
@@ -35,12 +38,12 @@ BEGIN
     IF @period IS NULL OR @period_end IS NULL
         RETURN 0;
 
-    SET @mes_periodo = CONVERT(INT, SUBSTRING(@period, 5, 2));
+    SET @mes_periodo = CONVERT(INT, SUBSTRING(@period_end, 5, 2));
 
     SET @inicio_ciclo_cts = CASE
-        WHEN @mes_periodo BETWEEN 5 AND 10 THEN CONVERT(DATE, LEFT(@period, 4) + '0501')
-        WHEN @mes_periodo BETWEEN 11 AND 12 THEN CONVERT(DATE, LEFT(@period, 4) + '1101')
-        ELSE CONVERT(DATE, CONVERT(CHAR(4), CONVERT(INT, LEFT(@period, 4)) - 1) + '1101')
+        WHEN @mes_periodo BETWEEN 5 AND 10 THEN CONVERT(DATE, LEFT(@period_end, 4) + '0501')
+        WHEN @mes_periodo BETWEEN 11 AND 12 THEN CONVERT(DATE, LEFT(@period_end, 4) + '1101')
+        ELSE CONVERT(DATE, CONVERT(CHAR(4), CONVERT(INT, LEFT(@period_end, 4)) - 1) + '1101')
     END;
 
     SET @inicio_yyyymm = LEFT(CONVERT(VARCHAR(8), @inicio_ciclo_cts, 112), 6);
@@ -49,7 +52,8 @@ BEGIN
     FROM PR_Period p (NOLOCK)
     WHERE p.Company = @cia
       AND p.PayRollType = @payrolltype
-      AND LEFT(p.PRPeriod, 6) >= @inicio_yyyymm;
+      AND LEFT(p.PRPeriod, 6) >= @inicio_yyyymm
+      AND p.PRPeriod <= @period_end;
 
     IF @period_begin IS NULL
         RETURN 0;

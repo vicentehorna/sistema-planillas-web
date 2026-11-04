@@ -109,12 +109,12 @@ BEGIN
           AND epc.concept = @par_concept
           AND epc.prperiod = @par_period
         GROUP BY epc.person
-        HAVING SUM(
+        HAVING ROUND(SUM(
             CASE
                 WHEN @par_currency = 'EX' THEN ISNULL(epc.conceptvalueex, 0)
                 ELSE ISNULL(epc.conceptvaluelo, 0)
             END
-        ) > 0
+        ), 2) > 0
     ),
     DetalleBase AS (
         SELECT
@@ -257,7 +257,8 @@ BEGIN
         ) AS importe_fmt
     INTO #Detalle
     FROM DetalleBase
-    WHERE LTRIM(RTRIM(ISNULL(cuenta, ''))) <> '';
+    WHERE LTRIM(RTRIM(ISNULL(cuenta, ''))) <> ''
+      AND ROUND(ISNULL(importe, 0), 2) > 0;
 
     SELECT @total_reg = COUNT(*) FROM #Detalle;
     SELECT @monto_total = ISNULL(SUM(importe), 0) FROM #Detalle;

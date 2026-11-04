@@ -12,6 +12,9 @@
 
     Si el proceso es VACACIONES (ShortName o Description), solo lista quienes tienen
     PR_VacationDetail en ese periodo con VacationType D (tomadas) o V (vendidas).
+
+    Lecturas con NOLOCK: el listado no debe quedar bloqueado si un cálculo en curso
+    (p. ej. liquidación) mantiene locks en PR_EmployeePayRoll.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_calcularplanillas_web]
     @cia            VARCHAR(10),
@@ -71,10 +74,10 @@ BEGIN
         ISNULL(PR_EMPLOYEE.REENTRYDATE, PR_EMPLOYEE.ENTRYDATE) AS entrydate,
         PR_EMPLOYEE.CEASEDATE AS ceasedate,
         EPR.XLastDate AS calculationdate
-    FROM PR_EMPLOYEE
-        INNER JOIN SY_PERSON
+    FROM PR_EMPLOYEE WITH (NOLOCK)
+        INNER JOIN SY_PERSON WITH (NOLOCK)
             ON PR_EMPLOYEE.PERSON = SY_PERSON.PERSON
-        LEFT JOIN PR_EmployeePayRoll EPR
+        LEFT JOIN PR_EmployeePayRoll EPR WITH (NOLOCK)
             ON EPR.Person = PR_EMPLOYEE.Person
            AND EPR.Company = @cia
            AND EPR.PayRollType = @payrolltype
@@ -118,7 +121,7 @@ BEGIN
             @es_vacaciones = 0
             OR EXISTS (
                 SELECT 1
-                FROM PR_VacationDetail vd
+                FROM PR_VacationDetail vd WITH (NOLOCK)
                 WHERE vd.Company = PR_EMPLOYEE.COMPANY
                   AND vd.Person = PR_EMPLOYEE.PERSON
                   AND LTRIM(RTRIM(vd.PRPeriod)) = @period

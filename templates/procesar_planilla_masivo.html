@@ -487,6 +487,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         lista.innerHTML = items.map((m) => `<li>${esc(m)}</li>`).join('');
         card.classList.remove('d-none');
+        try { card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } catch (ignore) {}
     }
 
     function ocultarValidaciones() {
@@ -661,6 +662,16 @@ document.addEventListener('DOMContentLoaded', function () {
                         if (data.error) {
                             if (Array.isArray(data.validaciones_pre) && data.validaciones_pre.length) {
                                 renderValidacionesPreCalculo(data.validaciones_pre);
+                                // Incluir detalle en el error: el card queda arriba y se pierde tras el alert.
+                                const detalle = data.validaciones_pre.slice(0, 12).join('\n• ');
+                                throw new Error(
+                                    data.error
+                                    + '\n\nValidaciones previas:\n• '
+                                    + detalle
+                                    + (data.validaciones_pre.length > 12
+                                        ? '\n• … (+' + (data.validaciones_pre.length - 12) + ' más; ver panel rojo arriba)'
+                                        : '')
+                                );
                             }
                             throw new Error(data.error);
                         }

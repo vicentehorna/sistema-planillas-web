@@ -61,12 +61,12 @@ BEGIN
              OR (@flag_set_period = 'Y' AND epc.prperiod = @par_period)
           )
         GROUP BY epc.person
-        HAVING SUM(
+        HAVING ROUND(SUM(
             CASE
                 WHEN @par_currency = 'EX' THEN ISNULL(epc.conceptvalueex, 0)
                 ELSE ISNULL(epc.conceptvaluelo, 0)
             END
-        ) > 0
+        ), 2) > 0
     )
     SELECT
         e.person,

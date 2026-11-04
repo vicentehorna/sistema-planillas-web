@@ -40,6 +40,71 @@ begin
 
 
 	--execute sp_pr_asignar_conceptos_persona @company, @payrolltype,  @period, @person, @UserID
+
+	/*DIAS TRABAJADOS: extraído de sp_pr_asignar_conceptos_persona.
+	  Si el tareo (o el usuario) ya asignó DIASTRABAJADOS en el periodo se respeta; si no, se calcula.
+	  Lo calculado aquí se marca en Comments para recalcularlo en cada proceso.
+	  Las ausencias pueden venir del registro (vacaciones / descansos) o como conceptos del tareo:
+	  por cada tipo se descuenta el mayor de ambos para no restar dos veces el mismo día.*/
+	declare @dt_concepto varchar(20), @dt_dias_mes numeric(19,4), @dt_ausencias numeric(19,4)
+	declare @dt_ausencias_tipo table (tipo varchar(10), registro numeric(19,4), concepto numeric(19,4))
+	set @dt_concepto = (select Concept from PR_Concept where FormulaCode = 'DIASTRABAJADOS' and Company = @company)
+
+	if @dt_concepto is not null
+	begin
+		delete from PR_EmployeeConcept where Company = @company and PayRollType = @payrolltype and Person = @person
+		and PRPeriodStart = @period and Concept = @dt_concepto and Comments = 'CALCULO FIN DE MES'
+
+		if not exists (select 1 from PR_EmployeeConcept where Company = @company and PayRollType = @payrolltype and Person = @person
+			and Concept = @dt_concepto and @period between PRPeriodStart and isnull(PRPeriodEnd, PRPeriodStart))
+		begin
+			select @dt_dias_mes =
+				case when convert(varchar(6), CeaseDate, 112) < left(@period,6) then 0 else
+				case when convert(varchar(6), CeaseDate, 112) = left(@period,6) then datepart(day, CeaseDate) else
+				case when convert(varchar(6), isnull(ReEntryDate, EntryDate), 112) < left(@period,6) then 30 else
+				case when convert(varchar(6), isnull(ReEntryDate, EntryDate), 112) = left(@period,6) then 30 - datepart(day, isnull(ReEntryDate, EntryDate)) + 1 else 0 end end end end
+			from PR_Employee
+			where Status = 'N' and Company = @company and PayRollType = @payrolltype and Person = @person
+
+			if @dt_dias_mes = 31 set @dt_dias_mes = 30
+
+			insert into @dt_ausencias_tipo (tipo, registro, concepto)
+			select T.tipo,
+				case when T.tipo = 'VAC' then
+					isnull((select sum(Days) from PR_VacationPay where Company = @company and PRPeriod = @period and Person = @person and VacationType = 'D'),0)
+				else
+					isnull((select sum(MR.Days) from PR_EmployeeMedicalRest MR inner join PR_MedicalRestType MT on (MR.MedicalRestType = MT.MedicalRestType)
+							where MR.Company = @company and MR.PRPeriod = @period and MR.Person = @person
+							and ',' + T.pdt + ',' like '%,' + ltrim(rtrim(MT.pdt)) + ',%'),0)
+				end,
+				isnull((select sum(EC.ConceptValue) from PR_EmployeeConcept EC inner join PR_Concept C on (C.Concept = EC.Concept and C.Company = EC.Company)
+						where EC.Company = @company and EC.PayRollType = @payrolltype and EC.Person = @person
+						and @period between EC.PRPeriodStart and isnull(EC.PRPeriodEnd, EC.PRPeriodStart)
+						and ',' + T.conceptos + ',' like '%,' + ltrim(rtrim(C.FormulaCode)) + ',%'),0)
+			from (values
+				('VAC', '',      'DIAS_VACAC_NORMAL'),
+				('DM',  '20',    'DIAS_DESCANSO_EMPRES'),
+				('SUB', '21,22', 'DIAS_SUBSIDIO,DIAS_DESC_SUBSI_INAF,DIAS_DESC_SUBSI_AFEC'),
+				('LSG', '05',    'DIAS_LIC_SINGOCE'),
+				('FAL', '07',    'CANT_DIAS_AUSENCIA'),
+				('LCG', '26',    'DIAS_LICENCIA_GOCE'),
+				('SUS', '01',    'DIAS_SUSPENSION')
+			) T (tipo, pdt, conceptos)
+
+			set @dt_ausencias = isnull((select sum(case when registro > concepto then registro else concepto end) from @dt_ausencias_tipo),0)
+
+			if isnull(@dt_dias_mes,0) - @dt_ausencias > 0
+			begin
+				insert into PR_EmployeeConcept (Person, Company,Concept,PayRollType,PRPeriodStart, CostCenter, PRPeriodEnd, ConceptValue, Application,ConceptCurrency,
+				ConceptValueLo,ConceptValueEx,ExchangeRate,Comments,FlagApplyFormula,FlagFrecuencyType, ReplicationUnit,XLastUser,XLastDate,CostCenterCode,PercentageDistribution)
+				select PR_Employee.Person, PR_Employee.Company, @dt_concepto, PR_Employee.PayRollType, @period, isnull(PR_Employee.CostCenter, ''), @period,
+					@dt_dias_mes - @dt_ausencias, 'PR', 'LO', NULL, NULL, NULL, 'CALCULO FIN DE MES', 'N', 'T', SY_Person.ReplicationUnit, @UserID, getdate(),
+					PR_Employee.Costcentername, 'A'
+				from PR_Employee inner join SY_Person on (PR_Employee.Person = SY_Person.Person)
+				where PR_Employee.Status = 'N' and PR_Employee.Company = @company and PR_Employee.PayRollType = @payrolltype and PR_Employee.Person = @person
+			end
+		end
+	end
 	
 	/*INSERTAR CONCEPTOS DESDE ASIGNACION*/
 
@@ -148,7 +213,8 @@ begin
 		end
 			
 	
-	FETCH NEXT FROM BucleAuxiliares	
+	FETCH NEXT FROM BucleAuxiliares
+	
 	INTO  @nemonico
 	END 
 		
@@ -182,7 +248,8 @@ begin
 		end
 			
 	
-	FETCH NEXT FROM BucleIngresos	
+	FETCH NEXT FROM BucleIngresos
+	
 	INTO  @nemonico
 	END 
 		
@@ -425,7 +492,8 @@ begin
 	
 		end
 
-	FETCH NEXT FROM BucleEgresos	
+	FETCH NEXT FROM BucleEgresos
+	
 	INTO  @nemonico
 	END 
 		
@@ -1093,7 +1161,8 @@ begin
 		end
 			
 	
-	FETCH NEXT FROM BucleAportes	
+	FETCH NEXT FROM BucleAportes
+	
 	INTO  @nemonico
 	END 
 		

@@ -4,6 +4,7 @@
     @modo_reingreso = 'Y': limpia cese, Status='N', EntryDate inmutable y valida nueva ReEntryDate.
 
     Nota: la asignación REM_BASICA solo se crea en sp_pr_registrar_trabajador_web (alta).
+    Sincroniza FLAG_ASIG_FAM permanente con @flagasigfamiliar (Y=asegura, N=elimina).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datoslaborales_trabajador_web]
     @cia                VARCHAR(10),
@@ -215,6 +216,124 @@ BEGIN
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia
       AND person = @person;
+
+    /* Sincroniza FLAG_ASIG_FAM permanente con el check de ficha */
+    BEGIN
+        DECLARE @concept_flag_asig VARCHAR(20) = NULL;
+        DECLARE @payroll_sync VARCHAR(20) = NULL;
+        DECLARE @cc_sync VARCHAR(20) = '';
+        DECLARE @ccname_sync VARCHAR(20) = '';
+        DECLARE @rep_sync VARCHAR(20) = 'LIMA';
+        DECLARE @period_sync VARCHAR(10) = NULL;
+        DECLARE @entry_sync DATETIME = NULL;
+
+        SELECT TOP 1 @concept_flag_asig = c.Concept
+        FROM PR_Concept c (NOLOCK)
+        WHERE c.Company = @cia
+          AND c.Status = 'A'
+          AND LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) = 'FLAG_ASIG_FAM'
+        ORDER BY c.Concept;
+
+        IF @concept_flag_asig IS NOT NULL
+        BEGIN
+            IF @flagasigfamiliar <> 'Y'
+            BEGIN
+                DELETE ec
+                FROM PR_EmployeeConcept ec
+                INNER JOIN PR_Concept c
+                    ON c.Concept = ec.Concept AND c.Company = ec.Company
+                WHERE ec.Company = @cia
+                  AND ec.Person = @person
+                  AND ec.FlagFrecuencyType = 'P'
+                  AND ec.PRPeriodEnd IS NULL
+                  AND LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) = 'FLAG_ASIG_FAM';
+            END
+            ELSE
+            BEGIN
+                SELECT
+                    @payroll_sync = e.PayRollType,
+                    @cc_sync = ISNULL(e.CostCenter, ''),
+                    @ccname_sync = ISNULL(e.Costcentername, ISNULL(e.CostCenter, '')),
+                    @entry_sync = ISNULL(e.ReEntryDate, e.EntryDate)
+                FROM PR_Employee e (NOLOCK)
+                WHERE e.Company = @cia AND e.Person = @person;
+
+                SELECT TOP 1 @rep_sync = ISNULL(NULLIF(LTRIM(RTRIM(p.ReplicationUnit)), ''), 'LIMA')
+                FROM SY_Person p (NOLOCK)
+                WHERE p.Person = @person;
+
+                IF @payroll_sync IS NOT NULL
+                   AND NOT EXISTS (
+                        SELECT 1
+                        FROM PR_EmployeeConcept ec (NOLOCK)
+                        WHERE ec.Company = @cia
+                          AND ec.Person = @person
+                          AND ec.Concept = @concept_flag_asig
+                          AND ec.PayRollType = @payroll_sync
+                          AND ec.FlagFrecuencyType = 'P'
+                          AND ec.PRPeriodEnd IS NULL
+                   )
+                BEGIN
+                    IF @entry_sync IS NOT NULL
+                    BEGIN
+                        SELECT TOP 1 @period_sync = p.PRPeriod
+                        FROM PR_Period p (NOLOCK)
+                        WHERE p.Company = @cia
+                          AND p.PayRollType = @payroll_sync
+                          AND @entry_sync BETWEEN p.DateBegin AND p.DateEnd
+                        ORDER BY p.PRPeriod;
+
+                        IF @period_sync IS NULL
+                            SELECT TOP 1 @period_sync = p.PRPeriod
+                            FROM PR_Period p (NOLOCK)
+                            WHERE p.Company = @cia
+                              AND p.PayRollType = @payroll_sync
+                              AND p.DateBegin >= @entry_sync
+                            ORDER BY p.DateBegin ASC, p.PRPeriod ASC;
+
+                        IF @period_sync IS NULL
+                            SELECT TOP 1 @period_sync = p.PRPeriod
+                            FROM PR_Period p (NOLOCK)
+                            WHERE p.Company = @cia
+                              AND p.PayRollType = @payroll_sync
+                            ORDER BY p.PRPeriod DESC;
+                    END;
+
+                    IF @period_sync IS NOT NULL
+                        INSERT INTO PR_EmployeeConcept (
+                            Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,
+                            PRPeriodEnd, ConceptValue, Application, ConceptCurrency, Comments,
+                            FlagApplyFormula, FlagFrecuencyType, ReplicationUnit,
+                            XLastUser, XLastDate, ConceptValueLo, ConceptValueEx, ExchangeRate,
+                            CostCenterCode, Project, ProjectCode, PercentageDistribution, FlagCopy
+                        )
+                        VALUES (
+                            @person, @cia, @concept_flag_asig, @payroll_sync, @period_sync, @cc_sync,
+                            NULL, 1, NULL, 'LO', NULL,
+                            'N', 'P', @rep_sync,
+                            NULLIF(LTRIM(RTRIM(@xlastuser)), ''), GETDATE(), 1, 0, 0,
+                            @ccname_sync, '', '', 'A', NULL
+                        );
+                END
+                ELSE IF @payroll_sync IS NOT NULL
+                BEGIN
+                    UPDATE PR_EmployeeConcept
+                    SET ConceptValue = 1,
+                        ConceptValueLo = 1,
+                        ConceptValueEx = 0,
+                        XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                        XLastDate = GETDATE()
+                    WHERE Company = @cia
+                      AND Person = @person
+                      AND Concept = @concept_flag_asig
+                      AND PayRollType = @payroll_sync
+                      AND FlagFrecuencyType = 'P'
+                      AND PRPeriodEnd IS NULL
+                      AND ISNULL(ConceptValue, 0) <> 1;
+                END
+            END
+        END
+    END;
 
     /* Sincroniza periodos vacacionales abiertos (sin consumo) con el nuevo cupo anual. */
     IF @dias_vac IS NOT NULL

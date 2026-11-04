@@ -338,9 +338,11 @@ begin
 	   (si no, se elige un periodo futuro y XFALTASVACA queda en 0).
 	   Contar PR_VacationDetail por @idvac (no por subquery correlacionada). */
 
+	/* NOLOCK: lecturas de maestro vacaciones; si hay sesion huerfana con X lock
+	   el calculo se colgaba justo despues de BucleAuxiliares (TOTAL_GRATIFICACION). */
 	select line, ControlYear, DateBeginProvision
 	into #vacaciones
-	from PR_Vacation
+	from PR_Vacation WITH (NOLOCK)
 	where Person = @person
 	  and Company = @company
 	  and ControlYear between year(@fechaingreso) and year(@ceasedate)
@@ -352,7 +354,7 @@ begin
 		set @idvac = (select top 1 line from #vacaciones order by ControlYear desc)
 		set @cantvac = isnull((
 			select count(*)
-			from PR_VacationDetail
+			from PR_VacationDetail WITH (NOLOCK)
 			where Person = @person
 			  and Company = @company
 			  and line = @idvac
@@ -486,13 +488,13 @@ begin
 	begin
 		set @dias_vac_gozados = ISNULL((
 			select SUM(ISNULL(ConsumedDays, 0))
-			from PR_Vacation
+			from PR_Vacation WITH (NOLOCK)
 			where Company = @company and Person = @person
 		), 0)
 
 		set @dias_vac_anuales = ISNULL(NULLIF((
 			select MAX(AcquiredDays)
-			from PR_Vacation
+			from PR_Vacation WITH (NOLOCK)
 			where Company = @company and Person = @person and ISNULL(AcquiredDays, 0) > 0
 		), 0), 15)
 
@@ -527,7 +529,7 @@ begin
 
 			,convert(date,@ceasedate) ) +
 
-			ISNULL((select count(*) from PR_Vacation where Company = @company and person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
+			ISNULL((select count(*) from PR_Vacation WITH (NOLOCK) where Company = @company and person = @person and ConsumedDays = 0 and left(ControlYear,4) = convert(varchar(4),convert(int,left(@period,4)) - 2)),0)*360
 
 		end
 	end
@@ -610,13 +612,13 @@ begin
 		begin
 			set @dias_vac_gozados = ISNULL((
 				select SUM(ISNULL(ConsumedDays, 0))
-				from PR_Vacation
+				from PR_Vacation WITH (NOLOCK)
 				where Company = @company and Person = @person
 			), 0)
 
 			set @dias_vac_anuales = ISNULL(NULLIF((
 				select MAX(AcquiredDays)
-				from PR_Vacation
+				from PR_Vacation WITH (NOLOCK)
 				where Company = @company and Person = @person and ISNULL(AcquiredDays, 0) > 0
 			), 0), 15)
 		end

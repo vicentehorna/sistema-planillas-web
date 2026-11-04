@@ -157,9 +157,10 @@ def exec_sql(conn, sql: str):
             break
 
 
-def sync_objetos(src: str, dst: str, dry: bool = False) -> dict:
+def sync_objetos(src: str, dst: str, dry: bool = False, exclude: set[str] | None = None) -> dict:
     """Retorna resumen {total, ok, err, still}."""
     safe_print(f"Comparando {src} -> {dst} (dry={dry})")
+    extra_excl = {e.lower() if "." in e else f"dbo.{e}".lower() for e in (exclude or set())}
     src_o = list_objects(src)
     dst_o = list_objects(dst)
 
@@ -167,7 +168,7 @@ def sync_objetos(src: str, dst: str, dry: bool = False) -> dict:
     for t, names in src_o.items():
         miss = []
         for n in sorted(names - dst_o.get(t, set())):
-            if excluded(n):
+            if excluded(n) or n.lower() in extra_excl:
                 continue
             # Case-insensitive: evita falsos positivos (sp_pr_vacation vs SP_PR_Vacation)
             if in_dst_case_insensitive(n, dst_o.get(t, set())):
@@ -278,8 +279,10 @@ def main(argv=None):
     p.add_argument("--src", default="hm_aci", help="BD origen (default hm_aci)")
     p.add_argument("--dst", required=True, help="BD destino cliente")
     p.add_argument("--dry", action="store_true")
+    p.add_argument("--exclude", default="", help="Objetos a omitir, separados por coma")
     args = p.parse_args(argv)
-    sync_objetos(args.src, args.dst, dry=args.dry)
+    exclude = {x.strip() for x in args.exclude.split(",") if x.strip()}
+    sync_objetos(args.src, args.dst, dry=args.dry, exclude=exclude)
 
 
 if __name__ == "__main__":

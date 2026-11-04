@@ -5,7 +5,9 @@
 
     Nota: PR_GrupoFormula tiene PK solo en GrupoFormula (catálogo global).
     En multi-compañía (p.ej. hm_alamo) los grupos suelen estar cargados
-    solo en Company='BGT'. Si la compañía pedida no tiene filas, se usa BGT.
+    solo en Company='BGT'. Si la compañía pedida no tiene filas, se usa BGT;
+    si BGT tampoco tiene (p.ej. hm_zilicom, donde están en SB01), se devuelve
+    el catálogo completo, porque el grupo es único para todas las empresas.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_selectorgrupoformula_web]
     @company VARCHAR(20)
@@ -27,12 +29,24 @@ BEGIN
         SET @cia_grp = 'BGT';
     END;
 
+    -- BGT tampoco tiene grupos: el catálogo es global (PK = GrupoFormula),
+    -- se devuelven los grupos de cualquier compañía que los tenga cargados.
+    IF NOT EXISTS (
+            SELECT 1
+            FROM PR_GrupoFormula gf (NOLOCK)
+            WHERE gf.Company = @cia_grp
+       )
+    BEGIN
+        SET @cia_grp = NULL;
+    END;
+
     SELECT
         gf.GrupoFormula AS id,
         gf.Name AS text,
         gf.GroupOrder AS grouporder
     FROM PR_GrupoFormula gf (NOLOCK)
-    WHERE gf.Company = @cia_grp
+    WHERE @cia_grp IS NULL
+       OR gf.Company = @cia_grp
     ORDER BY gf.GroupOrder ASC, gf.Name ASC;
 END
 GO

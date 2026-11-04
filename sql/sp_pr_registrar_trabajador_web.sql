@@ -7,8 +7,8 @@
     - Si régimen AFP: resuelve PR_Employee.AFP desde PR_AFP (sin UI)
     - Si sueldo > 0: asigna REM_BASICA permanente (salvo Construcción Civil)
     - Si flag asignación familiar = Y: asigna FLAG_ASIG_FAM permanente con valor 1
-    - Si régimen AFP: asigna AFP_FLUJO permanente con valor 1
-    - Si AFP: asigna AFP_FLUJO = 1
+    - Si régimen AFP y flagmixta=Y: asigna AFP_FLUJO permanente con valor 1
+      (en UI suele mostrarse como AFP_COMISION_MIXTA; flujo no asigna el concepto)
     - Educación opcional: InstructionLevel, CostCenter1/2 (institución/carrera),
       DriverLicenseAntiquity (año egreso), Specialty, ProfesionalStudiesCenterType,
       IsTrainer, Indicator
@@ -704,16 +704,36 @@ BEGIN
             END;
         END;
 
-        IF @tiene_afp = 'Y' AND @period_start IS NOT NULL
+        /* Solo comisión mixta: flujo no debe crear AFP_FLUJO / AFP_COMISION_MIXTA */
+        IF @tiene_afp = 'Y' AND @flagmixta = 'Y' AND @period_start IS NOT NULL
         BEGIN
             SELECT TOP 1 @concept_afp_flujo = c.Concept
             FROM PR_Concept c (NOLOCK)
             WHERE c.Company = @cia
-              AND c.FormulaCode = 'AFP_FLUJO'
               AND c.Status = 'A'
-            ORDER BY c.Concept;
+              AND (
+                    LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) IN ('AFP_FLUJO', 'AFP_COMISION_MIXTA')
+                 OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'AFP_COMISION_MIXTA'
+              )
+            ORDER BY
+                CASE LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))
+                    WHEN 'AFP_FLUJO' THEN 0
+                    WHEN 'AFP_COMISION_MIXTA' THEN 1
+                    ELSE 2
+                END,
+                c.Concept;
 
             IF @concept_afp_flujo IS NOT NULL
+               AND NOT EXISTS (
+                    SELECT 1
+                    FROM PR_EmployeeConcept ec (NOLOCK)
+                    WHERE ec.Company = @cia
+                      AND ec.Person = @person
+                      AND ec.Concept = @concept_afp_flujo
+                      AND ec.PayRollType = @payrolltype
+                      AND ec.FlagFrecuencyType = 'P'
+                      AND ec.PRPeriodEnd IS NULL
+               )
             BEGIN
                 INSERT INTO PR_EmployeeConcept (
                     Person, Company, Concept, PayRollType, PRPeriodStart, CostCenter,

@@ -90,7 +90,12 @@ BEGIN
         INNER JOIN PR_ProcessType pt_liq (NOLOCK)
             ON epc.ProcessType = pt_liq.ProcessType
            AND epc.Company = pt_liq.Company
-        LEFT JOIN SY_PersonDocumentType dt ON sp.DocumentType = dt.PersonDocumentType
+        /* Ficha web usa EmployeeDocumentType; DocumentType a veces queda NULL. */
+        LEFT JOIN SY_PersonDocumentType dt
+            ON dt.PersonDocumentType = COALESCE(
+                NULLIF(LTRIM(RTRIM(sp.DocumentType)), ''),
+                sp.EmployeeDocumentType
+            )
         LEFT JOIN SY_PersonDocumentType dt2 ON sc.Rep_DocType = dt2.PersonDocumentType
         LEFT JOIN AC_CostCenter cc ON pe.CostCenter = cc.CostCenter
     WHERE pe.Company = @cia

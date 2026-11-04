@@ -5651,6 +5651,30 @@ def _boleta_cabecera_modelo_anterior():
         return False
 
 
+def _boleta_proceso_shortname(cursor, cia, processtype):
+    """ShortName del proceso de la boleta (p. ej. SEMANAL, FIN_DE_MES)."""
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(ISNULL(ShortName, '')))
+            FROM PR_ProcessType
+            WHERE ProcessType = ? AND (Company = ? OR Company IS NULL)
+            ORDER BY CASE WHEN Company = ? THEN 0 ELSE 1 END
+            """,
+            (processtype, cia, cia),
+        )
+        row = cursor.fetchone()
+        return str(row[0] or '').strip().upper() if row else ''
+    except Exception:
+        logging.exception('_boleta_proceso_shortname processtype=%s', processtype)
+        return ''
+
+
+def _boleta_he_lumat_semanal(cursor, cia, processtype):
+    """hm_lumat + SEMANAL: cabecera con H. Extra 60% (CANT_HORAS_60) y solo H. Extra 100%."""
+    return _es_cliente_lumat() and _boleta_proceso_shortname(cursor, cia, processtype) == 'SEMANAL'
+
+
 def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
     """Días de la cabecera de la boleta doble tomados directamente de sus nemónicos."""
     extra = {'dias_faltas_justif': 0, 'dias_suspension': 0, 'dias_subsidio': 0, 'dias_no_subsidiados': 0}
@@ -5732,6 +5756,12 @@ def generar_pdf_en_memoria(params):
         raise ValueError('Faltan parámetros para generar boleta.')
 
     conn = None
+    boleta_doble = False
+    he_lumat_semanal = False
+    cabecera = {}
+    ingresos = []
+    descuentos = []
+    aportes = []
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -5767,6 +5797,7 @@ def generar_pdf_en_memoria(params):
         if boleta_doble:
             cabecera = dict(cabecera or {})
             cabecera.update(_boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person))
+            he_lumat_semanal = _boleta_he_lumat_semanal(cursor, cia, processtype)
     finally:
         if conn:
             try:
@@ -5802,6 +5833,7 @@ def generar_pdf_en_memoria(params):
             firma_ampliada=_es_cliente_ngservicios(),
             cabecera_modelo_anterior=boleta_doble and _boleta_cabecera_modelo_anterior(),
             etiqueta_dias_fallecimiento=_boleta_etiqueta_dias_fallecimiento(),
+            boleta_he_lumat_semanal=he_lumat_semanal,
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)

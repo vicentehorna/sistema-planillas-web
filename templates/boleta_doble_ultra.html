@@ -325,10 +325,17 @@
         <tr>
             <td class="label">Hrs. Trab.:</td>
             <td class="value">{{ cabecera.horassemana|dias }}</td>
+            {% if boleta_he_lumat_semanal %}
+            <td class="label">H. Extra 60%:</td>
+            <td class="value">{{ cabecera.cant_horas_60|dias }}</td>
+            <td class="label">H. Extra 100%:</td>
+            <td class="value">{{ cabecera.cant_horas_100|dias }}</td>
+            {% else %}
             <td class="label">H. Extra 25%:</td>
             <td class="value">{{ cabecera.cant_horas_25|dias }}</td>
             <td class="label">H. Extra 35% / 100%:</td>
             <td class="value">{{ cabecera.cant_horas_35|dias }} / {{ cabecera.cant_horas_100|dias }}</td>
+            {% endif %}
         </tr>
     </table>
     {% endif %}

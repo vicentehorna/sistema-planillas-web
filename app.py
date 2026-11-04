@@ -26538,8 +26538,8 @@ def procesar_formatos_cts_masivo():
     period = _normalize_pr_period(body.get('period'))
     modo = str(body.get('modo') or '').strip().lower()
     seleccionados = body.get('trabajadores') or []
-    if modo not in ('zip', 'mail'):
-        return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo not in ('zip', 'pdf', 'mail'):
+        return jsonify({'error': 'Modo inválido. Use zip, pdf o mail.'}), 400
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
@@ -26553,26 +26553,80 @@ def procesar_formatos_cts_masivo():
     if not ids:
         return jsonify({'error': 'No hay IDs válidos para procesar.'}), 400
 
-    if modo == 'zip':
+    if modo in ('zip', 'pdf'):
         company_name = str(body.get('company_name') or cia).strip()
         safe_company = re.sub(r'[^A-Za-z0-9_\\-]+', '_', company_name).strip('_') or 'compania'
         period_yyyymm = period[:6] if len(period) >= 6 else period
         safe_period = re.sub(r'[^A-Za-z0-9_\\-]+', '_', period_yyyymm).strip('_') or 'periodo'
-        nombre_zip = f'formatos_cts_{safe_company.lower()}_{safe_period}.zip'
-        memory_file = io.BytesIO()
-        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+        lote = str(body.get('lote') or body.get('batch') or '').strip()
+        safe_lote = ''
+        if lote:
+            safe_lote = re.sub(r'[^A-Za-z0-9_\\-]+', '_', lote).strip('_')
+
+        generadas = 0
+        omitidas = 0
+        pdf_parts = []
+        fecha_pago_str = fecha_pago.isoformat() if fecha_pago else ''
+        try:
             for pid in ids:
-                pdf_data = generar_pdf_formato_cts(
-                    {
-                        'person': pid,
-                        'cia': cia,
-                        'payroll_type': payroll_type,
-                        'period': period,
-                        'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
-                    }
-                )
-                zf.writestr(_formato_cts_pdf_filename(pid, period), pdf_data.getvalue())
+                try:
+                    pdf_data = generar_pdf_formato_cts(
+                        {
+                            'person': pid,
+                            'cia': cia,
+                            'payroll_type': payroll_type,
+                            'period': period,
+                            'fecha_pago': fecha_pago_str,
+                        }
+                    )
+                    pdf_parts.append((_formato_cts_pdf_filename(pid, period), pdf_data.getvalue()))
+                    generadas += 1
+                except Exception:
+                    omitidas += 1
+                    logging.exception('procesar_formatos_cts_masivo persona=%s', pid)
+                    continue
+            if generadas <= 0:
+                return jsonify({
+                    'error': 'No se pudo generar ningún formato CTS PDF para el lote indicado.',
+                    'omitidas': omitidas,
+                    'total': len(ids),
+                }), 500
+        except Exception as e:
+            logging.exception('procesar_formatos_cts_masivo %s', modo)
+            return jsonify({'error': f'Error al generar formatos CTS: {e}'}), 500
+
+        if modo == 'pdf':
+            try:
+                memory_file = _merge_pdf_buffers([raw for _, raw in pdf_parts])
+            except Exception as e:
+                logging.exception('procesar_formatos_cts_masivo merge pdf')
+                return jsonify({'error': f'Error al unir PDFs: {e}'}), 500
+            nombre_pdf = f'formatos_cts_{safe_company.lower()}_{safe_period}.pdf'
+            if safe_lote:
+                nombre_pdf = f'formatos_cts_{safe_company.lower()}_{safe_period}_lote{safe_lote}.pdf'
+            resp = send_file(
+                memory_file,
+                mimetype='application/pdf',
+                download_name=nombre_pdf,
+                as_attachment=True,
+            )
+            resp.headers['X-Formatos-Generados'] = str(generadas)
+            if omitidas:
+                resp.headers['X-Formatos-Omitidos'] = str(omitidas)
+            return resp
+
+        memory_file = io.BytesIO()
+        try:
+            with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for fname, raw in pdf_parts:
+                    zf.writestr(fname, raw)
+        except Exception as e:
+            logging.exception('procesar_formatos_cts_masivo zip')
+            return jsonify({'error': f'Error al armar el ZIP: {e}'}), 500
         memory_file.seek(0)
+        nombre_zip = f'formatos_cts_{safe_company.lower()}_{safe_period}.zip'
+        if safe_lote:
+            nombre_zip = f'formatos_cts_{safe_company.lower()}_{safe_period}_lote{safe_lote}.zip'
         return send_file(
             memory_file,
             mimetype='application/zip',

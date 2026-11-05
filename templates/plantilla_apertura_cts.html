@@ -1,0 +1,373 @@
+{% extends "layout.html" %}
+
+{% block title %}CTS - Plantilla Apertura{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-plantilla-cts {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-plantilla-cts th,
+    .table-plantilla-cts td {
+        padding: 0.2rem 0.4rem;
+        vertical-align: middle;
+    }
+
+    .table-plantilla-cts thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .empresas-dropdown {
+        min-width: 17rem;
+    }
+
+    .empresas-lista {
+        max-height: 16rem;
+        overflow: auto;
+    }
+
+    .empresas-lista .list-group-item {
+        padding: 0.3rem 0.5rem;
+        font-size: 0.82rem;
+        cursor: pointer;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmPlantillaAperturaCts" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-4">
+                <label class="form-label small fw-bold text-muted">Empresas</label>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary btn-sm w-100 d-flex justify-content-between align-items-center"
+                            type="button" id="btnEmpresas" data-bs-toggle="dropdown"
+                            data-bs-auto-close="outside" aria-expanded="false" disabled>
+                        <span id="lblEmpresasBtn" class="text-truncate">Cargando...</span>
+                        <i class="bi bi-chevron-down ms-1"></i>
+                    </button>
+                    <div class="dropdown-menu p-2 empresas-dropdown" aria-labelledby="btnEmpresas">
+                        <div class="form-check d-flex align-items-center gap-1 border-bottom pb-2 mb-2">
+                            <input class="form-check-input mt-0" type="checkbox" id="chkTodasEmpresas" checked>
+                            <label class="form-check-label small fw-bold" for="chkTodasEmpresas">Todas</label>
+                            <span class="ms-auto text-muted small" id="lblEmpresasCount">0/0</span>
+                        </div>
+                        <input type="text" id="txtBuscarEmpresa" class="form-control form-control-sm mb-2"
+                               placeholder="Buscar empresa..." autocomplete="off">
+                        <div id="panelEmpresas" class="empresas-lista list-group list-group-flush">
+                            <div class="text-center text-muted small py-2">Cargando...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-6 col-sm-4 col-md-3 col-lg-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="N" selected>No</option>
+                    <option value="Y">Sí</option>
+                    <option value="T">Todos</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+                </button>
+                <span class="ms-auto text-muted small fw-bold">
+                    No. de Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-3">PLANTILLA APERTURA CTS — SIN CUENTA</h4>
+        <p class="text-center text-muted small mb-3">
+            Trabajadores activos sin cuenta CTS (ficha). Obligaciones tributarias fuera de Perú = NO.
+        </p>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-plantilla-cts align-middle">
+                <thead>
+                    <tr>
+                        <th>Empresa</th>
+                        <th>N° Registro</th>
+                        <th>Tipo Doc.</th>
+                        <th>Num. Documento</th>
+                        <th>Apellido Paterno</th>
+                        <th>Apellido Materno</th>
+                        <th>Nombres</th>
+                        <th>Ocupación</th>
+                        <th>Oblig. otro país</th>
+                        <th>Teléfono</th>
+                        <th>Correo</th>
+                        <th>Moneda</th>
+                        <th>Departamento</th>
+                        <th>Provincia</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyPlantilla"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const URL_LISTADO = {{ url_for('api_plantilla_apertura_cts_listado') | tojson }};
+    const URL_EXCEL = {{ url_for('api_plantilla_apertura_cts_excel') | tojson }};
+
+    const panelEmpresas = document.getElementById('panelEmpresas');
+    const chkTodasEmpresas = document.getElementById('chkTodasEmpresas');
+    const btnEmpresas = document.getElementById('btnEmpresas');
+    const txtBuscarEmpresa = document.getElementById('txtBuscarEmpresa');
+    const btnExportExcel = document.getElementById('btnExportExcel');
+    const cardResultado = document.getElementById('cardResultado');
+    const tbody = document.getElementById('tbodyPlantilla');
+    const lblRowCount = document.getElementById('lblRowCount');
+
+    let empresasData = [];
+    let lastRows = [];
+    let ctrlEmpresas = null;
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function toastErr(msg) {
+        if (window.HmUi && HmUi.error) HmUi.error(msg);
+        else alert(msg);
+    }
+
+    function empresasSeleccionadas() {
+        return Array.from(panelEmpresas.querySelectorAll('.chk-empresa:checked'))
+            .map((el) => String(el.value || '').trim())
+            .filter(Boolean);
+    }
+
+    function actualizarEtiquetaEmpresas() {
+        const total = empresasData.length;
+        const sel = empresasSeleccionadas().length;
+        document.getElementById('lblEmpresasCount').textContent = `${sel}/${total}`;
+        document.getElementById('lblEmpresasBtn').textContent = !total
+            ? 'Sin empresas'
+            : sel === total
+                ? `Todas las empresas (${total})`
+                : sel === 0
+                    ? 'Ninguna empresa'
+                    : `${sel} de ${total} empresas`;
+    }
+
+    function sincronizarChkTodasEmpresas() {
+        const checks = panelEmpresas.querySelectorAll('.chk-empresa');
+        if (!checks.length) {
+            chkTodasEmpresas.checked = false;
+            chkTodasEmpresas.indeterminate = false;
+        } else {
+            const marcados = panelEmpresas.querySelectorAll('.chk-empresa:checked').length;
+            chkTodasEmpresas.checked = marcados === checks.length;
+            chkTodasEmpresas.indeterminate = marcados > 0 && marcados < checks.length;
+        }
+        actualizarEtiquetaEmpresas();
+    }
+
+    function renderEmpresas(items) {
+        empresasData = Array.isArray(items) ? items : [];
+        if (!empresasData.length) {
+            panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Sin empresas disponibles.</div>';
+            btnEmpresas.disabled = true;
+            sincronizarChkTodasEmpresas();
+            return;
+        }
+        panelEmpresas.innerHTML = empresasData.map((e) => {
+            const code = String(e.id || '').trim();
+            const text = String(e.text || code).trim();
+            return `<label class="list-group-item d-flex align-items-start gap-2">
+                <input class="form-check-input flex-shrink-0 chk-empresa mt-1" type="checkbox" value="${escHtml(code)}" checked>
+                <span class="text-truncate" title="${escHtml(text)}">${escHtml(text)}</span>
+            </label>`;
+        }).join('');
+        btnEmpresas.disabled = false;
+        filtrarEmpresas();
+        sincronizarChkTodasEmpresas();
+    }
+
+    function filtrarEmpresas() {
+        const q = String(txtBuscarEmpresa.value || '').trim().toUpperCase();
+        panelEmpresas.querySelectorAll('.list-group-item').forEach((li) => {
+            li.classList.toggle('d-none', !!q && !li.textContent.toUpperCase().includes(q));
+        });
+    }
+
+    async function cargarEmpresas() {
+        if (ctrlEmpresas) ctrlEmpresas.abort();
+        const ctrl = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        ctrlEmpresas = ctrl;
+        panelEmpresas.innerHTML = '<div class="text-center text-muted small py-2">Cargando...</div>';
+        try {
+            const res = await fetch('/api/selectores/companias?filtro_usuario=1', {
+                signal: ctrl ? ctrl.signal : undefined,
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const data = await res.json();
+            if (ctrlEmpresas !== ctrl) return;
+            renderEmpresas(Array.isArray(data) ? data : []);
+        } catch (e) {
+            if (e && e.name === 'AbortError') return;
+            panelEmpresas.innerHTML = '<div class="text-danger small py-2">Error al cargar empresas.</div>';
+            toastErr(e.message || String(e));
+        }
+    }
+
+    function payloadFiltros() {
+        return {
+            companies: empresasSeleccionadas(),
+            cesados: document.getElementById('cboCesados').value || 'N',
+        };
+    }
+
+    function renderRows(rows) {
+        lastRows = Array.isArray(rows) ? rows : [];
+        lblRowCount.textContent = String(lastRows.length);
+        btnExportExcel.disabled = lastRows.length === 0;
+        if (!lastRows.length) {
+            tbody.innerHTML = '<tr><td colspan="14" class="text-center text-muted py-3">Sin registros.</td></tr>';
+            cardResultado.classList.remove('d-none');
+            return;
+        }
+        tbody.innerHTML = lastRows.map((r) => (
+            `<tr>`
+            + `<td>${escHtml(r.empresa)}</td>`
+            + `<td class="text-center">${escHtml(r.nro_registro)}</td>`
+            + `<td>${escHtml(r.tipo_documento)}</td>`
+            + `<td>${escHtml(r.num_documento)}</td>`
+            + `<td>${escHtml(r.apellido_paterno)}</td>`
+            + `<td>${escHtml(r.apellido_materno)}</td>`
+            + `<td>${escHtml(r.nombres)}</td>`
+            + `<td>${escHtml(r.ocupacion)}</td>`
+            + `<td class="text-center">${escHtml(r.obligaciones_otro_pais)}</td>`
+            + `<td>${escHtml(r.telefono)}</td>`
+            + `<td>${escHtml(r.correo)}</td>`
+            + `<td>${escHtml(r.moneda_cuenta)}</td>`
+            + `<td>${escHtml(r.departamento)}</td>`
+            + `<td>${escHtml(r.provincia)}</td>`
+            + `</tr>`
+        )).join('');
+        cardResultado.classList.remove('d-none');
+    }
+
+    document.getElementById('frmPlantillaAperturaCts').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const body = payloadFiltros();
+        if (!body.companies.length) {
+            toastErr('Seleccione al menos una empresa.');
+            return;
+        }
+        const btn = e.submitter || document.querySelector('#frmPlantillaAperturaCts button[type="submit"]');
+        const old = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando...';
+        }
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
+            renderRows(data.rows || []);
+            if (window.HmUi && HmUi.exito) HmUi.exito(`Consulta lista: ${(data.rows || []).length} registro(s).`);
+        } catch (err) {
+            toastErr(err.message || String(err));
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = old;
+            }
+        }
+    });
+
+    btnExportExcel.addEventListener('click', async function () {
+        const body = payloadFiltros();
+        if (!body.companies.length) {
+            toastErr('Seleccione al menos una empresa.');
+            return;
+        }
+        const old = btnExportExcel.innerHTML;
+        btnExportExcel.disabled = true;
+        btnExportExcel.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+        try {
+            const res = await fetch(URL_EXCEL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            if (!res.ok) {
+                let msg = `HTTP ${res.status}`;
+                try {
+                    const data = await res.json();
+                    if (data && data.error) msg = data.error;
+                } catch (e) { /* ignore */ }
+                throw new Error(msg);
+            }
+            const blob = await res.blob();
+            let filename = 'Plantilla_Apertura_CTS.xlsx';
+            const cd = res.headers.get('Content-Disposition') || '';
+            const m = cd.match(/filename="([^"]+)"/i);
+            if (m) filename = m[1];
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            if (window.HmUi && HmUi.exito) HmUi.exito('Excel generado.');
+        } catch (err) {
+            toastErr(err.message || String(err));
+        } finally {
+            btnExportExcel.disabled = lastRows.length === 0;
+            btnExportExcel.innerHTML = old;
+        }
+    });
+
+    panelEmpresas.addEventListener('change', function (e) {
+        if (e.target && e.target.classList.contains('chk-empresa')) sincronizarChkTodasEmpresas();
+    });
+    chkTodasEmpresas.addEventListener('change', function () {
+        const marcar = chkTodasEmpresas.checked;
+        panelEmpresas.querySelectorAll('.chk-empresa').forEach((el) => { el.checked = marcar; });
+        sincronizarChkTodasEmpresas();
+    });
+    txtBuscarEmpresa.addEventListener('input', filtrarEmpresas);
+
+    cargarEmpresas();
+});
+</script>
+{% endblock %}

@@ -27150,6 +27150,199 @@ def api_continental_cts_generar_txt():
                 pass
 
 
+def _plantilla_apertura_cts_fetch_rows(cursor, companies, cesados):
+    companies_csv = _companies_csv_from_list(companies)
+    cesados_n = _normalize_cesados_telecredito(cesados, default='N')
+    cursor.execute(
+        'EXEC sp_pr_plantilla_apertura_cts_web @companies=?, @cesados=?',
+        (companies_csv, cesados_n),
+    )
+    filas = _dicts_first_nonempty_resultset(cursor)
+    rows = []
+    for r in filas or []:
+        rows.append({
+            'empresa': str(r.get('empresa') or '').strip(),
+            'nro_registro': r.get('nro_registro'),
+            'tipo_documento': str(r.get('tipo_documento') or '').strip(),
+            'num_documento': str(r.get('num_documento') or '').strip(),
+            'apellido_paterno': str(r.get('apellido_paterno') or '').strip(),
+            'apellido_materno': str(r.get('apellido_materno') or '').strip(),
+            'nombres': str(r.get('nombres') or '').strip(),
+            'ocupacion': str(r.get('ocupacion') or '').strip(),
+            'obligaciones_otro_pais': str(r.get('obligaciones_otro_pais') or 'NO').strip() or 'NO',
+            'telefono': str(r.get('telefono') or '').strip(),
+            'correo': str(r.get('correo') or '').strip(),
+            'moneda_cuenta': str(r.get('moneda_cuenta') or '').strip(),
+            'departamento': str(r.get('departamento') or '').strip(),
+            'provincia': str(r.get('provincia') or '').strip(),
+            'company': str(r.get('company') or '').strip(),
+            'person': str(r.get('person') or '').strip(),
+        })
+    return rows, companies_csv, cesados_n
+
+
+def _build_xlsx_plantilla_apertura_cts(rows):
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill, Border, Side
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Listado'
+
+    headers = [
+        'Empresa',
+        'N°REGISTRO',
+        'Tipo de Documento',
+        'Num. Documento (*)',
+        'Apellido Paterno (*)',
+        'Apellido Materno (*)',
+        'Nombres (*)',
+        'Ocupación (*)',
+        '¿Tiene obligaciones tributarias en algún país diferente a Perú? (*)',
+        'Teléfono (*)',
+        'Correo (*)',
+        'Moneda de Cuenta (*)',
+        'Departamento (*)',
+        'Provincia (*)',
+    ]
+    header_fill = PatternFill('solid', fgColor='1F4E79')
+    header_font = Font(color='FFFFFF', bold=True, size=10)
+    thin = Border(
+        left=Side(style='thin', color='D9D9D9'),
+        right=Side(style='thin', color='D9D9D9'),
+        top=Side(style='thin', color='D9D9D9'),
+        bottom=Side(style='thin', color='D9D9D9'),
+    )
+    for col, title in enumerate(headers, start=1):
+        cell = ws.cell(1, col, title)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+        cell.border = thin
+
+    keys = [
+        'empresa', 'nro_registro', 'tipo_documento', 'num_documento',
+        'apellido_paterno', 'apellido_materno', 'nombres', 'ocupacion',
+        'obligaciones_otro_pais', 'telefono', 'correo', 'moneda_cuenta',
+        'departamento', 'provincia',
+    ]
+    for r_idx, row in enumerate(rows, start=2):
+        for c_idx, key in enumerate(keys, start=1):
+            val = row.get(key)
+            cell = ws.cell(r_idx, c_idx, '' if val is None else val)
+            cell.border = thin
+            cell.alignment = Alignment(vertical='center')
+
+    from openpyxl.utils import get_column_letter
+    widths = [28, 12, 14, 16, 18, 18, 22, 28, 28, 14, 28, 14, 16, 16]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+
+    ws.row_dimensions[1].height = 36
+    ws.freeze_panes = 'A2'
+    ws.auto_filter.ref = f'A1:N{max(1, len(rows) + 1)}'
+
+    bio = BytesIO()
+    wb.save(bio)
+    bio.seek(0)
+    return bio
+
+
+@app.route('/cts/plantilla-apertura')
+@login_required
+def plantilla_apertura_cts_page():
+    if not _es_bd_hm_alamo():
+        abort(404)
+    return render_template('plantilla_apertura_cts.html')
+
+
+@app.route('/api/cts/plantilla-apertura/listado', methods=['POST'])
+@login_required
+def api_plantilla_apertura_cts_listado():
+    """Activos sin cuenta CTS — plantilla apertura banco (solo hm_alamo)."""
+    err_bd = _require_hm_alamo_json('Plantilla Apertura CTS')
+    if err_bd:
+        return err_bd
+
+    body = request.get_json(silent=True) or {}
+    companies = body.get('companies') or []
+    if isinstance(companies, str):
+        companies = [c.strip() for c in companies.split(',') if c.strip()]
+    if not companies:
+        return jsonify({'error': 'Seleccione al menos una empresa.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows, companies_csv, cesados = _plantilla_apertura_cts_fetch_rows(
+            cursor, companies, body.get('cesados')
+        )
+        return jsonify({
+            'rows': rows,
+            'meta': {
+                'total': len(rows),
+                'companies': companies_csv,
+                'cesados': cesados,
+            },
+        })
+    except Exception as e:
+        logging.exception('api_plantilla_apertura_cts_listado')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cts/plantilla-apertura/excel', methods=['POST'])
+@login_required
+def api_plantilla_apertura_cts_excel():
+    """Excel del listado Plantilla Apertura CTS (solo hm_alamo)."""
+    err_bd = _require_hm_alamo_json('Plantilla Apertura CTS')
+    if err_bd:
+        return err_bd
+
+    body = request.get_json(silent=True) or {}
+    companies = body.get('companies') or []
+    if isinstance(companies, str):
+        companies = [c.strip() for c in companies.split(',') if c.strip()]
+    if not companies:
+        return jsonify({'error': 'Seleccione al menos una empresa.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        rows, _companies_csv, cesados = _plantilla_apertura_cts_fetch_rows(
+            cursor, companies, body.get('cesados')
+        )
+        if not rows:
+            return jsonify({'error': 'No hay trabajadores sin cuenta CTS para exportar.'}), 400
+
+        bio = _build_xlsx_plantilla_apertura_cts(rows)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M')
+        filename = f'Plantilla_Apertura_CTS_{cesados}_{stamp}.xlsx'
+        return send_file(
+            bio,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=filename,
+        )
+    except Exception as e:
+        logging.exception('api_plantilla_apertura_cts_excel')
+        return jsonify({'error': _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/preview_certificado_trabajo')
 @login_required
 def preview_certificado_trabajo():

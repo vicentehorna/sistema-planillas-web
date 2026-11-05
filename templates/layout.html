@@ -1581,8 +1581,8 @@
                 </li>
                 {% endif %}
 
-                {% set cts_active = request.endpoint in ('formato_cts_page', 'telecredito_cts_page', 'continental_cts_page') %}
-                {% set show_cts = can_menu('formato_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') %}
+                {% set cts_active = request.endpoint in ('formato_cts_page', 'telecredito_cts_page', 'continental_cts_page', 'plantilla_apertura_cts_page') %}
+                {% set show_cts = can_menu('formato_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') or can_menu('plantilla_apertura_cts') %}
                 {% if show_cts %}
                 <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
                     <a href="#submenuCts"
@@ -1613,6 +1613,13 @@
                         <li class="{{ 'active' if request.endpoint == 'continental_cts_page' else '' }}">
                             <a href="{{ url_for('continental_cts_page') }}" title="Archivo Continental">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Continental</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('plantilla_apertura_cts') %}
+                        <li class="{{ 'active' if request.endpoint == 'plantilla_apertura_cts_page' else '' }}">
+                            <a href="{{ url_for('plantilla_apertura_cts_page') }}" title="Plantilla Apertura">
+                                <i class="bi bi-file-earmark-spreadsheet"></i><span class="sidebar-link-text">Plantilla Apertura</span>
                             </a>
                         </li>
                         {% endif %}

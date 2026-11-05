@@ -1351,6 +1351,15 @@ def _es_cliente_lumat():
         return False
 
 
+def _es_cliente_globaltec():
+    """True cuando la BD activa es hm_globaltec."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_globaltec'
+    except Exception:
+        return False
+
+
 def _usa_ingresos_config_formato_liquidacion():
     """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima / hm_lumat)."""
     return _es_cliente_alamo() or _es_cliente_maritima() or _es_cliente_lumat()
@@ -5675,6 +5684,39 @@ def _boleta_he_lumat_semanal(cursor, cia, processtype):
     return _es_cliente_lumat() and _boleta_proceso_shortname(cursor, cia, processtype) == 'SEMANAL'
 
 
+def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtype, payroll_type, period, person):
+    """hm_globaltec: Días Faltas Injust = CANT_DIAS_AUSENCIA + DIAS_POR_FUERA."""
+    if not cabecera:
+        return cabecera
+    try:
+        cursor.execute(
+            """
+            SELECT ISNULL(SUM(ISNULL(epc.ConceptValue, 0)), 0)
+            FROM PR_EmployeePayRollConcept epc (NOLOCK)
+                INNER JOIN PR_Concept c (NOLOCK) ON c.Concept = epc.Concept AND c.Company = epc.Company
+            WHERE epc.Company = ?
+              AND epc.ProcessType = ?
+              AND epc.PayRollType = ?
+              AND epc.PRPeriod = ?
+              AND epc.Person = ?
+              AND UPPER(LTRIM(RTRIM(c.FormulaCode))) = 'DIAS_POR_FUERA'
+            """,
+            (cia, processtype, payroll_type, period, person),
+        )
+        row = cursor.fetchone()
+        extra = float(row[0] or 0) if row else 0.0
+    except Exception:
+        logging.exception('_boleta_sumar_dias_por_fuera_faltas_injust person=%s', person)
+        return cabecera
+    if not extra:
+        return cabecera
+    actual = float(cabecera.get('dias_faltas_injustif') or 0)
+    total = actual + extra
+    cabecera['dias_faltas_injustif'] = total
+    cabecera['DIAS_FALTAS_INJUSTIF'] = total
+    return cabecera
+
+
 def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person):
     """Días de la cabecera de la boleta doble tomados directamente de sus nemónicos."""
     extra = {'dias_faltas_justif': 0, 'dias_suspension': 0, 'dias_subsidio': 0, 'dias_no_subsidiados': 0}
@@ -5777,6 +5819,10 @@ def generar_pdf_en_memoria(params):
             cabecera['titulo_boleta'] = _boleta_titulo_por_proceso(
                 cursor, cia, processtype, cabecera.get('titulo_boleta')
             )
+            if _es_cliente_globaltec():
+                cabecera = _boleta_sumar_dias_por_fuera_faltas_injust(
+                    cursor, cabecera, cia, processtype, payroll_type, period, person
+                )
 
         ingresos = _exec_sp_rows_dicts(
             cursor,

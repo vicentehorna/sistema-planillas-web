@@ -5698,12 +5698,32 @@ def _boleta_he_lumat_semanal(cursor, cia, processtype):
     return _es_cliente_lumat() and _boleta_proceso_shortname(cursor, cia, processtype) == 'SEMANAL'
 
 
+def _boleta_dias_calendario_mes(period):
+    """Días reales del mes del periodo (YYYYMM / YYYYMMDD). Ej. octubre -> 31."""
+    import calendar
+    raw = str(period or '').strip()
+    if len(raw) < 6 or not raw[:6].isdigit():
+        return 30
+    year = int(raw[:4])
+    month = int(raw[4:6])
+    if month < 1 or month > 12:
+        return 30
+    return calendar.monthrange(year, month)[1]
+
+
 def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtype, payroll_type, period, person):
-    """hm_globaltec: Días Faltas Injust = CANT_DIAS_AUSENCIA + DIAS_POR_FUERA.
-    Días Pagados queda intacto (valor DIAS_PAGADOS del SP).
+    """hm_globaltec (solo boleta):
+    - Faltas Injust = CANT_DIAS_AUSENCIA + DIAS_POR_FUERA
+    - Días Pagados = días calendario del mes
+        - mismas restas que sp_pr_asignar_conceptos_persona (vac normal, descanso,
+          subsidio, LSG, faltas, LCG, fallecimiento)
+        - DIAS_POR_FUERA
     """
     if not cabecera:
         return cabecera
+
+    extra = 0.0
+    restas_sp = 0.0
     try:
         cursor.execute(
             """
@@ -5721,15 +5741,58 @@ def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtyp
         )
         row = cursor.fetchone()
         extra = float(row[0] or 0) if row else 0.0
+
+        # Mismas restas que sp_pr_asignar_conceptos_persona sobre DIASTRABAJADOS.
+        cursor.execute(
+            """
+            SELECT
+              ISNULL((SELECT SUM(Days) FROM PR_VacationPay (NOLOCK)
+                      WHERE Company = ? AND PRPeriod = ? AND Person = ? AND VacationType = 'D'), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt = '20'
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt IN ('21', '22')
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt = '05'
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt = '07'
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt = '26'
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            + ISNULL((SELECT SUM(mr.Days) FROM PR_EmployeeMedicalRest mr (NOLOCK)
+                        INNER JOIN PR_MedicalRestType t ON mr.MedicalRestType = t.MedicalRestType AND t.pdt = '32'
+                      WHERE mr.Company = ? AND mr.PRPeriod = ? AND mr.Person = ?), 0)
+            """,
+            (
+                cia, period, person,
+                cia, period, person,
+                cia, period, person,
+                cia, period, person,
+                cia, period, person,
+                cia, period, person,
+                cia, period, person,
+            ),
+        )
+        row = cursor.fetchone()
+        restas_sp = float(row[0] or 0) if row else 0.0
     except Exception:
         logging.exception('_boleta_sumar_dias_por_fuera_faltas_injust person=%s', person)
         return cabecera
-    if not extra:
-        return cabecera
-    actual = float(cabecera.get('dias_faltas_injustif') or 0)
-    total = actual + extra
-    cabecera['dias_faltas_injustif'] = total
-    cabecera['DIAS_FALTAS_INJUSTIF'] = total
+
+    faltas = float(cabecera.get('dias_faltas_injustif') or 0) + extra
+    cabecera['dias_faltas_injustif'] = faltas
+    cabecera['DIAS_FALTAS_INJUSTIF'] = faltas
+
+    dias_mes = float(_boleta_dias_calendario_mes(period))
+    pagados = dias_mes - restas_sp - extra
+    if pagados < 0:
+        pagados = 0.0
+    cabecera['dias_laborables'] = pagados
+    cabecera['DIAS_LABORABLES'] = pagados
     return cabecera
 
 

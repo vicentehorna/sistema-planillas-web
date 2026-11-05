@@ -5685,7 +5685,7 @@ def _boleta_he_lumat_semanal(cursor, cia, processtype):
 
 
 def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtype, payroll_type, period, person):
-    """hm_globaltec: Días Faltas Injust = CANT_DIAS_AUSENCIA + DIAS_POR_FUERA."""
+    """hm_globaltec: Faltas Injust += DIAS_POR_FUERA; Días Pagados -= DIAS_POR_FUERA."""
     if not cabecera:
         return cabecera
     try:
@@ -5710,10 +5710,14 @@ def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtyp
         return cabecera
     if not extra:
         return cabecera
-    actual = float(cabecera.get('dias_faltas_injustif') or 0)
-    total = actual + extra
-    cabecera['dias_faltas_injustif'] = total
-    cabecera['DIAS_FALTAS_INJUSTIF'] = total
+    faltas = float(cabecera.get('dias_faltas_injustif') or 0) + extra
+    cabecera['dias_faltas_injustif'] = faltas
+    cabecera['DIAS_FALTAS_INJUSTIF'] = faltas
+    pagados = float(cabecera.get('dias_laborables') or 0) - extra
+    if pagados < 0:
+        pagados = 0.0
+    cabecera['dias_laborables'] = pagados
+    cabecera['DIAS_LABORABLES'] = pagados
     return cabecera
 
 

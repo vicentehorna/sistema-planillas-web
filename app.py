@@ -5699,10 +5699,8 @@ def _boleta_he_lumat_semanal(cursor, cia, processtype):
 
 
 def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtype, payroll_type, period, person):
-    """hm_globaltec:
-    - Faltas Injust += DIAS_POR_FUERA
-    - Días Pagados -= Lic. Sin Goce + Subsidiados + Faltas Injust (ya con DIAS_POR_FUERA)
-      + Paternidad + No Subsidiados
+    """hm_globaltec: Días Faltas Injust = CANT_DIAS_AUSENCIA + DIAS_POR_FUERA.
+    Días Pagados queda intacto (valor DIAS_PAGADOS del SP).
     """
     if not cabecera:
         return cabecera
@@ -5725,23 +5723,13 @@ def _boleta_sumar_dias_por_fuera_faltas_injust(cursor, cabecera, cia, processtyp
         extra = float(row[0] or 0) if row else 0.0
     except Exception:
         logging.exception('_boleta_sumar_dias_por_fuera_faltas_injust person=%s', person)
-        extra = 0.0
-
-    faltas = float(cabecera.get('dias_faltas_injustif') or 0) + extra
-    cabecera['dias_faltas_injustif'] = faltas
-    cabecera['DIAS_FALTAS_INJUSTIF'] = faltas
-
-    # Restas sobre el DIAS_PAGADOS original del SP (faltas ya incluye DIAS_POR_FUERA).
-    pagados = float(cabecera.get('dias_laborables') or 0)
-    pagados -= float(cabecera.get('diassingoce') or 0)
-    pagados -= float(cabecera.get('dias_subsidio') or 0)
-    pagados -= faltas
-    pagados -= float(cabecera.get('dias_paternidad') or 0)
-    pagados -= float(cabecera.get('dias_no_subsidiados') or 0)
-    if pagados < 0:
-        pagados = 0.0
-    cabecera['dias_laborables'] = pagados
-    cabecera['DIAS_LABORABLES'] = pagados
+        return cabecera
+    if not extra:
+        return cabecera
+    actual = float(cabecera.get('dias_faltas_injustif') or 0)
+    total = actual + extra
+    cabecera['dias_faltas_injustif'] = total
+    cabecera['DIAS_FALTAS_INJUSTIF'] = total
     return cabecera
 
 

@@ -45,6 +45,7 @@ Begin
 	declare @compiledexpr nvarchar(max), @expr_k nvarchar(max), @ph nvarchar(250), @code_k varchar(100), @p1 int, @p2 int
 	declare @sp_name varchar(128), @sp_nargs int, @sp_arg1 numeric(19,4), @sp_arg2 numeric(19,4), @sp_arg3 numeric(19,4)
 	declare @sp_out numeric(19,4), @sp_seg nvarchar(max), @sp_pend int, @p1_start int
+	declare @sp_strarg1 varchar(50)
 
 	set @flag_cts = case when isnull((select ShortName from pr_processtype where ProcessType = @processtype),'') = 'CTS' then 'Y' else 'N' end 
 	
@@ -324,7 +325,7 @@ Begin
 					SET @ph = SUBSTRING(@expr_k, @p1, @p2 - @p1 + 1)
 					SET @expr_k = STUFF(@expr_k, @p1, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@importe, 0)))
 				END
-				/* PROC("SP...") compilado como #S:NOMBRE|N|args|# */
+				/* PROC("SP...") compilado como #S:NOMBRE|N|args|# (args numéricos o F:FORMULACODE) */
 				WHILE CHARINDEX(N'#S:', @expr_k) > 0
 				BEGIN
 					SET @p1_start = CHARINDEX(N'#S:', @expr_k)
@@ -339,13 +340,17 @@ Begin
 					SET @sp_arg1 = 0
 					SET @sp_arg2 = 0
 					SET @sp_arg3 = 0
+					SET @sp_strarg1 = NULL
 					SET @p1 = @p2 + 1
 					IF @sp_nargs >= 1
 					BEGIN
 						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
 						IF @p2 <= 0 BREAK
 						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
-						SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
+						IF LEFT(@sp_seg, 2) = N'F:'
+							SET @sp_strarg1 = CONVERT(varchar(50), SUBSTRING(@sp_seg, 3, 50))
+						ELSE
+							SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
 						SET @p1 = @p2 + 1
 					END
 					IF @sp_nargs >= 2
@@ -380,7 +385,8 @@ Begin
 							@payrolltype = @payrolltype,
 							@processtype = @processtype,
 							@person = @person,
-							@result = @sp_out OUTPUT
+							@result = @sp_out OUTPUT,
+							@strarg1 = @sp_strarg1
 					END
 					SET @expr_k = STUFF(@expr_k, @p1_start, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@sp_out, 0)))
 				END
@@ -900,13 +906,17 @@ Begin
 					SET @sp_arg1 = 0
 					SET @sp_arg2 = 0
 					SET @sp_arg3 = 0
+					SET @sp_strarg1 = NULL
 					SET @p1 = @p2 + 1
 					IF @sp_nargs >= 1
 					BEGIN
 						SET @p2 = CHARINDEX(N'|', @expr_k, @p1)
 						IF @p2 <= 0 BREAK
 						SET @sp_seg = SUBSTRING(@expr_k, @p1, @p2 - @p1)
-						SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
+						IF LEFT(@sp_seg, 2) = N'F:'
+							SET @sp_strarg1 = CONVERT(varchar(50), SUBSTRING(@sp_seg, 3, 50))
+						ELSE
+							SET @sp_arg1 = CONVERT(NUMERIC(19,4), @sp_seg)
 						SET @p1 = @p2 + 1
 					END
 					IF @sp_nargs >= 2
@@ -941,7 +951,8 @@ Begin
 							@payrolltype = @payrolltype,
 							@processtype = @processtype,
 							@person = @person,
-							@result = @sp_out OUTPUT
+							@result = @sp_out OUTPUT,
+							@strarg1 = @sp_strarg1
 					END
 					SET @expr_k = STUFF(@expr_k, @p1_start, LEN(@ph), CONVERT(NVARCHAR(40), ISNULL(@sp_out, 0)))
 				END

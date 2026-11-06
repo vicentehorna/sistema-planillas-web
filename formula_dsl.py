@@ -16,6 +16,7 @@ Sintaxis soportada:
   CONCEPT("FORMULACODE")  PARAM("SHORTNAME")  ASSIGN("FORMULACODE")
   EMPLOYEE("CAMPO")   -- datos del trabajador (#empleado): PENSION, TOPAFP, PORC_SEGURO, ...
   PROC("SP_NOMBRE" [, arg1, ...])  -- ejecuta SP autorizado; contexto (@cia, @period, ...) implícito
+  PROC("sp_pr_FormulaPromedioSubsidios", "TOTAL_REMU_AFP")  -- promedio 12 meses (FormulaCode literal)
   PAYROLL("SHORTNAME") / PLANILLA("SHORTNAME")  -- 1 si la planilla actual coincide (PR_PayRollType.ShortName)
   PROCESS("SHORTNAME") / PROCESO("SHORTNAME")   -- 1 si el proceso actual coincide (PR_ProcessType.ShortName)
   MES() / MONTH()       -- mes numérico (1-12) del periodo en cálculo (@period)
@@ -83,6 +84,18 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "max_args": 0,
         "param_names": [],
     },
+    "SP_PR_FORMULAPROMEDIOSUBSIDIOS": {
+        "display": "sp_pr_FormulaPromedioSubsidios",
+        "description": (
+            "Promedio de un concepto (FormulaCode) en el proceso actual, "
+            "últimos 12 periodos (ACTUAL-12..ACTUAL-1); divide entre 12 o "
+            "meses desde ingreso si es menor. Requiere literal string."
+        ),
+        "min_args": 1,
+        "max_args": 1,
+        "param_names": ["formulacode"],
+        "arg_kinds": ["str"],
+    },
 }
 
 _ALIASES = {
@@ -144,7 +157,7 @@ def _normalize_proc_name(raw: str) -> str:
     return name
 
 
-def _validate_proc(name: str, nargs: int) -> None:
+def _validate_proc(name: str, nargs: int, arg_nodes: list[Any] | None = None) -> None:
     spec = FORMULA_PROCEDURES.get(name)
     if not spec:
         allowed = ", ".join(
@@ -161,6 +174,29 @@ def _validate_proc(name: str, nargs: int) -> None:
         if pnames:
             hint += f" ({pnames})"
         raise FormulaDslError(f'PROC("{name}"):{hint}. Recibió {nargs}.')
+    kinds = spec.get("arg_kinds") or []
+    if kinds and arg_nodes is not None:
+        for i, expected in enumerate(kinds):
+            if i >= len(arg_nodes):
+                break
+            node = arg_nodes[i]
+            if expected == "str":
+                if not (isinstance(node, tuple) and node[0] == "STR"):
+                    pname = (spec.get("param_names") or [f"arg{i + 1}"])[i]
+                    raise FormulaDslError(
+                        f'PROC("{name}"): el argumento "{pname}" debe ser '
+                        f'un literal string, p.ej. "TOTAL_REMU_AFP".'
+                    )
+                raw = str(node[1] or "").strip()
+                if not raw or not re.fullmatch(r"[A-Za-z0-9_]+", raw):
+                    raise FormulaDslError(
+                        f'PROC("{name}"): FormulaCode inválido {raw!r}. '
+                        f"Use solo letras, números y guion bajo."
+                    )
+
+
+def _normalize_formulacode_str(raw: str) -> str:
+    return str(raw or "").strip().upper()
 
 
 def _normalize_employee_field(raw: str) -> str:
@@ -506,9 +542,13 @@ class _Parser:
             args: list[Any] = []
             while self.peek()[0] == ",":
                 self.pop()
-                args.append(self.parse_expr())
+                if self.peek()[0] == "STR":
+                    _, sval = self.pop()
+                    args.append(("STR", _normalize_formulacode_str(str(sval))))
+                else:
+                    args.append(self.parse_expr())
             self.expect(")")
-            _validate_proc(proc_name, len(args))
+            _validate_proc(proc_name, len(args), args)
             self.procedures.add(proc_name)
             return ("PROC", proc_name, args)
         if k == "ID":
@@ -554,7 +594,13 @@ def _emit_sql(node: Any, lets: dict[str, Any]) -> str:
         return f"#M:{node[1]}#"
     if kind == "PROC":
         proc_name = node[1]
-        arg_exprs = [_emit_sql(a, lets) for a in node[2]]
+        arg_exprs: list[str] = []
+        for a in node[2]:
+            if isinstance(a, tuple) and a[0] == "STR":
+                code = _normalize_formulacode_str(str(a[1]))
+                arg_exprs.append(f"F:{code}")
+            else:
+                arg_exprs.append(_emit_sql(a, lets))
         n = len(arg_exprs)
         if n == 0:
             return f"#S:{proc_name}|0|#"

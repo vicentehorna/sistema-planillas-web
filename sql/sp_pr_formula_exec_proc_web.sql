@@ -13,7 +13,8 @@ CREATE OR ALTER PROCEDURE dbo.sp_pr_formula_exec_proc_web
     @payrolltype varchar(20),
     @processtype varchar(20),
     @person varchar(20),
-    @result numeric(19, 4) OUTPUT
+    @result numeric(19, 4) OUTPUT,
+    @strarg1 varchar(50) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -21,6 +22,7 @@ BEGIN
 
     DECLARE @p sysname = UPPER(LTRIM(RTRIM(ISNULL(@procname, ''))));
     SET @nargs = ISNULL(@nargs, 0);
+    SET @strarg1 = NULLIF(LTRIM(RTRIM(ISNULL(@strarg1, ''))), '');
 
     IF @p = 'SP_PR_REPORTETOTALQUINTAPERSONA'
     BEGIN
@@ -108,6 +110,25 @@ BEGIN
             @cia = @cia,
             @person = @person,
             @jornal = @result OUTPUT;
+        RETURN;
+    END
+
+    IF @p = 'SP_PR_FORMULAPROMEDIOSUBSIDIOS'
+    BEGIN
+        IF OBJECT_ID('dbo.sp_pr_FormulaPromedioSubsidios', 'P') IS NULL
+            RETURN;
+
+        IF @strarg1 IS NULL
+            RETURN;
+
+        EXEC dbo.sp_pr_FormulaPromedioSubsidios
+            @cia = @cia,
+            @person = @person,
+            @payrolltype = @payrolltype,
+            @processtype = @processtype,
+            @period = @period,
+            @formulacode = @strarg1,
+            @result = @result OUTPUT;
         RETURN;
     END
 

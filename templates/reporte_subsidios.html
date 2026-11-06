@@ -30,9 +30,15 @@
     .table-subsidios .col-dni { min-width: 5.5rem; }
     .table-subsidios .col-nombre { min-width: 14rem; max-width: 18rem; }
     .table-subsidios .col-mes,
+    .table-subsidios .col-total,
     .table-subsidios .col-promedio {
         min-width: 4.5rem;
         text-align: right;
+    }
+    .table-subsidios thead th.col-total,
+    .table-subsidios tbody td.col-total {
+        background-color: #e7f1ff;
+        font-weight: 700;
     }
     .table-subsidios thead th.col-promedio,
     .table-subsidios tbody td.col-promedio {
@@ -120,12 +126,13 @@
                         <th class="col-mes">M10</th>
                         <th class="col-mes">M11</th>
                         <th class="col-mes">M12</th>
+                        <th class="col-total">Total</th>
                         <th class="col-promedio">Promedio</th>
                     </tr>
                 </thead>
                 <tbody id="tbodySubsidios">
                     <tr>
-                        <td colspan="15" class="text-center text-muted py-4">Sin datos</td>
+                        <td colspan="16" class="text-center text-muted py-4">Sin datos</td>
                     </tr>
                 </tbody>
             </table>
@@ -145,7 +152,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = 'BGT';
     const MES_KEYS = ['m01','m02','m03','m04','m05','m06','m07','m08','m09','m10','m11','m12'];
     const LBL_KEYS = ['lbl01','lbl02','lbl03','lbl04','lbl05','lbl06','lbl07','lbl08','lbl09','lbl10','lbl11','lbl12'];
-    const COLS = 15;
+    const COLS = 16;
 
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
@@ -210,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         for (let i = 0; i < 12; i++) {
             html += `<th class="col-mes">${esc(labels[i] || ('M' + (i + 1)))}</th>`;
         }
-        html += '<th class="col-promedio">Promedio</th>';
+        html += '<th class="col-total">Total</th><th class="col-promedio">Promedio</th>';
         thead.innerHTML = html;
     }
 
@@ -229,6 +236,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="col-dni">${esc(r.person)}</td>
                 <td class="col-nombre">${esc(r.personname)}</td>
                 ${MES_KEYS.map((k) => `<td class="col-mes">${fmtNum(r[k])}</td>`).join('')}
+                <td class="col-total">${fmtNum(r.total)}</td>
                 <td class="col-promedio">${fmtNum(r.promedio)}</td>
             </tr>`;
         });
@@ -352,16 +360,17 @@ document.addEventListener('DOMContentLoaded', async function () {
         const labels = LBL_KEYS.map((k) => rows[0][k] || '');
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Subsidios');
-        ws.addRow(['DNI', 'Nombre', ...labels, 'Promedio']);
+        ws.addRow(['DNI', 'Nombre', ...labels, 'Total', 'Promedio']);
         ws.getRow(1).font = { bold: true };
         rows.forEach((r) => {
             ws.addRow([
                 r.person, r.personname,
                 ...MES_KEYS.map((k) => Number(r[k]) || 0),
+                Number(r.total) || 0,
                 Number(r.promedio) || 0,
             ]);
         });
-        for (let c = 3; c <= 15; c++) {
+        for (let c = 3; c <= 16; c++) {
             ws.getColumn(c).numFmt = '#,##0.0000';
             ws.getColumn(c).width = 12;
         }

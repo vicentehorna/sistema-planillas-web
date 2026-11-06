@@ -154,6 +154,10 @@ BEGIN
         CAST(MAX(CASE WHEN m.idx = 10 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m10,
         CAST(MAX(CASE WHEN m.idx = 11 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m11,
         CAST(MAX(CASE WHEN m.idx = 12 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m12,
+        CAST(
+            ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0)
+            AS decimal(19, 4)
+        ) AS total,
         CAST(ISNULL(@promedio, 0) AS decimal(19, 4)) AS promedio
     FROM dbo.PR_Employee e (NOLOCK)
     INNER JOIN dbo.SY_Person sp (NOLOCK)

@@ -35351,6 +35351,10 @@ def api_reporte_subsidios():
                 except (TypeError, ValueError):
                     item[k] = 0.0
             try:
+                item['total'] = float(r.get('total') or 0)
+            except (TypeError, ValueError):
+                item['total'] = 0.0
+            try:
                 item['promedio'] = float(r.get('promedio') or 0)
             except (TypeError, ValueError):
                 item['promedio'] = 0.0

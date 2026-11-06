@@ -1830,6 +1830,14 @@
                     </a>
                 </li>
                 {% endif %}
+                {% set es_alamo_boletas_masivo = (sql_database or '')|lower == 'hm_alamo' %}
+                {% if es_alamo_boletas_masivo and can_menu('generar_boletas_masivo') %}
+                <li class="{{ 'active' if request.endpoint == 'generar_boletas_masivo_page' else '' }}">
+                    <a href="{{ url_for('generar_boletas_masivo_page') }}" title="Generar Boletas Masivo">
+                        <i class="bi bi-files"></i><span class="sidebar-link-text">Generar Boletas Masivo</span>
+                    </a>
+                </li>
+                {% endif %}
                 {% if can_menu('formato_utilidades') %}
                 <li class="{{ 'active' if request.endpoint == 'formato_utilidades_page' else '' }}">
                     <a href="{{ url_for('formato_utilidades_page') }}" title="Constancia de Utilidades">

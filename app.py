@@ -25817,6 +25817,18 @@ def generar_boletas_page():
     )
 
 
+@app.route('/generar_boletas_masivo')
+@login_required
+def generar_boletas_masivo_page():
+    """Generar boletas multi-empresa (solo hm_alamo)."""
+    if not _es_bd_hm_alamo():
+        abort(404)
+    return render_template(
+        'generar_boletas_masivo.html',
+        confirmacion_boleta_habilitada=_confirmacion_boleta_habilitada(),
+    )
+
+
 @app.route('/documentos/formato_utilidades')
 @login_required
 def formato_utilidades_page():
@@ -28505,6 +28517,124 @@ def get_lista_boletas():
         return jsonify(trabajadores)
     except Exception as e:
         logging.exception('get_lista_boletas')
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/get_lista_boletas_masivo', methods=['POST'])
+@login_required
+def get_lista_boletas_masivo():
+    """
+    Listado multi-empresa para Generar Boletas Masivo (hm_alamo).
+    Filtros por Description de planilla/proceso (como Planilla Consolidada).
+    """
+    bloqueo = _require_hm_alamo_json('Generar Boletas Masivo')
+    if bloqueo is not None:
+        return bloqueo
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(
+        body.get('payroll_desc')
+        or body.get('payroll_description')
+        or body.get('payroll_type_desc')
+        or ''
+    ).strip()
+    proceso_desc = str(
+        body.get('proceso_desc')
+        or body.get('process_desc')
+        or body.get('process_description')
+        or ''
+    ).strip()
+    period = _normalize_pr_period(body.get('period'))
+    person = str(body.get('person') or '0').strip() or '0'
+    nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+    repunit = str(body.get('repunit') or body.get('unidad') or '0').strip() or '0'
+    costcenter = str(body.get('costcenter') or body.get('centrocosto') or '0').strip() or '0'
+    empresas_sel = _companies_seleccionadas_json(body)
+
+    if empresas_sel is not None and not empresas_sel:
+        return jsonify({'error': 'Seleccione al menos una empresa.'}), 400
+    if not payroll_desc or not proceso_desc or not period:
+        return jsonify({'error': 'Faltan tipo de planilla, proceso o periodo.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        permitidas = _list_active_companies(cursor)
+        companies = _filtrar_companies_seleccionadas(permitidas, empresas_sel)
+        if empresas_sel is not None and not companies:
+            return jsonify({
+                'error': 'Ninguna de las empresas seleccionadas está disponible. '
+                         'Seleccione al menos una empresa.'
+            }), 400
+
+        con_confirmacion = _confirmacion_boleta_habilitada()
+        trabajadores = []
+        for cia_code, cia_name in companies:
+            payroll_type, process_type = _resolve_payroll_process_by_description(
+                cursor, cia_code, payroll_desc, proceso_desc,
+            )
+            if not payroll_type or not process_type:
+                continue
+            if not _period_exists_for_company_process(
+                cursor, cia_code, payroll_type, process_type, period
+            ):
+                continue
+            cursor.execute(
+                'EXEC sp_pr_listadogenerarboletas_web '
+                '@cia=?, @payrolltype=?, @processtype=?, @period=?, @person=?, @nombre=?, @repunit=?, @costcenter=?',
+                (cia_code, payroll_type, process_type, period, person, nombre, repunit, costcenter),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            if not rows:
+                continue
+            fechas_envio = get_fechas_envio_boletas(
+                cursor, cia_code, payroll_type, process_type, period
+            )
+            confirmaciones = (
+                get_confirmaciones_boletas(cursor, cia_code, payroll_type, process_type, period)
+                if con_confirmacion
+                else {}
+            )
+            for r in rows:
+                pid = str(r.get('person') or '').strip()
+                if not pid:
+                    continue
+                fi = _jsonable_value(r.get('fechaingreso'))
+                fc = _jsonable_value(r.get('fechacese'))
+                trabajadores.append(
+                    {
+                        'cia': cia_code,
+                        'empresa': cia_name,
+                        'payroll_type': payroll_type,
+                        'process': process_type,
+                        'person': pid,
+                        'nombre': str(r.get('nombre') or '').strip(),
+                        'email': str(r.get('email') or '').strip(),
+                        'ingreso': fi if fi is not None else '',
+                        'cese': fc if fc is not None else '',
+                        'fecha_envio': fechas_envio.get(pid, ''),
+                        'fecha_confirmacion': (confirmaciones.get(pid) or {}).get('fecha', ''),
+                        'estado_confirmacion': (confirmaciones.get(pid) or {}).get('estado'),
+                    }
+                )
+
+        trabajadores.sort(
+            key=lambda t: (
+                str(t.get('empresa') or '').upper(),
+                str(t.get('nombre') or '').upper(),
+                str(t.get('person') or ''),
+            )
+        )
+        return jsonify(trabajadores)
+    except Exception as e:
+        logging.exception('get_lista_boletas_masivo')
         return jsonify({'error': str(e)}), 500
     finally:
         if conn:

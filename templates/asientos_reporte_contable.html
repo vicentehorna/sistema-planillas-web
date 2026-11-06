@@ -159,6 +159,11 @@
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled>
                     <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
                 </button>
+                {% if (sql_database or '')|lower == 'hm_zilicom' %}
+                <button type="button" class="btn btn-outline-danger btn-sm px-4" id="btnExportPdf" disabled>
+                    <i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
+                </button>
+                {% endif %}
                 <span class="ms-auto text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCount">0</span>
                 </span>
@@ -212,9 +217,14 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+{% if (sql_database or '')|lower == 'hm_zilicom' %}
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf.plugin.autotable.min.js"></script>
+{% endif %}
 <script>
 (function () {
     const DEFAULT_CIA = 'BGT';
+    const MOSTRAR_EXPORT_PDF = {{ ((sql_database or '')|lower == 'hm_zilicom') | tojson }};
     const frm = document.getElementById('frmReporteAsientoContable');
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
@@ -224,10 +234,17 @@
     const cboDistribucionPct = document.getElementById('cboDistribucionPct');
     const btnConsultar = document.getElementById('btnConsultar');
     const btnExport = document.getElementById('btnExportExcel');
+    const btnExportPdf = document.getElementById('btnExportPdf');
     const cardResultado = document.getElementById('cardResultado');
     const lblEstado = document.getElementById('lblEstadoCarga');
     const lblRowCount = document.getElementById('lblRowCount');
     let lastExport = null;
+
+    function setExportButtonsEnabled(enabled) {
+        const on = !!enabled;
+        if (btnExport) btnExport.disabled = !on;
+        if (btnExportPdf) btnExportPdf.disabled = !on;
+    }
 
     function fmtNum(n) {
         const x = Number(n || 0);
@@ -361,10 +378,11 @@
     }
 
     function setBusy(busy, msg) {
-        [btnConsultar, btnExport, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador, cboDistribucionPct].forEach(el => {
+        [btnConsultar, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador, cboDistribucionPct].forEach(el => {
             if (el) el.disabled = !!busy;
         });
         if (busy) {
+            setExportButtonsEnabled(false);
             lblEstado.textContent = msg || 'Consultando…';
             const label = btnConsultar.querySelector('.btn-consultar-label');
             if (label) label.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando…';
@@ -373,6 +391,7 @@
             const label = btnConsultar.querySelector('.btn-consultar-label');
             if (label) label.innerHTML = '<i class="bi bi-search"></i> Consultar';
             cboTrabajador.disabled = !cboCia.value;
+            setExportButtonsEnabled(!!(lastExport && lastExport.rows && lastExport.rows.length));
         }
     }
 
@@ -579,8 +598,14 @@
 
         lblRowCount.textContent = String(rows.length);
         cardResultado.classList.remove('d-none');
-        btnExport.disabled = !rows.length;
         lastExport = { rows, meta, problemas, descuadres };
+        setExportButtonsEnabled(!!rows.length);
+    }
+
+    function nombreArchivoAsiento(meta, conDist, ext) {
+        const sufijo = meta.person ? `_${meta.person}` : '';
+        const sufijoDist = conDist ? '_dist' : '';
+        return `asiento_contable_${meta.period || 'reporte'}${sufijoDist}${sufijo}.${ext}`;
     }
 
     async function exportExcel() {
@@ -618,13 +643,120 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        const sufijo = meta.person ? `_${meta.person}` : '';
-        const sufijoDist = conDist ? '_dist' : '';
-        a.download = `asiento_contable_${meta.period || 'reporte'}${sufijoDist}${sufijo}.xlsx`;
+        a.download = nombreArchivoAsiento(meta, conDist, 'xlsx');
         document.body.appendChild(a);
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
+    }
+
+    function exportPdf() {
+        if (!MOSTRAR_EXPORT_PDF || !lastExport || !lastExport.rows.length) return;
+        if (!window.jspdf || typeof window.jspdf.jsPDF !== 'function') {
+            const msg = 'No se pudo cargar la librería PDF.';
+            if (window.HmUi) HmUi.error(msg);
+            else alert(msg);
+            return;
+        }
+        const { rows, meta } = lastExport;
+        const conDist = String(meta.aplicar_distribucion || 'N').toUpperCase() === 'Y';
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: conDist ? 'landscape' : 'portrait',
+            unit: 'pt',
+            format: 'a4',
+        });
+        const titulo = armarTitulo(meta);
+        const marginX = 28;
+        doc.setFontSize(11);
+        doc.setFont(undefined, 'bold');
+        const tituloLines = doc.splitTextToSize(titulo, doc.internal.pageSize.getWidth() - marginX * 2);
+        doc.text(tituloLines, marginX, 36);
+        const startY = 36 + (tituloLines.length * 14) + 8;
+
+        const head = conDist
+            ? [['Cuenta', 'Concepto', 'Centro Costo', 'Código', 'Trabajador', 'Estado', 'F.Cese', 'Debe', 'Haber']]
+            : [['Cuenta', 'Cuenta - Descripción', 'Concepto', 'Debe', 'Haber']];
+        const body = conDist
+            ? rows.map((r) => [
+                r.account || '',
+                r.conceptname || '',
+                r.costcentername || '',
+                r.person || '',
+                r.trabajador || '',
+                r.status || '',
+                r.ceasedate || '00-00-0000',
+                fmtNum(r.conceptvaluedebe),
+                fmtNum(r.conceptvaluehaber),
+            ])
+            : rows.map((r) => [
+                r.account || '',
+                r.accountname || '',
+                r.conceptname || '',
+                fmtNum(r.conceptvaluedebe),
+                fmtNum(r.conceptvaluehaber),
+            ]);
+        const foot = conDist
+            ? [
+                ['', '', '', '', '', '', 'Total', fmtNum(meta.total_debe), fmtNum(meta.total_haber)],
+                ['', '', '', '', '', '', 'Diferencia', fmtNum(meta.diferencia), ''],
+            ]
+            : [
+                ['', '', 'Total', fmtNum(meta.total_debe), fmtNum(meta.total_haber)],
+                ['', '', 'Diferencia', fmtNum(meta.diferencia), ''],
+            ];
+
+        doc.autoTable({
+            startY,
+            head,
+            body,
+            foot,
+            theme: 'grid',
+            styles: {
+                fontSize: conDist ? 7 : 8,
+                cellPadding: 2.5,
+                overflow: 'linebreak',
+                valign: 'middle',
+            },
+            headStyles: {
+                fillColor: [248, 249, 250],
+                textColor: [33, 37, 41],
+                fontStyle: 'bold',
+                lineColor: [222, 226, 230],
+                lineWidth: 0.5,
+            },
+            footStyles: {
+                fillColor: [241, 243, 245],
+                textColor: [33, 37, 41],
+                fontStyle: 'bold',
+                lineColor: [222, 226, 230],
+                lineWidth: 0.5,
+            },
+            columnStyles: conDist
+                ? {
+                    7: { halign: 'right' },
+                    8: { halign: 'right' },
+                }
+                : {
+                    3: { halign: 'right' },
+                    4: { halign: 'right' },
+                },
+            margin: { left: marginX, right: marginX },
+            didDrawPage(data) {
+                const page = doc.internal.getNumberOfPages();
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(108, 117, 125);
+                doc.text(
+                    `Pág. ${page}`,
+                    doc.internal.pageSize.getWidth() - marginX,
+                    doc.internal.pageSize.getHeight() - 16,
+                    { align: 'right' }
+                );
+            },
+        });
+
+        doc.save(nombreArchivoAsiento(meta, conDist, 'pdf'));
     }
 
     frm.addEventListener('submit', async (ev) => {
@@ -648,7 +780,8 @@
         }
         setBusy(true);
         cardResultado.classList.add('d-none');
-        btnExport.disabled = true;
+        lastExport = null;
+        setExportButtonsEnabled(false);
         try {
             const res = await fetch('/api/asientos/reporte-contable', {
                 method: 'POST',
@@ -667,6 +800,9 @@
     });
 
     btnExport.addEventListener('click', exportExcel);
+    if (btnExportPdf) {
+        btnExportPdf.addEventListener('click', exportPdf);
+    }
     cboCia.addEventListener('change', cargarPlanillas);
     cboPlanilla.addEventListener('change', async () => {
         await Promise.all([cargarProcesos(), cargarTrabajadores()]);

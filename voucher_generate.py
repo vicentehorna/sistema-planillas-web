@@ -536,20 +536,37 @@ def _build_detail_lines(
                 )
             )
 
-    # ajuste centavos (como PB)
+    def _linea_ajuste_redondeo(cands: List[VoucherDetailLine]) -> VoucherDetailLine:
+        """Prefiere la línea de Neto a recibir (haber=importe negativo) para absorber centavos."""
+        if not cands:
+            return lines[0]
+        neto = [
+            ln for ln in cands
+            if ln.amountlo < 0 and "neto" in _s(ln.comments).lower()
+        ]
+        if neto:
+            return max(neto, key=lambda ln: abs(ln.amountlo))
+        creditos = [ln for ln in cands if ln.amountlo < 0]
+        if creditos:
+            return max(creditos, key=lambda ln: abs(ln.amountlo))
+        return cands[0]
+
+    # ajuste centavos (como PB): preferir Neto a recibir, no la 1.ª línea
     if lines and sum_credits_alt != sum_debits_alt:
         delta = sum_credits_alt + sum_debits_alt
+        ln_adj = _linea_ajuste_redondeo(lines)
         if currency == "LO":
-            lines[0].amountex = _r2(lines[0].amountex - delta)
+            ln_adj.amountex = _r2(ln_adj.amountex - delta)
         else:
-            lines[0].amountlo = _r2(lines[0].amountlo - delta)
+            ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
 
     if lines and sum_credits_cu != sum_debits_cu and abs(sum_credits_cu + sum_debits_cu) < Decimal("0.1"):
         delta = sum_credits_cu + sum_debits_cu
+        ln_adj = _linea_ajuste_redondeo(lines)
         if currency == "LO":
-            lines[0].amountlo = _r2(lines[0].amountlo - delta)
+            ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
         else:
-            lines[0].amountex = _r2(lines[0].amountex - delta)
+            ln_adj.amountex = _r2(ln_adj.amountex - delta)
 
     for i, ln in enumerate(lines, 1):
         ln.line = i

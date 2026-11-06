@@ -16263,6 +16263,46 @@ def api_asientos_generar_voucher():
                 pass
 
 
+def _asiento_ajustar_redondeo_neto(out_rows, total_debe, total_haber, max_gap=0.99):
+    """
+    Absorbe diferencias de centavos (±0.01..max_gap) en la línea de Neto a recibir (haber).
+    Origen típico: conceptos AFP/etc. con >2 decimales redondeados línea a línea vs NETO.
+    Devuelve (total_debe, total_haber, gap_aplicado_o_0, ajustado).
+    """
+    gap = round(float(total_debe or 0) - float(total_haber or 0), 2)
+    if abs(gap) < 0.005 or abs(gap) > float(max_gap):
+        return round(float(total_debe or 0), 2), round(float(total_haber or 0), 2), gap, False
+
+    candidatos = [
+        r for r in (out_rows or [])
+        if float(r.get('conceptvaluehaber') or 0) > 0
+        and 'neto' in str(r.get('conceptname') or '').lower()
+    ]
+    if not candidatos:
+        creditos = [r for r in (out_rows or []) if float(r.get('conceptvaluehaber') or 0) > 0]
+        if not creditos:
+            return round(float(total_debe or 0), 2), round(float(total_haber or 0), 2), gap, False
+        candidatos = [max(creditos, key=lambda r: float(r.get('conceptvaluehaber') or 0))]
+
+    preferidos = [
+        r for r in candidatos
+        if str(r.get('conceptname') or '').strip().lower().startswith('neto')
+    ]
+    target = max(
+        preferidos or candidatos,
+        key=lambda r: float(r.get('conceptvaluehaber') or 0),
+    )
+    haber_actual = round(float(target.get('conceptvaluehaber') or 0), 2)
+    haber_nuevo = round(haber_actual + gap, 2)
+    if haber_nuevo < 0:
+        return round(float(total_debe or 0), 2), round(float(total_haber or 0), 2), gap, False
+
+    target['conceptvaluehaber'] = haber_nuevo
+    total_haber = round(float(total_haber or 0) - haber_actual + haber_nuevo, 2)
+    total_debe = round(float(total_debe or 0), 2)
+    return total_debe, total_haber, gap, True
+
+
 @app.route('/api/asientos/reporte-contable', methods=['POST'])
 @login_required
 def api_asientos_reporte_contable():
@@ -16377,6 +16417,20 @@ def api_asientos_reporte_contable():
                 'causa': str(rd.get('causa') or '').strip(),
             })
 
+        total_debe = round(total_debe, 2)
+        total_haber = round(total_haber, 2)
+        # Centavos por redondeo AFP/etc.: absorber en Neto a recibir (mismo criterio que voucher).
+        total_debe, total_haber, gap_redondeo, ajustado_redondeo = _asiento_ajustar_redondeo_neto(
+            out_rows, total_debe, total_haber
+        )
+        if ajustado_redondeo:
+            # Ocultar avisos de solo ±0.01/0.02 ya absorbidos en el Neto.
+            descuadres = [
+                d for d in descuadres
+                if abs(float(d.get('asiento_diff') or 0)) >= 0.05
+                or float(d.get('neto_teorico') or 0) < -0.005
+            ]
+
         diferencia = round(abs(total_debe) - abs(total_haber), 2)
         alcance = f" del trabajador {person}" if person else ""
         motivo = ''
@@ -16416,11 +16470,17 @@ def api_asientos_reporte_contable():
                     "sin cuenta; revise perfiles, auxiliares u otras causas."
                 )
         else:
-            motivo = (
-                f"Asiento cuadrado{alcance}: débitos y créditos coinciden."
-                if person
-                else "Asiento cuadrado: débitos y créditos coinciden."
-            )
+            if ajustado_redondeo:
+                motivo = (
+                    f"Asiento cuadrado{alcance}: débitos y créditos coinciden "
+                    f"(ajuste por redondeo {gap_redondeo:+.2f} en Neto a recibir)."
+                )
+            else:
+                motivo = (
+                    f"Asiento cuadrado{alcance}: débitos y créditos coinciden."
+                    if person
+                    else "Asiento cuadrado: débitos y créditos coinciden."
+                )
 
         periodo_fmt = period
         if len(period) == 8 and period.isdigit():
@@ -16465,6 +16525,7 @@ def api_asientos_reporte_contable():
                 'total_haber': round(total_haber, 2),
                 'diferencia': diferencia,
                 'motivo': motivo,
+                'ajuste_redondeo': round(gap_redondeo, 2) if ajustado_redondeo else 0,
             },
         })
     except Exception as e:

@@ -5654,6 +5654,7 @@ def _usa_boleta_doble():
 
 
 _BOLETA_ETIQUETA_DIAS_FALLECIMIENTO = {'hm_globaltec': 'Días Ley 31602'}
+_BOLETA_ETIQUETA_DIAS_FALTAS = {'hm_globaltec': 'Días Faltas'}
 
 
 def _boleta_etiqueta_dias_fallecimiento():
@@ -5663,6 +5664,15 @@ def _boleta_etiqueta_dias_fallecimiento():
     except Exception:
         db = ''
     return _BOLETA_ETIQUETA_DIAS_FALLECIMIENTO.get(db, 'Días Fallecimiento')
+
+
+def _boleta_etiqueta_dias_faltas():
+    try:
+        from database import get_active_database
+        db = str(get_active_database() or '').strip().lower()
+    except Exception:
+        db = ''
+    return _BOLETA_ETIQUETA_DIAS_FALTAS.get(db, 'Días Faltas Injust')
 
 
 def _boleta_cabecera_modelo_anterior():
@@ -6079,6 +6089,7 @@ def generar_pdf_en_memoria(params):
             firma_ampliada=_es_cliente_ngservicios(),
             cabecera_modelo_anterior=boleta_doble and _boleta_cabecera_modelo_anterior(),
             etiqueta_dias_fallecimiento=_boleta_etiqueta_dias_fallecimiento(),
+            etiqueta_dias_faltas=_boleta_etiqueta_dias_faltas(),
             boleta_he_lumat_semanal=he_lumat_semanal,
         )
         pdf_io = io.BytesIO()

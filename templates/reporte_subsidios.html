@@ -266,7 +266,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             CombosCarga.resetSelect(cboPeriodo);
             return false;
         }
-        return FiltrosReportesPlanillas.poblarPeriodosConActivo(
+        return FiltrosPlanillasReportes.poblarPeriodosConActivo(
             cia, payrolltype, processtype, cboPeriodo, poblarSelect, periodoPreferido || ''
         );
     }

@@ -15790,7 +15790,7 @@ def api_asientos_interfaz_periodos():
 @app.route('/api/asientos/interfaz/generar-archivo', methods=['POST'])
 @login_required
 def api_asientos_interfaz_generar_archivo():
-    """Genera archivo del asiento: Alvisoft / SAP Quimica ZIP / Excel Divisa / Excel El Clan."""
+    """Genera archivo del asiento: Alvisoft / SAP Quimica / Softland Zilicom / Excel Divisa / Excel El Clan."""
     from database import get_active_database
     from alvisoft_export import generar_txt_alvisoft
 
@@ -15830,6 +15830,7 @@ def api_asientos_interfaz_generar_archivo():
         es_elclan = active_db == 'hm_elclan'
         es_aci = active_db == 'hm_aci'
         es_quimica = active_db == 'hm_quimica'
+        es_zilicom = active_db == 'hm_zilicom'
 
         # hm_quimica primero: nunca debe caer al TXT Alvisoft (SPs de hm_aci).
         if es_quimica:
@@ -15842,6 +15843,20 @@ def api_asientos_interfaz_generar_archivo():
             resp = Response(contenido, mimetype='application/zip')
             resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
             resp.headers['X-Asiento-Export'] = 'sap-quimica-cab-det'
+            return resp
+
+        # hm_zilicom: Softland clásico (sp_pr_asientozilicom), no Alvisoft NIIF.
+        if es_zilicom:
+            from zilicom_asiento_export import generar_txt_asiento_zilicom
+            filename, contenido = generar_txt_asiento_zilicom(cursor, cia, voucher)
+            try:
+                conn.commit()
+            except Exception:
+                pass
+            resp = Response(contenido.encode('latin-1', errors='replace'))
+            resp.headers['Content-Type'] = 'text/plain; charset=iso-8859-1'
+            resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+            resp.headers['X-Asiento-Export'] = 'zilicom-softland'
             return resp
 
         if es_elclan:

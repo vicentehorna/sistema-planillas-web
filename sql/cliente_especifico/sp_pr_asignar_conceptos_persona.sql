@@ -56,6 +56,26 @@ begin
 	delete from PR_EmployeeConcept where company = @company and PayRollType = @payrolltype and  Person = @person and PRPeriodStart = @period
 	and exists (select * from PR_Concept where Concept = PR_EmployeeConcept.Concept and FormulaCode = 'DIASTRABAJADOS')
 
+	--LIMPIEZA: conceptos generados por este SP en el periodo cuyo origen ya no existe
+	--(vacaciones, descansos, subsidios o préstamos eliminados). No toca asignaciones manuales ni TAREO.
+	delete EC
+	from PR_EmployeeConcept EC
+	where EC.Company = @company and EC.PayRollType = @payrolltype and EC.Person = @person
+	  and EC.PRPeriodStart = @period and EC.PRPeriodEnd = @period
+	  and EC.Application = 'PR' and isnull(EC.XLastUser,'') <> 'TAREO'
+	  and EC.Concept in (
+			select C.Concept from PR_Concept C
+			where C.Company = @company
+			  and C.FormulaCode in ('DIAS_VACAC_NORMAL','DIAS_VACAC_VENTA','DIAFALLECIMIENTO','DSCTO_DE_PRESTAMO')
+			union
+			select V.Concept from PR_Mapping2 M
+			cross apply (values (M.absencesdaysconcept), (M.mrcompanydaysconcept),
+								(M.mrallowancedaysnotaxconcept), (M.mrallowancedaystaxconcept),
+								(M.mrbenefitsdaystaxconcept), (M.mrbenefitsdaysnotaxconcept),
+								(M.mrvacationdaystaxconcept), (M.mrvacationdaysnotaxconcept)) V(Concept)
+			where M.Company = @company and isnull(V.Concept,'') <> ''
+	  )
+
 	--DIAS TRABAJADOS
 
 	insert into PR_EmployeeConcept (Person, Company,Concept,PayRollType,PRPeriodStart, CostCenter, PRPeriodEnd, ConceptValue, Application,ConceptCurrency,

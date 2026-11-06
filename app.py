@@ -9354,6 +9354,15 @@ def reporte_descansos_medicos_detalle_page():
     return render_template('reporte_descansos_medicos_detalle.html')
 
 
+@app.route('/reporte-subsidios')
+@login_required
+def reporte_subsidios_page():
+    """Reporte de Subsidios (TOTAL_REM_AFP 12 meses + promedio) — solo hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('reporte_subsidios.html')
+
+
 @app.route('/reporte-log-calculo')
 @login_required
 def reporte_log_calculo_page():
@@ -35282,6 +35291,79 @@ def api_reporte_planilla_por_conceptos():
     except Exception as e:
         logging.exception('api_reporte_planilla_por_conceptos')
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/reportes/subsidios', methods=['POST'])
+@login_required
+def api_reporte_subsidios():
+    """sp_pr_reportesubsidios_web: TOTAL_REM_AFP en 12 meses + promedio (hm_ultra)."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    ensure_user_session()
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll_type') or '').strip()
+    process = str(body.get('process') or body.get('processtype') or '').strip()
+    period = str(body.get('period') or body.get('prperiod') or '').strip()
+    person = str(body.get('person') or '').strip()
+
+    if not cia:
+        return jsonify({'error': 'Seleccione una compañía.'}), 400
+    if not payrolltype:
+        return jsonify({'error': 'Seleccione el tipo de planilla.'}), 400
+    if not process:
+        return jsonify({'error': 'Seleccione el proceso.'}), 400
+    if not period:
+        return jsonify({'error': 'Seleccione el periodo.'}), 400
+    if not person or person == '0':
+        return jsonify({'error': 'Seleccione el trabajador.'}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _set_cursor_timeout_report(cursor)
+        cursor.execute(
+            'EXEC sp_pr_reportesubsidios_web '
+            '@company=?, @payrolltype=?, @processtype=?, @period=?, @person=?',
+            (cia, payrolltype, process, period, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        mes_keys = [f'm{str(i).zfill(2)}' for i in range(1, 13)]
+        lbl_keys = [f'lbl{str(i).zfill(2)}' for i in range(1, 13)]
+        resultado = []
+        for r in rows:
+            item = {
+                'person': str(r.get('person') or '').strip(),
+                'personname': str(r.get('personname') or '').strip(),
+            }
+            for k in lbl_keys:
+                item[k] = str(r.get(k) or '').strip()
+            for k in mes_keys:
+                try:
+                    item[k] = float(r.get(k) or 0)
+                except (TypeError, ValueError):
+                    item[k] = 0.0
+            try:
+                item['promedio'] = float(r.get('promedio') or 0)
+            except (TypeError, ValueError):
+                item['promedio'] = 0.0
+            resultado.append(item)
+        return jsonify({
+            'rows': resultado,
+            'count': len(resultado),
+            'period': period,
+            'formulacode': 'TOTAL_REM_AFP',
+        })
+    except Exception as e:
+        logging.exception('api_reporte_subsidios')
+        return jsonify({'error': _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

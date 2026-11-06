@@ -5832,6 +5832,123 @@ def _boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, per
     return extra
 
 
+def _boleta_ultra_dias_mes_legacy(period):
+    """Días del mes como en la boleta antigua Ultra (Feb siempre 28)."""
+    raw = str(period or '').strip()
+    if len(raw) < 6 or not raw[:6].isdigit():
+        return 30
+    mm = raw[4:6]
+    return {
+        '01': 31, '02': 28, '03': 31, '04': 30,
+        '05': 31, '06': 30, '07': 31, '08': 31,
+        '09': 30, '10': 31, '11': 30, '12': 31,
+    }.get(mm, 30)
+
+
+def _boleta_ultra_parse_fecha(valor):
+    """Normaliza fecha de cabecera / SP a date o None."""
+    if valor is None or valor == '':
+        return None
+    if hasattr(valor, 'date') and callable(valor.date):
+        try:
+            return valor.date()
+        except Exception:
+            pass
+    if hasattr(valor, 'year') and hasattr(valor, 'month') and hasattr(valor, 'day'):
+        try:
+            import datetime as _dt
+            if isinstance(valor, _dt.datetime):
+                return valor.date()
+            if isinstance(valor, _dt.date):
+                return valor
+        except Exception:
+            pass
+    raw = str(valor).strip()
+    if not raw or raw in ('---', 'None'):
+        return None
+    for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%Y%m%d', '%d-%m-%Y'):
+        try:
+            import datetime as _dt
+            return _dt.datetime.strptime(raw[:10] if fmt != '%Y%m%d' else raw[:8], fmt).date()
+        except Exception:
+            continue
+    return None
+
+
+def _boleta_ultra_dias_pagados(cursor, cabecera, cia, processtype, payroll_type, period, person):
+    """hm_ultra (solo boleta): Días Pagados como campo calculado del sistema anterior.
+
+    base = (día cese si cese en el mes, si no días del mes Feb=28)
+         - (día ingreso si ingreso en el mes, si no 0)
+         + (1 si ingreso en el mes, si no 0)
+         - sum(nemonicos de restas)
+    Nemónicos (sin PR_Mapping): CANT_DIAS_AUSENCIA, DIAS_LICENCIA_GOCE, DIAS_VACAC_NORMAL,
+    DIASUSPENSION + FALTAS_EMPRE, CANT_DIAS_AUS_JUSTI, DIAS_LIC_SINGOCE,
+    DIAS_DESC_SUBSI_INAF + DIAS_DESC_SUBSI_AFEC, DIAS_PATERNIDAD, DIAS_DESCANSO_EMPRES.
+    """
+    if not cabecera:
+        return cabecera
+
+    yyyymm = str(period or '').strip()[:6]
+    if len(yyyymm) != 6 or not yyyymm.isdigit():
+        return cabecera
+
+    fecha_cese = _boleta_ultra_parse_fecha(cabecera.get('fecha_cese'))
+    fecha_ingreso = _boleta_ultra_parse_fecha(cabecera.get('fecha_ingreso'))
+
+    if fecha_cese and f'{fecha_cese.year:04d}{fecha_cese.month:02d}' == yyyymm:
+        base = float(fecha_cese.day)
+    else:
+        base = float(_boleta_ultra_dias_mes_legacy(period))
+
+    if fecha_ingreso and f'{fecha_ingreso.year:04d}{fecha_ingreso.month:02d}' == yyyymm:
+        base = base - float(fecha_ingreso.day) + 1.0
+
+    restas_codes = (
+        'CANT_DIAS_AUSENCIA',
+        'DIAS_LICENCIA_GOCE',
+        'DIAS_VACAC_NORMAL',
+        'DIASUSPENSION',
+        'FALTAS_EMPRE',
+        'CANT_DIAS_AUS_JUSTI',
+        'DIAS_LIC_SINGOCE',
+        'DIAS_DESC_SUBSI_INAF',
+        'DIAS_DESC_SUBSI_AFEC',
+        'DIAS_PATERNIDAD',
+        'DIAS_DESCANSO_EMPRES',
+    )
+    restas = 0.0
+    try:
+        placeholders = ','.join('?' for _ in restas_codes)
+        cursor.execute(
+            f"""
+            SELECT ISNULL(SUM(ISNULL(epc.ConceptValue, 0)), 0)
+            FROM PR_EmployeePayRollConcept epc (NOLOCK)
+                INNER JOIN PR_Concept c (NOLOCK)
+                    ON c.Concept = epc.Concept AND c.Company = epc.Company
+            WHERE epc.Company = ?
+              AND epc.ProcessType = ?
+              AND epc.PayRollType = ?
+              AND epc.PRPeriod = ?
+              AND epc.Person = ?
+              AND UPPER(LTRIM(RTRIM(c.FormulaCode))) IN ({placeholders})
+            """,
+            (cia, processtype, payroll_type, period, person, *restas_codes),
+        )
+        row = cursor.fetchone()
+        restas = float(row[0] or 0) if row else 0.0
+    except Exception:
+        logging.exception('_boleta_ultra_dias_pagados person=%s', person)
+        return cabecera
+
+    pagados = base - restas
+    if pagados < 0:
+        pagados = 0.0
+    cabecera['dias_laborables'] = pagados
+    cabecera['DIAS_LABORABLES'] = pagados
+    return cabecera
+
+
 def _boleta_titulo_por_proceso(cursor, cia, processtype, titulo_sp):
     """
     El SP arma 'BOLETA DE PAGO <tipo periodo> - <MES AÑO>' para todo proceso salvo
@@ -5923,6 +6040,10 @@ def generar_pdf_en_memoria(params):
             cabecera = dict(cabecera or {})
             cabecera.update(_boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person))
             he_lumat_semanal = _boleta_he_lumat_semanal(cursor, cia, processtype)
+        if _es_cliente_ultraseguros() and cabecera:
+            cabecera = _boleta_ultra_dias_pagados(
+                cursor, cabecera, cia, processtype, payroll_type, period, person
+            )
     finally:
         if conn:
             try:

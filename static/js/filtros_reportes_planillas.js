@@ -2268,6 +2268,10 @@
                 if (incluyeFechaPago) {
                     estado.fecha_pago = val('txtFechaPago');
                 }
+                const chkSinFirma = document.getElementById('chkSinFirma');
+                if (chkSinFirma) {
+                    estado.sin_firma = chkSinFirma.checked ? '1' : '0';
+                }
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros formato liquidacion: no se pudo guardar', e);
@@ -2334,6 +2338,11 @@
                     txtFechaPago.value = String(filtros.fecha_pago).trim();
                 }
             }
+            const chkSinFirma = document.getElementById('chkSinFirma');
+            if (chkSinFirma && filtros.sin_firma != null) {
+                const sinFirma = String(filtros.sin_firma || '').trim().toLowerCase();
+                chkSinFirma.checked = ['1', 'true', 'yes', 'y', 'on', 's', 'si'].includes(sinFirma);
+            }
 
             guardar();
             return true;
@@ -2353,6 +2362,8 @@
                 const txtFechaPago = document.getElementById('txtFechaPago');
                 if (txtFechaPago) txtFechaPago.addEventListener('change', guardar);
             }
+            const chkSinFirma = document.getElementById('chkSinFirma');
+            if (chkSinFirma) chkSinFirma.addEventListener('change', guardar);
         }
 
         return {

@@ -7647,7 +7647,7 @@ def _control_datos_cts_persona(cia, payroll_type, period, person):
                 pass
 
 
-def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None):
+def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None, sin_firma=False):
     conn = None
     try:
         conn = get_db_connection()
@@ -7718,7 +7718,8 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
     def _txt(key):
         return str(h.get(key) or '').strip()
 
-    logo_src, firma_src = _boleta_logo_firma_src(cia)
+    logo_src, firma_full = _boleta_logo_firma_src(cia)
+    firma_src = '' if sin_firma else firma_full
     return {
         'logo_src': logo_src,
         'firma_src': firma_src,
@@ -7759,6 +7760,11 @@ def generar_pdf_formato_cts(params):
     period = _normalize_pr_period(params.get('period'))
     person = str(params.get('person') or '').strip()
     fecha_pago = _formato_cts_fecha_pago_solicitada(params.get('fecha_pago'))
+    sin_firma = _truthy_param(
+        params.get('sin_firma')
+        if params.get('sin_firma') is not None
+        else params.get('sinfirma')
+    )
     if not (cia and payroll_type and period and person):
         raise ValueError('Faltan parámetros para generar el formato de CTS.')
 
@@ -7769,7 +7775,9 @@ def generar_pdf_formato_cts(params):
     _control_datos_cts_persona(cia, payroll_type, period, person)
     html_renderizado = render_template(
         'formato_cts_pdf.html',
-        **_contexto_formato_cts(cia, payroll_type, period, person, fecha_pago),
+        **_contexto_formato_cts(
+            cia, payroll_type, period, person, fecha_pago, sin_firma=sin_firma
+        ),
     )
 
     if WEASYPRINT_AVAILABLE:
@@ -26731,6 +26739,9 @@ def procesar_formatos_cts_masivo():
         omitidas = 0
         pdf_parts = []
         fecha_pago_str = fecha_pago.isoformat() if fecha_pago else ''
+        sin_firma = _truthy_param(
+            body.get('sin_firma') if body.get('sin_firma') is not None else body.get('sinfirma')
+        )
         try:
             for pid in ids:
                 try:
@@ -26741,6 +26752,7 @@ def procesar_formatos_cts_masivo():
                             'payroll_type': payroll_type,
                             'period': period,
                             'fecha_pago': fecha_pago_str,
+                            'sin_firma': '1' if sin_firma else '0',
                         }
                     )
                     pdf_parts.append((_formato_cts_pdf_filename(pid, period), pdf_data.getvalue()))
@@ -26858,6 +26870,11 @@ def descargar_zip_formatos_cts():
                         'period': period,
                         'person': person_id,
                         'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
+                        'sin_firma': (
+                            request.args.get('sin_firma')
+                            if request.args.get('sin_firma') is not None
+                            else request.args.get('sinfirma')
+                        ),
                     }
                 )
                 zip_file.writestr(_formato_cts_pdf_filename(person_id, period), pdf_io.getvalue())
@@ -26896,6 +26913,9 @@ def enviar_formatos_cts_masivo():
         fecha_pago = _formato_cts_fecha_pago_solicitada(data.get('fecha_pago'))
     except ValueError as e:
         return jsonify({'error': str(e)}), 400
+    sin_firma = _truthy_param(
+        data.get('sin_firma') if data.get('sin_firma') is not None else data.get('sinfirma')
+    )
 
     try:
         empleados_periodo = _listar_trabajadores_cts(cia, payroll_type, period, '0', None)
@@ -26936,6 +26956,7 @@ def enviar_formatos_cts_masivo():
                         'period': period,
                         'person': emp_code,
                         'fecha_pago': fecha_pago.isoformat() if fecha_pago else '',
+                        'sin_firma': '1' if sin_firma else '0',
                     }
                 )
                 exito, msg = enviar_correo_formato_cts(

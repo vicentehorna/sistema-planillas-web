@@ -536,37 +536,78 @@ def _build_detail_lines(
                 )
             )
 
-    def _linea_ajuste_redondeo(cands: List[VoucherDetailLine]) -> VoucherDetailLine:
-        """Prefiere la línea de Neto a recibir (haber=importe negativo) para absorber centavos."""
-        if not cands:
-            return lines[0]
-        neto = [
-            ln for ln in cands
-            if ln.amountlo < 0 and "neto" in _s(ln.comments).lower()
-        ]
-        if neto:
-            return max(neto, key=lambda ln: abs(ln.amountlo))
-        creditos = [ln for ln in cands if ln.amountlo < 0]
-        if creditos:
-            return max(creditos, key=lambda ln: abs(ln.amountlo))
-        return cands[0]
-
-    # ajuste centavos (como PB): preferir Neto a recibir, no la 1.ª línea
+    # ajuste centavos (como PB): preferir Neto a recibir, no la 1.ª línea.
+    # Umbral 0.99: la suma de ±0.01 por persona suele superar 0.10.
     if lines and sum_credits_alt != sum_debits_alt:
         delta = sum_credits_alt + sum_debits_alt
-        ln_adj = _linea_ajuste_redondeo(lines)
-        if currency == "LO":
-            ln_adj.amountex = _r2(ln_adj.amountex - delta)
-        else:
-            ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
+        if abs(delta) <= Decimal("0.99"):
+            ln_adj = _pick_rounding_adjust_line(lines)
+            if currency == "LO":
+                ln_adj.amountex = _r2(ln_adj.amountex - delta)
+            else:
+                ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
 
-    if lines and sum_credits_cu != sum_debits_cu and abs(sum_credits_cu + sum_debits_cu) < Decimal("0.1"):
+    if lines and sum_credits_cu != sum_debits_cu:
         delta = sum_credits_cu + sum_debits_cu
-        ln_adj = _linea_ajuste_redondeo(lines)
-        if currency == "LO":
-            ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
+        if abs(delta) <= Decimal("0.99"):
+            ln_adj = _pick_rounding_adjust_line(lines)
+            if currency == "LO":
+                ln_adj.amountlo = _r2(ln_adj.amountlo - delta)
+            else:
+                ln_adj.amountex = _r2(ln_adj.amountex - delta)
+
+    for i, ln in enumerate(lines, 1):
+        ln.line = i
+    return lines
+
+
+def _pick_rounding_adjust_line(lines: List[VoucherDetailLine]) -> VoucherDetailLine:
+    """Prefiere Neto a recibir (haber = importe local negativo) para absorber centavos."""
+    if not lines:
+        raise ValueError("No hay líneas para ajustar redondeo.")
+    neto = [
+        ln for ln in lines
+        if ln.amountlo < 0 and "neto" in _s(ln.comments).lower()
+    ]
+    if neto:
+        return max(neto, key=lambda ln: abs(ln.amountlo))
+    creditos = [ln for ln in lines if ln.amountlo < 0]
+    if creditos:
+        return max(creditos, key=lambda ln: abs(ln.amountlo))
+    return lines[0]
+
+
+def _absorb_rounding_imbalance(
+    lines: List[VoucherDetailLine],
+    currency: str = "LO",
+    max_gap: Decimal = Decimal("0.99"),
+) -> List[VoucherDetailLine]:
+    """
+    Tras distribuciones, reabsorbe |créditos|-|débitos| ≤ max_gap en Neto a recibir.
+    Necesario porque el ajuste previo a distribución no alcanza cuando el gap
+    acumulado por persona supera el umbral antiguo (0.10) o se altera después.
+    """
+    if not lines:
+        return lines
+    credit_lo = debit_lo = credit_ex = debit_ex = Decimal("0")
+    for ln in lines:
+        if ln.amountlo > 0:
+            credit_lo += ln.amountlo
         else:
-            ln_adj.amountex = _r2(ln_adj.amountex - delta)
+            debit_lo += ln.amountlo
+        if ln.amountex > 0:
+            credit_ex += ln.amountex
+        else:
+            debit_ex += ln.amountex
+
+    # Misma convención que _build_detail_lines: créditos en amountlo negativo.
+    delta_lo = _r2(credit_lo + debit_lo)
+    delta_ex = _r2(credit_ex + debit_ex)
+    ln_adj = _pick_rounding_adjust_line(lines)
+    if delta_lo != 0 and abs(delta_lo) <= max_gap:
+        ln_adj.amountlo = _r2(ln_adj.amountlo - delta_lo)
+    if delta_ex != 0 and abs(delta_ex) <= max_gap:
+        ln_adj.amountex = _r2(ln_adj.amountex - delta_ex)
 
     for i, ln in enumerate(lines, 1):
         ln.line = i
@@ -1018,6 +1059,7 @@ def generar_voucher_general(
 
     lines = _build_detail_lines(epc_rows, currency, er, voucher_date)
     lines = _apply_distributions(cursor, company, lines)
+    lines = _absorb_rounding_imbalance(lines, currency=currency)
     totals = _totals(lines)
     errors = _validate_balance(totals)
 

@@ -405,37 +405,182 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     async function exportExcel() {
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
         if (!ultimoPayload || !(ultimoPayload.columns || []).length) return;
+
         const columns = ultimoPayload.columns;
         const rows = ultimoPayload.rows || [];
         const subtots = ultimoPayload.subtotals || {};
+        const headers = ['Mes', ...columns.map((c) => c.description)];
+        const ncols = headers.length;
+
+        const F = {
+            title: 'FFE9ECEF',
+            meta: 'FFF8F9FA',
+            header: 'FF1E3A5F',
+            data: 'FFFFFFFF',
+            subtotal: 'FFF1F3F5',
+            totalIng: 'FFCFE2FF',
+            kpi: 'FFFFFFFF',
+        };
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+        const alignCenter = { horizontal: 'center', vertical: 'middle' };
+        const alignLeft = { horizontal: 'left', vertical: 'middle' };
+        const alignRight = { horizontal: 'right', vertical: 'middle' };
+
         const wb = new ExcelJS.Workbook();
-        const ws = wb.addWorksheet('Subsidios');
-        ws.addRow(['Mes', ...columns.map((c) => c.description)]);
-        ws.getRow(1).font = { bold: true };
+        const ws = wb.addWorksheet('Subsidios', { views: [{ showGridLines: true }] });
+
+        const tituloReporte = lblTitulo.textContent || 'Reporte de Subsidios';
+        const metaCia = selectedText(cboCia);
+        const metaPlanilla = selectedText(cboPlanilla);
+        const metaProceso = selectedText(cboProceso);
+        const metaPeriodo = selectedText(cboPeriodo);
+        const metaTrab = [ultimoPayload.person, ultimoPayload.personname].filter(Boolean).join(' — ')
+            || selectedText(cboTrabajador);
+
+        let rowIdx = 1;
+        ws.mergeCells(rowIdx, 1, rowIdx, ncols);
+        const titleCell = ws.getCell(rowIdx, 1);
+        titleCell.value = tituloReporte;
+        titleCell.font = { bold: true, size: 14 };
+        titleCell.alignment = alignCenter;
+        titleCell.fill = fill(F.title);
+        titleCell.border = allBorders;
+        ws.getRow(rowIdx).height = 26;
+        rowIdx++;
+
+        const metaVals = [
+            'Compañía', metaCia,
+            'Planilla', metaPlanilla,
+            'Proceso', metaProceso,
+            'Periodo', metaPeriodo,
+            'Trabajador', metaTrab,
+        ];
+        const metaRow = ws.addRow(metaVals);
+        metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (colNumber <= metaVals.length) {
+                cell.fill = fill(F.meta);
+                cell.font = { bold: colNumber % 2 === 1 };
+                cell.alignment = alignCenter;
+            }
+            cell.border = allBorders;
+        });
+        rowIdx++;
+
+        ws.addRow([]);
+        rowIdx++;
+
+        const hRow = ws.addRow(headers);
+        hRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        hRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.fill = fill(F.header);
+            cell.alignment = colNumber === 1 ? alignLeft : alignCenter;
+            cell.border = allBorders;
+        });
+        rowIdx++;
+
+        const dataRows = [];
         rows.forEach((r) => {
-            ws.addRow([
+            const vals = [
                 r.month_lbl,
                 ...columns.map((c) => Number((r.values && r.values[c.concept]) || 0)),
-            ]);
+            ];
+            dataRows.push(vals);
+            const excelRow = ws.addRow(vals);
+            excelRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.fill = fill(F.data);
+                cell.border = allBorders;
+                if (colNumber === 1) {
+                    cell.font = { bold: true };
+                    cell.alignment = alignLeft;
+                } else {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = alignRight;
+                }
+            });
+            rowIdx++;
         });
-        ws.addRow(['SUBTOTAL', ...columns.map((c) => Number(subtots[c.concept] || 0))]);
-        ws.addRow(['TOTAL INGRESOS', Number(ultimoPayload.total_ingresos || 0)]);
-        ws.addRow(['MESES', Number(ultimoPayload.meses || 0)]);
-        ws.addRow(['PROMEDIO', Number(ultimoPayload.promedio || 0)]);
-        ws.getColumn(1).width = 16;
-        for (let c = 2; c <= columns.length + 1; c++) {
-            ws.getColumn(c).numFmt = '#,##0.00';
-            ws.getColumn(c).width = 14;
+
+        function addFooterRow(label, valuesOrSingle, bg, opts) {
+            opts = opts || {};
+            const vals = new Array(ncols).fill('');
+            vals[0] = label;
+            if (Array.isArray(valuesOrSingle)) {
+                valuesOrSingle.forEach((v, i) => { vals[i + 1] = v; });
+            } else {
+                vals[1] = valuesOrSingle;
+            }
+            const excelRow = ws.addRow(vals);
+            excelRow.font = { bold: true };
+            excelRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.fill = fill(bg);
+                cell.border = allBorders;
+                if (colNumber === 1) {
+                    cell.alignment = alignLeft;
+                } else if (vals[colNumber - 1] !== '' && vals[colNumber - 1] != null) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = alignRight;
+                } else {
+                    cell.alignment = alignCenter;
+                }
+            });
+            if (opts.mergeValueAcross && ncols > 2) {
+                // valor queda en col 2; resto vacío con mismo fondo
+            }
+            rowIdx++;
+            return vals;
         }
-        const buf = await wb.xlsx.writeBuffer();
-        const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+        const subtotalVals = columns.map((c) => Number(subtots[c.concept] || 0));
+        const footerRows = [];
+        footerRows.push(addFooterRow('SUBTOTAL', subtotalVals, F.subtotal));
+        footerRows.push(addFooterRow('TOTAL INGRESOS', Number(ultimoPayload.total_ingresos || 0), F.totalIng));
+        footerRows.push(addFooterRow('MESES', Number(ultimoPayload.meses || 0), F.kpi));
+        footerRows.push(addFooterRow('PROMEDIO', Number(ultimoPayload.promedio || 0), F.kpi));
+
+        const fmtNumEn = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const largoTexto = (v) => {
+            if (v === null || v === undefined || v === '') return 0;
+            if (typeof v === 'number' && Number.isFinite(v)) return fmtNumEn.format(v).length;
+            return String(v).length;
+        };
+        const ANCHO_MAX = 60;
+        for (let c = 0; c < ncols; c++) {
+            let largo = largoTexto(headers[c]) + 2;
+            dataRows.forEach((rv) => { largo = Math.max(largo, largoTexto(rv[c])); });
+            footerRows.forEach((fv) => { largo = Math.max(largo, largoTexto(fv[c])); });
+            // también meta labels en primeras columnas
+            if (c < metaVals.length) largo = Math.max(largo, largoTexto(metaVals[c]));
+            const ancho = Math.min(Math.max(largo + 2, c === 0 ? 14 : 10), ANCHO_MAX);
+            ws.getColumn(c + 1).width = ancho;
+            if (largoTexto(headers[c]) + 2 > ANCHO_MAX) {
+                hRow.getCell(c + 1).alignment = { ...hRow.getCell(c + 1).alignment, wrapText: true };
+            }
+        }
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        const person = ultimoPayload.person || CombosCarga.valorValido(cboTrabajador) || '';
-        a.download = `reporte_subsidios_${person}_${CombosCarga.valorValido(cboPeriodo) || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        a.href = url;
+        const person = String(ultimoPayload.person || CombosCarga.valorValido(cboTrabajador) || '')
+            .replace(/[\\/:*?"<>|\r\n\t]+/g, ' ')
+            .trim() || 'TRABAJADOR';
+        const periodoDigitos = String(CombosCarga.valorValido(cboPeriodo) || '').replace(/[^0-9]/g, '');
+        const periodoArchivo = periodoDigitos.length >= 6
+            ? `${periodoDigitos.slice(4, 6)}-${periodoDigitos.slice(0, 4)}`
+            : (periodoDigitos || 'PERIODO');
+        a.download = `SUBSIDIOS_${person}_${periodoArchivo}.xlsx`;
+        document.body.appendChild(a);
         a.click();
-        URL.revokeObjectURL(a.href);
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
     }
 
     document.getElementById('frmSubsidios').addEventListener('submit', consultar);

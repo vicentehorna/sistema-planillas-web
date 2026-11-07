@@ -2,8 +2,8 @@
     Reporte de Subsidios (hm_ultra) — matriz meses x conceptos afectos AFP.
 
     Filas: 12 periodos ACTUAL-12 .. ACTUAL-1.
-    Columnas: conceptos tipo Ingreso (ConceptType.ShortName = 'I') con flagafectoAFP = 'Y'
-              que el trabajador tuvo con importe > 0 en proceso FIN_DE_MES dentro del rango.
+    Columnas: DISTINCT conceptos del query I+flagafectoAFP+FIN_DE_MES+importe>0
+              del trabajador, restringido a esos mismos 12 meses (dinámicas, no fijas).
     Result sets:
       1) cabecera (person, personname)
       2) columnas (col_idx, concept, description, formulacode)
@@ -109,37 +109,50 @@ BEGIN
         SET @i = @i + 1;
     END;
 
-    /* Columnas: conceptos I + flagafectoAFP con importe > 0 en el rango / FIN_DE_MES */
+    /*
+        Columnas = query de referencia del cliente, acotado a los 12 meses
+        del trabajador filtrado (#meses = ACTUAL-12 .. ACTUAL-1):
+          I + flagafectoAFP='Y', FIN_DE_MES, importe > 0.
+        El resultado DISTINCT Description/Concept son las columnas dinámicas.
+    */
     IF OBJECT_ID('tempdb..#cols') IS NOT NULL DROP TABLE #cols;
     CREATE TABLE #cols (
-        col_idx     int NOT NULL IDENTITY(1, 1) PRIMARY KEY,
+        col_idx     int NOT NULL PRIMARY KEY,
         Concept     varchar(20) NOT NULL,
         Description varchar(200) NOT NULL,
         FormulaCode varchar(50) NULL
     );
 
-    INSERT INTO #cols (Concept, Description, FormulaCode)
+    INSERT INTO #cols (col_idx, Concept, Description, FormulaCode)
     SELECT
-        c.Concept,
-        MAX(LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.PrintText)), ''), c.Description)))) AS Description,
-        MAX(LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))) AS FormulaCode
-    FROM dbo.PR_EmployeePayRollConcept epc (NOLOCK)
-    INNER JOIN dbo.PR_Concept c (NOLOCK)
-        ON c.Concept = epc.Concept
-       AND c.Company = epc.Company
-    INNER JOIN dbo.PR_ConceptType ct (NOLOCK)
-        ON ct.ConceptType = c.ConceptType
-    INNER JOIN #meses m
-        ON m.PRPeriod = epc.PRPeriod
-    WHERE epc.Company = @company
-      AND epc.PayRollType = @payrolltype
-      AND epc.Person = @person
-      AND epc.ProcessType = @process_finmes
-      AND UPPER(LTRIM(RTRIM(ISNULL(ct.ShortName, '')))) = 'I'
-      AND UPPER(LTRIM(RTRIM(ISNULL(c.flagafectoAFP, 'N')))) = 'Y'
-      AND ISNULL(epc.ConceptValueLo, epc.ConceptValue) > 0
-    GROUP BY c.Concept
-    ORDER BY MAX(LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.PrintText)), ''), c.Description)))), c.Concept;
+        ROW_NUMBER() OVER (ORDER BY x.Description, x.Concept) AS col_idx,
+        x.Concept,
+        x.Description,
+        x.FormulaCode
+    FROM (
+        SELECT DISTINCT
+            c.Concept,
+            LTRIM(RTRIM(c.Description)) AS Description,
+            LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) AS FormulaCode
+        FROM dbo.PR_EmployeePayRollConcept epc (NOLOCK)
+        INNER JOIN dbo.PR_Concept c (NOLOCK)
+            ON c.Concept = epc.Concept
+        INNER JOIN dbo.PR_ConceptType ct (NOLOCK)
+            ON ct.ConceptType = c.ConceptType
+           AND LTRIM(RTRIM(ct.ShortName)) = 'I'
+           AND UPPER(LTRIM(RTRIM(ISNULL(c.flagafectoAFP, 'N')))) = 'Y'
+        WHERE epc.Person = @person
+          AND epc.Company = @company
+          AND epc.PayRollType = @payrolltype
+          AND EXISTS (
+                SELECT 1
+                FROM dbo.PR_ProcessType pt (NOLOCK)
+                WHERE pt.ShortName = 'FIN_DE_MES'
+                  AND pt.ProcessType = epc.ProcessType
+            )
+          AND ISNULL(epc.ConceptValueLo, epc.ConceptValue) > 0
+          AND epc.PRPeriod IN (SELECT m.PRPeriod FROM #meses m)
+    ) x;
 
     /* RS1: trabajador */
     SELECT

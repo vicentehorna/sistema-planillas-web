@@ -35727,6 +35727,10 @@ def api_reporte_subsidios():
         total_ingresos = _f(total_raw.get('total_ingresos'))
         if not total_ingresos and subtots:
             total_ingresos = sum(subtots.values())
+        meses = _f(total_raw.get('meses'))
+        promedio = _f(total_raw.get('promedio'))
+        if meses > 0 and not promedio and total_ingresos:
+            promedio = total_ingresos / meses
 
         return jsonify({
             'person': str(cab.get('person') or person).strip(),
@@ -35736,6 +35740,8 @@ def api_reporte_subsidios():
             'rows': rows,
             'subtotals': subtots,
             'total_ingresos': total_ingresos,
+            'meses': meses,
+            'promedio': promedio,
             'count': len(rows),
         })
     except Exception as e:

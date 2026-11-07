@@ -60,6 +60,16 @@
         background-color: #cfe2ff;
         text-align: left;
     }
+    .table-subsidios tfoot td.kpi-label {
+        text-align: left;
+        background-color: #fff;
+        font-weight: 700;
+    }
+    .table-subsidios tfoot td.kpi-value {
+        text-align: right;
+        background-color: #fff;
+        font-weight: 700;
+    }
     .titulo-reporte {
         font-size: 1.05rem;
         text-align: center;
@@ -235,6 +245,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         const rows = data.rows || [];
         const subtots = data.subtotals || {};
         const totalIngresos = Number(data.total_ingresos || 0);
+        const meses = Number(data.meses || 0);
+        const promedio = Number(data.promedio || 0);
 
         if (!columns.length) {
             renderVacio('Sin conceptos afectos a AFP con importe en los 12 meses');
@@ -264,14 +276,15 @@ document.addEventListener('DOMContentLoaded', async function () {
             foot += `<td class="col-concepto">${fmtNum(subtots[c.concept] || 0)}</td>`;
         });
         foot += '</tr>';
-        // TOTAL INGRESOS: etiqueta en col Mes + valor en la primera columna de conceptos
-        // (coincide con la suma de los SUBTOTAL; debe cuadrar con TOTAL_REM_AFP).
         const restoCols = Math.max(0, columns.length - 1);
-        foot += `<tr>
-            <td class="total-ingresos-label">TOTAL INGRESOS</td>
-            <td class="total-ingresos">${fmtNum(totalIngresos)}</td>
-            ${restoCols ? `<td colspan="${restoCols}" class="total-ingresos-label"></td>` : ''}
+        const kpiRow = (label, value, labelCls, valueCls) => `<tr>
+            <td class="${labelCls}">${label}</td>
+            <td class="${valueCls}">${fmtNum(value)}</td>
+            ${restoCols ? `<td colspan="${restoCols}" class="${labelCls}"></td>` : ''}
         </tr>`;
+        foot += kpiRow('TOTAL INGRESOS', totalIngresos, 'total-ingresos-label', 'total-ingresos');
+        foot += kpiRow('MESES', meses, 'kpi-label', 'kpi-value');
+        foot += kpiRow('PROMEDIO', promedio, 'kpi-label', 'kpi-value');
         tfoot.innerHTML = foot;
 
         lblCount.textContent = String(rows.length);
@@ -408,6 +421,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
         ws.addRow(['SUBTOTAL', ...columns.map((c) => Number(subtots[c.concept] || 0))]);
         ws.addRow(['TOTAL INGRESOS', Number(ultimoPayload.total_ingresos || 0)]);
+        ws.addRow(['MESES', Number(ultimoPayload.meses || 0)]);
+        ws.addRow(['PROMEDIO', Number(ultimoPayload.promedio || 0)]);
         ws.getColumn(1).width = 16;
         for (let c = 2; c <= columns.length + 1; c++) {
             ws.getColumn(c).numFmt = '#,##0.00';

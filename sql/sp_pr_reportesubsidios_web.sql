@@ -8,7 +8,8 @@
       1) cabecera (person, personname)
       2) columnas (col_idx, concept, description, formulacode)
       3) celdas (month_idx, prperiod, month_lbl, concept, importe)
-      4) totales por concepto (concept, subtotal) + total_ingresos
+      4) totales por concepto (concept, subtotal)
+      5) total_ingresos, meses hábiles (desde ingreso), promedio = total/meses
 
     Usado por: POST /api/reportes/subsidios
 */
@@ -215,8 +216,9 @@ BEGIN
     GROUP BY col.col_idx, col.Concept, col.Description
     ORDER BY col.col_idx;
 
+    DECLARE @total_ingresos decimal(19, 4) = 0;
     SELECT
-        CAST(ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0) AS decimal(19, 4)) AS total_ingresos
+        @total_ingresos = CAST(ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0) AS decimal(19, 4))
     FROM #cols col
     INNER JOIN dbo.PR_EmployeePayRollConcept epc (NOLOCK)
         ON epc.Company = @company
@@ -225,5 +227,33 @@ BEGIN
        AND epc.ProcessType = @process_finmes
        AND epc.Concept = col.Concept
        AND epc.PRPeriod IN (SELECT PRPeriod FROM #meses);
+
+    /* Meses hábiles: periodos del rango con LEFT(PRPeriod,6) >= ingreso/reingreso (yyyymm). */
+    DECLARE @fechaingreso datetime = NULL;
+    DECLARE @hire_yyyymm char(6) = NULL;
+    DECLARE @meses int = 0;
+    DECLARE @promedio decimal(19, 4) = 0;
+
+    SELECT TOP 1 @fechaingreso = ISNULL(e.ReEntryDate, e.EntryDate)
+    FROM dbo.PR_Employee e (NOLOCK)
+    WHERE e.Company = @company
+      AND e.PayRollType = @payrolltype
+      AND e.Person = @person;
+
+    IF @fechaingreso IS NOT NULL
+        SET @hire_yyyymm = LEFT(CONVERT(varchar(8), CONVERT(date, @fechaingreso), 112), 6);
+
+    SELECT @meses = COUNT(*)
+    FROM #meses m
+    WHERE @hire_yyyymm IS NULL
+       OR LEFT(m.PRPeriod, 6) >= @hire_yyyymm;
+
+    IF @meses > 0
+        SET @promedio = @total_ingresos / @meses;
+
+    SELECT
+        @total_ingresos AS total_ingresos,
+        CAST(@meses AS decimal(19, 4)) AS meses,
+        @promedio AS promedio;
 END
 GO

@@ -7,14 +7,15 @@ GO
     Requiere la tabla temporal #TelecreditoPersonas (person) con los trabajadores
     seleccionados; solo se incluyen los elegibles de sp_pr_listatelecreditocts_web.
 
-    Cabecera (113): 1 | cantidad(6) | fecha abono aaaammdd | subtipo(1) | tipo cta empresa C/M |
-                    moneda(4) | cuenta empresa(20) | monto total 99999999999999.99 | referencia(40) |
-                    checksum(15)
+    Cabecera (112): 1 | cantidad(6) | fecha abono aaaammdd | [subtipo(1) solo si tiene valor] |
+                    tipo cta empresa C/M | moneda(4) | cuenta empresa(20) |
+                    monto total 99999999999999.99 | referencia(40) | checksum(15)
     Detalle  (195): 2 | tipo cta A/C | cuenta CTS(20) | tipo doc(1) | documento(12) | 3 espacios |
                     nombre(75) | ref. beneficiario(40) | ref. empresa(20) | moneda(4) |
                     importe 99999999999999.99 | 'S'
 
-    Subtipo: PR_ProcessType.subtype del proceso CTS; si no está configurado, espacio.
+    Subtipo: PR_ProcessType.subtype del proceso CTS; si está vacío NO se emite (cabecera 112,
+    formato BCP validado). Solo se concatena si tiene un carácter configurado.
     Cuenta empresa: TE_BankAccount del banco PR_Mapping.CreditoBank en la moneda del depósito.
     @par_referencia vacío: 'DEPOSITO CTS NOVIEMBRE aaaa - ABRIL aaaa' (mayo) o
     'DEPOSITO CTS MAYO aaaa - OCTUBRE aaaa' (noviembre).
@@ -42,7 +43,7 @@ BEGIN
     END
 
     DECLARE @moneda_txt      VARCHAR(4);
-    DECLARE @subtipo         CHAR(1);
+    DECLARE @subtipo         VARCHAR(1);  /* VARCHAR: '' no se convierte en espacio (CHAR sí) */
     DECLARE @cuenta_origen   VARCHAR(20);
     DECLARE @tipo_cta_origen CHAR(1);
     DECLARE @ref_planilla    VARCHAR(40);
@@ -84,7 +85,8 @@ BEGIN
     FROM PR_ProcessType pt
     WHERE pt.Company = @par_company
       AND pt.ShortName = 'CTS';
-    IF ISNULL(@subtipo, '') = '' SET @subtipo = ' ';
+    /* Vacío = no emitir (cabecera 112). Antes se ponía espacio y BCP rechazaba por largo. */
+    IF ISNULL(@subtipo, '') = '' SET @subtipo = '';
 
     SET @mes_ref = CASE @mes WHEN '05' THEN 'MAY' WHEN '11' THEN 'NOV' ELSE @mes END;
     IF @par_referencia <> ''

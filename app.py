@@ -16314,6 +16314,113 @@ def _asiento_ajustar_redondeo_neto(out_rows, total_debe, total_haber, max_gap=0.
     return total_debe, total_haber, gap, True
 
 
+@app.route('/api/asientos/reporte-contable/sin-distribucion', methods=['POST'])
+@login_required
+def api_asientos_reporte_contable_sin_distribucion():
+    """hm_divisa: trabajadores del filtro sin Distribución Porcentual CC en el periodo."""
+    if not _es_cliente_divisa():
+        return jsonify({"rows": [], "total": 0, "aplica": False})
+
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or body.get('payroll') or '').strip()
+    processtype = str(body.get('processtype') or body.get('proceso') or '').strip()
+    period = str(body.get('period') or body.get('periodo') or '').strip()
+    person = str(body.get('person') or body.get('trabajador') or body.get('dni') or '').strip()
+
+    if not cia or not payrolltype or not processtype or not period:
+        return jsonify({"error": "Complete compañía, planilla, proceso y periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_listar_sin_distribucion_asiento_cc_web "
+            "@company=?, @payrolltype=?, @processtype=?, @period=?, @person=?",
+            (cia, payrolltype, processtype, period, person or None),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        resultado = [
+            {
+                'dni': _jsonable_value(r.get('dni')),
+                'nombre': _jsonable_value(r.get('nombre')),
+            }
+            for r in rows
+            if r.get('dni') is not None
+        ]
+        return jsonify({
+            "aplica": True,
+            "rows": resultado,
+            "total": len(resultado),
+        })
+    except Exception as e:
+        logging.exception("api_asientos_reporte_contable_sin_distribucion")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/asientos/reporte-contable/perfil-trabajador', methods=['POST'])
+@login_required
+def api_asientos_reporte_contable_perfil_trabajador():
+    """Perfil contable (AccountProfile) del trabajador filtrado en el reporte."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    person = str(body.get('person') or body.get('trabajador') or body.get('dni') or '').strip()
+    if not cia or not person:
+        return jsonify({"error": "Indique compañía y trabajador."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT
+                LTRIM(RTRIM(ISNULL(e.AccountProfile, ''))) AS accountprofile,
+                LTRIM(RTRIM(ISNULL(ap.Description, ''))) AS accountprofile_desc
+            FROM PR_Employee e (NOLOCK)
+            LEFT JOIN PR_AccountProfile ap (NOLOCK)
+                ON ap.Company = e.Company
+               AND ap.AccountProfile = e.AccountProfile
+            WHERE e.Company = ?
+              AND e.Person = ?
+            """,
+            (cia, person),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        if not rows:
+            return jsonify({"error": "No se encontró el trabajador."}), 404
+        row = rows[0]
+        accountprofile = str(row.get('accountprofile') or '').strip()
+        if not accountprofile:
+            return jsonify({
+                "error": "El trabajador no tiene Perfil Contable asignado.",
+                "accountprofile": "",
+                "accountprofile_desc": "",
+                "person": person,
+            }), 400
+        return jsonify({
+            "person": person,
+            "accountprofile": accountprofile,
+            "accountprofile_desc": _jsonable_value(row.get('accountprofile_desc')) or accountprofile,
+        })
+    except Exception as e:
+        logging.exception("api_asientos_reporte_contable_perfil_trabajador")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/asientos/reporte-contable', methods=['POST'])
 @login_required
 def api_asientos_reporte_contable():

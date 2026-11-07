@@ -102,12 +102,85 @@
         vertical-align: baseline;
     }
 
+    .box-sin-dist {
+        border-radius: 0.35rem;
+        padding: 0.65rem 0.85rem;
+        font-size: 0.85rem;
+        margin-bottom: 0.75rem;
+        background: #fff3cd;
+        border: 1px solid #ffecb5;
+        color: #664d03;
+    }
+    .box-sin-dist .sin-dist-lista {
+        margin: 0.35rem 0 0;
+        padding-left: 1.1rem;
+        max-height: 9rem;
+        overflow: auto;
+    }
+    .box-sin-dist a {
+        color: #664d03;
+        font-weight: 600;
+    }
+
     .reporte-estado-carga:not(:empty) {
         min-height: 1rem;
         margin-top: 0.25rem;
         color: #1a4b84;
         font-weight: 600;
     }
+
+    /* Modal Configurar Conceptos (desde reporte) */
+    #modalConfigConceptos .modal-body {
+        max-height: calc(100vh - 140px);
+        overflow: auto;
+    }
+    #modalConfigConceptos .acc-grilla-modal {
+        max-height: min(52vh, 420px);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    #modalConfigConceptos .table-acc {
+        font-size: 12px;
+        margin-bottom: 0;
+        white-space: nowrap;
+    }
+    #modalConfigConceptos .table-acc th,
+    #modalConfigConceptos .table-acc td {
+        padding: 0.3rem 0.4rem;
+        vertical-align: middle;
+    }
+    #modalConfigConceptos .table-acc thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        font-weight: 600;
+        color: #495057;
+    }
+    #modalConfigConceptos .table-acc tbody tr.acc-row.dirty { background: #fff8e6; }
+    #modalConfigConceptos .table-acc tbody tr.acc-row.nueva { background: #eef8ff; }
+    #modalConfigConceptos .acc-cuenta-wrap {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+        min-width: 8.5rem;
+    }
+    #modalConfigConceptos .acc-cuenta-wrap input {
+        flex: 1 1 auto;
+        width: 5.5rem;
+    }
+    #modalConfigConceptos .acc-cuenta-wrap .btn {
+        padding: 0.15rem 0.35rem;
+        line-height: 1;
+    }
+    #modalConfigConceptos .acc-concepto-select { min-width: 14rem; max-width: 22rem; }
+    #modalConfigConceptos .acc-flag-select { min-width: 8.5rem; }
+    #modalCuentasReporte .modal-body { max-height: 60vh; overflow: auto; }
+    #modalCuentasReporte .table tbody tr { cursor: pointer; }
+    #modalCuentasReporte .table tbody tr:hover { background: #cfe2ff; }
 </style>
 {% endblock %}
 
@@ -164,6 +237,10 @@
                     <i class="bi bi-file-earmark-pdf"></i> Exportar a PDF
                 </button>
                 {% endif %}
+                <button type="button" class="btn btn-outline-secondary btn-sm px-4" id="btnConfigConceptos" disabled
+                        title="Requiere filtrar un trabajador">
+                    <i class="bi bi-gear"></i> Configuración
+                </button>
                 <span class="ms-auto text-muted small fw-bold">
                     No. de Registros: <span id="lblRowCount">0</span>
                 </span>
@@ -180,6 +257,7 @@
         <div class="text-center mb-3">
             <div class="reporte-cabecera-titulo fw-bold" id="lblTituloReporte">—</div>
         </div>
+        <div id="boxSinDist" class="box-sin-dist d-none" role="status"></div>
         <div id="boxMotivo" class="box-motivo-diff d-none" role="status"></div>
         <div class="table-scroll-container" id="scrollReporte">
             <table class="table table-bordered table-sm table-hover table-asiento-contable align-middle">
@@ -213,6 +291,98 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: Configurar Conceptos del perfil del trabajador -->
+<div class="modal fade" id="modalConfigConceptos" tabindex="-1" aria-labelledby="tituloModalConfigConceptos" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <div>
+                    <h6 class="modal-title mb-0" id="tituloModalConfigConceptos">Configurar Conceptos</h6>
+                    <div class="small text-muted" id="lblConfigContexto">—</div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="row g-2 align-items-end mb-2">
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Perfil contable</label>
+                        <input type="text" class="form-control form-control-sm" id="txtConfigPerfil" readonly>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label small fw-bold text-muted mb-1">Proceso</label>
+                        <input type="text" class="form-control form-control-sm" id="txtConfigProceso" readonly>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="txtConfigLocalizar" class="form-label small fw-bold text-muted mb-1">Localizar</label>
+                        <input type="search" id="txtConfigLocalizar" class="form-control form-control-sm"
+                               placeholder="Concepto o cuenta..." autocomplete="off">
+                    </div>
+                    <div class="col-md-3 d-flex flex-wrap gap-2">
+                        <button type="button" class="btn btn-primary btn-sm" id="btnConfigConsultar">
+                            <i class="bi bi-search"></i> Consultar
+                        </button>
+                        <button type="button" class="btn btn-success btn-sm" id="btnConfigAgregar">
+                            <i class="bi bi-plus-lg"></i> Agregar
+                        </button>
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="btnConfigGuardar" disabled>
+                            <i class="bi bi-save"></i> Guardar
+                        </button>
+                    </div>
+                </div>
+                <div id="msgConfigAcc" class="small mb-2" style="min-height:1.2rem"></div>
+                <div class="acc-grilla-modal">
+                    <table class="table table-bordered table-sm table-hover table-acc align-middle">
+                        <thead>
+                            <tr>
+                                <th style="min-width:16rem">Concepto</th>
+                                <th style="min-width:9rem">Crédito</th>
+                                <th style="min-width:9rem">Débito</th>
+                                <th style="min-width:9rem">Detalle a nivel</th>
+                                <th style="width:4.5rem" class="text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyConfigAcc">
+                            <tr><td colspan="5" class="text-center text-muted py-4">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="small text-muted mt-2 text-end" id="lblConfigConteo">0 registros</div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal búsqueda de cuentas (anidado) -->
+<div class="modal fade" id="modalCuentasReporte" tabindex="-1" aria-labelledby="tituloModalCuentasReporte" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title" id="tituloModalCuentasReporte">Buscar cuenta contable</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="input-group input-group-sm mb-2">
+                    <input type="search" id="txtBuscarCuentaReporte" class="form-control" placeholder="Código o nombre..." autocomplete="off">
+                    <button type="button" class="btn btn-outline-secondary" id="btnBuscarCuentaReporte">
+                        <i class="bi bi-search"></i>
+                    </button>
+                </div>
+                <table class="table table-sm table-hover mb-0">
+                    <thead>
+                        <tr><th>Código</th><th>Nombre</th></tr>
+                    </thead>
+                    <tbody id="tbodyCuentasReporte">
+                        <tr><td colspan="2" class="text-muted text-center">Escriba para buscar</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_js %}
@@ -225,6 +395,7 @@
 (function () {
     const DEFAULT_CIA = 'BGT';
     const MOSTRAR_EXPORT_PDF = {{ ((sql_database or '')|lower == 'hm_zilicom') | tojson }};
+    const VALIDAR_DIST_PCT = {{ ((sql_database or '')|lower == 'hm_divisa') | tojson }};
     const frm = document.getElementById('frmReporteAsientoContable');
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
@@ -235,15 +406,26 @@
     const btnConsultar = document.getElementById('btnConsultar');
     const btnExport = document.getElementById('btnExportExcel');
     const btnExportPdf = document.getElementById('btnExportPdf');
+    const btnConfigConceptos = document.getElementById('btnConfigConceptos');
     const cardResultado = document.getElementById('cardResultado');
     const lblEstado = document.getElementById('lblEstadoCarga');
     const lblRowCount = document.getElementById('lblRowCount');
+    const boxSinDist = document.getElementById('boxSinDist');
     let lastExport = null;
 
     function setExportButtonsEnabled(enabled) {
         const on = !!enabled;
         if (btnExport) btnExport.disabled = !on;
         if (btnExportPdf) btnExportPdf.disabled = !on;
+    }
+
+    function syncConfigButton() {
+        if (!btnConfigConceptos) return;
+        const tieneTrabajador = !!(cboTrabajador && String(cboTrabajador.value || '').trim());
+        btnConfigConceptos.disabled = !tieneTrabajador;
+        btnConfigConceptos.title = tieneTrabajador
+            ? 'Configurar conceptos del perfil contable del trabajador'
+            : 'Requiere filtrar un trabajador';
     }
 
     function fmtNum(n) {
@@ -299,6 +481,7 @@
         });
         cboTrabajador.value = '';
         cboTrabajador.disabled = false;
+        syncConfigButton();
     }
 
     async function obtenerPeriodoActivo(cia, payrolltype, processtype) {
@@ -381,6 +564,7 @@
         [btnConsultar, cboCia, cboPlanilla, cboProceso, cboPeriodo, cboTrabajador, cboDistribucionPct].forEach(el => {
             if (el) el.disabled = !!busy;
         });
+        if (btnConfigConceptos) btnConfigConceptos.disabled = true;
         if (busy) {
             setExportButtonsEnabled(false);
             lblEstado.textContent = msg || 'Consultando…';
@@ -392,6 +576,7 @@
             if (label) label.innerHTML = '<i class="bi bi-search"></i> Consultar';
             cboTrabajador.disabled = !cboCia.value;
             setExportButtonsEnabled(!!(lastExport && lastExport.rows && lastExport.rows.length));
+            syncConfigButton();
         }
     }
 
@@ -474,6 +659,55 @@
                 + top
                 + `</li>`;
         }).join('') + '</ul>';
+    }
+
+    function pintarSinDist(payload) {
+        if (!boxSinDist) return;
+        if (!VALIDAR_DIST_PCT || !payload || !payload.aplica) {
+            boxSinDist.classList.add('d-none');
+            boxSinDist.innerHTML = '';
+            return;
+        }
+        const rows = payload.rows || [];
+        if (!rows.length) {
+            boxSinDist.classList.add('d-none');
+            boxSinDist.innerHTML = '';
+            return;
+        }
+        const maxShow = 40;
+        const items = rows.slice(0, maxShow).map((r) =>
+            `<li><strong>${escHtml(r.dni || '')}</strong> — ${escHtml(r.nombre || '')}</li>`
+        ).join('');
+        const extra = rows.length > maxShow
+            ? `<li class="text-muted">… y ${rows.length - maxShow} más</li>`
+            : '';
+        boxSinDist.innerHTML =
+            `<div><i class="bi bi-exclamation-triangle-fill me-1"></i>`
+            + `<strong>${rows.length} trabajador(es) sin Distribución Porcentual</strong> `
+            + `en el periodo filtrado.</div>`
+            + `<div class="small mt-1">Configure en `
+            + `<a href="/asientos/distribucion-porcentual" target="_blank" rel="noopener">Asientos → Distribución Porcentual</a>`
+            + `.</div>`
+            + `<ul class="sin-dist-lista">${items}${extra}</ul>`;
+        boxSinDist.classList.remove('d-none');
+    }
+
+    async function consultarSinDistribucion(body) {
+        if (!VALIDAR_DIST_PCT) return { aplica: false, rows: [], total: 0 };
+        try {
+            const res = await fetch('/api/asientos/reporte-contable/sin-distribucion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Error al validar distribución porcentual');
+            return data;
+        } catch (e) {
+            console.error(e);
+            if (window.HmUi) HmUi.advertencia(e.message || String(e));
+            return { aplica: true, rows: [], total: 0, error: e.message || String(e) };
+        }
     }
 
     function pintarResultado(payload) {
@@ -780,17 +1014,25 @@
         }
         setBusy(true);
         cardResultado.classList.add('d-none');
+        if (boxSinDist) {
+            boxSinDist.classList.add('d-none');
+            boxSinDist.innerHTML = '';
+        }
         lastExport = null;
         setExportButtonsEnabled(false);
         try {
-            const res = await fetch('/api/asientos/reporte-contable', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            const [sinDist, res] = await Promise.all([
+                consultarSinDistribucion(body),
+                fetch('/api/asientos/reporte-contable', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }),
+            ]);
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al consultar reporte');
             pintarResultado(data);
+            pintarSinDist(sinDist);
         } catch (e) {
             if (window.HmUi) HmUi.error(e.message || String(e));
             else alert(e.message || e);
@@ -803,17 +1045,504 @@
     if (btnExportPdf) {
         btnExportPdf.addEventListener('click', exportPdf);
     }
-    cboCia.addEventListener('change', cargarPlanillas);
+    cboCia.addEventListener('change', async () => {
+        await cargarPlanillas();
+        syncConfigButton();
+    });
     cboPlanilla.addEventListener('change', async () => {
         await Promise.all([cargarProcesos(), cargarTrabajadores()]);
+        syncConfigButton();
     });
     cboProceso.addEventListener('change', cargarPeriodos);
+    cboTrabajador.addEventListener('change', syncConfigButton);
+
+    /* ========== Modal Configurar Conceptos ========== */
+    const FLAG_OPTS = [
+        { id: 'T', text: 'Trabajador' },
+        { id: 'C', text: 'Centro de Costo' },
+        { id: 'O', text: 'Concepto' },
+    ];
+    const modalConfigEl = document.getElementById('modalConfigConceptos');
+    const modalConfig = modalConfigEl ? new bootstrap.Modal(modalConfigEl) : null;
+    const modalCuentasRepEl = document.getElementById('modalCuentasReporte');
+    const modalCuentasRep = modalCuentasRepEl ? new bootstrap.Modal(modalCuentasRepEl) : null;
+    const txtConfigPerfil = document.getElementById('txtConfigPerfil');
+    const txtConfigProceso = document.getElementById('txtConfigProceso');
+    const txtConfigLocalizar = document.getElementById('txtConfigLocalizar');
+    const tbodyConfigAcc = document.getElementById('tbodyConfigAcc');
+    const lblConfigConteo = document.getElementById('lblConfigConteo');
+    const lblConfigContexto = document.getElementById('lblConfigContexto');
+    const msgConfigAcc = document.getElementById('msgConfigAcc');
+    const btnConfigConsultar = document.getElementById('btnConfigConsultar');
+    const btnConfigAgregar = document.getElementById('btnConfigAgregar');
+    const btnConfigGuardar = document.getElementById('btnConfigGuardar');
+    const txtBuscarCuentaReporte = document.getElementById('txtBuscarCuentaReporte');
+    const tbodyCuentasReporte = document.getElementById('tbodyCuentasReporte');
+
+    let cfgCtx = { cia: '', accountprofile: '', accountprofile_desc: '', processtype: '', proceso_text: '', person: '' };
+    let cfgFilas = [];
+    let cfgConceptos = [];
+    let cfgCuentaTarget = null;
+    let cfgBuscarTimer = null;
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); } catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    async function postJson(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body || {}),
+        });
+        return leerJson(res);
+    }
+
+    function cfgToastOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
+    function cfgToastErr(m) { if (window.HmUi) HmUi.error(m); else alert(m); }
+
+    function setCfgMsg(texto, tipo) {
+        if (!msgConfigAcc) return;
+        msgConfigAcc.className = 'small mb-2';
+        if (!texto) { msgConfigAcc.textContent = ''; return; }
+        msgConfigAcc.classList.add(tipo === 'ok' ? 'text-success' : 'text-danger');
+        msgConfigAcc.textContent = texto;
+    }
+
+    function syncCfgGuardar() {
+        if (!btnConfigGuardar) return;
+        const dirty = cfgFilas.some((f) => f._dirty || f._nuevo);
+        btnConfigGuardar.disabled = !dirty || !cfgCtx.accountprofile || !cfgCtx.processtype;
+    }
+
+    function opcionesFlag(sel) {
+        return FLAG_OPTS.map((o) =>
+            `<option value="${o.id}" ${o.id === sel ? 'selected' : ''}>${escHtml(o.text)}</option>`
+        ).join('');
+    }
+
+    function opcionesConcepto(sel) {
+        const opts = ['<option value="">Seleccione...</option>'];
+        cfgConceptos.forEach((c) => {
+            const id = String(c.id || '');
+            const selected = id === String(sel || '') ? 'selected' : '';
+            opts.push(`<option value="${escHtml(id)}" ${selected}>${escHtml(c.text || id)}</option>`);
+        });
+        return opts.join('');
+    }
+
+    function conceptoReadonly(f) {
+        const txt = f.concept_description || f.concept || '';
+        const code = f.formulacode ? ` (${f.formulacode})` : '';
+        return `<span title="${escHtml(f.concept || '')}">${escHtml(txt + code)}</span>`;
+    }
+
+    function celdaCuenta(idx, campo, code, account) {
+        return `<div class="acc-cuenta-wrap">
+            <input type="text" class="form-control form-control-sm acc-code"
+                   data-idx="${idx}" data-campo="${campo}" maxlength="20"
+                   value="${escHtml(code || '')}" data-account="${escHtml(account || '')}" autocomplete="off">
+            <button type="button" class="btn btn-outline-secondary btn-sm acc-buscar-cta"
+                    data-idx="${idx}" data-campo="${campo}" title="Buscar cuenta">
+                <i class="bi bi-search"></i>
+            </button>
+        </div>`;
+    }
+
+    function renderCfg() {
+        if (!tbodyConfigAcc) return;
+        if (!cfgFilas.length) {
+            tbodyConfigAcc.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-4">Sin configuraciones para estos filtros</td></tr>';
+            if (lblConfigConteo) lblConfigConteo.textContent = '0 registros';
+            syncCfgGuardar();
+            return;
+        }
+        tbodyConfigAcc.innerHTML = cfgFilas.map((f, idx) => {
+            const cls = ['acc-row', f._nuevo ? 'nueva' : '', f._dirty ? 'dirty' : ''].filter(Boolean).join(' ');
+            const conceptoHtml = f._nuevo
+                ? `<select class="form-select form-select-sm acc-concepto-select acc-concept" data-idx="${idx}">${opcionesConcepto(f.concept)}</select>`
+                : conceptoReadonly(f);
+            return `<tr class="${cls}" data-idx="${idx}">
+                <td>${conceptoHtml}</td>
+                <td>${celdaCuenta(idx, 'credit', f.creditaccountcode, f.creditaccount)}</td>
+                <td>${celdaCuenta(idx, 'debit', f.debitaccountcode, f.debitaccount)}</td>
+                <td><select class="form-select form-select-sm acc-flag-select acc-flag" data-idx="${idx}">${opcionesFlag(f.flagsumtype || 'T')}</select></td>
+                <td class="text-center">
+                    <button type="button" class="btn btn-outline-danger btn-sm acc-del" data-idx="${idx}" title="Eliminar">
+                        <i class="bi bi-trash"></i>
+                    </button>
+                </td>
+            </tr>`;
+        }).join('');
+        if (lblConfigConteo) {
+            lblConfigConteo.textContent = `${cfgFilas.length} registro${cfgFilas.length === 1 ? '' : 's'}`;
+        }
+        syncCfgGuardar();
+    }
+
+    function marcarCfgDirty(idx) {
+        if (!cfgFilas[idx]) return;
+        cfgFilas[idx]._dirty = true;
+        const tr = tbodyConfigAcc.querySelector(`tr[data-idx="${idx}"]`);
+        if (tr) tr.classList.add('dirty');
+        syncCfgGuardar();
+    }
+
+    async function cfgConsultar() {
+        if (!cfgCtx.cia || !cfgCtx.accountprofile || !cfgCtx.processtype) {
+            cfgToastErr('Faltan compañía, perfil contable o proceso.');
+            return;
+        }
+        setCfgMsg('');
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/listado', {
+                cia: cfgCtx.cia,
+                accountprofile: cfgCtx.accountprofile,
+                processtype: cfgCtx.processtype,
+                busqueda: (txtConfigLocalizar && txtConfigLocalizar.value.trim()) || null,
+            });
+            cfgFilas = (data.rows || []).map((r) => ({ ...r, _nuevo: false, _dirty: false }));
+            renderCfg();
+            setCfgMsg(`${cfgFilas.length} registro(s) cargados.`, 'ok');
+        } catch (err) {
+            cfgToastErr(err.message || String(err));
+            setCfgMsg(err.message || String(err), 'err');
+        }
+    }
+
+    function cfgAgregar() {
+        if (!cfgCtx.accountprofile || !cfgCtx.processtype) return;
+        cfgFilas.push({
+            detail: '',
+            accountprofile: cfgCtx.accountprofile,
+            concept: '',
+            concept_description: '',
+            formulacode: '',
+            processtype: cfgCtx.processtype,
+            debitaccount: '',
+            debitaccountcode: '',
+            creditaccount: '',
+            creditaccountcode: '',
+            flagsumtype: 'T',
+            currency: 'LO',
+            company: cfgCtx.cia,
+            _nuevo: true,
+            _dirty: true,
+        });
+        renderCfg();
+        const lastSelect = tbodyConfigAcc.querySelector(`tr[data-idx="${cfgFilas.length - 1}"] .acc-concept`);
+        if (lastSelect) lastSelect.focus();
+    }
+
+    async function cfgEliminar(idx) {
+        const f = cfgFilas[idx];
+        if (!f) return;
+        if (f._nuevo) {
+            cfgFilas.splice(idx, 1);
+            renderCfg();
+            return;
+        }
+        const ok = window.HmUi
+            ? await HmUi.confirmar({
+                titulo: 'Eliminar configuración',
+                mensaje: `¿Eliminar la configuración del concepto "${f.concept_description || f.concept}"?`,
+                textoOk: 'Eliminar',
+                variant: 'danger',
+            })
+            : confirm('¿Eliminar esta configuración?');
+        if (!ok) return;
+        try {
+            await postJson('/api/asientos/configurar-conceptos/eliminar', {
+                cia: cfgCtx.cia,
+                detail: f.detail,
+                accountprofile: f.accountprofile,
+            });
+            cfgFilas.splice(idx, 1);
+            renderCfg();
+            cfgToastOk('Configuración eliminada.');
+        } catch (err) {
+            cfgToastErr(err.message || String(err));
+        }
+    }
+
+    async function cfgGuardar() {
+        const pendientes = cfgFilas.filter((f) => f._dirty || f._nuevo);
+        if (!pendientes.length) return;
+        for (const f of pendientes) {
+            if (!f.concept) {
+                cfgToastErr('Toda fila nueva debe tener un concepto.');
+                return;
+            }
+            if (!(f.creditaccountcode || '').trim() && !(f.debitaccountcode || '').trim()) {
+                cfgToastErr(`El concepto "${f.concept_description || f.concept}" necesita al menos una cuenta.`);
+                return;
+            }
+        }
+        btnConfigGuardar.disabled = true;
+        let okCount = 0;
+        try {
+            for (const f of pendientes) {
+                const data = await postJson('/api/asientos/configurar-conceptos/guardar', {
+                    modo: f._nuevo ? 'I' : 'U',
+                    cia: cfgCtx.cia,
+                    detail: f.detail || null,
+                    accountprofile: cfgCtx.accountprofile,
+                    concept: f.concept,
+                    processtype: cfgCtx.processtype,
+                    creditaccount: f.creditaccount || null,
+                    creditaccountcode: (f.creditaccountcode || '').trim() || null,
+                    debitaccount: f.debitaccount || null,
+                    debitaccountcode: (f.debitaccountcode || '').trim() || null,
+                    flagsumtype: f.flagsumtype || 'T',
+                });
+                if (f._nuevo && data.detail) f.detail = data.detail;
+                f._nuevo = false;
+                f._dirty = false;
+                okCount += 1;
+            }
+            cfgToastOk(`${okCount} configuración(es) guardada(s).`);
+            await cfgConsultar();
+        } catch (err) {
+            cfgToastErr(err.message || String(err));
+            syncCfgGuardar();
+        }
+    }
+
+    async function abrirBusquedaCuentaCfg(idx, campo) {
+        cfgCuentaTarget = { idx, campo };
+        if (txtBuscarCuentaReporte) txtBuscarCuentaReporte.value = '';
+        if (tbodyCuentasReporte) {
+            tbodyCuentasReporte.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Escriba para buscar</td></tr>';
+        }
+        if (modalCuentasRep) modalCuentasRep.show();
+        setTimeout(() => { if (txtBuscarCuentaReporte) txtBuscarCuentaReporte.focus(); }, 250);
+        await buscarCuentasCfg('');
+    }
+
+    async function buscarCuentasCfg(q) {
+        if (!cfgCtx.cia || !tbodyCuentasReporte) return;
+        tbodyCuentasReporte.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Buscando...</td></tr>';
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/cuentas', {
+                cia: cfgCtx.cia,
+                busqueda: q || null,
+            });
+            const rows = data.rows || [];
+            if (!rows.length) {
+                tbodyCuentasReporte.innerHTML = '<tr><td colspan="2" class="text-muted text-center">Sin resultados</td></tr>';
+                return;
+            }
+            tbodyCuentasReporte.innerHTML = rows.map((r) =>
+                `<tr data-id="${escHtml(r.id)}" data-code="${escHtml(r.code)}" data-name="${escHtml(r.name)}">
+                    <td>${escHtml(r.code)}</td>
+                    <td>${escHtml(r.name)}</td>
+                </tr>`
+            ).join('');
+        } catch (err) {
+            tbodyCuentasReporte.innerHTML = `<tr><td colspan="2" class="text-danger text-center">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    async function resolverCuentaCfg(idx, campo, code) {
+        const f = cfgFilas[idx];
+        if (!f) return;
+        const codeNorm = String(code || '').trim();
+        if (!codeNorm) {
+            if (campo === 'credit') { f.creditaccount = ''; f.creditaccountcode = ''; }
+            else { f.debitaccount = ''; f.debitaccountcode = ''; }
+            marcarCfgDirty(idx);
+            return;
+        }
+        try {
+            const data = await postJson('/api/asientos/configurar-conceptos/cuentas', {
+                cia: cfgCtx.cia,
+                busqueda: codeNorm,
+            });
+            const hit = (data.rows || []).find((r) => String(r.code || '').trim() === codeNorm);
+            if (!hit) {
+                cfgToastErr(`Cuenta ${codeNorm} no encontrada o inactiva.`);
+                return;
+            }
+            if (campo === 'credit') {
+                f.creditaccount = hit.id;
+                f.creditaccountcode = hit.code;
+            } else {
+                f.debitaccount = hit.id;
+                f.debitaccountcode = hit.code;
+            }
+            marcarCfgDirty(idx);
+            renderCfg();
+        } catch (err) {
+            cfgToastErr(err.message || String(err));
+        }
+    }
+
+    async function abrirConfigConceptos() {
+        const person = String(cboTrabajador.value || '').trim();
+        if (!person) {
+            cfgToastErr('Seleccione un trabajador.');
+            return;
+        }
+        if (!cboCia.value || !cboProceso.value) {
+            cfgToastErr('Seleccione compañía y proceso.');
+            return;
+        }
+        const optTrab = cboTrabajador.options[cboTrabajador.selectedIndex];
+        const optProc = cboProceso.options[cboProceso.selectedIndex];
+        try {
+            btnConfigConceptos.disabled = true;
+            const perfil = await postJson('/api/asientos/reporte-contable/perfil-trabajador', {
+                cia: cboCia.value,
+                person,
+            });
+            cfgCtx = {
+                cia: cboCia.value,
+                accountprofile: perfil.accountprofile,
+                accountprofile_desc: perfil.accountprofile_desc || perfil.accountprofile,
+                processtype: cboProceso.value,
+                proceso_text: optProc ? String(optProc.textContent || '').trim() : cboProceso.value,
+                person,
+            };
+            if (txtConfigPerfil) {
+                txtConfigPerfil.value = cfgCtx.accountprofile_desc
+                    && cfgCtx.accountprofile_desc !== cfgCtx.accountprofile
+                    ? `${cfgCtx.accountprofile_desc}`
+                    : cfgCtx.accountprofile;
+                txtConfigPerfil.title = cfgCtx.accountprofile;
+            }
+            if (txtConfigProceso) txtConfigProceso.value = cfgCtx.proceso_text;
+            if (txtConfigLocalizar) txtConfigLocalizar.value = '';
+            if (lblConfigContexto) {
+                const nom = optTrab ? String(optTrab.textContent || '').trim() : person;
+                lblConfigContexto.textContent = `${nom} · perfil ${cfgCtx.accountprofile_desc || cfgCtx.accountprofile}`;
+            }
+            const dataConc = await postJson('/api/asientos/configurar-conceptos/conceptos', { cia: cfgCtx.cia });
+            cfgConceptos = dataConc.rows || [];
+            cfgFilas = [];
+            renderCfg();
+            if (modalConfig) modalConfig.show();
+            await cfgConsultar();
+        } catch (err) {
+            cfgToastErr(err.message || String(err));
+        } finally {
+            syncConfigButton();
+        }
+    }
+
+    if (btnConfigConceptos) {
+        btnConfigConceptos.addEventListener('click', abrirConfigConceptos);
+    }
+    if (btnConfigConsultar) btnConfigConsultar.addEventListener('click', cfgConsultar);
+    if (btnConfigAgregar) btnConfigAgregar.addEventListener('click', cfgAgregar);
+    if (btnConfigGuardar) btnConfigGuardar.addEventListener('click', cfgGuardar);
+    if (txtConfigLocalizar) {
+        txtConfigLocalizar.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                cfgConsultar();
+            }
+        });
+    }
+
+    if (tbodyConfigAcc) {
+        tbodyConfigAcc.addEventListener('change', function (e) {
+            const t = e.target;
+            const idx = parseInt(t.getAttribute('data-idx'), 10);
+            if (Number.isNaN(idx) || !cfgFilas[idx]) return;
+            if (t.classList.contains('acc-concept')) {
+                cfgFilas[idx].concept = t.value;
+                const item = cfgConceptos.find((c) => String(c.id) === String(t.value));
+                cfgFilas[idx].concept_description = item ? item.text : '';
+                cfgFilas[idx].formulacode = item ? (item.formulacode || '') : '';
+                marcarCfgDirty(idx);
+            }
+            if (t.classList.contains('acc-flag')) {
+                cfgFilas[idx].flagsumtype = t.value;
+                marcarCfgDirty(idx);
+            }
+        });
+        tbodyConfigAcc.addEventListener('click', function (e) {
+            const btnBuscar = e.target.closest('.acc-buscar-cta');
+            if (btnBuscar) {
+                abrirBusquedaCuentaCfg(
+                    parseInt(btnBuscar.getAttribute('data-idx'), 10),
+                    btnBuscar.getAttribute('data-campo')
+                );
+                return;
+            }
+            const btnDel = e.target.closest('.acc-del');
+            if (btnDel) cfgEliminar(parseInt(btnDel.getAttribute('data-idx'), 10));
+        });
+        tbodyConfigAcc.addEventListener('blur', function (e) {
+            const t = e.target;
+            if (!t.classList.contains('acc-code')) return;
+            const idx = parseInt(t.getAttribute('data-idx'), 10);
+            const campo = t.getAttribute('data-campo');
+            if (Number.isNaN(idx) || !cfgFilas[idx]) return;
+            const code = t.value.trim();
+            const actual = campo === 'credit'
+                ? (cfgFilas[idx].creditaccountcode || '')
+                : (cfgFilas[idx].debitaccountcode || '');
+            if (code === actual) return;
+            resolverCuentaCfg(idx, campo, code);
+        }, true);
+        tbodyConfigAcc.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' && e.target.classList.contains('acc-code')) {
+                e.preventDefault();
+                e.target.blur();
+            }
+        });
+    }
+
+    if (document.getElementById('btnBuscarCuentaReporte')) {
+        document.getElementById('btnBuscarCuentaReporte').addEventListener('click', () =>
+            buscarCuentasCfg((txtBuscarCuentaReporte && txtBuscarCuentaReporte.value.trim()) || '')
+        );
+    }
+    if (txtBuscarCuentaReporte) {
+        txtBuscarCuentaReporte.addEventListener('input', function () {
+            clearTimeout(cfgBuscarTimer);
+            cfgBuscarTimer = setTimeout(() => buscarCuentasCfg(txtBuscarCuentaReporte.value.trim()), 300);
+        });
+        txtBuscarCuentaReporte.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                buscarCuentasCfg(txtBuscarCuentaReporte.value.trim());
+            }
+        });
+    }
+    if (tbodyCuentasReporte) {
+        tbodyCuentasReporte.addEventListener('click', function (e) {
+            const tr = e.target.closest('tr[data-id]');
+            if (!tr || !cfgCuentaTarget) return;
+            const { idx, campo } = cfgCuentaTarget;
+            if (!cfgFilas[idx]) return;
+            if (campo === 'credit') {
+                cfgFilas[idx].creditaccount = tr.getAttribute('data-id');
+                cfgFilas[idx].creditaccountcode = tr.getAttribute('data-code');
+            } else {
+                cfgFilas[idx].debitaccount = tr.getAttribute('data-id');
+                cfgFilas[idx].debitaccountcode = tr.getAttribute('data-code');
+            }
+            marcarCfgDirty(idx);
+            if (modalCuentasRep) modalCuentasRep.hide();
+            renderCfg();
+        });
+    }
 
     (async function init() {
         try {
             await poblarSelect('/api/selectores/companias', cboCia);
             seleccionarInsensitive(cboCia, DEFAULT_CIA);
             if (cboCia.value) await cargarPlanillas();
+            syncConfigButton();
         } catch (e) {
             if (window.HmUi) HmUi.error(e.message || String(e));
             else alert(e.message || e);

@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
     .table-scroll-container {
-        max-height: 65vh;
+        max-height: 70vh;
         overflow: auto;
         border: 1px solid #dee2e6;
     }
@@ -16,39 +16,60 @@
     }
     .table-subsidios th,
     .table-subsidios td {
-        padding: 0.25rem 0.4rem;
+        padding: 0.28rem 0.45rem;
         vertical-align: middle;
     }
     .table-subsidios thead th {
         position: sticky;
         top: 0;
-        background-color: #f8f9fa;
+        background-color: #1e3a5f;
+        color: #fff;
         z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        box-shadow: 0 1px 0 #0d2137;
         text-align: center;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
     }
-    .table-subsidios .col-dni { min-width: 5.5rem; }
-    .table-subsidios .col-nombre { min-width: 14rem; max-width: 18rem; }
-    .table-subsidios .col-mes,
-    .table-subsidios .col-total,
-    .table-subsidios .col-promedio {
-        min-width: 4.5rem;
+    .table-subsidios thead th.col-mes {
+        text-align: left;
+        background-color: #1e3a5f;
+        min-width: 7.5rem;
+    }
+    .table-subsidios .col-concepto {
+        min-width: 5.5rem;
         text-align: right;
     }
-    .table-subsidios thead th.col-total,
-    .table-subsidios tbody td.col-total {
-        background-color: #e7f1ff;
-        font-weight: 700;
+    .table-subsidios .col-mes {
+        min-width: 7.5rem;
+        text-align: left;
+        font-weight: 600;
     }
-    .table-subsidios thead th.col-promedio,
-    .table-subsidios tbody td.col-promedio {
-        background-color: #fff8e1;
+    .table-subsidios tfoot td {
         font-weight: 700;
+        background-color: #f1f3f5;
+    }
+    .table-subsidios tfoot td.col-subtotal-label {
+        text-align: left;
+    }
+    .table-subsidios tfoot td.total-ingresos {
+        background-color: #cfe2ff;
+        text-align: right;
+    }
+    .table-subsidios tfoot td.total-ingresos-label {
+        background-color: #cfe2ff;
+        text-align: left;
     }
     .titulo-reporte {
         font-size: 1.05rem;
         text-align: center;
         margin: 0;
+    }
+    .subtitulo-trabajador {
+        font-size: 0.85rem;
+        text-align: center;
+        color: #555;
+        margin: 0.15rem 0 0;
     }
 </style>
 {% endblock %}
@@ -95,7 +116,8 @@
                     <i class="bi bi-file-earmark-excel"></i> Exportar a Excel
                 </button>
                 <span class="ms-auto text-muted small fw-bold">
-                    No. de Registros: <span id="lblRowCount">0</span>
+                    Conceptos: <span id="lblColCount">0</span>
+                    · Meses: <span id="lblRowCount">0</span>
                 </span>
             </div>
         </form>
@@ -106,35 +128,22 @@
 <div class="card shadow-sm border-0">
     <div class="card-body py-2">
         <div class="mb-2">
-            <div class="titulo-reporte fw-bold" id="lblTituloReporte">Reporte de Subsidios — TOTAL_REM_AFP</div>
+            <div class="titulo-reporte fw-bold" id="lblTituloReporte">Reporte de Subsidios</div>
+            <div class="subtitulo-trabajador" id="lblTrabajador"></div>
         </div>
         <div class="table-scroll-container" id="wrapTabla">
             <table class="table table-bordered table-sm table-hover table-subsidios align-middle">
                 <thead>
                     <tr id="theadSubsidios">
-                        <th class="col-dni">DNI</th>
-                        <th class="col-nombre">Nombre</th>
-                        <th class="col-mes">M1</th>
-                        <th class="col-mes">M2</th>
-                        <th class="col-mes">M3</th>
-                        <th class="col-mes">M4</th>
-                        <th class="col-mes">M5</th>
-                        <th class="col-mes">M6</th>
-                        <th class="col-mes">M7</th>
-                        <th class="col-mes">M8</th>
-                        <th class="col-mes">M9</th>
-                        <th class="col-mes">M10</th>
-                        <th class="col-mes">M11</th>
-                        <th class="col-mes">M12</th>
-                        <th class="col-total">Total</th>
-                        <th class="col-promedio">Promedio</th>
+                        <th class="col-mes">Mes</th>
                     </tr>
                 </thead>
                 <tbody id="tbodySubsidios">
                     <tr>
-                        <td colspan="16" class="text-center text-muted py-4">Sin datos</td>
+                        <td class="text-center text-muted py-4">Sin datos</td>
                     </tr>
                 </tbody>
+                <tfoot id="tfootSubsidios"></tfoot>
             </table>
         </div>
     </div>
@@ -150,9 +159,6 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_API = {{ url_for('api_reporte_subsidios') | tojson }};
     const STORAGE_KEY = 'filtros_reporte_subsidios';
     const DEFAULT_CIA = 'BGT';
-    const MES_KEYS = ['m01','m02','m03','m04','m05','m06','m07','m08','m09','m10','m11','m12'];
-    const LBL_KEYS = ['lbl01','lbl02','lbl03','lbl04','lbl05','lbl06','lbl07','lbl08','lbl09','lbl10','lbl11','lbl12'];
-    const COLS = 16;
 
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
@@ -161,8 +167,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboTrabajador = document.getElementById('cboTrabajador');
     const thead = document.getElementById('theadSubsidios');
     const tbody = document.getElementById('tbodySubsidios');
+    const tfoot = document.getElementById('tfootSubsidios');
     const lblCount = document.getElementById('lblRowCount');
+    const lblColCount = document.getElementById('lblColCount');
     const lblTitulo = document.getElementById('lblTituloReporte');
+    const lblTrabajador = document.getElementById('lblTrabajador');
     const msg = document.getElementById('msgEstado');
     const btnExcel = document.getElementById('btnExportExcel');
     const poblarSelect = CombosCarga.poblarSelect;
@@ -176,7 +185,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     function fmtNum(n) {
         const v = Number(n || 0);
         if (!Number.isFinite(v)) return '0.00';
-        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+        return v.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     function selectedText(el) {
         const opt = el && el.options[el.selectedIndex];
@@ -212,45 +221,69 @@ document.addEventListener('DOMContentLoaded', async function () {
         catch (e) { return {}; }
     }
 
-    function setHeaders(labels) {
-        let html = '<th class="col-dni">DNI</th><th class="col-nombre">Nombre</th>';
-        for (let i = 0; i < 12; i++) {
-            html += `<th class="col-mes">${esc(labels[i] || ('M' + (i + 1)))}</th>`;
-        }
-        html += '<th class="col-total">Total</th><th class="col-promedio">Promedio</th>';
-        thead.innerHTML = html;
+    function renderVacio(mensaje) {
+        thead.innerHTML = '<th class="col-mes">Mes</th>';
+        tbody.innerHTML = `<tr><td class="text-center text-muted py-4">${esc(mensaje || 'Sin datos')}</td></tr>`;
+        tfoot.innerHTML = '';
+        lblCount.textContent = '0';
+        lblColCount.textContent = '0';
+        btnExcel.disabled = true;
     }
 
-    function renderRows(rows) {
-        if (!rows || !rows.length) {
-            tbody.innerHTML = `<tr><td colspan="${COLS}" class="text-center text-muted py-4">Sin datos para los filtros seleccionados</td></tr>`;
-            lblCount.textContent = '0';
-            btnExcel.disabled = true;
+    function renderMatriz(data) {
+        const columns = data.columns || [];
+        const rows = data.rows || [];
+        const subtots = data.subtotals || {};
+        const totalIngresos = Number(data.total_ingresos || 0);
+
+        if (!columns.length) {
+            renderVacio('Sin conceptos afectos a AFP con importe en los 12 meses');
+            lblTrabajador.textContent = [data.person, data.personname].filter(Boolean).join(' — ');
             return;
         }
-        const labels = LBL_KEYS.map((k) => rows[0][k] || '');
-        setHeaders(labels);
-        let html = '';
-        rows.forEach((r) => {
-            html += `<tr>
-                <td class="col-dni">${esc(r.person)}</td>
-                <td class="col-nombre">${esc(r.personname)}</td>
-                ${MES_KEYS.map((k) => `<td class="col-mes">${fmtNum(r[k])}</td>`).join('')}
-                <td class="col-total">${fmtNum(r.total)}</td>
-                <td class="col-promedio">${fmtNum(r.promedio)}</td>
-            </tr>`;
+
+        let head = '<th class="col-mes">Mes</th>';
+        columns.forEach((c) => {
+            head += `<th class="col-concepto" title="${esc(c.concept)}">${esc(c.description)}</th>`;
         });
-        tbody.innerHTML = html;
+        thead.innerHTML = head;
+
+        let body = '';
+        rows.forEach((r) => {
+            body += `<tr><td class="col-mes">${esc(r.month_lbl)}</td>`;
+            columns.forEach((c) => {
+                const v = (r.values && r.values[c.concept] != null) ? r.values[c.concept] : 0;
+                body += `<td class="col-concepto">${fmtNum(v)}</td>`;
+            });
+            body += '</tr>';
+        });
+        tbody.innerHTML = body || `<tr><td colspan="${columns.length + 1}" class="text-center text-muted py-4">Sin datos</td></tr>`;
+
+        let foot = '<tr><td class="col-subtotal-label">SUBTOTAL</td>';
+        columns.forEach((c) => {
+            foot += `<td class="col-concepto">${fmtNum(subtots[c.concept] || 0)}</td>`;
+        });
+        foot += '</tr>';
+        // TOTAL INGRESOS: etiqueta en col Mes + valor en la primera columna de conceptos
+        // (coincide con la suma de los SUBTOTAL; debe cuadrar con TOTAL_REM_AFP).
+        const restoCols = Math.max(0, columns.length - 1);
+        foot += `<tr>
+            <td class="total-ingresos-label">TOTAL INGRESOS</td>
+            <td class="total-ingresos">${fmtNum(totalIngresos)}</td>
+            ${restoCols ? `<td colspan="${restoCols}" class="total-ingresos-label"></td>` : ''}
+        </tr>`;
+        tfoot.innerHTML = foot;
+
         lblCount.textContent = String(rows.length);
-        btnExcel.disabled = false;
+        lblColCount.textContent = String(columns.length);
+        lblTrabajador.textContent = [data.person, data.personname].filter(Boolean).join(' — ');
+        btnExcel.disabled = !rows.length;
     }
 
     function actualizarTitulo() {
         const p = selectedText(cboPeriodo);
-        const t = selectedText(cboTrabajador);
-        let s = 'Reporte de Subsidios — TOTAL_REM_AFP';
+        let s = 'Reporte de Subsidios — conceptos afectos AFP';
         if (p) s += ` · Periodo ${p}`;
-        if (t) s += ` · ${t}`;
         lblTitulo.textContent = s;
     }
 
@@ -343,44 +376,49 @@ document.addEventListener('DOMContentLoaded', async function () {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Error al consultar');
             ultimoPayload = data;
-            renderRows(data.rows || []);
-            msg.textContent = data.count ? `${data.count} registro(s).` : 'Sin resultados.';
+            renderMatriz(data);
+            const nCols = (data.columns || []).length;
+            msg.textContent = nCols
+                ? `${nCols} concepto(s) · TOTAL INGRESOS ${fmtNum(data.total_ingresos)}.`
+                : 'Sin resultados.';
             msg.className = 'small mt-2 text-muted';
         } catch (e) {
             ultimoPayload = null;
-            renderRows([]);
+            renderVacio('Sin datos');
+            lblTrabajador.textContent = '';
             msg.textContent = e.message || String(e);
             msg.className = 'small mt-2 text-danger';
         }
     }
 
     async function exportExcel() {
-        if (!ultimoPayload || !ultimoPayload.rows || !ultimoPayload.rows.length) return;
-        const rows = ultimoPayload.rows;
-        const labels = LBL_KEYS.map((k) => rows[0][k] || '');
+        if (!ultimoPayload || !(ultimoPayload.columns || []).length) return;
+        const columns = ultimoPayload.columns;
+        const rows = ultimoPayload.rows || [];
+        const subtots = ultimoPayload.subtotals || {};
         const wb = new ExcelJS.Workbook();
         const ws = wb.addWorksheet('Subsidios');
-        ws.addRow(['DNI', 'Nombre', ...labels, 'Total', 'Promedio']);
+        ws.addRow(['Mes', ...columns.map((c) => c.description)]);
         ws.getRow(1).font = { bold: true };
         rows.forEach((r) => {
             ws.addRow([
-                r.person, r.personname,
-                ...MES_KEYS.map((k) => Number(r[k]) || 0),
-                Number(r.total) || 0,
-                Number(r.promedio) || 0,
+                r.month_lbl,
+                ...columns.map((c) => Number((r.values && r.values[c.concept]) || 0)),
             ]);
         });
-        for (let c = 3; c <= 16; c++) {
-            ws.getColumn(c).numFmt = '#,##0.0000';
-            ws.getColumn(c).width = 12;
+        ws.addRow(['SUBTOTAL', ...columns.map((c) => Number(subtots[c.concept] || 0))]);
+        ws.addRow(['TOTAL INGRESOS', Number(ultimoPayload.total_ingresos || 0)]);
+        ws.getColumn(1).width = 16;
+        for (let c = 2; c <= columns.length + 1; c++) {
+            ws.getColumn(c).numFmt = '#,##0.00';
+            ws.getColumn(c).width = 14;
         }
-        ws.getColumn(1).width = 12;
-        ws.getColumn(2).width = 36;
         const buf = await wb.xlsx.writeBuffer();
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `reporte_subsidios_${CombosCarga.valorValido(cboPeriodo) || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`;
+        const person = ultimoPayload.person || CombosCarga.valorValido(cboTrabajador) || '';
+        a.download = `reporte_subsidios_${person}_${CombosCarga.valorValido(cboPeriodo) || ''}_${new Date().toISOString().slice(0, 10)}.xlsx`;
         a.click();
         URL.revokeObjectURL(a.href);
     }

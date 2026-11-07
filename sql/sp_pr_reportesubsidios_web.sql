@@ -1,9 +1,14 @@
 /*
-    Reporte de Subsidios (hm_ultra).
-    Muestra TOTAL_REM_AFP en los 12 periodos anteriores al periodo filtro
-    (ACTUAL-12 .. ACTUAL-1) y la columna Promedio vía sp_pr_FormulaPromedioSubsidios.
+    Reporte de Subsidios (hm_ultra) — matriz meses x conceptos afectos AFP.
 
-    Ejemplo: periodo 20261010 → Oct-2025 .. Set-2026 + promedio.
+    Filas: 12 periodos ACTUAL-12 .. ACTUAL-1.
+    Columnas: conceptos tipo Ingreso (ConceptType.ShortName = 'I') con flagafectoAFP = 'Y'
+              que el trabajador tuvo con importe > 0 en proceso FIN_DE_MES dentro del rango.
+    Result sets:
+      1) cabecera (person, personname)
+      2) columnas (col_idx, concept, description, formulacode)
+      3) celdas (month_idx, prperiod, month_lbl, concept, importe)
+      4) totales por concepto (concept, subtotal) + total_ingresos
 
     Usado por: POST /api/reportes/subsidios
 */
@@ -35,20 +40,16 @@ BEGIN
         RETURN;
     END;
 
-    DECLARE @formulacode varchar(50) = 'TOTAL_REM_AFP';
-    DECLARE @concept varchar(20) = NULL;
-
-    SELECT TOP 1 @concept = Concept
-    FROM dbo.PR_Concept (NOLOCK)
+    /* Proceso MENSUAL / FIN_DE_MES para montos del reporte (query de referencia). */
+    DECLARE @process_finmes varchar(20) = NULL;
+    SELECT TOP 1 @process_finmes = ProcessType
+    FROM dbo.PR_ProcessType (NOLOCK)
     WHERE Company = @company
-      AND UPPER(LTRIM(RTRIM(ISNULL(FormulaCode, '')))) = @formulacode
-    ORDER BY Concept;
+      AND UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))) = 'FIN_DE_MES'
+    ORDER BY ProcessType;
 
-    IF ISNULL(@concept, '') = ''
-    BEGIN
-        RAISERROR('No existe el concepto TOTAL_REM_AFP en la compañía.', 16, 1);
-        RETURN;
-    END;
+    IF @process_finmes IS NULL
+        SET @process_finmes = @processtype;
 
     DECLARE @ord int = NULL;
     SELECT @ord = PeriodOrder
@@ -63,12 +64,11 @@ BEGIN
         RETURN;
     END;
 
-    /* 12 periodos: ACTUAL-12 .. ACTUAL-1 */
     IF OBJECT_ID('tempdb..#meses') IS NOT NULL DROP TABLE #meses;
     CREATE TABLE #meses (
         idx      int NOT NULL PRIMARY KEY,
         PRPeriod varchar(20) NOT NULL,
-        lbl      varchar(20) NOT NULL
+        lbl      varchar(40) NOT NULL
     );
 
     DECLARE @i int = 1;
@@ -76,11 +76,11 @@ BEGIN
     DECLARE @pp varchar(20);
     DECLARE @mm char(2);
     DECLARE @yy char(4);
-    DECLARE @mesnom varchar(3);
+    DECLARE @mesnom varchar(10);
 
     WHILE @i <= 12
     BEGIN
-        SET @po = @ord - (13 - @i);  /* i=1 -> ord-12; i=12 -> ord-1 */
+        SET @po = @ord - (13 - @i);
         SET @pp = NULL;
         SELECT @pp = PRPeriod
         FROM dbo.PR_Period (NOLOCK)
@@ -97,31 +97,51 @@ BEGIN
         SET @yy = LEFT(@pp, 4);
         SET @mm = SUBSTRING(@pp, 5, 2);
         SET @mesnom = CASE @mm
-            WHEN '01' THEN 'Ene' WHEN '02' THEN 'Feb' WHEN '03' THEN 'Mar'
-            WHEN '04' THEN 'Abr' WHEN '05' THEN 'May' WHEN '06' THEN 'Jun'
-            WHEN '07' THEN 'Jul' WHEN '08' THEN 'Ago' WHEN '09' THEN 'Set'
-            WHEN '10' THEN 'Oct' WHEN '11' THEN 'Nov' WHEN '12' THEN 'Dic'
+            WHEN '01' THEN 'Enero' WHEN '02' THEN 'Febrero' WHEN '03' THEN 'Marzo'
+            WHEN '04' THEN 'Abril' WHEN '05' THEN 'Mayo' WHEN '06' THEN 'Junio'
+            WHEN '07' THEN 'Julio' WHEN '08' THEN 'Agosto' WHEN '09' THEN 'Setiembre'
+            WHEN '10' THEN 'Octubre' WHEN '11' THEN 'Noviembre' WHEN '12' THEN 'Diciembre'
             ELSE @mm END;
 
         INSERT INTO #meses (idx, PRPeriod, lbl)
-        VALUES (@i, @pp, @mesnom + '-' + @yy);
+        VALUES (@i, @pp, @mesnom + ' ' + @yy);
 
         SET @i = @i + 1;
     END;
 
-    DECLARE @promedio numeric(19, 4) = 0;
-    IF OBJECT_ID('dbo.sp_pr_FormulaPromedioSubsidios', 'P') IS NOT NULL
-    BEGIN
-        EXEC dbo.sp_pr_FormulaPromedioSubsidios
-            @cia = @company,
-            @person = @person,
-            @payrolltype = @payrolltype,
-            @processtype = @processtype,
-            @period = @period,
-            @formulacode = @formulacode,
-            @result = @promedio OUTPUT;
-    END;
+    /* Columnas: conceptos I + flagafectoAFP con importe > 0 en el rango / FIN_DE_MES */
+    IF OBJECT_ID('tempdb..#cols') IS NOT NULL DROP TABLE #cols;
+    CREATE TABLE #cols (
+        col_idx     int NOT NULL IDENTITY(1, 1) PRIMARY KEY,
+        Concept     varchar(20) NOT NULL,
+        Description varchar(200) NOT NULL,
+        FormulaCode varchar(50) NULL
+    );
 
+    INSERT INTO #cols (Concept, Description, FormulaCode)
+    SELECT
+        c.Concept,
+        MAX(LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.PrintText)), ''), c.Description)))) AS Description,
+        MAX(LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))) AS FormulaCode
+    FROM dbo.PR_EmployeePayRollConcept epc (NOLOCK)
+    INNER JOIN dbo.PR_Concept c (NOLOCK)
+        ON c.Concept = epc.Concept
+       AND c.Company = epc.Company
+    INNER JOIN dbo.PR_ConceptType ct (NOLOCK)
+        ON ct.ConceptType = c.ConceptType
+    INNER JOIN #meses m
+        ON m.PRPeriod = epc.PRPeriod
+    WHERE epc.Company = @company
+      AND epc.PayRollType = @payrolltype
+      AND epc.Person = @person
+      AND epc.ProcessType = @process_finmes
+      AND UPPER(LTRIM(RTRIM(ISNULL(ct.ShortName, '')))) = 'I'
+      AND UPPER(LTRIM(RTRIM(ISNULL(c.flagafectoAFP, 'N')))) = 'Y'
+      AND ISNULL(epc.ConceptValueLo, epc.ConceptValue) > 0
+    GROUP BY c.Concept
+    ORDER BY MAX(LTRIM(RTRIM(ISNULL(NULLIF(LTRIM(RTRIM(c.PrintText)), ''), c.Description)))), c.Concept;
+
+    /* RS1: trabajador */
     SELECT
         LTRIM(RTRIM(e.Person)) AS person,
         LTRIM(RTRIM(
@@ -129,52 +149,68 @@ BEGIN
             ISNULL(sp.LastName2, '') + ' ' +
             ISNULL(sp.Name1, '') + ' ' +
             ISNULL(sp.Name2, '')
-        )) AS personname,
-        MAX(CASE WHEN m.idx = 1 THEN m.lbl END) AS lbl01,
-        MAX(CASE WHEN m.idx = 2 THEN m.lbl END) AS lbl02,
-        MAX(CASE WHEN m.idx = 3 THEN m.lbl END) AS lbl03,
-        MAX(CASE WHEN m.idx = 4 THEN m.lbl END) AS lbl04,
-        MAX(CASE WHEN m.idx = 5 THEN m.lbl END) AS lbl05,
-        MAX(CASE WHEN m.idx = 6 THEN m.lbl END) AS lbl06,
-        MAX(CASE WHEN m.idx = 7 THEN m.lbl END) AS lbl07,
-        MAX(CASE WHEN m.idx = 8 THEN m.lbl END) AS lbl08,
-        MAX(CASE WHEN m.idx = 9 THEN m.lbl END) AS lbl09,
-        MAX(CASE WHEN m.idx = 10 THEN m.lbl END) AS lbl10,
-        MAX(CASE WHEN m.idx = 11 THEN m.lbl END) AS lbl11,
-        MAX(CASE WHEN m.idx = 12 THEN m.lbl END) AS lbl12,
-        CAST(MAX(CASE WHEN m.idx = 1 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m01,
-        CAST(MAX(CASE WHEN m.idx = 2 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m02,
-        CAST(MAX(CASE WHEN m.idx = 3 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m03,
-        CAST(MAX(CASE WHEN m.idx = 4 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m04,
-        CAST(MAX(CASE WHEN m.idx = 5 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m05,
-        CAST(MAX(CASE WHEN m.idx = 6 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m06,
-        CAST(MAX(CASE WHEN m.idx = 7 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m07,
-        CAST(MAX(CASE WHEN m.idx = 8 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m08,
-        CAST(MAX(CASE WHEN m.idx = 9 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m09,
-        CAST(MAX(CASE WHEN m.idx = 10 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m10,
-        CAST(MAX(CASE WHEN m.idx = 11 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m11,
-        CAST(MAX(CASE WHEN m.idx = 12 THEN ISNULL(epc.ConceptValueLo, epc.ConceptValue) ELSE 0 END) AS decimal(19, 4)) AS m12,
-        CAST(
-            ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0)
-            AS decimal(19, 4)
-        ) AS total,
-        CAST(ISNULL(@promedio, 0) AS decimal(19, 4)) AS promedio
+        )) AS personname
     FROM dbo.PR_Employee e (NOLOCK)
     INNER JOIN dbo.SY_Person sp (NOLOCK)
         ON sp.Person = e.Person
-    CROSS JOIN #meses m
-    LEFT JOIN dbo.PR_EmployeePayRollConcept epc (NOLOCK)
-        ON epc.Company = e.Company
-       AND epc.PayRollType = e.PayRollType
-       AND epc.Person = e.Person
-       AND epc.ProcessType = @processtype
-       AND epc.Concept = @concept
-       AND epc.PRPeriod = m.PRPeriod
     WHERE e.Company = @company
       AND e.PayRollType = @payrolltype
-      AND e.Person = @person
+      AND e.Person = @person;
+
+    /* RS2: columnas */
+    SELECT col_idx, Concept AS concept, Description AS description, FormulaCode AS formulacode
+    FROM #cols
+    ORDER BY col_idx;
+
+    /* RS3: celdas mes x concepto (incluye meses sin importe = 0) */
+    SELECT
+        m.idx AS month_idx,
+        m.PRPeriod AS prperiod,
+        m.lbl AS month_lbl,
+        col.col_idx,
+        col.Concept AS concept,
+        col.Description AS description,
+        CAST(ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0) AS decimal(19, 4)) AS importe
+    FROM #meses m
+    CROSS JOIN #cols col
+    LEFT JOIN dbo.PR_EmployeePayRollConcept epc (NOLOCK)
+        ON epc.Company = @company
+       AND epc.PayRollType = @payrolltype
+       AND epc.Person = @person
+       AND epc.ProcessType = @process_finmes
+       AND epc.PRPeriod = m.PRPeriod
+       AND epc.Concept = col.Concept
     GROUP BY
-        e.Person,
-        sp.LastName1, sp.LastName2, sp.Name1, sp.Name2;
+        m.idx, m.PRPeriod, m.lbl,
+        col.col_idx, col.Concept, col.Description
+    ORDER BY m.idx, col.col_idx;
+
+    /* RS4: subtotales por concepto + total ingresos */
+    SELECT
+        col.col_idx,
+        col.Concept AS concept,
+        col.Description AS description,
+        CAST(ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0) AS decimal(19, 4)) AS subtotal
+    FROM #cols col
+    LEFT JOIN dbo.PR_EmployeePayRollConcept epc (NOLOCK)
+        ON epc.Company = @company
+       AND epc.PayRollType = @payrolltype
+       AND epc.Person = @person
+       AND epc.ProcessType = @process_finmes
+       AND epc.Concept = col.Concept
+       AND epc.PRPeriod IN (SELECT PRPeriod FROM #meses)
+    GROUP BY col.col_idx, col.Concept, col.Description
+    ORDER BY col.col_idx;
+
+    SELECT
+        CAST(ISNULL(SUM(ISNULL(epc.ConceptValueLo, epc.ConceptValue)), 0) AS decimal(19, 4)) AS total_ingresos
+    FROM #cols col
+    INNER JOIN dbo.PR_EmployeePayRollConcept epc (NOLOCK)
+        ON epc.Company = @company
+       AND epc.PayRollType = @payrolltype
+       AND epc.Person = @person
+       AND epc.ProcessType = @process_finmes
+       AND epc.Concept = col.Concept
+       AND epc.PRPeriod IN (SELECT PRPeriod FROM #meses);
 END
 GO

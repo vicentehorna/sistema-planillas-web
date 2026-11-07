@@ -35625,7 +35625,7 @@ def api_reporte_planilla_por_conceptos():
 @app.route('/api/reportes/subsidios', methods=['POST'])
 @login_required
 def api_reporte_subsidios():
-    """sp_pr_reportesubsidios_web: TOTAL_REM_AFP en 12 meses + promedio (hm_ultra)."""
+    """sp_pr_reportesubsidios_web: matriz 12 meses x conceptos I afectos AFP (hm_ultra)."""
     if not _es_cliente_ultraseguros():
         abort(404)
     ensure_user_session()
@@ -35647,6 +35647,33 @@ def api_reporte_subsidios():
     if not person or person == '0':
         return jsonify({'error': 'Seleccione el trabajador.'}), 400
 
+    def _f(v):
+        try:
+            return float(v or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _all_resultsets(cursor, max_sets=8):
+        """Lee todos los resultsets en orden (incluye vacíos)."""
+        out_sets = []
+        n = 0
+        while n < max_sets:
+            if cursor.description:
+                cols = [str(c[0]).strip() for c in cursor.description]
+                rows = cursor.fetchall()
+                batch = []
+                for row in rows:
+                    rd = {}
+                    for i, cname in enumerate(cols):
+                        key = (cname or f'col{i}').lower()
+                        rd[key] = row[i]
+                    batch.append(rd)
+                out_sets.append(batch)
+                n += 1
+            if not cursor.nextset():
+                break
+        return out_sets
+
     conn = None
     try:
         conn = get_db_connection()
@@ -35657,36 +35684,59 @@ def api_reporte_subsidios():
             '@company=?, @payrolltype=?, @processtype=?, @period=?, @person=?',
             (cia, payrolltype, process, period, person),
         )
-        rows = _dicts_first_nonempty_resultset(cursor)
-        mes_keys = [f'm{str(i).zfill(2)}' for i in range(1, 13)]
-        lbl_keys = [f'lbl{str(i).zfill(2)}' for i in range(1, 13)]
-        resultado = []
-        for r in rows:
-            item = {
-                'person': str(r.get('person') or '').strip(),
-                'personname': str(r.get('personname') or '').strip(),
-            }
-            for k in lbl_keys:
-                item[k] = str(r.get(k) or '').strip()
-            for k in mes_keys:
-                try:
-                    item[k] = float(r.get(k) or 0)
-                except (TypeError, ValueError):
-                    item[k] = 0.0
-            try:
-                item['total'] = float(r.get('total') or 0)
-            except (TypeError, ValueError):
-                item['total'] = 0.0
-            try:
-                item['promedio'] = float(r.get('promedio') or 0)
-            except (TypeError, ValueError):
-                item['promedio'] = 0.0
-            resultado.append(item)
+        sets = _all_resultsets(cursor)
+        cab = (sets[0][0] if sets and sets[0] else {}) or {}
+        cols_raw = sets[1] if len(sets) > 1 else []
+        cells_raw = sets[2] if len(sets) > 2 else []
+        subtots_raw = sets[3] if len(sets) > 3 else []
+        total_raw = (sets[4][0] if len(sets) > 4 and sets[4] else {}) or {}
+
+        columns = []
+        for c in cols_raw:
+            columns.append({
+                'col_idx': int(c.get('col_idx') or 0),
+                'concept': str(c.get('concept') or '').strip(),
+                'description': str(c.get('description') or '').strip(),
+                'formulacode': str(c.get('formulacode') or '').strip(),
+            })
+
+        # Agrupar celdas por mes
+        months_map = {}
+        for cell in cells_raw:
+            mid = int(cell.get('month_idx') or 0)
+            if mid not in months_map:
+                months_map[mid] = {
+                    'month_idx': mid,
+                    'prperiod': str(cell.get('prperiod') or '').strip(),
+                    'month_lbl': str(cell.get('month_lbl') or '').strip(),
+                    'values': {},
+                    'row_total': 0.0,
+                }
+            concept = str(cell.get('concept') or '').strip()
+            importe = _f(cell.get('importe'))
+            months_map[mid]['values'][concept] = importe
+            months_map[mid]['row_total'] += importe
+
+        rows = [months_map[k] for k in sorted(months_map.keys())]
+
+        subtots = {}
+        for s in subtots_raw:
+            concept = str(s.get('concept') or '').strip()
+            subtots[concept] = _f(s.get('subtotal'))
+
+        total_ingresos = _f(total_raw.get('total_ingresos'))
+        if not total_ingresos and subtots:
+            total_ingresos = sum(subtots.values())
+
         return jsonify({
-            'rows': resultado,
-            'count': len(resultado),
+            'person': str(cab.get('person') or person).strip(),
+            'personname': str(cab.get('personname') or '').strip(),
             'period': period,
-            'formulacode': 'TOTAL_REM_AFP',
+            'columns': columns,
+            'rows': rows,
+            'subtotals': subtots,
+            'total_ingresos': total_ingresos,
+            'count': len(rows),
         })
     except Exception as e:
         logging.exception('api_reporte_subsidios')

@@ -1,0 +1,540 @@
+{% extends "layout.html" %}
+
+{% block title %}Detalle de CTS{% endblock %}
+
+{% block extra_css %}
+<style>
+    #tblBody tr.reporte-fila-totales td {
+        background-color: #d9edf7;
+        font-weight: 700;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-header bg-white border-bottom-0 pt-4 pb-0">
+        <h5 class="mb-0 fw-bold text-secondary"><i class="bi bi-funnel"></i> Filtros del Reporte</h5>
+    </div>
+    <div class="card-body">
+        <form id="frmFiltros" class="row g-3">
+            <div class="col-md-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboTipoPlanilla" class="form-label small fw-bold text-muted">Tipo Planilla</label>
+                <select id="cboTipoPlanilla" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboProceso" class="form-label small fw-bold text-muted">Proceso</label>
+                <select id="cboProceso" class="form-select form-select-sm" required disabled>
+                    <option value="">PAGO DE CTS</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="cboTrabajador" class="form-label small fw-bold text-muted">Empleado</label>
+                <select id="cboTrabajador" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex gap-2 border-top pt-3 mt-3">
+                <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Buscar</button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcel" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="reportContainer">
+    <div class="card-body">
+        <h4 class="text-center fw-bold mb-4">REPORTE DETALLE DE CTS</h4>
+
+        <div class="d-flex justify-content-between mb-3 fw-bold" style="font-size: 0.9rem;" id="headerInfo">
+            <span id="lblNombre"></span>
+            <span id="lblIngreso"></span>
+            <span id="lblCese"></span>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-bordered table-sm table-hover text-center align-middle" style="font-size: 0.85rem;">
+                <thead class="table-light">
+                    <tr>
+                        <th rowspan="2" class="align-middle">Periodo</th>
+                        <th colspan="5" class="bg-success bg-opacity-10">CTS</th>
+                    </tr>
+                    <tr>
+                        <th class="bg-success bg-opacity-10">Horas Ex</th>
+                        <th class="bg-success bg-opacity-10">Bono</th>
+                        <th class="bg-success bg-opacity-10">Feriado</th>
+                        <th class="bg-success bg-opacity-10">Comisión</th>
+                        <th class="bg-success bg-opacity-10">Ausencias*</th>
+                    </tr>
+                </thead>
+                <tbody id="tblBody">
+                </tbody>
+            </table>
+        </div>
+        <div class="mt-2 text-muted small">
+            <span class="fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
+            <div class="mt-1">
+                * Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION
+                (días de ausencia + licencia sin goce + suspensión).
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/combos_carga.js') }}"></script>
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
+<script>
+document.addEventListener("DOMContentLoaded", async function() {
+    const COLUMNAS_NUMERICAS = ['he_cts', 'bono_cts', 'feriado_cts', 'comision_cts', 'faltas_cts'];
+    const EXCEL_HEADER = ['Periodo', 'Horas Ex', 'Bono', 'Feriado', 'Comisión', 'Ausencias*'];
+    const EXCEL_NOTA_AUSENCIAS = '* Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION (días de ausencia + licencia sin goce + suspensión).';
+
+    let lastExport = null;
+    let generacionFiltros = 0;
+
+    const num = (v) => Number(v == null ? 0 : v);
+    const fmt = (v) => Number(v == null ? 0 : v).toFixed(2);
+    const periodoCell = (row) => row.periodo_fmt || row[''] || '';
+
+    const poblarSelect = CombosCarga.poblarSelect;
+    const { resetSelect, valorValido, textoValido, seleccionarPorTexto } = CombosCarga;
+    const cboCia = document.getElementById('cboCompania');
+    const cboPlanilla = document.getElementById('cboTipoPlanilla');
+    const cboProceso = document.getElementById('cboProceso');
+    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboTrabajador = document.getElementById('cboTrabajador');
+
+    function esProcesoCts(item) {
+        const id = String(item?.id || '').trim().toUpperCase();
+        const text = String(item?.text || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .trim().toUpperCase().replace(/\s+/g, ' ');
+        if (text.includes('PROVISION')) return false;
+        return id === 'CTS' || /\bPAGO\s*DE\s*CTS\b/.test(text) || text === 'CTS';
+    }
+
+    function esPeriodoMayoNov(periodId) {
+        const p = String(periodId || '').replace(/\D/g, '');
+        if (p.length < 6) return false;
+        const mm = p.slice(4, 6);
+        return mm === '05' || mm === '11';
+    }
+
+    function fijarProcesoCts(id, texto) {
+        cboProceso.innerHTML = '';
+        const opt = document.createElement('option');
+        opt.value = id || '';
+        opt.textContent = texto || 'PAGO DE CTS';
+        opt.selected = true;
+        cboProceso.appendChild(opt);
+        cboProceso.disabled = true;
+    }
+
+    function pickCtsCant(row) {
+        if (!row) return 0;
+        for (const nombre of ['ctsCant', 'ctscant']) {
+            if (row[nombre] != null && row[nombre] !== '') return num(row[nombre]);
+        }
+        const claves = Object.keys(row);
+        for (const nombre of ['ctsCant', 'ctscant']) {
+            const k = claves.find((c) => c.toLowerCase() === nombre.toLowerCase());
+            if (k != null && row[k] != null && row[k] !== '') return num(row[k]);
+        }
+        return 0;
+    }
+
+    function computeResumen(data) {
+        const totales = COLUMNAS_NUMERICAS.map((key) =>
+            data.reduce((acc, row) => acc + num(row[key]), 0)
+        );
+        const cantidades = COLUMNAS_NUMERICAS.map((key) =>
+            data.reduce((acc, row) => acc + (num(row[key]) > 0 ? 1 : 0), 0)
+        );
+        const mesesCts = pickCtsCant(data[0]);
+        const promedios = COLUMNAS_NUMERICAS.map((_, i) => {
+            const c = cantidades[i];
+            const t = totales[i];
+            if (c > 2 && Number.isFinite(mesesCts) && mesesCts !== 0) {
+                return Number((t / mesesCts).toFixed(2));
+            }
+            return 0;
+        });
+        return { totales, cantidades, mesesCts, promedios };
+    }
+
+    function renderTabla(data, resumen, tbody) {
+        tbody.innerHTML = '';
+        const { totales, cantidades, mesesCts, promedios } = resumen;
+
+        data.forEach((row) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="fw-bold bg-light">${periodoCell(row)}</td>
+                <td>${fmt(row.he_cts)}</td>
+                <td>${fmt(row.bono_cts)}</td>
+                <td>${fmt(row.feriado_cts)}</td>
+                <td>${fmt(row.comision_cts)}</td>
+                <td>${fmt(row.faltas_cts)}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const trTot = document.createElement('tr');
+        trTot.className = 'reporte-fila-totales';
+        trTot.innerHTML = `<td class="text-start">Totales</td>${totales.map((t) => `<td>${fmt(t)}</td>`).join('')}`;
+        tbody.appendChild(trTot);
+
+        const trCant = document.createElement('tr');
+        trCant.className = 'reporte-fila-totales';
+        trCant.innerHTML = `<td class="text-start">Cantidad</td>${cantidades.map((c) => `<td>${c}</td>`).join('')}`;
+        tbody.appendChild(trCant);
+
+        const nMes = Math.round(num(mesesCts));
+        const trMes = document.createElement('tr');
+        trMes.className = 'reporte-fila-totales';
+        trMes.innerHTML = `<td class="text-start">Meses Div</td>${Array(5).fill(`<td>${Number.isFinite(nMes) ? nMes : 0}</td>`).join('')}`;
+        tbody.appendChild(trMes);
+
+        const trProm = document.createElement('tr');
+        trProm.className = 'reporte-fila-totales';
+        trProm.innerHTML = `<td class="text-start">Promedio</td>${promedios.map((p) => `<td>${fmt(p)}</td>`).join('')}`;
+        tbody.appendChild(trProm);
+    }
+
+    async function exportExcel(data, resumen) {
+        if (typeof ExcelJS === 'undefined') {
+            alert('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+        const { totales, cantidades, mesesCts, promedios } = resumen;
+        const NCOLS = EXCEL_HEADER.length;
+        const F = {
+            periodo: 'FFF8F9FA',
+            cts: 'FFD1E7DD',
+            resumen: 'FFD9EDF7',
+            title: 'FFE9ECEF',
+            meta: 'FFF8F9FA'
+        };
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFCCCCCC' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+        const alignCenter = { horizontal: 'center', vertical: 'middle' };
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Detalle CTS', { views: [{ showGridLines: true }] });
+
+        let rowIdx = 1;
+        ws.mergeCells(rowIdx, 1, rowIdx, NCOLS);
+        const titleCell = ws.getCell(rowIdx, 1);
+        titleCell.value = 'REPORTE DETALLE DE CTS';
+        titleCell.font = { bold: true, size: 14 };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        titleCell.fill = fill(F.title);
+        titleCell.border = allBorders;
+        ws.getRow(rowIdx).height = 26;
+        rowIdx++;
+
+        const meta = ws.addRow([
+            'Empleado', data[0].Name || '',
+            'F. Ingreso', data[0].fechaingreso || '',
+            'F. Cese', data[0].fechacese || ''
+        ]);
+        meta.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (colNumber <= 6) {
+                cell.fill = fill(F.meta);
+                cell.font = { bold: colNumber % 2 === 1 };
+                cell.alignment = alignCenter;
+            }
+            cell.border = allBorders;
+        });
+        rowIdx++;
+        ws.addRow([]);
+        rowIdx++;
+
+        const hRow = ws.addRow(EXCEL_HEADER);
+        hRow.font = { bold: true };
+        hRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.fill = fill(colNumber === 1 ? F.periodo : F.cts);
+            cell.alignment = alignCenter;
+            cell.border = allBorders;
+        });
+        rowIdx++;
+
+        data.forEach((drow) => {
+            const vals = [periodoCell(drow), ...COLUMNAS_NUMERICAS.map((k) => num(drow[k]))];
+            const r = ws.addRow(vals);
+            r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.fill = fill(colNumber === 1 ? F.periodo : F.cts);
+                cell.alignment = alignCenter;
+                cell.border = allBorders;
+                if (colNumber > 1) cell.numFmt = '#,##0.00';
+                else cell.font = { bold: true };
+            });
+            rowIdx++;
+        });
+
+        const addResumen = (label, valores, numFmtDec) => {
+            const r = ws.addRow([label, ...valores]);
+            r.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.fill = fill(F.resumen);
+                cell.font = { bold: true };
+                cell.alignment = colNumber === 1 ? { horizontal: 'left', vertical: 'middle' } : alignCenter;
+                cell.border = allBorders;
+                if (colNumber > 1) cell.numFmt = numFmtDec ? '#,##0.00' : '0';
+            });
+            rowIdx++;
+        };
+
+        addResumen('Totales', totales, true);
+        addResumen('Cantidad', cantidades, false);
+        addResumen('Meses Div', Array(5).fill(Math.round(num(mesesCts))), false);
+        addResumen('Promedio', promedios, true);
+
+        ws.addRow([]);
+        rowIdx++;
+        ws.mergeCells(rowIdx, 1, rowIdx, NCOLS);
+        const notaCell = ws.getCell(rowIdx, 1);
+        notaCell.value = EXCEL_NOTA_AUSENCIAS;
+        notaCell.font = { italic: true, size: 9, color: { argb: 'FF666666' } };
+        notaCell.alignment = { horizontal: 'left', vertical: 'middle', wrapText: true };
+        ws.getRow(rowIdx).height = 28;
+
+        ws.getColumn(1).width = 18;
+        for (let c = 2; c <= NCOLS; c++) ws.getColumn(c).width = 14;
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 80);
+        const stamp = new Date().toISOString().slice(0, 10);
+        a.download = `detalle_cts_${safe(data[0].Name)}_${stamp}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+    }
+
+    async function cargarTrabajadoresCts(personPreferido) {
+        const cia = valorValido(cboCia);
+        const pt = valorValido(cboPlanilla);
+        const per = valorValido(cboPeriodo);
+        resetSelect(cboTrabajador);
+        if (!cia || !pt || !per) return false;
+
+        try {
+            const res = await fetch('/get_lista_formato_cts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia, payroll_type: pt, period: per, person: '0' })
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const rows = await res.json();
+            if (!Array.isArray(rows)) {
+                resetSelect(cboTrabajador, 'Sin trabajadores');
+                return false;
+            }
+            cboTrabajador.innerHTML = '';
+            const empty = document.createElement('option');
+            empty.value = '';
+            empty.textContent = rows.length ? 'Seleccione...' : 'Sin trabajadores CTS';
+            cboTrabajador.appendChild(empty);
+            rows.forEach((r) => {
+                const id = String(r.person || '').trim();
+                if (!id) return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = String(r.nombre || id).trim();
+                cboTrabajador.appendChild(opt);
+            });
+            cboTrabajador.disabled = rows.length === 0;
+            if (personPreferido && Array.from(cboTrabajador.options).some((o) => o.value === personPreferido)) {
+                cboTrabajador.value = personPreferido;
+            }
+            return rows.length > 0;
+        } catch (err) {
+            console.error(err);
+            resetSelect(cboTrabajador, 'Error al cargar');
+            return false;
+        }
+    }
+
+    async function cargarProcesoYPeriodos(periodoPreferido, personPreferido) {
+        const cia = valorValido(cboCia);
+        const pt = valorValido(cboPlanilla);
+        const gen = generacionFiltros;
+        fijarProcesoCts('', 'PAGO DE CTS');
+        resetSelect(cboPeriodo);
+        resetSelect(cboTrabajador);
+        if (!cia || !pt) return false;
+
+        let procesos = [];
+        try {
+            const res = await fetch(`/api/selectores/procesos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            procesos = await res.json();
+        } catch (err) {
+            console.error(err);
+            return false;
+        }
+        if (gen !== generacionFiltros) return false;
+
+        const cts = (Array.isArray(procesos) ? procesos : []).find(esProcesoCts);
+        if (!cts) {
+            fijarProcesoCts('', 'Sin proceso PAGO DE CTS');
+            resetSelect(cboPeriodo, 'Sin periodos');
+            return false;
+        }
+        fijarProcesoCts(String(cts.id || '').trim(), String(cts.text || 'PAGO DE CTS').trim());
+
+        let periodos = [];
+        try {
+            const res = await fetch(
+                `/api/selectores/periodos?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(pt)}&processtype=${encodeURIComponent(cboProceso.value)}`
+            );
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            periodos = await res.json();
+        } catch (err) {
+            console.error(err);
+            resetSelect(cboPeriodo, 'Sin periodos');
+            return false;
+        }
+        if (gen !== generacionFiltros) return false;
+
+        const filtrados = (Array.isArray(periodos) ? periodos : []).filter((p) => esPeriodoMayoNov(p.id));
+        cboPeriodo.innerHTML = '';
+        const empty = document.createElement('option');
+        empty.value = '';
+        empty.textContent = filtrados.length ? 'Seleccione...' : 'Sin periodos mayo/noviembre';
+        cboPeriodo.appendChild(empty);
+        filtrados.forEach((p) => {
+            const opt = document.createElement('option');
+            opt.value = String(p.id || '').trim();
+            opt.textContent = String(p.text || p.id || '').trim();
+            cboPeriodo.appendChild(opt);
+        });
+        cboPeriodo.disabled = filtrados.length === 0;
+
+        if (periodoPreferido && Array.from(cboPeriodo.options).some((o) => o.value === periodoPreferido)) {
+            cboPeriodo.value = periodoPreferido;
+        }
+        if (valorValido(cboPeriodo)) {
+            await cargarTrabajadoresCts(personPreferido);
+        }
+        return filtrados.length > 0;
+    }
+
+    async function ejecutarConsulta() {
+        const payload = {
+            cia: document.getElementById('cboCompania').value.trim(),
+            payrolltype: document.getElementById('cboTipoPlanilla').value.trim(),
+            period: document.getElementById('cboPeriodo').value.trim(),
+            person: document.getElementById('cboTrabajador').value.trim()
+        };
+
+        try {
+            const res = await fetch('/api/reportes/detalle-cts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            const tbody = document.getElementById('tblBody');
+            tbody.innerHTML = '';
+
+            if (!Array.isArray(data)) {
+                lastExport = null;
+                document.getElementById('btnExportExcel').disabled = true;
+                alert('Respuesta inválida del servidor.');
+                document.getElementById('reportContainer').classList.add('d-none');
+                return;
+            }
+
+            if (data.length > 0) {
+                document.getElementById('lblNombre').innerText = data[0].Name || '';
+                document.getElementById('lblIngreso').innerText = 'F. Ingreso: ' + (data[0].fechaingreso || '');
+                document.getElementById('lblCese').innerText = 'F. Cese: ' + (data[0].fechacese || '');
+                document.getElementById('lblRowCount').innerText = data.length;
+
+                const resumen = computeResumen(data);
+                renderTabla(data, resumen, tbody);
+                lastExport = { data, resumen };
+                document.getElementById('btnExportExcel').disabled = false;
+                document.getElementById('reportContainer').classList.remove('d-none');
+            } else {
+                lastExport = null;
+                document.getElementById('btnExportExcel').disabled = true;
+                alert('No se encontraron registros para los filtros seleccionados.');
+                document.getElementById('reportContainer').classList.add('d-none');
+            }
+        } catch (error) {
+            console.error('Error al generar reporte:', error);
+            lastExport = null;
+            document.getElementById('btnExportExcel').disabled = true;
+            alert('Ocurrió un error al consultar el reporte.');
+        }
+    }
+
+    cboCia.addEventListener('change', async function () {
+        const gen = ++generacionFiltros;
+        const cia = valorValido(cboCia);
+        const planillaPrevia = textoValido(cboPlanilla);
+        const periodoPrevio = valorValido(cboPeriodo);
+        const personPrevio = valorValido(cboTrabajador);
+        fijarProcesoCts('', 'PAGO DE CTS');
+        resetSelect(cboPeriodo);
+        resetSelect(cboTrabajador);
+        if (!cia) {
+            resetSelect(cboPlanilla);
+            return;
+        }
+        const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);
+        if (gen === generacionFiltros && ok && planillaPrevia && seleccionarPorTexto(cboPlanilla, planillaPrevia)) {
+            await cargarProcesoYPeriodos(periodoPrevio, personPrevio);
+        } else if (gen === generacionFiltros && ok && valorValido(cboPlanilla)) {
+            await cargarProcesoYPeriodos(null, null);
+        }
+    });
+
+    cboPlanilla.addEventListener('change', async function () {
+        ++generacionFiltros;
+        await cargarProcesoYPeriodos(null, null);
+    });
+
+    cboPeriodo.addEventListener('change', async function () {
+        await cargarTrabajadoresCts(null);
+    });
+
+    document.getElementById('frmFiltros').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await ejecutarConsulta();
+    });
+
+    document.getElementById('btnExportExcel').addEventListener('click', async function () {
+        if (!lastExport) return;
+        await exportExcel(lastExport.data, lastExport.resumen);
+    });
+
+    await poblarSelect('/api/selectores/companias', cboCia);
+    if (valorValido(cboCia)) {
+        cboCia.dispatchEvent(new Event('change'));
+    }
+});
+</script>
+{% endblock %}

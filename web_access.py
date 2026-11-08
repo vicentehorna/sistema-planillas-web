@@ -97,6 +97,8 @@ ENDPOINT_MENU_MAP = {
     'procesar_formatos_cts_masivo': 'formato_cts',
     'descargar_zip_formatos_cts': 'formato_cts',
     'enviar_formatos_cts_masivo': 'formato_cts',
+    'reporte_detalle_cts_page': 'reporte_detalle_cts',
+    'api_reporte_detalle_cts': 'reporte_detalle_cts',
     'telecredito_cts_page': 'telecredito_cts',
     'api_telecredito_cts_listado': 'telecredito_cts',
     'api_telecredito_cts_generar_txt': 'telecredito_cts',

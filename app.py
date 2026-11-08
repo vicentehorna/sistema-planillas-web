@@ -26960,6 +26960,43 @@ def formato_cts_page():
     return render_template('formato_cts.html')
 
 
+@app.route('/cts/reporte_detalle_cts')
+@login_required
+def reporte_detalle_cts_page():
+    return render_template('reporte_detalle_cts.html')
+
+
+@app.route('/api/reportes/detalle-cts', methods=['POST'])
+@login_required
+def api_reporte_detalle_cts():
+    """SP_PR_ReporteDetalleCTS @cia, @payrolltype, @period, @person (varchar)."""
+    params = _report_params_from_json(request)
+    if not params:
+        return jsonify([])
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC SP_PR_ReporteDetalleCTS @cia=?, @payrolltype=?, @period=?, @person=?",
+            params,
+        )
+        columns, rows = _fetch_first_nonempty_resultset(cursor)
+        if not rows:
+            return jsonify([])
+        data = [{col: _jsonable_value(val) for col, val in zip(columns, row)} for row in rows]
+        return jsonify(data)
+    except Exception:
+        logging.exception("api_reporte_detalle_cts params=%s", params)
+        return jsonify([])
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/get_lista_formato_cts', methods=['POST'])
 @login_required
 def get_lista_formato_cts():

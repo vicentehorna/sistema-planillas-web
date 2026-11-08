@@ -1581,9 +1581,8 @@
                 </li>
                 {% endif %}
 
-                {% set es_aci_cts = (sql_database or '')|lower == 'hm_aci' %}
-                {% set cts_active = request.endpoint in ('formato_cts_page', 'reporte_detalle_cts_page', 'telecredito_cts_page', 'continental_cts_page', 'banbif_cts_page', 'plantilla_apertura_cts_page') %}
-                {% set show_cts = can_menu('formato_cts') or can_menu('reporte_detalle_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') or (es_aci_cts and can_menu('banbif_cts')) or can_menu('plantilla_apertura_cts') %}
+                {% set cts_active = request.endpoint in ('formato_cts_page', 'reporte_detalle_cts_page', 'telecredito_cts_page', 'continental_cts_page', 'banbif_cts_page', 'scotiabank_cts_page', 'plantilla_apertura_cts_page') %}
+                {% set show_cts = can_menu('formato_cts') or can_menu('reporte_detalle_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') or can_menu('banbif_cts') or can_menu('scotiabank_cts') or can_menu('plantilla_apertura_cts') %}
                 {% if show_cts %}
                 <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
                     <a href="#submenuCts"
@@ -1624,10 +1623,17 @@
                             </a>
                         </li>
                         {% endif %}
-                        {% if es_aci_cts and can_menu('banbif_cts') %}
+                        {% if can_menu('banbif_cts') %}
                         <li class="{{ 'active' if request.endpoint == 'banbif_cts_page' else '' }}">
                             <a href="{{ url_for('banbif_cts_page') }}" title="Archivo BANBIF">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo BANBIF</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('scotiabank_cts') %}
+                        <li class="{{ 'active' if request.endpoint == 'scotiabank_cts_page' else '' }}">
+                            <a href="{{ url_for('scotiabank_cts_page') }}" title="Archivo Scotiabank">
+                                <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Scotiabank</span>
                             </a>
                         </li>
                         {% endif %}

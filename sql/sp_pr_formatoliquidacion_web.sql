@@ -47,6 +47,13 @@ BEGIN
         ), 0) AS basico,
         epc.EntryDate AS entry_date,
         epc.CeaseDate AS cease_date,
+        ISNULL(
+            NULLIF(LTRIM(RTRIM(ru.Description)), ''),
+            ISNULL(
+                NULLIF(LTRIM(RTRIM(ru.name)), ''),
+                ISNULL(LTRIM(RTRIM(sp.ReplicationUnit)), '')
+            )
+        ) AS unit_name,
         ISNULL(cr.Description, ISNULL(epc.CeaseReason, '')) AS cease_reason,
         CASE
             WHEN pt_pens.PDT IN ('21', '22', '23', '24', '25') THEN ISNULL(afp.Description, '')
@@ -170,6 +177,8 @@ BEGIN
         LEFT JOIN PR_CeaseReason cr (NOLOCK)
             ON cr.Company = @cia
            AND cr.CeaseReason = epc.CeaseReason
+        LEFT JOIN SY_ReplicationUnit ru (NOLOCK)
+            ON ru.ReplicationUnit = sp.ReplicationUnit
         INNER JOIN PR_ProcessType pt_liq (NOLOCK)
             ON epc.ProcessType = pt_liq.ProcessType
            AND epc.Company = pt_liq.Company

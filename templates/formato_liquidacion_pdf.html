@@ -457,6 +457,12 @@
                     <td class="col-izq nowrap"><span class="lbl datos-lbl">Sueldo:</span><span class="datos-val">{{ basico_fmt }}</span></td>
                     <td class="col-der nowrap"><span class="lbl datos-lbl">Fecha de cese:</span><span class="datos-val">{{ cease_date_fmt }}</span></td>
                 </tr>
+                {% if es_cliente_alamo %}
+                <tr>
+                    <td class="col-izq nowrap"></td>
+                    <td class="col-der wrap"><span class="lbl datos-lbl">Unidad:</span><span class="datos-val">{{ liq.unit_name or '' }}</span></td>
+                </tr>
+                {% endif %}
                 <tr>
                     <td colspan="2" class="fila-completa celda-motivo-cese-full">
                         <table class="dato-par">

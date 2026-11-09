@@ -7891,6 +7891,7 @@ def _contexto_formato_liquidacion(params, include_images=True):
         'es_ultraseguros': _es_cliente_ultraseguros(),
         'es_elclan': es_elclan,
         'es_alamo': _usa_ingresos_config_formato_liquidacion(),
+        'es_cliente_alamo': _es_cliente_alamo(),
     }
 
 

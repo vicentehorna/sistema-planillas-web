@@ -124,15 +124,29 @@
     </style>
 </head>
 <body>
-{% macro boleta_block(clase='') %}
+{% macro boleta_block(
+    clase='',
+    cab=None,
+    ing=None,
+    des=None,
+    apo=None,
+    moneda_texto='',
+    simbolo_neto='S/',
+    tipocambio=None,
+    etiqueta_empleador='EMPLEADOR'
+) %}
+{% set cab = cab if cab is not none else cabecera %}
+{% set ing = ing if ing is not none else ingresos %}
+{% set des = des if des is not none else descuentos %}
+{% set apo = apo if apo is not none else aportes %}
 <div class="boleta {{ clase }}">
     {% if clase == 'copia' %}<div class="corte">&#9986; cortar aquí</div>{% endif %}
     <table class="header-table">
         <tr>
             <td width="70%">
-                <div class="empresa-nombre">{{ cabecera.nombre_empresa }}</div>
-                <div class="empresa-info">RUC: {{ cabecera.ruc_empresa }}</div>
-                <div class="empresa-info">{{ cabecera.direccion_empresa }}</div>
+                <div class="empresa-nombre">{{ cab.nombre_empresa }}</div>
+                <div class="empresa-info">RUC: {{ cab.ruc_empresa }}</div>
+                <div class="empresa-info">{{ cab.direccion_empresa }}</div>
                 <div class="empresa-info">D.S. N° 001-98-TR</div>
             </td>
             <td width="30%" style="text-align: right; vertical-align: middle;">
@@ -144,8 +158,11 @@
     </table>
 
     <div class="boleta-titulo">
-        {{ cabecera.titulo_boleta }}
-        <span class="periodo"> — Periodo: {{ cabecera.RangoFechas }}</span>
+        {{ cab.titulo_boleta }}
+        <span class="periodo"> — Periodo: {{ cab.RangoFechas }}</span>
+        {% if moneda_texto %}
+        <span class="periodo"> — Moneda: <strong>{{ moneda_texto }}</strong>{% if tipocambio is not none %} · T.C.: {{ '%.3f'|format(tipocambio) }}{% endif %}</span>
+        {% endif %}
     </div>
 
     {% if cabecera_modelo_anterior %}
@@ -159,83 +176,83 @@
         </colgroup>
         <tr>
             <td class="label">Empleado:</td>
-            <td class="value"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
+            <td class="value"><strong>{{ cab.nombre_trabajador }}</strong></td>
             <td class="label">Banco:</td>
-            <td class="value" colspan="3">{{ cabecera.bancosalario or '---' }}</td>
+            <td class="value" colspan="3">{{ cab.bancosalario or '---' }}</td>
             <td class="label">Nro. Cuenta:</td>
-            <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
+            <td class="value">{{ cab.numerocuenta or '---' }}</td>
         </tr>
         <tr>
-            <td class="label">{{ cabecera.DocumentType or 'DNI / CE:' }}</td>
-            <td class="value">{{ cabecera.dni }}</td>
+            <td class="label">{{ cab.DocumentType or 'DNI / CE:' }}</td>
+            <td class="value">{{ cab.dni }}</td>
             <td class="label">Días Pagados:</td>
-            <td class="value">{{ cabecera.dias_laborables|dias }}</td>
+            <td class="value">{{ cab.dias_laborables|dias }}</td>
             <td class="label">Días Lic. Sin Goce:</td>
-            <td class="value">{{ cabecera.diassingoce|dias }}</td>
+            <td class="value">{{ cab.diassingoce|dias }}</td>
             <td class="label">Aporte:</td>
-            <td class="value pct">{{ cabecera.aporte|importe }} %</td>
+            <td class="value pct">{{ cab.aporte|importe }} %</td>
         </tr>
         <tr>
             <td class="label">Rem. Básica:</td>
-            <td class="value">{{ (cabecera.salaryconcept or cabecera.sueldobasico or cabecera.rem_basica)|importe }}</td>
+            <td class="value">{{ (cab.salaryconcept or cab.sueldobasico or cab.rem_basica)|importe }}</td>
             <td class="label">Días Faltas Injust:</td>
-            <td class="value">{{ cabecera.dias_faltas_injustif|dias }}</td>
+            <td class="value">{{ cab.dias_faltas_injustif|dias }}</td>
             <td class="label">Días Lic. Con Goce:</td>
-            <td class="value">{{ cabecera.diascongoce|dias }}</td>
+            <td class="value">{{ cab.diascongoce|dias }}</td>
             <td class="label">Com. Flujo:</td>
-            <td class="value pct">{{ cabecera.comisionflujo|importe }} %</td>
+            <td class="value pct">{{ cab.comisionflujo|importe }} %</td>
         </tr>
         <tr>
             <td class="label">Fecha de Ingreso:</td>
-            <td class="value">{{ cabecera.fecha_ingreso|fecha }}</td>
+            <td class="value">{{ cab.fecha_ingreso|fecha }}</td>
             <td class="label">Días Faltas Just:</td>
-            <td class="value">{{ cabecera.dias_faltas_justif|dias }}</td>
+            <td class="value">{{ cab.dias_faltas_justif|dias }}</td>
             <td class="label">Días Subsidiados:</td>
-            <td class="value">{{ cabecera.dias_subsidio|dias }}</td>
+            <td class="value">{{ cab.dias_subsidio|dias }}</td>
             <td class="label">Com. Mixta:</td>
-            <td class="value pct">{{ cabecera.comisionmixta|importe }} %</td>
+            <td class="value pct">{{ cab.comisionmixta|importe }} %</td>
         </tr>
         <tr>
             <td class="label">Fecha de Cese:</td>
-            <td class="value">{{ cabecera.fecha_cese|fecha if cabecera.fecha_cese else '---' }}</td>
+            <td class="value">{{ cab.fecha_cese|fecha if cab.fecha_cese else '---' }}</td>
             <td class="label">Días Fallecimiento:</td>
-            <td class="value">{{ cabecera.dias_fallecimiento|dias }}</td>
+            <td class="value">{{ cab.dias_fallecimiento|dias }}</td>
             <td class="label">Días Vacaciones:</td>
-            <td class="value">{{ cabecera.dias_vacaciones|dias }}</td>
+            <td class="value">{{ cab.dias_vacaciones|dias }}</td>
             <td class="label">Seguro:</td>
-            <td class="value pct">{{ cabecera.seguro|importe }} %</td>
+            <td class="value pct">{{ cab.seguro|importe }} %</td>
         </tr>
         <tr>
             <td class="label">Reg. Pensión:</td>
             <td class="value">
-                {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
+                {% if cab.TipoPension|string == '99' or not cab.TipoPension %}
                     NINGUNO
                 {% else %}
-                    {{ cabecera.afp_description or cabecera.regimenpension or 'SNP' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                    {{ cab.afp_description or cab.regimenpension or 'SNP' }}{% if cab.tipocomision %} - {{ cab.tipocomision }}{% endif %}
                 {% endif %}
             </td>
             <td class="label">Días Suspensión:</td>
-            <td class="value">{{ cabecera.dias_suspension|dias }}</td>
+            <td class="value">{{ cab.dias_suspension|dias }}</td>
             <td class="label">Días No Subsid:</td>
-            <td class="value">{{ cabecera.dias_no_subsidiados|dias }}</td>
+            <td class="value">{{ cab.dias_no_subsidiados|dias }}</td>
             <td class="label">SNP:</td>
-            <td class="value pct">{{ cabecera.snp|importe }} %</td>
+            <td class="value pct">{{ cab.snp|importe }} %</td>
         </tr>
         <tr>
             <td class="label">CUSPP:</td>
-            <td class="value">{{ cabecera.cupss or '---' }}</td>
+            <td class="value">{{ cab.cupss or '---' }}</td>
             <td class="label"></td>
             <td class="value"></td>
             <td class="label">Días Paternidad:</td>
-            <td class="value">{{ cabecera.dias_paternidad|dias }}</td>
+            <td class="value">{{ cab.dias_paternidad|dias }}</td>
             <td class="label"></td>
             <td class="value"></td>
         </tr>
         <tr>
             <td class="label">Cargo:</td>
-            <td class="value" colspan="3">{{ cabecera.cargo_trabajador }}</td>
+            <td class="value" colspan="3">{{ cab.cargo_trabajador }}</td>
             <td class="label">Clasificación:</td>
-            <td class="value">{{ cabecera.clasificacion or 'Ninguna' }}</td>
+            <td class="value">{{ cab.clasificacion or 'Ninguna' }}</td>
             <td class="label"></td>
             <td class="value"></td>
         </tr>
@@ -244,97 +261,97 @@
     <table class="datos-table">
         <tr>
             <td class="label">Trabajador:</td>
-            <td class="value" colspan="3"><strong>{{ cabecera.nombre_trabajador }}</strong></td>
-            <td class="label">{{ cabecera.DocumentType or 'DNI:' }}</td>
-            <td class="value">{{ cabecera.dni }}</td>
+            <td class="value" colspan="3"><strong>{{ cab.nombre_trabajador }}</strong></td>
+            <td class="label">{{ cab.DocumentType or 'DNI:' }}</td>
+            <td class="value">{{ cab.dni }}</td>
         </tr>
         <tr>
             <td class="label">Cargo:</td>
-            <td class="value" colspan="3">{{ cabecera.cargo_trabajador }}</td>
+            <td class="value" colspan="3">{{ cab.cargo_trabajador }}</td>
             <td class="label">Clasificación:</td>
-            <td class="value">{{ cabecera.clasificacion or '---' }}</td>
+            <td class="value">{{ cab.clasificacion or '---' }}</td>
         </tr>
         <tr>
             <td class="label">F. Ingreso:</td>
-            <td class="value">{{ cabecera.fecha_ingreso|fecha }}</td>
+            <td class="value">{{ cab.fecha_ingreso|fecha }}</td>
             <td class="label">F. Cese:</td>
-            <td class="value">{{ cabecera.fecha_cese|fecha if cabecera.fecha_cese else '---' }}</td>
+            <td class="value">{{ cab.fecha_cese|fecha if cab.fecha_cese else '---' }}</td>
             <td class="label">Rem. Básica:</td>
-            <td class="value">{{ (cabecera.salaryconcept or cabecera.sueldobasico or cabecera.rem_basica)|importe }}</td>
+            <td class="value">{{ (cab.salaryconcept or cab.sueldobasico or cab.rem_basica)|importe }}</td>
         </tr>
         <tr>
             <td class="label">Reg. Pensión:</td>
             <td class="value" colspan="3">
-                {% if cabecera.TipoPension|string == '99' or not cabecera.TipoPension %}
+                {% if cab.TipoPension|string == '99' or not cab.TipoPension %}
                     NINGUNO
                 {% else %}
-                    {{ cabecera.afp_description or cabecera.regimenpension or 'SNP' }}{% if cabecera.tipocomision %} - {{ cabecera.tipocomision }}{% endif %}
+                    {{ cab.afp_description or cab.regimenpension or 'SNP' }}{% if cab.tipocomision %} - {{ cab.tipocomision }}{% endif %}
                 {% endif %}
             </td>
             <td class="label">CUSPP:</td>
-            <td class="value">{{ cabecera.cupss or '---' }}</td>
+            <td class="value">{{ cab.cupss or '---' }}</td>
         </tr>
         <tr>
             <td class="label">Tasas:</td>
             <td class="value tasas" colspan="5">
-                <span>Aporte: {{ cabecera.aporte|importe }} %</span>
-                <span>Com. Flujo: {{ cabecera.comisionflujo|importe }} %</span>
-                <span>Com. Mixta: {{ cabecera.comisionmixta|importe }} %</span>
-                <span>Seguro: {{ cabecera.seguro|importe }} %</span>
-                <span>SNP: {{ cabecera.snp|importe }} %</span>
+                <span>Aporte: {{ cab.aporte|importe }} %</span>
+                <span>Com. Flujo: {{ cab.comisionflujo|importe }} %</span>
+                <span>Com. Mixta: {{ cab.comisionmixta|importe }} %</span>
+                <span>Seguro: {{ cab.seguro|importe }} %</span>
+                <span>SNP: {{ cab.snp|importe }} %</span>
             </td>
         </tr>
         <tr>
             <td class="label">Banco:</td>
-            <td class="value" colspan="3">{{ cabecera.bancosalario or '---' }}</td>
+            <td class="value" colspan="3">{{ cab.bancosalario or '---' }}</td>
             <td class="label">Nro. Cuenta:</td>
-            <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
+            <td class="value">{{ cab.numerocuenta or '---' }}</td>
         </tr>
         <tr>
             <td class="label">Días Pagados:</td>
-            <td class="value">{{ cabecera.dias_laborables|dias }}</td>
+            <td class="value">{{ cab.dias_laborables|dias }}</td>
             <td class="label">Días Vacaciones:</td>
-            <td class="value">{{ cabecera.dias_vacaciones|dias }}</td>
+            <td class="value">{{ cab.dias_vacaciones|dias }}</td>
             <td class="label">Lic. Con Goce:</td>
-            <td class="value">{{ cabecera.diascongoce|dias }}</td>
+            <td class="value">{{ cab.diascongoce|dias }}</td>
         </tr>
         <tr>
             <td class="label">Lic. Sin Goce:</td>
-            <td class="value">{{ cabecera.diassingoce|dias }}</td>
+            <td class="value">{{ cab.diassingoce|dias }}</td>
             <td class="label">Subsidiados:</td>
-            <td class="value">{{ cabecera.dias_subsidio|dias }}</td>
+            <td class="value">{{ cab.dias_subsidio|dias }}</td>
             <td class="label">No Subsidiados:</td>
-            <td class="value">{{ cabecera.dias_no_subsidiados|dias }}</td>
+            <td class="value">{{ cab.dias_no_subsidiados|dias }}</td>
         </tr>
         <tr>
             <td class="label">Faltas Just.:</td>
-            <td class="value">{{ cabecera.dias_faltas_justif|dias }}</td>
+            <td class="value">{{ cab.dias_faltas_justif|dias }}</td>
             <td class="label">Faltas Injust.:</td>
-            <td class="value">{{ cabecera.dias_faltas_injustif|dias }}</td>
+            <td class="value">{{ cab.dias_faltas_injustif|dias }}</td>
             <td class="label">Suspensión:</td>
-            <td class="value">{{ cabecera.dias_suspension|dias }}</td>
+            <td class="value">{{ cab.dias_suspension|dias }}</td>
         </tr>
         <tr>
             <td class="label">Fallecimiento:</td>
-            <td class="value">{{ cabecera.dias_fallecimiento|dias }}</td>
+            <td class="value">{{ cab.dias_fallecimiento|dias }}</td>
             <td class="label">Paternidad:</td>
-            <td class="value">{{ cabecera.dias_paternidad|dias }}</td>
+            <td class="value">{{ cab.dias_paternidad|dias }}</td>
             <td class="label">No Laborados:</td>
-            <td class="value">{{ cabecera.dias_no_laborados|dias }}</td>
+            <td class="value">{{ cab.dias_no_laborados|dias }}</td>
         </tr>
         <tr>
             <td class="label">Hrs. Trab.:</td>
-            <td class="value">{{ cabecera.horassemana|dias }}</td>
+            <td class="value">{{ cab.horassemana|dias }}</td>
             {% if boleta_he_lumat_semanal %}
             <td class="label">H. Extra 60%:</td>
-            <td class="value">{{ cabecera.cant_horas_60|dias }}</td>
+            <td class="value">{{ cab.cant_horas_60|dias }}</td>
             <td class="label">H. Extra 100%:</td>
-            <td class="value">{{ cabecera.cant_horas_100|dias }}</td>
+            <td class="value">{{ cab.cant_horas_100|dias }}</td>
             {% else %}
             <td class="label">H. Extra 25%:</td>
-            <td class="value">{{ cabecera.cant_horas_25|dias }}</td>
+            <td class="value">{{ cab.cant_horas_25|dias }}</td>
             <td class="label">H. Extra 35% / 100%:</td>
-            <td class="value">{{ cabecera.cant_horas_35|dias }} / {{ cabecera.cant_horas_100|dias }}</td>
+            <td class="value">{{ cab.cant_horas_35|dias }} / {{ cab.cant_horas_100|dias }}</td>
             {% endif %}
         </tr>
     </table>
@@ -352,7 +369,7 @@
             <tr>
                 <td>
                     <table class="inner-table">
-                        {% for item in ingresos %}
+                        {% for item in ing %}
                         <tr>
                             <td>{{ item.printtext }}</td>
                             <td class="monto">{{ item.conceptvalue|importe }}</td>
@@ -362,7 +379,7 @@
                 </td>
                 <td>
                     <table class="inner-table">
-                        {% for item in descuentos %}
+                        {% for item in des %}
                         <tr>
                             <td>{{ item.printtext }}</td>
                             <td class="monto">{{ item.conceptvalue|importe }}</td>
@@ -372,7 +389,7 @@
                 </td>
                 <td>
                     <table class="inner-table">
-                        {% for item in aportes %}
+                        {% for item in apo %}
                         <tr>
                             <td>{{ item.printtext }}</td>
                             <td class="monto">{{ item.conceptvalue|importe }}</td>
@@ -386,7 +403,7 @@
                     <table class="inner-table">
                         <tr>
                             <td>Total Ingresos:</td>
-                            <td class="monto">{{ cabecera.total_ingresos|importe }}</td>
+                            <td class="monto">{{ cab.total_ingresos|importe }}</td>
                         </tr>
                     </table>
                 </td>
@@ -394,7 +411,7 @@
                     <table class="inner-table">
                         <tr>
                             <td>Total Descuentos:</td>
-                            <td class="monto">{{ cabecera.total_egresos|importe }}</td>
+                            <td class="monto">{{ cab.total_egresos|importe }}</td>
                         </tr>
                     </table>
                 </td>
@@ -402,7 +419,7 @@
                     <table class="inner-table">
                         <tr>
                             <td>Total Aportes:</td>
-                            <td class="monto">{{ cabecera.total_aportes|importe }}</td>
+                            <td class="monto">{{ cab.total_aportes|importe }}</td>
                         </tr>
                     </table>
                 </td>
@@ -413,7 +430,7 @@
     <table class="neto-table">
         <tr>
             <td class="neto-label-cell">NETO A PAGAR:</td>
-            <td class="neto-amount-cell">S/ {{ cabecera.neto_pagar|importe }}</td>
+            <td class="neto-amount-cell">{{ simbolo_neto }} {{ cab.neto_pagar|importe }}</td>
         </tr>
     </table>
 
@@ -425,20 +442,26 @@
                 {% else %}
                 <div class="firma-spacer"></div>
                 {% endif %}
-                <div class="linea-firma">EMPLEADOR</div>
-                <div class="firma-info">{{ cabecera.nombre_representante }}{% if cabecera.cargo_representante %} — {{ cabecera.cargo_representante }}{% endif %}</div>
+                <div class="linea-firma">{{ etiqueta_empleador }}</div>
+                <div class="firma-info">{{ cab.nombre_representante }}{% if cab.cargo_representante %} — {{ cab.cargo_representante }}{% endif %}</div>
             </td>
             <td width="50%">
                 <div class="firma-spacer"></div>
                 <div class="linea-firma">TRABAJADOR</div>
-                <div class="firma-info">{{ cabecera.nombre_trabajador }} — DNI: {{ cabecera.dni }}</div>
+                <div class="firma-info">{{ cab.nombre_trabajador }} — DNI: {{ cab.dni }}</div>
             </td>
         </tr>
     </table>
 </div>
 {% endmacro %}
 
-{{ boleta_block() }}
-{{ boleta_block('copia') }}
+{% set _emp = etiqueta_firma_empleador if etiqueta_firma_empleador is defined else 'EMPLEADOR' %}
+{% if boleta_dual_moneda %}
+{{ boleta_block('', cabecera_usd, ingresos_usd, descuentos_usd, aportes_usd, 'DOLARES', 'US$', tipocambio, _emp) }}
+{{ boleta_block('copia', cabecera_pen, ingresos_pen, descuentos_pen, aportes_pen, 'SOLES', 'S/', tipocambio, _emp) }}
+{% else %}
+{{ boleta_block(etiqueta_empleador=_emp) }}
+{{ boleta_block('copia', etiqueta_empleador=_emp) }}
+{% endif %}
 </body>
 </html>

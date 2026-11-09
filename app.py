@@ -1383,6 +1383,15 @@ def _es_cliente_zilicom():
         return False
 
 
+def _es_cliente_cristal():
+    """True cuando la BD activa es hm_cristal."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_cristal'
+    except Exception:
+        return False
+
+
 def _es_cliente_lumat2():
     """True cuando la BD activa es hm_lumat2 (empresa del Estado, sin Remuneración Básica)."""
     try:
@@ -5656,6 +5665,213 @@ def _usa_boleta_doble():
         return False
 
 
+def _boleta_cristal_es_ria_jug_dolares(cursor, cia, payroll_type):
+    """hm_cristal + planilla RIA Dólares Jugadores (ShortName RIA JUG D)."""
+    if not _es_cliente_cristal():
+        return False
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1
+                UPPER(LTRIM(RTRIM(ISNULL(ShortName, '')))),
+                UPPER(LTRIM(RTRIM(ISNULL(Description, ''))))
+            FROM PR_PayRollType (NOLOCK)
+            WHERE PayRollType = ? AND Company = ?
+            """,
+            (payroll_type, cia),
+        )
+        row = cursor.fetchone()
+    except Exception:
+        logging.exception('_boleta_cristal_es_ria_jug_dolares payroll=%s', payroll_type)
+        return False
+    if not row:
+        return False
+    short_name = str(row[0] or '').strip()
+    desc = str(row[1] or '').strip().replace('Ó', 'O').replace('Á', 'A')
+    if short_name == 'RIA JUG D':
+        return True
+    return 'RIA' in desc and 'DOLAR' in desc and 'JUGADOR' in desc
+
+
+def _boleta_cristal_round2(value):
+    try:
+        return round(float(value or 0), 2)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _boleta_cristal_dual_moneda_payload(
+    cursor, cia, processtype, payroll_type, period, person, cabecera
+):
+    """
+    Arma dos juegos de datos (USD / PEN) para la boleta doble de hm_cristal RIA JUG D.
+    ConceptValueLo = soles; ConceptValueEx = dólares (ya grabados en planilla).
+    """
+    cab_pen = dict(cabecera or {})
+    tc = 1.0
+    totals_ex = {
+        'total_ingresos': 0.0,
+        'total_egresos': 0.0,
+        'total_aportes': 0.0,
+        'neto_pagar': 0.0,
+    }
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1
+                ISNULL(ExchangeRate, 0),
+                ISNULL(TotalIncomeEx, 0),
+                ISNULL(TotalDebitsEx, 0),
+                ISNULL(TotalPatronalEx, 0),
+                ISNULL(NetEx, 0),
+                ISNULL(TotalIncomeLo, 0),
+                ISNULL(TotalDebitsLo, 0),
+                ISNULL(TotalPatronalLo, 0),
+                ISNULL(NetLo, 0)
+            FROM PR_EmployeePayRoll (NOLOCK)
+            WHERE Company = ?
+              AND ProcessType = ?
+              AND PayRollType = ?
+              AND PRPeriod = ?
+              AND Person = ?
+            """,
+            (cia, processtype, payroll_type, period, person),
+        )
+        row = cursor.fetchone()
+        if row:
+            tc = float(row[0] or 0) or 1.0
+            totals_ex = {
+                'total_ingresos': _boleta_cristal_round2(row[1]),
+                'total_egresos': _boleta_cristal_round2(row[2]),
+                'total_aportes': _boleta_cristal_round2(row[3]),
+                'neto_pagar': _boleta_cristal_round2(row[4]),
+            }
+            # Preferir totales LO de planilla si el SP no los trajo
+            if cab_pen.get('total_ingresos') in (None, ''):
+                cab_pen['total_ingresos'] = _boleta_cristal_round2(row[5])
+            if cab_pen.get('total_egresos') in (None, ''):
+                cab_pen['total_egresos'] = _boleta_cristal_round2(row[6])
+            if cab_pen.get('total_aportes') in (None, ''):
+                cab_pen['total_aportes'] = _boleta_cristal_round2(row[7])
+            if cab_pen.get('neto_pagar') in (None, ''):
+                cab_pen['neto_pagar'] = _boleta_cristal_round2(row[8])
+    except Exception:
+        logging.exception('_boleta_cristal_dual_moneda_payload totals person=%s', person)
+
+    # Conservar decimales del T.C. (p.ej. 3.368); no redondear a 2.
+    try:
+        tc_show = round(float(tc), 4)
+    except (TypeError, ValueError):
+        tc_show = 1.0
+    cab_pen['tipocambio'] = tc_show
+    cab_pen['moneda_texto'] = 'SOLES'
+
+    ingresos_pen, descuentos_pen, aportes_pen = [], [], []
+    ingresos_usd, descuentos_usd, aportes_usd = [], [], []
+    rem_lo = rem_ex = None
+    try:
+        cursor.execute(
+            """
+            SELECT
+                LTRIM(RTRIM(ISNULL(ct.ShortName, ''))) AS tipo,
+                LTRIM(RTRIM(ISNULL(c.PrintText, ''))) AS printtext,
+                ISNULL(epc.ConceptValueLo, ISNULL(epc.ConceptValue, 0)) AS val_lo,
+                ISNULL(epc.ConceptValueEx, 0) AS val_ex,
+                ISNULL(c.ConceptOrder, 0) AS conceptorder
+            FROM PR_EmployeePayRollConcept epc (NOLOCK)
+                INNER JOIN PR_Concept c (NOLOCK)
+                    ON c.Concept = epc.Concept AND c.Company = epc.Company
+                INNER JOIN PR_ConceptType ct (NOLOCK)
+                    ON ct.ConceptType = c.ConceptType
+            WHERE epc.Company = ?
+              AND epc.ProcessType = ?
+              AND epc.PayRollType = ?
+              AND epc.PRPeriod = ?
+              AND epc.Person = ?
+              AND ISNULL(c.FlagPayrollTicket, 'N') = 'Y'
+              AND LTRIM(RTRIM(ISNULL(ct.ShortName, ''))) IN ('I', 'D', 'A')
+              AND (
+                    ISNULL(epc.ConceptValueLo, ISNULL(epc.ConceptValue, 0)) <> 0
+                    OR ISNULL(epc.ConceptValueEx, 0) <> 0
+                  )
+            ORDER BY LTRIM(RTRIM(ISNULL(ct.ShortName, ''))), ISNULL(c.ConceptOrder, 0)
+            """,
+            (cia, processtype, payroll_type, period, person),
+        )
+        for tipo, printtext, val_lo, val_ex, _ord in cursor.fetchall() or []:
+            tipo_n = str(tipo or '').strip().upper()[:1]
+            item_pen = {
+                'printtext': str(printtext or '').strip(),
+                'conceptvalue': _boleta_cristal_round2(val_lo),
+            }
+            item_usd = {
+                'printtext': str(printtext or '').strip(),
+                'conceptvalue': _boleta_cristal_round2(val_ex),
+            }
+            if tipo_n == 'I':
+                ingresos_pen.append(item_pen)
+                ingresos_usd.append(item_usd)
+            elif tipo_n == 'D':
+                descuentos_pen.append(item_pen)
+                descuentos_usd.append(item_usd)
+            elif tipo_n == 'A':
+                aportes_pen.append(item_pen)
+                aportes_usd.append(item_usd)
+    except Exception:
+        logging.exception('_boleta_cristal_dual_moneda_payload concepts person=%s', person)
+
+    # REM_BASICA suele ser ConceptType X (no sale en I/D/A); es la Rem. Básica de cabecera.
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1
+                ISNULL(epc.ConceptValueLo, ISNULL(epc.ConceptValue, 0)),
+                ISNULL(epc.ConceptValueEx, 0)
+            FROM PR_EmployeePayRollConcept epc (NOLOCK)
+                INNER JOIN PR_Concept c (NOLOCK)
+                    ON c.Concept = epc.Concept AND c.Company = epc.Company
+            WHERE epc.Company = ?
+              AND epc.ProcessType = ?
+              AND epc.PayRollType = ?
+              AND epc.PRPeriod = ?
+              AND epc.Person = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(c.FormulaCode, '')))) = 'REM_BASICA'
+            """,
+            (cia, processtype, payroll_type, period, person),
+        )
+        row_rem = cursor.fetchone()
+        if row_rem:
+            rem_lo = _boleta_cristal_round2(row_rem[0])
+            rem_ex = _boleta_cristal_round2(row_rem[1])
+    except Exception:
+        logging.exception('_boleta_cristal_dual_moneda_payload rem_basica person=%s', person)
+
+    if rem_lo is not None:
+        cab_pen['salaryconcept'] = rem_lo
+        cab_pen['rem_basica'] = rem_lo
+
+    cab_usd = dict(cab_pen)
+    cab_usd.update(totals_ex)
+    cab_usd['moneda_texto'] = 'DOLARES'
+    cab_usd['tipocambio'] = cab_pen['tipocambio']
+    if rem_ex is not None:
+        cab_usd['salaryconcept'] = rem_ex
+        cab_usd['rem_basica'] = rem_ex
+        cab_usd['sueldobasico'] = rem_ex
+
+    return {
+        'tipocambio': cab_pen['tipocambio'],
+        'cabecera_usd': cab_usd,
+        'cabecera_pen': cab_pen,
+        'ingresos_usd': ingresos_usd,
+        'descuentos_usd': descuentos_usd,
+        'aportes_usd': aportes_usd,
+        'ingresos_pen': ingresos_pen,
+        'descuentos_pen': descuentos_pen,
+        'aportes_pen': aportes_pen,
+    }
+
+
 _BOLETA_ETIQUETA_DIAS_FALLECIMIENTO = {'hm_globaltec': 'Días Ley 31602'}
 _BOLETA_ETIQUETA_DIAS_FALTAS = {'hm_globaltec': 'Días Faltas'}
 
@@ -6008,6 +6224,8 @@ def generar_pdf_en_memoria(params):
 
     conn = None
     boleta_doble = False
+    boleta_cristal_dual = False
+    cristal_dual = None
     he_lumat_semanal = False
     cabecera = {}
     ingresos = []
@@ -6049,7 +6267,13 @@ def generar_pdf_en_memoria(params):
             (cia, processtype, payroll_type, period, person),
         )
         boleta_doble = _usa_boleta_doble()
-        if boleta_doble:
+        boleta_cristal_dual = _boleta_cristal_es_ria_jug_dolares(cursor, cia, payroll_type)
+        if boleta_cristal_dual:
+            boleta_doble = True
+            cristal_dual = _boleta_cristal_dual_moneda_payload(
+                cursor, cia, processtype, payroll_type, period, person, cabecera
+            )
+        if boleta_doble and not boleta_cristal_dual:
             cabecera = dict(cabecera or {})
             cabecera.update(_boleta_ultra_dias_extra(cursor, cia, processtype, payroll_type, period, person))
             he_lumat_semanal = _boleta_he_lumat_semanal(cursor, cia, processtype)
@@ -6081,19 +6305,42 @@ def generar_pdf_en_memoria(params):
         )
 
     if WEASYPRINT_AVAILABLE:
+        tpl_kwargs = {
+            'cabecera': cabecera,
+            'ingresos': ingresos,
+            'descuentos': descuentos,
+            'aportes': aportes,
+            'logo_src': logo_src,
+            'firma_src': firma_src,
+            'firma_ampliada': _es_cliente_ngservicios(),
+            'cabecera_modelo_anterior': (
+                boleta_doble and (not boleta_cristal_dual) and _boleta_cabecera_modelo_anterior()
+            ),
+            'etiqueta_dias_fallecimiento': _boleta_etiqueta_dias_fallecimiento(),
+            'etiqueta_dias_faltas': _boleta_etiqueta_dias_faltas(),
+            'boleta_he_lumat_semanal': he_lumat_semanal,
+            'boleta_dual_moneda': boleta_cristal_dual,
+            'etiqueta_firma_empleador': 'APODERADO' if boleta_cristal_dual else 'EMPLEADOR',
+        }
+        if boleta_cristal_dual and cristal_dual:
+            tpl_kwargs.update({
+                'cabecera': cristal_dual['cabecera_pen'],
+                'ingresos': cristal_dual['ingresos_pen'],
+                'descuentos': cristal_dual['descuentos_pen'],
+                'aportes': cristal_dual['aportes_pen'],
+                'cabecera_usd': cristal_dual['cabecera_usd'],
+                'ingresos_usd': cristal_dual['ingresos_usd'],
+                'descuentos_usd': cristal_dual['descuentos_usd'],
+                'aportes_usd': cristal_dual['aportes_usd'],
+                'cabecera_pen': cristal_dual['cabecera_pen'],
+                'ingresos_pen': cristal_dual['ingresos_pen'],
+                'descuentos_pen': cristal_dual['descuentos_pen'],
+                'aportes_pen': cristal_dual['aportes_pen'],
+                'tipocambio': cristal_dual['tipocambio'],
+            })
         html_renderizado = render_template(
             'boleta_doble_ultra.html' if boleta_doble else 'boleta_moderna.html',
-            cabecera=cabecera,
-            ingresos=ingresos,
-            descuentos=descuentos,
-            aportes=aportes,
-            logo_src=logo_src,
-            firma_src=firma_src,
-            firma_ampliada=_es_cliente_ngservicios(),
-            cabecera_modelo_anterior=boleta_doble and _boleta_cabecera_modelo_anterior(),
-            etiqueta_dias_fallecimiento=_boleta_etiqueta_dias_fallecimiento(),
-            etiqueta_dias_faltas=_boleta_etiqueta_dias_faltas(),
-            boleta_he_lumat_semanal=he_lumat_semanal,
+            **tpl_kwargs,
         )
         pdf_io = io.BytesIO()
         HTML(string=html_renderizado).write_pdf(pdf_io)

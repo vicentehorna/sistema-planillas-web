@@ -14475,6 +14475,8 @@ def api_tareo_reporte_detalle():
     payrolltype = str(body.get('payrolltype') or '').strip() or None
     prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
     costcenter = str(body.get('costcenter') or body.get('unidad') or '').strip() or None
+    person = str(body.get('person') or body.get('trabajador') or '').strip() or None
+    tipodia = str(body.get('tipodia') or body.get('registertype') or '').strip() or None
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
     if not prperiod:
@@ -14486,8 +14488,8 @@ def api_tareo_reporte_detalle():
         cursor = conn.cursor()
         cursor.execute(
             "EXEC sp_pr_reportetareodetalle_web "
-            "@company=?, @payrolltype=?, @prperiod=?, @costcenter=?",
-            (cia, payrolltype, prperiod, costcenter),
+            "@company=?, @payrolltype=?, @prperiod=?, @costcenter=?, @person=?, @tipodia=?",
+            (cia, payrolltype, prperiod, costcenter, person, tipodia),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         out = []

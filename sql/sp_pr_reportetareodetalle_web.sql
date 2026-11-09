@@ -2,11 +2,13 @@
     Reporte Detalle de Tareos (hm_ultra) — día a día.
     Fuente: PR_REGISTERHOUR + PR_TIPODIA + AC_CostCenter + SY_ReplicationUnit.
 
-    Filtros web (mismos que resumen):
+    Filtros web:
       @company     — obligatorio
       @payrolltype — vacío = todas
       @prperiod    — formato 20260808; se toma el mes (YYYYMM)
       @costcenter  — unidad (PR_TareoHeader.costcenter / REGISTERHOUR.CostCenter); vacío = todas
+      @person      — trabajador; vacío = todos
+      @tipodia     — código PR_TIPODIA / RegisterType; vacío = todos
 
     Columnas:
       Código, Nombre, Fecha, Tipo Día, Cliente, Sede, Horas, HE 25, HE 35, H NOC
@@ -17,7 +19,9 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reportetareodetalle_web]
     @company     VARCHAR(4),
     @payrolltype VARCHAR(20) = NULL,
     @prperiod    VARCHAR(20),
-    @costcenter  VARCHAR(20) = NULL
+    @costcenter  VARCHAR(20) = NULL,
+    @person      VARCHAR(20) = NULL,
+    @tipodia     VARCHAR(10) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -31,6 +35,8 @@ BEGIN
     SET @payrolltype = NULLIF(LTRIM(RTRIM(ISNULL(@payrolltype, ''))), '');
     SET @prperiod = LTRIM(RTRIM(ISNULL(@prperiod, '')));
     SET @costcenter = NULLIF(LTRIM(RTRIM(ISNULL(@costcenter, ''))), '');
+    SET @person = NULLIF(LTRIM(RTRIM(ISNULL(@person, ''))), '');
+    SET @tipodia = NULLIF(LTRIM(RTRIM(ISNULL(@tipodia, ''))), '');
 
     IF @company = ''
     BEGIN
@@ -91,6 +97,8 @@ BEGIN
          OR H.costcenter = @costcenter
          OR a.CostCenter = @costcenter
       )
+      AND (@person IS NULL OR a.Person = @person)
+      AND (@tipodia IS NULL OR RTRIM(a.RegisterType) = @tipodia)
     ORDER BY b.Name, b.Person, a.RegisterDate;
 END
 GO

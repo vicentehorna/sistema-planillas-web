@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
     .trd-grilla {
-        max-height: calc(100vh - 270px);
+        max-height: calc(100vh - 310px);
         overflow: auto;
         border: 1px solid #dee2e6;
         border-radius: 0.375rem;
@@ -45,7 +45,7 @@
                 <label class="form-label small mb-0">Compañía</label>
                 <select id="selCia" class="form-select form-select-sm" required></select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Tipo de planilla</label>
                 <select id="selPlanilla" class="form-select form-select-sm">
                     <option value="">(Todas)</option>
@@ -57,14 +57,26 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Unidad</label>
                 <select id="selUnidad" class="form-select form-select-sm">
                     <option value="">(Todas)</option>
                 </select>
             </div>
-            <div class="col-md-2 d-flex gap-2">
-                <button type="submit" class="btn btn-primary btn-sm flex-grow-1">
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Trabajador</label>
+                <select id="selTrabajador" class="form-select form-select-sm">
+                    <option value="">(Todos)</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Tipo de Día</label>
+                <select id="selTipoDia" class="form-select form-select-sm">
+                    <option value="">(Todos)</option>
+                </select>
+            </div>
+            <div class="col-md-12 d-flex gap-2 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm">
                     <i class="bi bi-search"></i> Buscar
                 </button>
                 <button type="button" class="btn btn-success btn-sm" id="btnExcel" disabled title="Exportar Excel">
@@ -106,6 +118,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const selPlanilla = document.getElementById('selPlanilla');
     const selPeriodo = document.getElementById('selPeriodo');
     const selUnidad = document.getElementById('selUnidad');
+    const selTrabajador = document.getElementById('selTrabajador');
+    const selTipoDia = document.getElementById('selTipoDia');
     const tbody = document.getElementById('tbodyReporte');
     const msg = document.getElementById('msgReporte');
     const btnExcel = document.getElementById('btnExcel');
@@ -227,11 +241,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
-    async function cargarUnidades() {
+    async function cargarUnidadesYTiposDia() {
         const cia = selCia.value;
-        const keep = selUnidad.value;
+        const keepU = selUnidad.value;
+        const keepT = selTipoDia.value;
         if (!cia) {
             selUnidad.innerHTML = '<option value="">(Todas)</option>';
+            selTipoDia.innerHTML = '<option value="">(Todos)</option>';
             return;
         }
         const data = await leerJson(await fetch('/api/tareo/registro/catalogos', {
@@ -246,7 +262,33 @@ document.addEventListener('DOMContentLoaded', async function () {
             o.textContent = u.name || u.description || u.abbrev || u.costcenter;
             selUnidad.appendChild(o);
         });
-        if (keep && [...selUnidad.options].some(o => o.value === keep)) selUnidad.value = keep;
+        if (keepU && [...selUnidad.options].some(o => o.value === keepU)) selUnidad.value = keepU;
+
+        selTipoDia.innerHTML = '<option value="">(Todos)</option>';
+        (data.tipodia || []).forEach(t => {
+            const o = document.createElement('option');
+            o.value = t.codigo;
+            o.textContent = (t.nombre || t.codigo) + (t.codigo ? ' (' + t.codigo + ')' : '');
+            selTipoDia.appendChild(o);
+        });
+        if (keepT && [...selTipoDia.options].some(o => o.value === keepT)) selTipoDia.value = keepT;
+    }
+
+    async function cargarTrabajadores() {
+        const cia = selCia.value;
+        const pt = selPlanilla.value;
+        const keep = selTrabajador.value;
+        if (!cia) {
+            selTrabajador.innerHTML = '<option value="">(Todos)</option>';
+            return;
+        }
+        let url = '/api/selectores/trabajadores?cia=' + encodeURIComponent(cia);
+        if (pt) url += '&payrolltype=' + encodeURIComponent(pt);
+        await poblarSelect(url, selTrabajador, {
+            incluyeTodos: true,
+            textoTodos: '(Todos)',
+            keep
+        });
     }
 
     function renderRows(rows) {
@@ -287,7 +329,9 @@ document.addEventListener('DOMContentLoaded', async function () {
                     cia: selCia.value,
                     payrolltype: selPlanilla.value || '',
                     prperiod: selPeriodo.value,
-                    costcenter: selUnidad.value || ''
+                    costcenter: selUnidad.value || '',
+                    person: selTrabajador.value || '',
+                    tipodia: selTipoDia.value || ''
                 })
             }));
             renderRows(data.rows || []);
@@ -329,10 +373,12 @@ document.addEventListener('DOMContentLoaded', async function () {
     selCia.addEventListener('change', async () => {
         await cargarPlanillas();
         await cargarPeriodos();
-        await cargarUnidades();
+        await cargarUnidadesYTiposDia();
+        await cargarTrabajadores();
     });
     selPlanilla.addEventListener('change', async () => {
         await cargarPeriodos();
+        await cargarTrabajadores();
     });
 
     try {
@@ -345,7 +391,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         await cargarPlanillas();
         seleccionarPorTexto(selPlanilla, DEFAULT_PLANILLA_TEXT);
         await cargarPeriodos();
-        await cargarUnidades();
+        await cargarUnidadesYTiposDia();
+        await cargarTrabajadores();
     } catch (e) {
         toastErr(e.message || String(e));
     }

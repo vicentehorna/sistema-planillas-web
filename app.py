@@ -27996,9 +27996,6 @@ def banbif_cts_page():
 @app.route('/cts/interbank')
 @login_required
 def interbank_cts_page():
-    if not _es_bd_hm_aci():
-        flash('Archivo Interbank CTS solo está disponible en hm_aci.', 'warning')
-        return redirect(url_for('dashboard'))
     return render_template('interbank_cts.html')
 
 
@@ -28006,9 +28003,6 @@ def interbank_cts_page():
 @login_required
 def api_interbank_cts_listado():
     """sp_pr_listainterbankcts_web: trabajadores con cuenta CTS en Interbank."""
-    denied = _require_hm_aci_json('Archivo Interbank CTS')
-    if denied:
-        return denied
     body = request.get_json(silent=True) or {}
     p = _telecredito_cts_params_from_json(body)
     err = _telecredito_cts_validar_params(p)
@@ -28070,9 +28064,6 @@ def api_interbank_cts_listado():
 @login_required
 def api_interbank_cts_generar_txt():
     """sp_pr_generar_interbankcts_web → TXT depósito CTS Interbank (servicio CTS)."""
-    denied = _require_hm_aci_json('Archivo Interbank CTS')
-    if denied:
-        return denied
     body = request.get_json(silent=True) or {}
     p = _telecredito_cts_params_from_json(body)
     err = _telecredito_cts_validar_params(p)

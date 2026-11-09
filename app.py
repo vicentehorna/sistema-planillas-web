@@ -5665,8 +5665,16 @@ def _usa_boleta_doble():
         return False
 
 
-def _boleta_cristal_es_ria_jug_dolares(cursor, cia, payroll_type):
-    """hm_cristal + planilla RIA Dólares Jugadores (ShortName RIA JUG D)."""
+# Planillas en dólares de hm_cristal: boleta doble USD (arriba) + PEN (abajo).
+_CRISTAL_DUAL_MONEDA_SHORTNAMES = frozenset({
+    'ADMINISTRATIVOS DOL',  # ADMINISTRATIVOS DOLARES
+    'REGULAR JUG DOL',      # REGULAR JUG DOL
+    'RIA JUG D',            # RIA DOLARES JUGADORES
+})
+
+
+def _boleta_cristal_es_planilla_dolares(cursor, cia, payroll_type):
+    """hm_cristal + planilla en dólares (administrativos / regular jug / RIA jug)."""
     if not _es_cliente_cristal():
         return False
     try:
@@ -5682,15 +5690,22 @@ def _boleta_cristal_es_ria_jug_dolares(cursor, cia, payroll_type):
         )
         row = cursor.fetchone()
     except Exception:
-        logging.exception('_boleta_cristal_es_ria_jug_dolares payroll=%s', payroll_type)
+        logging.exception('_boleta_cristal_es_planilla_dolares payroll=%s', payroll_type)
         return False
     if not row:
         return False
     short_name = str(row[0] or '').strip()
-    desc = str(row[1] or '').strip().replace('Ó', 'O').replace('Á', 'A')
-    if short_name == 'RIA JUG D':
+    if short_name in _CRISTAL_DUAL_MONEDA_SHORTNAMES:
         return True
-    return 'RIA' in desc and 'DOLAR' in desc and 'JUGADOR' in desc
+    # Fallback por descripción por si el ShortName varía entre ambientes.
+    desc = str(row[1] or '').strip().replace('Ó', 'O').replace('Á', 'A')
+    if 'DOLAR' not in desc:
+        return False
+    return (
+        'ADMINISTRATIVO' in desc
+        or ('REGULAR' in desc and 'JUG' in desc)
+        or ('RIA' in desc and 'JUGADOR' in desc)
+    )
 
 
 def _boleta_cristal_round2(value):
@@ -5704,7 +5719,7 @@ def _boleta_cristal_dual_moneda_payload(
     cursor, cia, processtype, payroll_type, period, person, cabecera
 ):
     """
-    Arma dos juegos de datos (USD / PEN) para la boleta doble de hm_cristal RIA JUG D.
+    Arma dos juegos de datos (USD / PEN) para la boleta doble de hm_cristal (planillas dólares).
     ConceptValueLo = soles; ConceptValueEx = dólares (ya grabados en planilla).
     """
     cab_pen = dict(cabecera or {})
@@ -6267,7 +6282,7 @@ def generar_pdf_en_memoria(params):
             (cia, processtype, payroll_type, period, person),
         )
         boleta_doble = _usa_boleta_doble()
-        boleta_cristal_dual = _boleta_cristal_es_ria_jug_dolares(cursor, cia, payroll_type)
+        boleta_cristal_dual = _boleta_cristal_es_planilla_dolares(cursor, cia, payroll_type)
         if boleta_cristal_dual:
             boleta_doble = True
             cristal_dual = _boleta_cristal_dual_moneda_payload(

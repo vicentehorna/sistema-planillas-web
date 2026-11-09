@@ -7146,6 +7146,7 @@ _FORMATO_LIQ_DESCUENTOS_DEF = (
 
 _FORMATO_LIQ_APORTACIONES_DEF = (
     {'label': 'ESSALUD', 'formula_code': 'ESSALUD', 'pct_formula_code': 'PORCENTAJE_ESSALUD'},
+    {'label': 'SIS', 'formula_code': 'SIS', 'solo_si_valor': True},
     {'label': 'Aporte EPS', 'formula_code': 'APORTE_EPS', 'pct_field': 'porc_eps'},
 )
 
@@ -7158,6 +7159,7 @@ _FORMATO_LIQ_TABLA_CONCEPTOS_FORMULACODES = (
     'LIQ_OTROS_DESC',
     'ESSALUD',
     'PORCENTAJE_ESSALUD',
+    'SIS',
     'APORTE_EPS',
 )
 
@@ -7450,6 +7452,8 @@ def _build_formato_liquidacion_tabla_conceptos(defn_rows, formula_values, liq=No
             })
             continue
         importe = _formato_liquidacion_fc_valor(formula_values, defn['formula_code'])
+        if defn.get('solo_si_valor') and _formato_liquidacion_r2(importe) <= 0:
+            continue
         total += importe
         pct_formula_code = defn.get('pct_formula_code')
         pct_field = defn.get('pct_field')
@@ -7543,9 +7547,22 @@ def _build_formato_liquidacion_descuentos(liq, formula_values, conceptos_extra=N
 
 
 def _build_formato_liquidacion_aportaciones(liq, formula_values):
-    return _build_formato_liquidacion_tabla_conceptos(
+    resultado = _build_formato_liquidacion_tabla_conceptos(
         _FORMATO_LIQ_APORTACIONES_DEF, formula_values, liq=liq
     )
+    # Si hay SIS, no mostrar ESSALUD (régimen de salud excluyente en el formato).
+    if _formato_liquidacion_r2(_formato_liquidacion_fc_valor(formula_values, 'SIS')) > 0:
+        filas = [
+            f for f in (resultado.get('filas') or [])
+            if str(f.get('formula_code') or '').strip().upper() != 'ESSALUD'
+        ]
+        total = 0.0
+        for fila in filas:
+            total += _formato_liquidacion_r2(fila.get('importe'))
+        resultado['filas'] = filas
+        resultado['total'] = total
+        resultado['total_fmt'] = _formato_liquidacion_moneda(total)
+    return resultado
 
 
 def _build_formato_liquidacion_cts(total_remuneracion_cts, formula_values):
@@ -37419,7 +37436,7 @@ def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype
     """sp_pr_validar_pre_calculo_web → permanentes duplicados + vías (mensual/FIN_DE_MES/LIQUIDACION).
 
     En hm_aci/hm_aci2 + mensual el SP omite el formulador (solo maestro vs procedimiento).
-    Liquidación siempre compara fórmulas del proceso vs nemónicos del SP.
+    Liquidación compara Insertar en liquidación (L), fórmulas del proceso y nemónicos del SP.
     """
     cursor.execute(
         "EXEC sp_pr_validar_pre_calculo_web "

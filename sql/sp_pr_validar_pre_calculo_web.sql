@@ -12,12 +12,14 @@
         S — Procedimiento de cálculo (literales sp_pr_registrar_concepto)
         F — Fórmulas del proceso (PR_FormulaHeader)
       LIQUIDACION:
-        Solo F vs S (p. ej. RENTA_NETA en fórmula y en el SP).
-        No se considera Insertar en mensual/quincena.
+        L — Maestro: Insertar en = Liquidación (flaginsertar = 'L')
+        S — Procedimiento de cálculo (literales sp_pr_registrar_concepto)
+        F — Fórmulas del proceso (PR_FormulaHeader)
+        (p. ej. LIQ_OTROS_DESC con Insertar en Liquidación y también en fórmula)
 
     Excepción hm_aci / hm_aci2 + MENSUAL/FIN_DE_MES:
       No se incluye F (formulador) en la comparación. Se valida solo M vs S.
-      En LIQUIDACION siempre se compara F vs S.
+      En LIQUIDACION siempre se compara L / F / S.
 
     Usado por: POST /api/procesar-planilla/validar-pre-calculo
     (también al buscar trabajadores) y antes de /ejecutar_calculo_streaming
@@ -137,7 +139,7 @@ BEGIN
             ON P.Person = D.Person
            AND P.Company = @cia;
 
-    /* Vías: mensual (M/F/S) o liquidación (solo F/S). */
+    /* Vías: mensual (M/F/S) o liquidación (L/F/S). */
     IF @aplica_vias = 0
     BEGIN
         SELECT
@@ -159,6 +161,19 @@ BEGIN
         FROM PR_Concept C (NOLOCK)
         WHERE C.Company = @cia
           AND ISNULL(C.flaginsertar, 'N') = 'M'
+          AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
+    END
+
+    /* L — Insertar en liquidación (solo proceso LIQUIDACION) */
+    IF @es_liquidacion = 1
+    BEGIN
+        INSERT INTO #vias (formulacode, via)
+        SELECT DISTINCT
+            UPPER(LTRIM(RTRIM(C.FormulaCode))),
+            'L'
+        FROM PR_Concept C (NOLOCK)
+        WHERE C.Company = @cia
+          AND ISNULL(C.flaginsertar, 'N') = 'L'
           AND LTRIM(RTRIM(ISNULL(C.FormulaCode, ''))) <> '';
     END
 
@@ -299,6 +314,7 @@ BEGIN
             + STUFF((
                 SELECT N', ' + CASE V2.via
                     WHEN 'M' THEN N'Insertar en mensual'
+                    WHEN 'L' THEN N'Insertar en liquidaci' + NCHAR(243) + N'n'
                     WHEN 'Q' THEN N'Insertar en quincena'
                     WHEN 'S' THEN N'Procedimiento de c' + NCHAR(225) + N'lculo'
                     WHEN 'F' THEN N'F' + NCHAR(243) + N'rmulas del proceso'

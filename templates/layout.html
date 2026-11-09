@@ -1488,8 +1488,8 @@
                 {% endif %}
 
                 {% set es_ultraseguros = (sql_database or '')|lower == 'hm_ultra' %}
-                {% set tareo_active = request.endpoint in ('tareo_tipo_dia_page', 'tareo_registro_page', 'tareo_registro_edit_page', 'tareo_reporte_resumen_page', 'tareo_asignacion_page') %}
-                {% set show_tareo = es_ultraseguros and (can_menu('tareo_tipo_dia') or can_menu('tareo_registro') or can_menu('tareo_reporte_resumen') or can_menu('tareo_asignacion')) %}
+                {% set tareo_active = request.endpoint in ('tareo_tipo_dia_page', 'tareo_registro_page', 'tareo_registro_edit_page', 'tareo_reporte_resumen_page', 'tareo_reporte_detalle_page', 'tareo_asignacion_page') %}
+                {% set show_tareo = es_ultraseguros and (can_menu('tareo_tipo_dia') or can_menu('tareo_registro') or can_menu('tareo_reporte_resumen') or can_menu('tareo_reporte_detalle') or can_menu('tareo_asignacion')) %}
                 {% if show_tareo %}
                 <li class="sidebar-menu-parent {{ 'active' if tareo_active else '' }}">
                     <a href="#submenuTareo"
@@ -1520,6 +1520,13 @@
                         <li class="{{ 'active' if request.endpoint == 'tareo_reporte_resumen_page' else '' }}">
                             <a href="{{ url_for('tareo_reporte_resumen_page') }}" title="Reporte Resumen Tareo">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Reporte Resumen Tareo</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if can_menu('tareo_reporte_detalle') %}
+                        <li class="{{ 'active' if request.endpoint == 'tareo_reporte_detalle_page' else '' }}">
+                            <a href="{{ url_for('tareo_reporte_detalle_page') }}" title="Reporte Detalle Tareo">
+                                <i class="bi bi-list-columns-reverse"></i><span class="sidebar-link-text">Reporte Detalle Tareo</span>
                             </a>
                         </li>
                         {% endif %}

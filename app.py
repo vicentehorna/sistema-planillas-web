@@ -10428,6 +10428,15 @@ def tareo_reporte_resumen_page():
     return render_template('tareo_reporte_resumen.html')
 
 
+@app.route('/tareo/reporte-detalle')
+@login_required
+def tareo_reporte_detalle_page():
+    """Reporte Detalle de Tareos (día a día) — hm_ultra."""
+    if not _es_cliente_ultraseguros():
+        abort(404)
+    return render_template('tareo_reporte_detalle.html')
+
+
 @app.route('/tareo/asignacion')
 @login_required
 def tareo_asignacion_page():
@@ -14446,6 +14455,59 @@ def api_tareo_reporte_resumen():
         return jsonify({"rows": out, "total": len(out)})
     except Exception as e:
         logging.exception("api_tareo_reporte_resumen")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/tareo/reporte-detalle', methods=['POST'])
+@login_required
+def api_tareo_reporte_detalle():
+    """sp_pr_reportetareodetalle_web — detalle día a día por periodo."""
+    if not _es_cliente_ultraseguros():
+        return jsonify({"error": "Módulo Tareo no disponible en esta base."}), 404
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or session.get('company') or '').strip()
+    payrolltype = str(body.get('payrolltype') or '').strip() or None
+    prperiod = str(body.get('prperiod') or body.get('period') or '').strip()
+    costcenter = str(body.get('costcenter') or body.get('unidad') or '').strip() or None
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not prperiod:
+        return jsonify({"error": "Seleccione un periodo."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_reportetareodetalle_web "
+            "@company=?, @payrolltype=?, @prperiod=?, @costcenter=?",
+            (cia, payrolltype, prperiod, costcenter),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        out = []
+        for r in rows:
+            out.append({
+                "person": _jsonable_value(r.get('person')),
+                "name": _jsonable_value(r.get('name')),
+                "fecha": _jsonable_value(r.get('fecha')),
+                "tipodia_codigo": _jsonable_value(r.get('tipodia_codigo')),
+                "tipodia": _jsonable_value(r.get('tipodia')),
+                "cliente": _jsonable_value(r.get('cliente')),
+                "sede": _jsonable_value(r.get('sede')),
+                "hourday": _float_sp_cell(r.get('hourday')),
+                "extrahour25": _float_sp_cell(r.get('extrahour25')),
+                "extrahour35": _float_sp_cell(r.get('extrahour35')),
+                "extrahour100": _float_sp_cell(r.get('extrahour100')),
+            })
+        return jsonify({"rows": out, "total": len(out)})
+    except Exception as e:
+        logging.exception("api_tareo_reporte_detalle")
         return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:

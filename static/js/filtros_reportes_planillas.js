@@ -27,6 +27,7 @@
     const STORAGE_KEY_TELECREDITO_CTS = 'filtros_telecredito_cts';
     const STORAGE_KEY_CONTINENTAL_CTS = 'filtros_continental_cts';
     const STORAGE_KEY_BANBIF_CTS = 'filtros_banbif_cts';
+    const STORAGE_KEY_INTERBANK_CTS = 'filtros_interbank_cts';
     const STORAGE_KEY_SCOTIABANK_CTS = 'filtros_scotiabank_cts';
     const STORAGE_KEY_FORMATO_UTILIDADES = 'filtros_formato_utilidades';
     const STORAGE_KEY_CERTIFICADO_QUINTA = 'filtros_certificado_quinta';
@@ -2890,6 +2891,7 @@
         STORAGE_KEY_TELECREDITO_CTS,
         STORAGE_KEY_CONTINENTAL_CTS,
         STORAGE_KEY_BANBIF_CTS,
+        STORAGE_KEY_INTERBANK_CTS,
         STORAGE_KEY_SCOTIABANK_CTS,
         STORAGE_KEY_FORMATO_UTILIDADES,
         STORAGE_KEY_PLANILLA_POR_CONCEPTOS,
@@ -3007,6 +3009,9 @@
         },
         banbifCts: function () {
             return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_BANBIF_CTS);
+        },
+        interbankCts: function () {
+            return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_INTERBANK_CTS);
         },
         scotiabankCts: function () {
             return crearPersistenciaFormatoLiquidacion(STORAGE_KEY_SCOTIABANK_CTS);

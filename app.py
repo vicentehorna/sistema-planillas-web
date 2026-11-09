@@ -4768,7 +4768,8 @@ def _telecredito_params_from_json(body):
 def _pago_haberes_cargar_personas_temp(cursor, persons, temp_table):
     """Carga tabla temporal #TelecreditoPersonas o #InterbankPersonas en lotes."""
     allowed = {
-        'TelecreditoPersonas', 'InterbankPersonas', 'ContinentalPersonas', 'ContinentalCtsPersonas',
+        'TelecreditoPersonas', 'InterbankPersonas', 'InterbankCtsPersonas',
+        'ContinentalPersonas', 'ContinentalCtsPersonas',
         'BanbifPersonas', 'BanbifCtsPersonas', 'ScotiabankPersonas', 'ScotiabankCtsPersonas',
     }
     if temp_table not in allowed:
@@ -27990,6 +27991,138 @@ def banbif_cts_page():
         flash('Archivo BANBIF CTS solo está disponible en hm_aci.', 'warning')
         return redirect(url_for('dashboard'))
     return render_template('banbif_cts.html')
+
+
+@app.route('/cts/interbank')
+@login_required
+def interbank_cts_page():
+    if not _es_bd_hm_aci():
+        flash('Archivo Interbank CTS solo está disponible en hm_aci.', 'warning')
+        return redirect(url_for('dashboard'))
+    return render_template('interbank_cts.html')
+
+
+@app.route('/api/cts/interbank/listado', methods=['POST'])
+@login_required
+def api_interbank_cts_listado():
+    """sp_pr_listainterbankcts_web: trabajadores con cuenta CTS en Interbank."""
+    denied = _require_hm_aci_json('Archivo Interbank CTS')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_cts_params_from_json(body)
+    err = _telecredito_cts_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            'EXEC sp_pr_listainterbankcts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+            '@par_currency=?, @cesados=?, @repunit=?, @todos_bancos=?',
+            (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit, todos_bancos),
+        )
+        filas = _dicts_first_nonempty_resultset(cursor)
+        rows, excluidos = [], []
+        for r in filas:
+            item = {
+                'person': str(r.get('person') or '').strip(),
+                'dni': str(r.get('dni') or '').strip(),
+                'tipodoc': str(r.get('tipodoc') or '').strip(),
+                'nombre': str(r.get('nombre') or '').strip(),
+                'banco': str(r.get('banco') or '').strip(),
+                'cuenta': str(r.get('cuenta') or '').strip(),
+                'tipo_abono': str(r.get('tipo_abono') or '').strip(),
+                'importe': float(r.get('importe') or 0),
+            }
+            if str(r.get('elegible') or '').strip() == 'S':
+                rows.append(item)
+            else:
+                item['motivo'] = str(r.get('motivo') or '').strip()
+                excluidos.append(item)
+        return jsonify({
+            'rows': rows,
+            'excluidos': excluidos,
+            'meta': {
+                'total': len(rows),
+                'importe_total': round(sum(r['importe'] for r in rows), 2),
+                'excluidos': len(excluidos),
+                'todos_bancos': todos_bancos == 'Y',
+            },
+        })
+    except Exception as e:
+        logging.exception('api_interbank_cts_listado')
+        return jsonify({'error': _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cts/interbank/generar-txt', methods=['POST'])
+@login_required
+def api_interbank_cts_generar_txt():
+    """sp_pr_generar_interbankcts_web → TXT depósito CTS Interbank (servicio CTS)."""
+    denied = _require_hm_aci_json('Archivo Interbank CTS')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _telecredito_cts_params_from_json(body)
+    err = _telecredito_cts_validar_params(p)
+    if err:
+        return jsonify({'error': err}), 400
+    persons = _telecredito_persons_from_json(body)
+    if not persons:
+        return jsonify({'error': 'Seleccione al menos un trabajador.'}), 400
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    referencia = str(body.get('referencia') or '').strip()[:40]
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _pago_haberes_cargar_personas_temp(cursor, persons, 'InterbankCtsPersonas')
+        cursor.execute(
+            'EXEC sp_pr_generar_interbankcts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+            '@par_currency=?, @par_paydate=?, @todos_bancos=?, @par_referencia=?',
+            (
+                p['cia'], p['payrolltype'], p['period'], p['currency'], p['paydate'],
+                todos_bancos, referencia or None,
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        lineas = [str(r.get('linea_txt') or '').rstrip('\r\n') for r in rows]
+        lineas = [x for x in lineas if x]
+        if len(lineas) < 2:
+            return jsonify({
+                'error': 'No se generaron líneas de detalle: ninguno de los seleccionados tiene cuenta CTS en Interbank.',
+            }), 400
+
+        periodo = re.sub(r'[^0-9]', '', p['period'])[:8]
+        stamp = datetime.now().strftime('%Y%m%d%H%M')
+        filename = f'InterbankCTS_{periodo}_{stamp}.txt'
+        resp = Response(
+            ('\r\n'.join(lineas) + '\r\n').encode('latin-1', errors='replace'),
+            mimetype='text/plain; charset=iso-8859-1',
+        )
+        resp.headers['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return resp
+    except Exception as e:
+        logging.exception('api_interbank_cts_generar_txt')
+        return jsonify({'error': _sql_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/cts/scotiabank')

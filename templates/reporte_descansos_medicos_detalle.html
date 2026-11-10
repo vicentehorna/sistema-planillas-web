@@ -80,9 +80,31 @@
                 </select>
             </div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
-                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
-                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                <label for="cboPeriodoDesde" class="form-label small fw-bold text-muted">Periodo inicial</label>
+                <select id="cboPeriodoDesde" class="form-select form-select-sm" required disabled>
                     <option value="">Seleccione tipo de planilla...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodoHasta" class="form-label small fw-bold text-muted">Periodo final</label>
+                <select id="cboPeriodoHasta" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione tipo de planilla...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCesados" class="form-label small fw-bold text-muted">Cesados</label>
+                <select id="cboCesados" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Sí</option>
+                    <option value="N">No</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboActivos" class="form-label small fw-bold text-muted">Activos</label>
+                <select id="cboActivos" class="form-select form-select-sm">
+                    <option value="T" selected>Todos</option>
+                    <option value="Y">Activo</option>
+                    <option value="N">Inactivo</option>
                 </select>
             </div>
             <div class="col-12 col-md-6 col-lg-3">
@@ -141,12 +163,6 @@ document.addEventListener('DOMContentLoaded', async function () {
             .replace(/"/g, '&quot;');
     }
 
-    function optionExists(select, value) {
-        if (!select || value === '' || value == null) return false;
-        const v = String(value);
-        return Array.from(select.options).some((o) => o.value === v);
-    }
-
     function seleccionarCompaniaInsensitive(select, codigoDeseado) {
         if (!select) return false;
         const want = String(codigoDeseado || '').trim().toUpperCase();
@@ -155,20 +171,6 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!opt) return false;
         select.value = opt.value;
         return true;
-    }
-
-    function limpiarValorComboSiObsoleto(select) {
-        if (!select) return;
-        const v = String(select.value || '').trim();
-        if (!v) return;
-        const ok = Array.from(select.options).some((o) => String(o.value) === v);
-        if (!ok) select.value = '';
-    }
-
-    function etiquetaTrabajadorTodosPorDefecto(selectElement) {
-        if (!selectElement || !selectElement.options.length) return;
-        const o = selectElement.options[0];
-        if (o && o.value === '') o.textContent = 'Todos (por defecto)';
     }
 
     function fmtCelda(valor, opts) {
@@ -187,6 +189,37 @@ document.addEventListener('DOMContentLoaded', async function () {
         const el = document.getElementById(id);
         const opt = el && el.options[el.selectedIndex];
         return opt ? opt.textContent.trim() : '';
+    }
+
+    function normalizarPeriodoYyyymm(raw) {
+        const digits = String(raw || '').replace(/\D/g, '');
+        return digits.length >= 6 ? digits.slice(0, 6) : '';
+    }
+
+    function validarRangoPeriodos(desdeStr, hastaStr) {
+        const desde = normalizarPeriodoYyyymm(desdeStr);
+        const hasta = normalizarPeriodoYyyymm(hastaStr);
+        if (!desde || !hasta) {
+            return { ok: false, error: 'Seleccione periodo inicial y periodo final.' };
+        }
+        if (hasta < desde) {
+            return { ok: false, error: 'El periodo final no puede ser menor al periodo inicial.' };
+        }
+        return { ok: true };
+    }
+
+    function etiquetaCesados(valor) {
+        const v = String(valor || 'T').toUpperCase();
+        if (v === 'Y') return 'Sí';
+        if (v === 'N') return 'No';
+        return 'Todos';
+    }
+
+    function etiquetaActivos(valor) {
+        const v = String(valor || 'T').toUpperCase();
+        if (v === 'Y') return 'Activo';
+        if (v === 'N') return 'Inactivo';
+        return 'Todos';
     }
 
     function renderizarTablaDescansosMedicos(response) {
@@ -270,11 +303,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         const metaRow = ws.addRow([
             'Compañía', meta.compania || '',
             'Tipo planilla', meta.tipoPlanilla || '',
-            'Periodo', meta.periodo || '',
+            'Periodo inicial', meta.periodoDesde || '',
+            'Periodo final', meta.periodoHasta || '',
+            'Cesados', meta.cesados || '',
+            'Activos', meta.activos || '',
             'Tipo descanso', meta.tipoDescanso || ''
         ]);
         metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
-            if (colNumber <= 8) {
+            if (colNumber <= 14) {
                 cell.fill = fill(F.meta);
                 cell.font = { bold: colNumber % 2 === 1 };
                 cell.alignment = alignCenter;
@@ -356,17 +392,37 @@ document.addEventListener('DOMContentLoaded', async function () {
         document.getElementById('btnExportExcelDescMed').disabled = true;
         const cia = document.getElementById('cboCompania').value.trim();
         const payroll_type = document.getElementById('cboTipoPlanilla').value.trim();
-        const period = document.getElementById('cboPeriodo').value.trim();
+        const period_desde = document.getElementById('cboPeriodoDesde').value.trim();
+        const period_hasta = document.getElementById('cboPeriodoHasta').value.trim();
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
         let medicalresttype = document.getElementById('cboTipoDescanso').value.trim();
         if (!medicalresttype) medicalresttype = '0';
+        const cesados = document.getElementById('cboCesados').value.trim() || 'T';
+        const activos = document.getElementById('cboActivos').value.trim() || 'T';
+
+        const validacion = validarRangoPeriodos(period_desde, period_hasta);
+        if (!validacion.ok) {
+            document.getElementById('cardResultadoDescansosMedicos').classList.add('d-none');
+            document.getElementById('lblRowCountDescMed').textContent = '0';
+            alert(validacion.error);
+            return;
+        }
 
         try {
             const res = await fetch(URL_REPORTE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payroll_type, period, person, medicalresttype })
+                body: JSON.stringify({
+                    cia,
+                    payroll_type,
+                    period_desde,
+                    period_hasta,
+                    person,
+                    medicalresttype,
+                    cesados,
+                    activos
+                })
             });
             const payload = await res.json();
             if (!res.ok) {
@@ -395,7 +451,10 @@ document.addEventListener('DOMContentLoaded', async function () {
                 meta: {
                     compania: selectedText('cboCompania'),
                     tipoPlanilla: selectedText('cboTipoPlanilla'),
-                    periodo: selectedText('cboPeriodo'),
+                    periodoDesde: selectedText('cboPeriodoDesde'),
+                    periodoHasta: selectedText('cboPeriodoHasta'),
+                    cesados: etiquetaCesados(cesados),
+                    activos: etiquetaActivos(activos),
                     tipoDescanso: selectedText('cboTipoDescanso')
                 }
             };
@@ -420,12 +479,34 @@ document.addEventListener('DOMContentLoaded', async function () {
         );
     }
 
-    async function poblarPeriodosDescansosMedicosDetalle(cia, payrolltype, selectElement) {
-        return poblarSelect(
+    async function poblarPeriodosRango(cia, payrolltype, cboDesde, cboHasta) {
+        const desdePrevio = CombosCarga.valorValido(cboDesde);
+        const hastaPrevio = CombosCarga.valorValido(cboHasta);
+        const ok = await poblarSelect(
             `/api/selectores/periodos-asig?cia=${encodeURIComponent(cia)}&payrolltype=${encodeURIComponent(payrolltype)}`,
-            selectElement,
-            { incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos' }
+            cboDesde,
+            { textoVacio: 'Sin periodos' }
         );
+        if (!ok) {
+            CombosCarga.resetSelect(cboHasta, 'Seleccione tipo de planilla...');
+            return false;
+        }
+        cboHasta.innerHTML = cboDesde.innerHTML;
+        cboHasta.disabled = cboDesde.disabled;
+        if (desdePrevio && CombosCarga.optionExists?.(cboDesde, desdePrevio)) {
+            cboDesde.value = desdePrevio;
+        } else if (desdePrevio) {
+            const okDesde = Array.from(cboDesde.options).some((o) => String(o.value) === String(desdePrevio));
+            if (okDesde) cboDesde.value = desdePrevio;
+        }
+        if (hastaPrevio) {
+            const okHasta = Array.from(cboHasta.options).some((o) => String(o.value) === String(hastaPrevio));
+            if (okHasta) cboHasta.value = hastaPrevio;
+        }
+        if (!CombosCarga.valorValido(cboHasta) && CombosCarga.valorValido(cboDesde)) {
+            cboHasta.value = cboDesde.value;
+        }
+        return true;
     }
 
     function reseleccionarPorTexto(select, texto) {
@@ -435,7 +516,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const DEFAULT_CIA = 'BGT';
     const cboCia = document.getElementById('cboCompania');
     const cboPlanilla = document.getElementById('cboTipoPlanilla');
-    const cboPeriodo = document.getElementById('cboPeriodo');
+    const cboPeriodoDesde = document.getElementById('cboPeriodoDesde');
+    const cboPeriodoHasta = document.getElementById('cboPeriodoHasta');
     const cboTrabajador = document.getElementById('cboTrabajador');
     const cboTipoDescanso = document.getElementById('cboTipoDescanso');
 
@@ -445,7 +527,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function cargarDependientesCia(cia, pref) {
         const gen = ++generacionCompania;
         pref = pref || {};
-        CombosCarga.resetSelect(cboPeriodo, 'Seleccione tipo de planilla...');
+        CombosCarga.resetSelect(cboPeriodoDesde, 'Seleccione tipo de planilla...');
+        CombosCarga.resetSelect(cboPeriodoHasta, 'Seleccione tipo de planilla...');
         if (!cia) {
             CombosCarga.resetSelect(cboPlanilla);
             CombosCarga.resetSelect(cboTrabajador, 'Todos (por defecto)', '');
@@ -466,7 +549,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         reseleccionarPorTexto(cboTipoDescanso, pref.tipoDescansoTexto);
         const pt = CombosCarga.valorValido(cboPlanilla);
         if (pt) {
-            await poblarPeriodosDescansosMedicosDetalle(cia, pt, cboPeriodo);
+            await poblarPeriodosRango(cia, pt, cboPeriodoDesde, cboPeriodoHasta);
         }
         return gen === generacionCompania;
     }
@@ -484,9 +567,10 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboPlanilla.addEventListener('change', async function () {
         const cia = CombosCarga.valorValido(cboCia);
         const pt = CombosCarga.valorValido(this);
-        CombosCarga.resetSelect(cboPeriodo, 'Seleccione tipo de planilla...');
+        CombosCarga.resetSelect(cboPeriodoDesde, 'Seleccione tipo de planilla...');
+        CombosCarga.resetSelect(cboPeriodoHasta, 'Seleccione tipo de planilla...');
         if (pt && cia) {
-            await poblarPeriodosDescansosMedicosDetalle(cia, pt, cboPeriodo);
+            await poblarPeriodosRango(cia, pt, cboPeriodoDesde, cboPeriodoHasta);
         }
     });
 

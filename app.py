@@ -36768,25 +36768,41 @@ def reporte_log_calculo_post():
 @app.route('/reporte_descansos_medicos_detalle', methods=['POST'])
 @login_required
 def reporte_descansos_medicos_detalle_post():
-    """sp_pr_reportesdescansos_medicos_web @cia, @payrolltype, @period, @person, @medicalresttype."""
+    """sp_pr_reportesdescansos_medicos_web: rango de periodos + cesados + activos."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or '').strip()
     payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
-    period_raw = body.get('period')
-    ps = str(period_raw).strip() if period_raw is not None else ''
-    if ps == '' or ps == '0':
-        period = '0'
-    else:
-        period = _normalize_pr_period(period_raw)
+
+    period_desde_raw = body.get('period_desde') or body.get('periodo_desde') or body.get('period')
+    period_hasta_raw = body.get('period_hasta') or body.get('periodo_hasta') or period_desde_raw
+    period_desde = _normalize_pr_period(period_desde_raw)
+    period_hasta = _normalize_pr_period(period_hasta_raw)
+
     person = str(body.get('person') or '0').strip() or '0'
     mrt_raw = body.get('medicalresttype')
     mrs = str(mrt_raw).strip() if mrt_raw is not None else ''
     medicalresttype = '0' if mrs == '' or mrs == '0' else mrs
 
+    cesados = str(body.get('cesados') or 'T').strip().upper()[:1] or 'T'
+    if cesados not in ('T', 'Y', 'N'):
+        cesados = 'T'
+    activos = str(body.get('activos') or 'T').strip().upper()[:1] or 'T'
+    if activos not in ('T', 'Y', 'N'):
+        activos = 'T'
+
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
     if not payroll_type:
         return jsonify({"error": "Debe indicar tipo de planilla."}), 400
+    if not period_desde or not period_hasta:
+        return jsonify({"error": "Seleccione periodo inicial y periodo final."}), 400
+
+    p_desde = str(period_desde)[:6]
+    p_hasta = str(period_hasta)[:6]
+    if len(p_desde) < 6 or len(p_hasta) < 6:
+        return jsonify({"error": "Periodos inválidos."}), 400
+    if p_hasta < p_desde:
+        return jsonify({"error": "El periodo final no puede ser menor al periodo inicial."}), 400
 
     headers_es = [
         'Periodo',
@@ -36805,8 +36821,19 @@ def reporte_descansos_medicos_detalle_post():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute(
-            "EXEC sp_pr_reportesdescansos_medicos_web @cia=?, @payrolltype=?, @period=?, @person=?, @medicalresttype=?",
-            (cia, payroll_type, period, person, medicalresttype),
+            "EXEC sp_pr_reportesdescansos_medicos_web "
+            "@cia=?, @payrolltype=?, @period_desde=?, @period_hasta=?, "
+            "@person=?, @medicalresttype=?, @cesados=?, @activos=?",
+            (
+                cia,
+                payroll_type,
+                period_desde,
+                period_hasta,
+                person,
+                medicalresttype,
+                cesados,
+                activos,
+            ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []

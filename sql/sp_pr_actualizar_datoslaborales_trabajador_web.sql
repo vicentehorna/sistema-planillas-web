@@ -2,6 +2,7 @@
     Actualiza datos laborales del trabajador (PR_Employee).
     Fechas: VARCHAR(10) YYYY-MM-DD o vacío → NULL.
     @modo_reingreso = 'Y': limpia cese, Status='N', EntryDate inmutable y valida nueva ReEntryDate.
+    Además realinea PR_Vacation al MD de reingreso (sp_pr_actualizar_vacaciones) y crea periodos faltantes.
 
     Nota: la asignación REM_BASICA solo se crea en sp_pr_registrar_trabajador_web (alta).
     Sincroniza FLAG_ASIG_FAM permanente con @flagasigfamiliar (Y=asegura, N=elimina).
@@ -420,6 +421,35 @@ BEGIN
             WHERE Company = @cia
               AND Person = @person
               AND CONVERT(DATE, FechaInicio) = CONVERT(DATE, @fecha_reingreso);
+        END
+    END
+
+    /*
+        Reingreso: realinea periodos vacacionales al MD de ReEntryDate
+        (borra ControlYear < año reingreso) y crea faltantes.
+    */
+    IF @modo_reingreso = 'Y'
+       AND @fecha_reingreso IS NOT NULL
+       AND OBJECT_ID(N'dbo.sp_pr_actualizar_vacaciones', N'P') IS NOT NULL
+    BEGIN
+        EXEC dbo.sp_pr_actualizar_vacaciones @cia = @cia, @person = @person;
+
+        IF OBJECT_ID(N'dbo.sp_pr_generar_periodos_vacacionales_web', N'P') IS NOT NULL
+        BEGIN
+            DECLARE @gen_vac TABLE (
+                personas_procesadas INT,
+                periodos_creados INT,
+                periodos_actualizados INT,
+                mensaje VARCHAR(200)
+            );
+
+            INSERT INTO @gen_vac
+            EXEC dbo.sp_pr_generar_periodos_vacacionales_web
+                @company = @cia,
+                @payrolltype = '0',
+                @personlist = @person,
+                @solo_activos = 'N',
+                @xlastuser = @xlastuser;
         END
     END
 END

@@ -7,18 +7,19 @@ GO
     Requiere la tabla temporal #TelecreditoPersonas (person) con los trabajadores
     seleccionados; solo se incluyen los elegibles de sp_pr_listatelecreditocts_web.
 
-    Cabecera (112): 1 | cantidad(6) | fecha abono aaaammdd | [subtipo(1) solo si tiene valor] |
-                    tipo cta empresa C/M | moneda(4) | cuenta empresa(20) |
-                    monto total 99999999999999.99 | referencia(40) | checksum(15)
-    Detalle  (195): 2 | tipo cta A/C | cuenta CTS(20) | tipo doc(1) | documento(12) | 3 espacios |
-                    nombre(75) | ref. beneficiario(40) | ref. empresa(20) | moneda(4) |
-                    importe 99999999999999.99 | 'S'
+    Formato estándar (resto de clientes) — cabecera 112 / detalle 195:
+      Cabecera: 1 | cantidad(6) | fecha | [subtipo] | tipo cta C/M | moneda(4) | cuenta(20) |
+                monto | referencia(40) | checksum(15)
+      Detalle:  2 | tipo cta A/C | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
+                ref benef(40) | ref emp(20) | moneda | importe | 'S'
 
-    Subtipo: PR_ProcessType.subtype del proceso CTS; si está vacío NO se emite (cabecera 112,
-    formato BCP validado). Solo se concatena si tiene un carácter configurado.
-    Cuenta empresa: TE_BankAccount del banco PR_Mapping.CreditoBank en la moneda del depósito.
-    @par_referencia vacío: 'DEPOSITO CTS NOVIEMBRE aaaa - ABRIL aaaa' (mayo) o
-    'DEPOSITO CTS MAYO aaaa - OCTUBRE aaaa' (noviembre).
+    Formato hm_aci (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
+      Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
+                monto | espacios(40) | checksum(15)
+      Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
+                espacios(40) | espacios(20) | moneda | importe | '0001' | BASICO_CTS*4
+      Checksum empresa: mid(cuenta,4,11) si SalaryAccountType=A; mid(cuenta,4,10) si no.
+      Importe: AmountLo/Ex + interés de PR_EmployeeCTS si existe; si no, concepto CTS.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecreditocts_web]
     @par_company     VARCHAR(10),
@@ -46,6 +47,7 @@ BEGIN
     DECLARE @subtipo         VARCHAR(1);  /* VARCHAR: '' no se convierte en espacio (CHAR sí) */
     DECLARE @cuenta_origen   VARCHAR(20);
     DECLARE @tipo_cta_origen CHAR(1);
+    DECLARE @abrev_salary    CHAR(1);
     DECLARE @ref_planilla    VARCHAR(40);
     DECLARE @mes_ref         VARCHAR(10);
     DECLARE @anio            INT;
@@ -54,14 +56,19 @@ BEGIN
     DECLARE @total_cent      BIGINT;
     DECLARE @checksum        BIGINT;
     DECLARE @parte_chk       VARCHAR(30);
+    DECLARE @es_hm_aci       BIT;
+    DECLARE @ruc_empresa     VARCHAR(12);
+    DECLARE @chk_len_empresa INT;
 
+    SET @es_hm_aci = CASE WHEN LOWER(DB_NAME()) = 'hm_aci' THEN 1 ELSE 0 END;
     SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN '1001' ELSE '0001' END;
     SET @anio = CAST(LEFT(@par_period, 4) AS INT);
     SET @mes = SUBSTRING(@par_period, 5, 2);
 
     SELECT TOP 1
         @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20),
-        @tipo_cta_origen = LEFT(ISNULL(NULLIF(tba.abrev, ''), ISNULL(tmp.abrev, 'C')), 1)
+        @tipo_cta_origen = LEFT(ISNULL(NULLIF(tba.abrev, ''), ISNULL(tmp.abrev, 'C')), 1),
+        @abrev_salary = LEFT(ISNULL(NULLIF(tmp.abrev, ''), 'C'), 1)
     FROM PR_Mapping m
         INNER JOIN TE_BankAccount ba
             ON ba.Company = m.Company
@@ -80,6 +87,7 @@ BEGIN
         RETURN;
     END
     IF @tipo_cta_origen NOT IN ('C', 'M') SET @tipo_cta_origen = 'C';
+    IF ISNULL(@abrev_salary, '') = '' SET @abrev_salary = 'C';
 
     SELECT TOP 1 @subtipo = LEFT(LTRIM(RTRIM(ISNULL(CAST(pt.subtype AS VARCHAR(10)), ''))), 1)
     FROM PR_ProcessType pt
@@ -87,6 +95,11 @@ BEGIN
       AND pt.ShortName = 'CTS';
     /* Vacío = no emitir (cabecera 112). Antes se ponía espacio y BCP rechazaba por largo. */
     IF ISNULL(@subtipo, '') = '' SET @subtipo = '';
+
+    SELECT TOP 1 @ruc_empresa = LEFT(LTRIM(RTRIM(ISNULL(c.Ruc, ''))) + REPLICATE(' ', 12), 12)
+    FROM SY_Company c
+    WHERE c.Company = @par_company;
+    IF @ruc_empresa IS NULL SET @ruc_empresa = REPLICATE(' ', 12);
 
     SET @mes_ref = CASE @mes WHEN '05' THEN 'MAY' WHEN '11' THEN 'NOV' ELSE @mes END;
     IF @par_referencia <> ''
@@ -131,7 +144,24 @@ BEGIN
         LEFT(l.nombre, 75) AS nombre,
         LEFT('CTS ' + @mes_ref + CAST(@anio AS VARCHAR(4)) + ' ' + l.dni + ' ' + l.nombre, 40) AS refbeneficiario,
         LEFT('CTS ' + l.person, 20) AS refempresa,
-        CAST(ROUND(l.importe * 100, 0) AS BIGINT) AS cent
+        CAST(ROUND(
+            COALESCE(
+                CASE
+                    WHEN @es_hm_aci = 1 AND ects.Person IS NOT NULL THEN
+                        CASE
+                            WHEN @par_currency = 'EX'
+                                THEN ISNULL(ects.AmountEx, 0) + ISNULL(ects.AmountInterestEx, 0)
+                            ELSE ISNULL(ects.AmountLo, 0) + ISNULL(ects.AmountInterestLo, 0)
+                        END
+                    ELSE l.importe
+                END,
+                l.importe,
+                0
+            ) * 100, 0
+        ) AS BIGINT) AS cent,
+        CAST(ROUND(
+            ISNULL(bas.basico_cts, 0) * 4 * 100, 0
+        ) AS BIGINT) AS cent_cts_anios
     INTO #Detalle
     FROM #Lista l
         INNER JOIN (
@@ -139,13 +169,47 @@ BEGIN
             FROM #TelecreditoPersonas
             WHERE LTRIM(RTRIM(ISNULL(person, ''))) <> ''
         ) ps ON ps.person = l.person
+        LEFT JOIN PR_EmployeeCTS ects
+            ON ects.Company = @par_company
+           AND ects.PayRollType = @par_payrolltype
+           AND ects.PRPeriod = @par_period
+           AND ects.Person = l.person
+        LEFT JOIN (
+            SELECT
+                epc.Person,
+                MAX(CASE WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0) ELSE ISNULL(epc.ConceptValueLo, 0) END) AS basico_cts
+            FROM PR_EmployeePayRollConcept epc
+                INNER JOIN PR_Concept c
+                    ON c.Company = epc.Company
+                   AND c.Concept = epc.Concept
+                   AND c.FormulaCode = 'BASICO_CTS'
+                INNER JOIN PR_ProcessType pt
+                    ON pt.Company = epc.Company
+                   AND pt.ProcessType = epc.ProcessType
+                   AND pt.ShortName = 'CTS'
+            WHERE epc.Company = @par_company
+              AND epc.PayRollType = @par_payrolltype
+              AND epc.PRPeriod = @par_period
+            GROUP BY epc.Person
+        ) bas ON bas.Person = l.person
     WHERE l.elegible = 'S';
 
     SELECT @total_reg = COUNT(*), @total_cent = ISNULL(SUM(cent), 0) FROM #Detalle;
 
-    /* Checksum BCP: cuenta de cargo + cuentas de abono, sin los 3 primeros dígitos. */
+    /* Checksum BCP: cuenta de cargo + cuentas de abono. */
     SET @checksum = 0;
-    IF LEN(@cuenta_origen) > 3
+    IF @es_hm_aci = 1
+    BEGIN
+        /* wf_calculate: A → mid(4,11); otro → mid(4,10). */
+        SET @chk_len_empresa = CASE WHEN @abrev_salary = 'A' THEN 11 ELSE 10 END;
+        IF LEN(@cuenta_origen) >= 4
+        BEGIN
+            SET @parte_chk = SUBSTRING(@cuenta_origen, 4, @chk_len_empresa);
+            IF @parte_chk NOT LIKE '%[^0-9]%' AND @parte_chk <> ''
+                SET @checksum = @checksum + CAST(@parte_chk AS BIGINT);
+        END
+    END
+    ELSE IF LEN(@cuenta_origen) > 3
     BEGIN
         SET @parte_chk = SUBSTRING(@cuenta_origen, 4, LEN(@cuenta_origen) - 3);
         IF @parte_chk NOT LIKE '%[^0-9]%'
@@ -161,39 +225,82 @@ BEGIN
     ), 0)
     FROM #Detalle;
 
-    SELECT orden, linea_txt
-    FROM (
-        SELECT
-            0 AS orden,
-            '1' +
-            RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +
-            CONVERT(VARCHAR(8), @par_paydate, 112) +
-            @subtipo +
-            @tipo_cta_origen +
-            @moneda_txt +
-            LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
-            RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
-            RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
-            LEFT(@ref_planilla + REPLICATE(' ', 40), 40) +
-            RIGHT(REPLICATE('0', 15) + CAST(@checksum AS VARCHAR(20)), 15) AS linea_txt
-        UNION ALL
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY nombre, person) AS orden,
-            '2' +
-            tipocuenta +
-            LEFT(cuenta + REPLICATE(' ', 20), 20) +
-            tipodoc_bcp +
-            LEFT(dni + REPLICATE(' ', 12), 12) +
-            '   ' +
-            LEFT(nombre + REPLICATE(' ', 75), 75) +
-            LEFT(refbeneficiario + REPLICATE(' ', 40), 40) +
-            LEFT(refempresa + REPLICATE(' ', 20), 20) +
-            @moneda_txt +
-            RIGHT(REPLICATE('0', 14) + CAST(cent / 100 AS VARCHAR(20)), 14) + '.' +
-            RIGHT('0' + CAST(cent % 100 AS VARCHAR(2)), 2) +
-            'S'
-        FROM #Detalle
-    ) AS lineas
-    ORDER BY orden;
+    IF @es_hm_aci = 1
+    BEGIN
+        /* Estructura mayo / wf_calculate: cabecera 125, detalle 214. */
+        SELECT orden, linea_txt
+        FROM (
+            SELECT
+                0 AS orden,
+                '1' +
+                RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +
+                CONVERT(VARCHAR(8), @par_paydate, 112) +
+                'C' +
+                @moneda_txt +
+                LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
+                '6' +
+                @ruc_empresa +
+                RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
+                REPLICATE(' ', 40) +
+                RIGHT(REPLICATE('0', 15) + CAST(@checksum AS VARCHAR(20)), 15) AS linea_txt
+            UNION ALL
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY nombre, person) AS orden,
+                '2' +
+                LEFT(cuenta + REPLICATE(' ', 20), 20) +
+                tipodoc_bcp +
+                LEFT(dni + REPLICATE(' ', 12), 12) +
+                '   ' +
+                LEFT(nombre + REPLICATE(' ', 75), 75) +
+                REPLICATE(' ', 40) +
+                REPLICATE(' ', 20) +
+                @moneda_txt +
+                RIGHT(REPLICATE('0', 14) + CAST(cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(cent % 100 AS VARCHAR(2)), 2) +
+                '0001' +
+                RIGHT(REPLICATE('0', 14) + CAST(cent_cts_anios / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(cent_cts_anios % 100 AS VARCHAR(2)), 2)
+            FROM #Detalle
+        ) AS lineas
+        ORDER BY orden;
+    END
+    ELSE
+    BEGIN
+        SELECT orden, linea_txt
+        FROM (
+            SELECT
+                0 AS orden,
+                '1' +
+                RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +
+                CONVERT(VARCHAR(8), @par_paydate, 112) +
+                @subtipo +
+                @tipo_cta_origen +
+                @moneda_txt +
+                LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
+                RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
+                LEFT(@ref_planilla + REPLICATE(' ', 40), 40) +
+                RIGHT(REPLICATE('0', 15) + CAST(@checksum AS VARCHAR(20)), 15) AS linea_txt
+            UNION ALL
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY nombre, person) AS orden,
+                '2' +
+                tipocuenta +
+                LEFT(cuenta + REPLICATE(' ', 20), 20) +
+                tipodoc_bcp +
+                LEFT(dni + REPLICATE(' ', 12), 12) +
+                '   ' +
+                LEFT(nombre + REPLICATE(' ', 75), 75) +
+                LEFT(refbeneficiario + REPLICATE(' ', 40), 40) +
+                LEFT(refempresa + REPLICATE(' ', 20), 20) +
+                @moneda_txt +
+                RIGHT(REPLICATE('0', 14) + CAST(cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(cent % 100 AS VARCHAR(2)), 2) +
+                'S'
+            FROM #Detalle
+        ) AS lineas
+        ORDER BY orden;
+    END
 END
 GO

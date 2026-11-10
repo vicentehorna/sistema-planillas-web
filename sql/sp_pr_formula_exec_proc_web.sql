@@ -132,6 +132,25 @@ BEGIN
         RETURN;
     END
 
+    IF @p = 'SP_PR_FORMULAPROMEDIOCTS'
+    BEGIN
+        IF OBJECT_ID('dbo.sp_pr_FormulaPromedioCTS', 'P') IS NULL
+            RETURN;
+
+        IF @strarg1 IS NULL
+            RETURN;
+
+        EXEC dbo.sp_pr_FormulaPromedioCTS
+            @cia = @cia,
+            @person = @person,
+            @payrolltype = @payrolltype,
+            @processtype = @processtype,
+            @period = @period,
+            @formulacode = @strarg1,
+            @result = @result OUTPUT;
+        RETURN;
+    END
+
     RAISERROR('Procedimiento no autorizado en formulador: %s', 16, 1, @procname);
 END
 GO

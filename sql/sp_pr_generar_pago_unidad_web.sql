@@ -159,10 +159,11 @@ BEGIN
                 ELSE '1'
             END AS tipodocumento,
             LEFT(LTRIM(RTRIM(
-                CASE
-                    WHEN ISNULL(sp.DocumentNumber, '') = '' THEN ISNULL(sp.Ruc, '')
-                    ELSE sp.DocumentNumber
-                END
+                COALESCE(
+                    NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumberBcp, ''))), ''),
+                    NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))), ''),
+                    LTRIM(RTRIM(ISNULL(sp.Ruc, '')))
+                )
             )), 12) AS numerodocumento,
             LEFT(LTRIM(RTRIM(
                 ISNULL(sp.lastname1, '') + ' ' +
@@ -172,18 +173,20 @@ BEGIN
             )), 75) AS nombre,
             LEFT(LTRIM(RTRIM(
                 'Referencia Beneficiario ' + LTRIM(RTRIM(
-                    CASE
-                        WHEN ISNULL(sp.DocumentNumber, '') = '' THEN ISNULL(sp.Ruc, '')
-                        ELSE sp.DocumentNumber
-                    END
+                    COALESCE(
+                        NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumberBcp, ''))), ''),
+                        NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))), ''),
+                        LTRIM(RTRIM(ISNULL(sp.Ruc, '')))
+                    )
                 ))
             )), 40) AS refbeneficiario,
             LEFT(LTRIM(RTRIM(
                 'Ref Emp ' + LTRIM(RTRIM(
-                    CASE
-                        WHEN ISNULL(sp.DocumentNumber, '') = '' THEN ISNULL(sp.Ruc, '')
-                        ELSE sp.DocumentNumber
-                    END
+                    COALESCE(
+                        NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumberBcp, ''))), ''),
+                        NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))), ''),
+                        LTRIM(RTRIM(ISNULL(sp.Ruc, '')))
+                    )
                 ))
             )), 20) AS refempresa,
             p.importe

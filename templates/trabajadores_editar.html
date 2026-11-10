@@ -455,6 +455,17 @@
                             <input type="text" id="txtDocumentNumber" name="documentnumber" class="form-control form-control-sm campo-obligatorio"
                                    maxlength="15" value="{{ empleado.documentnumber or '' }}" required autocomplete="off">
                         </div>
+                        {% if (sql_database or '')|lower == 'hm_alamo' %}
+                        <div class="col-md-3">
+                            <label for="txtDocumentNumberBcp" class="form-label small fw-bold text-muted">Número BCP</label>
+                            <input type="text" id="txtDocumentNumberBcp" name="documentnumberbcp" class="form-control form-control-sm"
+                                   maxlength="15"
+                                   value="{{ empleado.documentnumberbcp or empleado.documentnumber or '' }}"
+                                   autocomplete="off"
+                                   title="Documento que irá en el TXT Telecrédito BCP (haberes/CTS). Por defecto igual al número real.">
+                            <div class="form-text">Solo pago BCP. Editar si el banco exige otro formato (p. ej. un cero en CE).</div>
+                        </div>
+                        {% endif %}
                         <div class="col-md-4">
                             <label for="cboUnidad" class="form-label small fw-bold text-muted te-req">Unidad</label>
                             <select id="cboUnidad" name="replicationunit" class="form-select form-select-sm campo-obligatorio" required>
@@ -1408,6 +1419,34 @@ document.addEventListener('DOMContentLoaded', function () {
         }
     }
 
+    function wireDocumentNumberBcpSync() {
+        const txtDoc = document.getElementById('txtDocumentNumber');
+        const txtBcp = document.getElementById('txtDocumentNumberBcp');
+        if (!txtDoc || !txtBcp) return;
+
+        let lastDoc = (txtDoc.value || '').trim();
+        let bcpManual = (txtBcp.value || '').trim() !== ''
+            && (txtBcp.value || '').trim() !== lastDoc;
+
+        txtBcp.addEventListener('input', function () {
+            const docNow = (txtDoc.value || '').trim();
+            bcpManual = (this.value || '').trim() !== ''
+                && (this.value || '').trim() !== docNow;
+        });
+
+        const syncFromDoc = function () {
+            const docNow = (this.value || '').trim();
+            const bcpNow = (txtBcp.value || '').trim();
+            if (!bcpManual || bcpNow === '' || bcpNow === lastDoc) {
+                txtBcp.value = docNow;
+                bcpManual = false;
+            }
+            lastDoc = docNow;
+        };
+        txtDoc.addEventListener('input', syncFromDoc);
+        txtDoc.addEventListener('change', syncFromDoc);
+    }
+
     function wireGenerales() {
         ['txtName1', 'txtName2', 'txtLastName1', 'txtLastName2'].forEach((id) => {
             normalizarMayusculas(document.getElementById(id));
@@ -1416,6 +1455,7 @@ document.addEventListener('DOMContentLoaded', function () {
         });
         calcularNombreCompleto();
         wireUbigeo();
+        wireDocumentNumberBcpSync();
 
         if (modoNuevo) {
             const txtPerson = document.getElementById('txtPerson');
@@ -1426,6 +1466,7 @@ document.addEventListener('DOMContentLoaded', function () {
                     actualizarResumenCodigo();
                     if (!docEditadoManual && txtDoc) {
                         txtDoc.value = this.value;
+                        txtDoc.dispatchEvent(new Event('input'));
                     }
                 });
                 actualizarResumenCodigo();

@@ -21,7 +21,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_actualizar_datosgenerales_trabajador_web]
     @documentnumber         VARCHAR(15),
     @replicationunit        VARCHAR(4),
     @userid                 VARCHAR(20) = NULL,
-    @xlastuser              VARCHAR(20) = NULL
+    @xlastuser              VARCHAR(20) = NULL,
+    @documentnumberbcp      VARCHAR(15) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -34,6 +35,8 @@ BEGIN
     DECLARE @province_id     VARCHAR(20);
     DECLARE @department_id   VARCHAR(20);
     DECLARE @country_id      VARCHAR(20);
+    DECLARE @doc_old         VARCHAR(15);
+    DECLARE @bcp_old         VARCHAR(15);
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @person = UPPER(LTRIM(RTRIM(ISNULL(@person, ''))));
@@ -53,6 +56,7 @@ BEGIN
     SET @department_id = NULL;
     SET @country_id = NULL;
     SET @documentnumber = LTRIM(RTRIM(ISNULL(@documentnumber, '')));
+    SET @documentnumberbcp = LTRIM(RTRIM(ISNULL(@documentnumberbcp, '')));
     SET @replicationunit = UPPER(LTRIM(RTRIM(ISNULL(@replicationunit, ''))));
     -- Conservar el UserID canónico de SY_User (sin forzar LOWER): el combo web
     -- compara en forma exacta y usuarios como ARODRIGUEZ / Contador fallaban al reabrir.
@@ -212,6 +216,24 @@ BEGIN
     IF LEN(@nombre_completo) > 100
         SET @nombre_completo = LEFT(@nombre_completo, 100);
 
+    /* Número BCP: vacío → documento; si antes iba sincronizado y cambió el doc, re-sincroniza. */
+    SELECT
+        @doc_old = LTRIM(RTRIM(ISNULL(DocumentNumber, ''))),
+        @bcp_old = LTRIM(RTRIM(ISNULL(DocumentNumberBcp, '')))
+    FROM SY_Person (NOLOCK)
+    WHERE Person = @person;
+
+    IF @documentnumberbcp = ''
+        SET @documentnumberbcp = @documentnumber;
+    ELSE IF (@bcp_old = '' OR @bcp_old = @doc_old)
+         AND @documentnumber <> @doc_old
+         AND (
+                @documentnumberbcp = @doc_old
+             OR @documentnumberbcp = @bcp_old
+             OR @documentnumberbcp = @documentnumber
+         )
+        SET @documentnumberbcp = @documentnumber;
+
     UPDATE sy_person
     SET name1 = @name1,
         name2 = NULLIF(@name2, ''),
@@ -231,6 +253,7 @@ BEGIN
         employeedocumenttype = @employeedocumenttype,
         documenttype = @employeedocumenttype,
         documentnumber = @documentnumber,
+        DocumentNumberBcp = LEFT(@documentnumberbcp, 15),
         replicationunit = @replicationunit,
         userid = @userid_norm,
         flaguserid = CASE WHEN @userid_norm IS NULL THEN 'N' ELSE 'Y' END,

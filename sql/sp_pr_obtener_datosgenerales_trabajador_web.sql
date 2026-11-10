@@ -75,6 +75,13 @@ BEGIN
         ))) AS employeedocumenttype,
         LTRIM(RTRIM(ISNULL(dt.description, ''))) AS employeedocumenttype_desc,
         LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) AS documentnumber,
+        LTRIM(RTRIM(ISNULL(
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumberBcp, ''))), ''),
+                sp.documentnumber
+            ),
+            ''
+        ))) AS documentnumberbcp,
         LTRIM(RTRIM(ISNULL(sp.replicationunit, ''))) AS replicationunit,
         LTRIM(RTRIM(ISNULL(ru.description, ISNULL(ru.name, '')))) AS replicationunit_desc,
         LTRIM(RTRIM(ISNULL(sp.userid, ''))) AS userid,

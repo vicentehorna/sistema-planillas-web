@@ -8589,6 +8589,7 @@ def _empleado_generales_desde_form(form):
         'localite': str(form.get('localite') or '').strip()[:20],
         'employeedocumenttype': str(form.get('employeedocumenttype') or '').strip(),
         'documentnumber': str(form.get('documentnumber') or '').strip()[:15],
+        'documentnumberbcp': str(form.get('documentnumberbcp') or '').strip()[:15],
         'replicationunit': str(form.get('replicationunit') or '').strip().upper()[:4],
         'userid': str(form.get('userid') or '').strip()[:20],
     }
@@ -8899,13 +8900,16 @@ def trabajadores_editar(person_id):
             sede = ''
             if _es_cliente_elclan():
                 sede = _sede_elclan_normalizada(request.form.get('sede'))
+            doc_bcp = datos.get('documentnumberbcp') or ''
+            if not doc_bcp:
+                doc_bcp = datos['documentnumber']
             cursor.execute(
                 'EXEC sp_pr_actualizar_datosgenerales_trabajador_web '
                 '@cia=?, @person=?, @name1=?, @name2=?, @lastname1=?, @lastname2=?, '
                 '@birthdate=?, @sex=?, '
                 '@sectelephone=?, @email=?, @address=?, @nacionalidad=?, @localite=?, '
                 '@employeedocumenttype=?, @documentnumber=?, '
-                '@replicationunit=?, @userid=?, @xlastuser=?',
+                '@replicationunit=?, @userid=?, @xlastuser=?, @documentnumberbcp=?',
                 (
                     cia,
                     person_id,
@@ -8925,6 +8929,7 @@ def trabajadores_editar(person_id):
                     datos['replicationunit'],
                     datos['userid'] or None,
                     xlastuser,
+                    doc_bcp,
                 ),
             )
             if _es_cliente_elclan():
@@ -9424,7 +9429,7 @@ def trabajadores_nuevo():
                     @cci=?, @ctsbank=?, @ctsaccount=?, @ctscurrency=?,
                     @instructionlevel=?, @costcenter1=?, @costcenter2=?, @anio_egreso=?,
                     @specialty=?, @profesionalstudiescentertype=?, @istrainer=?, @indicator=?,
-                    @confirmar_nombre=?, @xlastuser=?,
+                    @confirmar_nombre=?, @xlastuser=?, @documentnumberbcp=?,
                     @person_out=@person_out OUTPUT, @mensaje_out=@mensaje_out OUTPUT;
                 SELECT @person_out AS person_out, @mensaje_out AS mensaje_out;
                 """,
@@ -9484,6 +9489,7 @@ def trabajadores_nuevo():
                     educacion['indicator'] or None,
                     confirmar_nombre,
                     xlastuser,
+                    (generales.get('documentnumberbcp') or generales['documentnumber'] or None),
                 ),
             )
             rows = _dicts_first_nonempty_resultset(cursor)

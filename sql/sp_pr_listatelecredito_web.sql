@@ -71,10 +71,11 @@ BEGIN
     SELECT
         e.person,
         LTRIM(RTRIM(
-            CASE
-                WHEN ISNULL(sp.DocumentNumber, '') = '' THEN ISNULL(sp.Ruc, '')
-                ELSE sp.DocumentNumber
-            END
+            COALESCE(
+                NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumberBcp, ''))), ''),
+                NULLIF(LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))), ''),
+                LTRIM(RTRIM(ISNULL(sp.Ruc, '')))
+            )
         )) AS dni,
         LTRIM(RTRIM(
             ISNULL(sp.lastname1, '') + ' ' +

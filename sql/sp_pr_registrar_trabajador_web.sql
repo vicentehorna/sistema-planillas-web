@@ -78,6 +78,7 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_registrar_trabajador_web]
     @indicator              CHAR(1) = NULL,
     @confirmar_nombre       CHAR(1) = 'N',
     @xlastuser              VARCHAR(20) = NULL,
+    @documentnumberbcp      VARCHAR(15) = NULL,
     @person_out             VARCHAR(20) = NULL OUTPUT,
     @mensaje_out            VARCHAR(500) = NULL OUTPUT
 AS
@@ -532,7 +533,7 @@ BEGIN
 
         INSERT INTO SY_Person (
             Person, FlagUserID, PersonType, Name, Address,
-            DocumentType, DocumentNumber, Email, Status, FlagRucPersonType,
+            DocumentType, DocumentNumber, DocumentNumberBcp, Email, Status, FlagRucPersonType,
             IsVendor, IsCustomer, XLastUser, XLastDate, Company,
             ReplicationUnit, IsEmployee, SecTelephone, Name2, LastName1,
             Name1, LastName2, BirthDate, Sex,
@@ -546,7 +547,9 @@ BEGIN
         )
         VALUES (
             @person, 'N', 'NN', @nombre_completo, @address,
-            @employeedocumenttype, @documentnumber, @email, 'A', 'XX',
+            @employeedocumenttype, @documentnumber,
+            LEFT(ISNULL(NULLIF(LTRIM(RTRIM(ISNULL(@documentnumberbcp, ''))), ''), @documentnumber), 15),
+            @email, 'A', 'XX',
             'Y', 'N', @xlastuser, GETDATE(), @cia,
             @replicationunit, 'Y', @sectelephone, NULLIF(@name2, ''), @lastname1,
             @name1, NULLIF(@lastname2, ''), @birthdate_dt, @sex,

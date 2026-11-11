@@ -17,7 +17,7 @@ GO
       Cabecera: igual largo que estándar, sin subtipo; referencia cabecera = 40 espacios.
       Detalle:  ref benef = 'Referencia Beneficiario ' + dni; ref emp = 'Ref Emp ' + dni.
 
-    Formato hm_aci / hm_ultra (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
+    Formato hm_aci / hm_ultra / hm_alamo / hm_lumat (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
                 monto | espacios(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
@@ -60,13 +60,13 @@ BEGIN
     DECLARE @total_cent      BIGINT;
     DECLARE @checksum        BIGINT;
     DECLARE @parte_chk       VARCHAR(30);
-    DECLARE @es_formato_aci  BIT;  /* hm_aci + hm_ultra: cabecera 125 / detalle 214 */
+    DECLARE @es_formato_aci  BIT;  /* hm_aci + hm_ultra + hm_alamo + hm_lumat: cabecera 125 / detalle 214 */
     DECLARE @es_hm_maritima  BIT;
     DECLARE @ruc_empresa     VARCHAR(12);
     DECLARE @chk_len_empresa INT;
 
     SET @es_formato_aci = CASE
-        WHEN LOWER(DB_NAME()) IN ('hm_aci', 'hm_ultra') THEN 1
+        WHEN LOWER(DB_NAME()) IN ('hm_aci', 'hm_ultra', 'hm_alamo', 'hm_lumat') THEN 1
         ELSE 0
     END;
     SET @es_hm_maritima = CASE WHEN LOWER(DB_NAME()) = 'hm_maritima' THEN 1 ELSE 0 END;
@@ -251,7 +251,7 @@ BEGIN
 
     IF @es_formato_aci = 1
     BEGIN
-        /* Estructura mayo / wf_calculate (hm_aci, hm_ultra): cabecera 125, detalle 214. */
+        /* Estructura mayo / wf_calculate (hm_aci, hm_ultra, hm_alamo, hm_lumat): cabecera 125, detalle 214. */
         SELECT orden, linea_txt
         FROM (
             SELECT

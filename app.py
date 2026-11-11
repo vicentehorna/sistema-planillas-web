@@ -4220,6 +4220,26 @@ def _require_hm_aci_json(feature='Esta opción'):
     return None
 
 
+# Archivo BANBIF CTS (TXT depósito CTS): hm_aci + hm_elclan.
+_BDS_BANBIF_CTS = frozenset({'hm_aci', 'hm_elclan'})
+
+
+def _es_bd_banbif_cts():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() in _BDS_BANBIF_CTS
+    except Exception:
+        return False
+
+
+def _require_banbif_cts_json(feature='Archivo BANBIF CTS'):
+    if not _es_bd_banbif_cts():
+        return jsonify({
+            'error': f'{feature} solo está disponible en hm_aci / hm_elclan.',
+        }), 403
+    return None
+
+
 # BDs con modal "Buscar todos" (lista de trabajadores cross-empresa).
 _BDS_BUSCAR_TODOS_TRABAJADORES = frozenset({'hm_alamo', 'hm_garc'})
 
@@ -27994,8 +28014,8 @@ def api_continental_cts_generar_txt():
 @app.route('/cts/banbif')
 @login_required
 def banbif_cts_page():
-    if not _es_bd_hm_aci():
-        flash('Archivo BANBIF CTS solo está disponible en hm_aci.', 'warning')
+    if not _es_bd_banbif_cts():
+        flash('Archivo BANBIF CTS solo está disponible en hm_aci / hm_elclan.', 'warning')
         return redirect(url_for('dashboard'))
     return render_template('banbif_cts.html')
 
@@ -28250,7 +28270,7 @@ def api_scotiabank_cts_generar_txt():
 @login_required
 def api_banbif_cts_listado():
     """sp_pr_listabanbifcts_web: trabajadores con cuenta CTS en el BANBIF."""
-    denied = _require_hm_aci_json('Archivo BANBIF CTS')
+    denied = _require_banbif_cts_json('Archivo BANBIF CTS')
     if denied:
         return denied
     body = request.get_json(silent=True) or {}
@@ -28314,7 +28334,7 @@ def api_banbif_cts_listado():
 @login_required
 def api_banbif_cts_generar_txt():
     """sp_pr_generar_banbifcts_web → TXT depósito CTS BANBIF (servicio CTS)."""
-    denied = _require_hm_aci_json('Archivo BANBIF CTS')
+    denied = _require_banbif_cts_json('Archivo BANBIF CTS')
     if denied:
         return denied
     body = request.get_json(silent=True) or {}

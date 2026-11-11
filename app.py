@@ -28333,7 +28333,7 @@ def api_banbif_cts_listado():
 @app.route('/api/cts/banbif/generar-txt', methods=['POST'])
 @login_required
 def api_banbif_cts_generar_txt():
-    """sp_pr_generar_banbifcts_web → TXT depósito CTS BANBIF (servicio CTS)."""
+    """sp_pr_generar_banbifcts_web → TXT CTS BANBIF (layout mayo 213 chars, sin cabecera)."""
     denied = _require_banbif_cts_json('Archivo BANBIF CTS')
     if denied:
         return denied

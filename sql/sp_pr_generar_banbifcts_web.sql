@@ -1,14 +1,20 @@
 /*
-    Archivo BANBIF de depósito de CTS (layout fijo según manual Banbif).
+    Archivo BANBIF depósito CTS — layout fijo 213 (validado vs
+    AUXILIARES/SCOTIA/BanBif_CTS_LO20.txt del sistema anterior, mayo).
 
-    Cabecera (96): 1 + servicio CTS (3) + cuenta cargo 20 + PEN/USD + total 15
-                   + cantidad 6 + fecha AAAAMMDD + referencia 40.
-    Detalle (130): 2 + P/I + cuenta CTS 20 + tipo doc 1 + documento 12
-                   + nombre 40 + importe 15 + referencia individual 40.
+    Sin cabecera. Solo detalle 213 caracteres:
+       7  secuencia (izquierda)
+      12  documento
+      20  apellido 1
+      20  apellido 2
+      40  nombres
+      74  espacios
+      14  cuenta CTS del trabajador
+      10  espacios
+       1  moneda (1=soles, 2=dólares)
+      15  importe en centavos
 
-    Servicio fijo: CTS.
     Cuenta destino: PR_Employee.CTSAccount.
-    P si CTSBank = PR_Mapping.banbifbank; I si es otro banco.
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
     Requiere #BanbifCtsPersonas (person) cargada por la app.
 */
@@ -38,15 +44,8 @@ BEGIN
         RETURN;
     END
 
-    DECLARE @cuenta_origen VARCHAR(20);
-    DECLARE @banbifbank    VARCHAR(20);
-    DECLARE @moneda_txt    CHAR(3);
-    DECLARE @fecha_txt     CHAR(8);
-    DECLARE @ref_txt       VARCHAR(40);
-    DECLARE @total_reg     INT;
-    DECLARE @total_importe DECIMAL(18, 2);
-    DECLARE @importe15     VARCHAR(15);
-    DECLARE @linea_cabecera VARCHAR(96);
+    DECLARE @banbifbank VARCHAR(20);
+    DECLARE @tipo_moneda CHAR(1);
 
     SELECT @banbifbank = LTRIM(RTRIM(ISNULL(m.banbifbank, '')))
     FROM pr_mapping m
@@ -58,21 +57,7 @@ BEGIN
         RETURN;
     END
 
-    SELECT @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20)
-    FROM TE_BankAccount ba
-    WHERE ba.Company = @par_company
-      AND ba.Bank = @banbifbank
-      AND ba.accountcurrency = @par_currency;
-
-    IF @cuenta_origen IS NULL OR LTRIM(RTRIM(@cuenta_origen)) = ''
-    BEGIN
-        RAISERROR('No se encontró cuenta origen BANBIF en TE_BankAccount para la compañía/moneda.', 16, 1);
-        RETURN;
-    END
-
-    SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN 'USD' ELSE 'PEN' END;
-    SET @fecha_txt = CONVERT(CHAR(8), @par_paydate, 112);
-    SET @ref_txt = LEFT(@par_referencia + REPLICATE(' ', 40), 40);
+    SET @tipo_moneda = CASE WHEN @par_currency = 'EX' THEN '2' ELSE '1' END;
 
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
@@ -111,34 +96,20 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
-            /* 1=DNI, 3=CE; resto espacio */
-            CASE
-                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
-                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
-                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
-                ELSE ' '
-            END AS tipo_doc,
-            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) AS documentnumber,
-            UPPER(LTRIM(RTRIM(
-                ISNULL(sp.lastname1, '') + ' ' +
-                ISNULL(sp.lastname2, '') + ' ' +
-                ISNULL(sp.name1, '') + ' ' +
-                ISNULL(sp.name2, '')
-            ))) AS nombre,
-            CASE WHEN e.CTSBank = m.banbifbank THEN 'P' ELSE 'I' END AS tipo_abono,
-            LEFT(
-                REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '')
-                + REPLICATE(' ', 20),
-                20
-            ) AS cuenta_empleado,
+            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, e.person))) AS documentnumber,
+            LTRIM(RTRIM(ISNULL(sp.lastname1, ''))) AS lastname1,
+            LTRIM(RTRIM(ISNULL(sp.lastname2, ''))) AS lastname2,
+            LTRIM(RTRIM(
+                LTRIM(RTRIM(ISNULL(sp.name1, ''))) + ' ' +
+                LTRIM(RTRIM(ISNULL(sp.name2, '')))
+            )) AS nombres,
+            REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') AS cuenta_raw,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
             INNER JOIN pr_mapping m ON m.company = e.company
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
-            LEFT JOIN SY_PersonDocumentType pdt
-                ON pdt.PersonDocumentType = sp.EmployeeDocumentType
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(m.banbifbank, '') <> ''
@@ -148,61 +119,36 @@ BEGIN
                 (@todos_bancos = 'N' AND e.CTSBank = m.banbifbank)
              OR (@todos_bancos = 'Y' AND ISNULL(e.CTSBank, '') <> '')
           )
+    ),
+    Numerado AS (
+        SELECT
+            *,
+            LEFT(cuenta_raw + REPLICATE(' ', 14), 14) AS cuenta_fmt,
+            ROW_NUMBER() OVER (
+                ORDER BY lastname1, lastname2, nombres, person
+            ) AS orden
+        FROM DetalleBase
+        WHERE cuenta_raw <> ''
     )
     SELECT
-        person,
-        tipo_doc,
-        LEFT(documentnumber + REPLICATE(' ', 12), 12) AS documento_fmt,
-        tipo_abono,
-        cuenta_empleado,
-        LEFT(nombre + REPLICATE(' ', 40), 40) AS nombre_fmt,
-        importe,
-        RIGHT(
-            REPLICATE('0', 15) +
-            CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
-            15
-        ) AS importe15
-    INTO #Detalle
-    FROM DetalleBase
-    WHERE LTRIM(RTRIM(cuenta_empleado)) <> '';
-
-    SELECT @total_reg = COUNT(*), @total_importe = ISNULL(SUM(importe), 0)
-    FROM #Detalle;
-
-    SET @importe15 = RIGHT(
-        REPLICATE('0', 15) +
-        CAST(CAST(ROUND(ISNULL(@total_importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
-        15
-    );
-
-    SET @linea_cabecera =
-        '1' +
-        'CTS' +
-        LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
-        @moneda_txt +
-        @importe15 +
-        RIGHT(REPLICATE('0', 6) + CAST(ISNULL(@total_reg, 0) AS VARCHAR(10)), 6) +
-        @fecha_txt +
-        @ref_txt;
-
-    SELECT orden, linea_txt
-    FROM (
-        SELECT 0 AS orden, @linea_cabecera AS linea_txt
-        UNION ALL
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY nombre_fmt, person) AS orden,
-            (
-                '2' +
-                tipo_abono +
-                cuenta_empleado +
-                tipo_doc +
-                documento_fmt +
-                nombre_fmt +
-                importe15 +
-                @ref_txt
-            ) AS linea_txt
-        FROM #Detalle
-    ) AS lineas
+        orden,
+        (
+            LEFT(CAST(orden AS VARCHAR(10)) + REPLICATE(' ', 7), 7) +
+            LEFT(documentnumber + REPLICATE(' ', 12), 12) +
+            LEFT(lastname1 + REPLICATE(' ', 20), 20) +
+            LEFT(lastname2 + REPLICATE(' ', 20), 20) +
+            LEFT(nombres + REPLICATE(' ', 40), 40) +
+            REPLICATE(' ', 74) +
+            cuenta_fmt +
+            REPLICATE(' ', 10) +
+            @tipo_moneda +
+            RIGHT(
+                REPLICATE('0', 15) +
+                CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
+                15
+            )
+        ) AS linea_txt
+    FROM Numerado
     ORDER BY orden;
 END
 GO

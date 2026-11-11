@@ -17,7 +17,7 @@ Sintaxis soportada:
   EMPLOYEE("CAMPO")   -- datos del trabajador (#empleado): PENSION, TOPAFP, PORC_SEGURO, ...
   PROC("SP_NOMBRE" [, arg1, ...])  -- ejecuta SP autorizado; contexto (@cia, @period, ...) implícito
   PROC("sp_pr_FormulaPromedioSubsidios", "TOTAL_REMU_AFP")  -- promedio 12 meses (FormulaCode literal)
-  PROC("sp_pr_FormulaPromedioCTS", "HRS_EXT_HIST")  -- promedio ciclo CTS (FormulaCode literal)
+  PROC("sp_pr_FormulaPromedioCTS", "COMISION", 3, 6)  -- CTS: FormulaCode, mín. meses>0, divisor (opc.)
   PAYROLL("SHORTNAME") / PLANILLA("SHORTNAME")  -- 1 si la planilla actual coincide (PR_PayRollType.ShortName)
   PROCESS("SHORTNAME") / PROCESO("SHORTNAME")   -- 1 si el proceso actual coincide (PR_ProcessType.ShortName)
   MES() / MONTH()       -- mes numérico (1-12) del periodo en cálculo (@period)
@@ -101,12 +101,13 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "display": "sp_pr_FormulaPromedioCTS",
         "description": (
             "Promedio CTS de un concepto (FormulaCode) en FIN_DE_MES. "
-            "Ciclo may–oct / nov–abr según periodo fin; divide entre meses "
-            "del rango desde ingreso/reingreso. Requiere literal string."
+            "Ciclo may–oct / nov–abr. Args: FormulaCode [, minimo_meses>0 [, divisor]]. "
+            "Sin divisor (o 0): meses del rango desde ingreso/reingreso; "
+            "con divisor>0: divide siempre entre ese valor."
         ),
         "min_args": 1,
-        "max_args": 1,
-        "param_names": ["formulacode"],
+        "max_args": 3,
+        "param_names": ["formulacode", "valor_minimo", "divisor"],
         "arg_kinds": ["str"],
     },
 }

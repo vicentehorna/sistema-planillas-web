@@ -140,6 +140,18 @@ BEGIN
         IF @strarg1 IS NULL
             RETURN;
 
+        /*
+            Compilado: #S:SP_PR_FORMULAPROMEDIOCTS|N|F:CODE|[min]|[div]|#
+            Con FormulaCode en F:, EjecutarFormula deja los numéricos en @arg2/@arg3.
+            min omitido → 0; div omitido o 0 → NULL (meses desde ingreso/reingreso).
+        */
+        DECLARE @cts_min numeric(19, 4) = 0;
+        DECLARE @cts_div numeric(19, 4) = NULL;
+        IF @nargs >= 2
+            SET @cts_min = ISNULL(@arg2, 0);
+        IF @nargs >= 3 AND ISNULL(@arg3, 0) > 0
+            SET @cts_div = @arg3;
+
         EXEC dbo.sp_pr_FormulaPromedioCTS
             @cia = @cia,
             @person = @person,
@@ -147,6 +159,8 @@ BEGIN
             @processtype = @processtype,
             @period = @period,
             @formulacode = @strarg1,
+            @valor_minimo = @cts_min,
+            @divisor = @cts_div,
             @result = @result OUTPUT;
         RETURN;
     END

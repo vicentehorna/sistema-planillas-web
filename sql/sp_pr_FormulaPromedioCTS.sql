@@ -12,29 +12,38 @@
 
     Importes: siempre desde FIN_DE_MES (igual que las líneas tipo U de elclan).
 
-    Divisor: vacío → meses del rango desde ingreso/reingreso
-    (si el trabajador ingresó después de mayo/noviembre, solo cuenta desde su mes).
+    @valor_minimo:
+      Meses del rango con importe > 0 exigidos. Si hay menos → 0.
+      Ej.: 3 = mismo criterio típico de elclan tipo U.
+
+    @divisor:
+      > 0 → divide siempre entre ese valor (p.ej. 6), aunque haya ingresado hace 2 meses.
+      NULL o 0 → divide entre meses del rango desde ingreso/reingreso.
 
     Uso directo:
         DECLARE @r numeric(19,4);
         EXEC dbo.sp_pr_FormulaPromedioCTS
             @cia = 'BGT', @person = '12345678',
             @payrolltype = '...', @processtype = '...',
-            @period = '20261111', @formulacode = 'HRS_EXT_HIST',
-            @result = @r OUTPUT;
+            @period = '20261111', @formulacode = 'COMISION',
+            @valor_minimo = 3, @divisor = 6, @result = @r OUTPUT;
 
     Uso en fórmulas (vía sp_pr_formula_exec_proc_web):
-        LET PROM = PROC("sp_pr_FormulaPromedioCTS", "HRS_EXT_HIST")
+        LET PROM = PROC("sp_pr_FormulaPromedioCTS", "COMISION", 3, 6)
+        LET PROM2 = PROC("sp_pr_FormulaPromedioCTS", "COMISION", 3)
+        LET PROM3 = PROC("sp_pr_FormulaPromedioCTS", "COMISION")
         RESULT = PROM
 */
 CREATE OR ALTER PROCEDURE dbo.sp_pr_FormulaPromedioCTS
-    @cia         varchar(20),
-    @person      varchar(20),
-    @payrolltype varchar(20),
-    @processtype varchar(20),
-    @period      varchar(20),
-    @formulacode varchar(50),
-    @result      numeric(19, 4) OUTPUT
+    @cia           varchar(20),
+    @person        varchar(20),
+    @payrolltype   varchar(20),
+    @processtype   varchar(20),
+    @period        varchar(20),
+    @formulacode   varchar(50),
+    @valor_minimo  numeric(19, 4) = 0,
+    @divisor       numeric(19, 4) = NULL,
+    @result        numeric(19, 4) OUTPUT
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -46,6 +55,9 @@ BEGIN
     SET @processtype = LTRIM(RTRIM(ISNULL(@processtype, '')));
     SET @period = LTRIM(RTRIM(ISNULL(@period, '')));
     SET @formulacode = UPPER(LTRIM(RTRIM(ISNULL(@formulacode, ''))));
+    SET @valor_minimo = ISNULL(@valor_minimo, 0);
+    IF ISNULL(@divisor, 0) <= 0
+        SET @divisor = NULL;
 
     IF @cia = '' OR @person = '' OR @payrolltype = '' OR @processtype = ''
        OR @period = '' OR @formulacode = ''
@@ -120,8 +132,8 @@ BEGIN
         @period,
         @period_end,
         @concept,
-        0,            /* sin mínimo de meses con importe > 0 */
-        NULL,         /* Div. vacío: meses del rango desde ingreso/reingreso */
+        @valor_minimo,
+        @divisor,
         @fechaingreso
     ), 0);
 END

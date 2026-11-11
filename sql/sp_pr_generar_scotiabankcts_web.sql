@@ -1,15 +1,19 @@
 /*
-    Archivo Scotiabank de depósito de CTS (layout AUXILIARES/SCOTIA).
+    Archivo Scotiabank depósito CTS — plantilla SBP CTS NUEVO TBK
+    (validado contra AUXILIARES/SCOTIA/ABONOS.txt del sistema anterior, mayo).
 
-    Cabecera (96): 1 + servicio CTS (3) + cuenta cargo 20 + PEN/USD + total 15
-                   + cantidad 6 + fecha AAAAMMDD + referencia 40.
-    Detalle (130): 2 + P/I + cuenta CTS 20 + tipo doc 1 + documento 12
-                   + nombre 40 + importe 15 + referencia individual 40.
+    Sin cabecera. Solo líneas de detalle de 139 caracteres:
+      12  documento (DNI/CE, izquierda, relleno espacios)
+       1  espacio
+      60  nombre
+      20  cuenta cargo empresa Scotiabank (izquierda)
+      11  espacios
+      13  importe (centavos, 13 dígitos con ceros a la izquierda)
+      20  espacios
+       2  tipo/forma de pago CTS = '05'
 
-    Servicio fijo: CTS.
-    Cuenta destino: PR_Employee.CTSAccount.
-    P si CTSBank/ERP_Bank es Scotiabank; I si es otro banco.
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
+    Cuenta por línea: cuenta origen Scotiabank de la empresa (igual que ABONOS mayo).
     Requiere #ScotiabankCtsPersonas (person) cargada por la app.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_scotiabankcts_web]
@@ -40,13 +44,6 @@ BEGIN
 
     DECLARE @cuenta_origen VARCHAR(20);
     DECLARE @scotia_bank   VARCHAR(20);
-    DECLARE @moneda_txt    CHAR(3);
-    DECLARE @fecha_txt     CHAR(8);
-    DECLARE @ref_txt       VARCHAR(40);
-    DECLARE @total_reg     INT;
-    DECLARE @total_importe DECIMAL(18, 2);
-    DECLARE @importe15     VARCHAR(15);
-    DECLARE @linea_cabecera VARCHAR(96);
 
     SELECT TOP 1 @scotia_bank = LTRIM(RTRIM(b.Bank))
     FROM ERP_Bank b
@@ -60,11 +57,14 @@ BEGIN
         RETURN;
     END
 
-    SELECT @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20)
+    /* Preferir la cuenta Scotiabank más larga en la moneda (CTS empresa). */
+    SELECT TOP 1 @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20)
     FROM TE_BankAccount ba
     WHERE ba.Company = @par_company
       AND ba.Bank = @scotia_bank
-      AND ba.accountcurrency = @par_currency;
+      AND ba.accountcurrency = @par_currency
+    ORDER BY LEN(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', '')) DESC,
+             ba.BankAccountNumber;
 
     IF @cuenta_origen IS NULL OR LTRIM(RTRIM(@cuenta_origen)) = ''
     BEGIN
@@ -72,9 +72,11 @@ BEGIN
         RETURN;
     END
 
-    SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN 'USD' ELSE 'PEN' END;
-    SET @fecha_txt = CONVERT(CHAR(8), @par_paydate, 112);
-    SET @ref_txt = LEFT(@par_referencia + REPLICATE(' ', 40), 40);
+    /* Mayo ABONOS / SBP CTS: soles suele ir con prefijo 1 (376153240 → 1376153240). */
+    IF @par_currency = 'LO'
+       AND LEN(@cuenta_origen) = 9
+       AND LEFT(@cuenta_origen, 1) <> '1'
+        SET @cuenta_origen = '1' + @cuenta_origen;
 
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
@@ -113,45 +115,24 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
-            CASE
-                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
-                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
-                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
-                ELSE ' '
-            END AS tipo_doc,
-            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) AS documentnumber,
+            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, e.person))) AS documentnumber,
             UPPER(LTRIM(RTRIM(
                 ISNULL(sp.lastname1, '') + ' ' +
                 ISNULL(sp.lastname2, '') + ' ' +
                 ISNULL(sp.name1, '') + ' ' +
                 ISNULL(sp.name2, '')
             ))) AS nombre,
-            CASE
-                WHEN UPPER(ISNULL(eb.Name, '')) LIKE '%SCOTIABANK%'
-                  OR UPPER(ISNULL(e.CTSBank, '')) LIKE '%SCOTIABANK%'
-                  OR e.CTSBank = @scotia_bank
-                    THEN 'P'
-                ELSE 'I'
-            END AS tipo_abono,
-            LEFT(
-                REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '')
-                + REPLICATE(' ', 20),
-                20
-            ) AS cuenta_empleado,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
-            LEFT JOIN SY_PersonDocumentType pdt
-                ON pdt.PersonDocumentType = sp.EmployeeDocumentType
             LEFT JOIN ERP_Bank eb
                 ON eb.Bank = e.CTSBank
                AND eb.Company = e.Company
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(NULLIF(LTRIM(RTRIM(e.CTSCurrency)), ''), 'LO') = @par_currency
-          AND REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') <> ''
           AND (
                 (
                     @todos_bancos = 'N'
@@ -169,58 +150,32 @@ BEGIN
     )
     SELECT
         person,
-        tipo_doc,
-        LEFT(documentnumber + REPLICATE(' ', 12), 12) AS documento_fmt,
-        tipo_abono,
-        cuenta_empleado,
-        LEFT(nombre + REPLICATE(' ', 40), 40) AS nombre_fmt,
+        LEFT(LTRIM(RTRIM(ISNULL(documentnumber, ''))) + REPLICATE(' ', 12), 12) AS documento_fmt,
+        LEFT(LTRIM(RTRIM(ISNULL(nombre, ''))) + REPLICATE(' ', 60), 60) AS nombre_fmt,
+        LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) AS cuenta_fmt,
         importe,
         RIGHT(
-            REPLICATE('0', 15) +
+            REPLICATE('0', 13) +
             CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
-            15
-        ) AS importe15
+            13
+        ) AS importe13
     INTO #Detalle
-    FROM DetalleBase
-    WHERE LTRIM(RTRIM(cuenta_empleado)) <> '';
+    FROM DetalleBase;
 
-    SELECT @total_reg = COUNT(*), @total_importe = ISNULL(SUM(importe), 0)
-    FROM #Detalle;
-
-    SET @importe15 = RIGHT(
-        REPLICATE('0', 15) +
-        CAST(CAST(ROUND(ISNULL(@total_importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
-        15
-    );
-
-    SET @linea_cabecera =
-        '1' +
-        'CTS' +
-        LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
-        @moneda_txt +
-        @importe15 +
-        RIGHT(REPLICATE('0', 6) + CAST(ISNULL(@total_reg, 0) AS VARCHAR(10)), 6) +
-        @fecha_txt +
-        @ref_txt;
-
-    SELECT orden, linea_txt
-    FROM (
-        SELECT 0 AS orden, @linea_cabecera AS linea_txt
-        UNION ALL
-        SELECT
-            ROW_NUMBER() OVER (ORDER BY nombre_fmt, person) AS orden,
-            (
-                '2' +
-                tipo_abono +
-                cuenta_empleado +
-                tipo_doc +
-                documento_fmt +
-                nombre_fmt +
-                importe15 +
-                @ref_txt
-            ) AS linea_txt
-        FROM #Detalle
-    ) AS lineas
+    /* SBP CTS NUEVO TBK: solo detalle 139, sin cabecera. */
+    SELECT
+        ROW_NUMBER() OVER (ORDER BY nombre_fmt, person) AS orden,
+        (
+            documento_fmt +
+            ' ' +
+            nombre_fmt +
+            cuenta_fmt +
+            REPLICATE(' ', 11) +
+            importe13 +
+            REPLICATE(' ', 20) +
+            '05'
+        ) AS linea_txt
+    FROM #Detalle
     ORDER BY orden;
 END
 GO

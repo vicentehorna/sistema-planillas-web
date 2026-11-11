@@ -28213,7 +28213,7 @@ def api_scotiabank_cts_listado():
 @app.route('/api/cts/scotiabank/generar-txt', methods=['POST'])
 @login_required
 def api_scotiabank_cts_generar_txt():
-    """sp_pr_generar_scotiabankcts_web → TXT depósito CTS Scotiabank (servicio CTS)."""
+    """sp_pr_generar_scotiabankcts_web → TXT CTS Scotiabank (SBP CTS NUEVO TBK, 139 chars)."""
     body = request.get_json(silent=True) or {}
     p = _telecredito_cts_params_from_json(body)
     err = _telecredito_cts_validar_params(p)

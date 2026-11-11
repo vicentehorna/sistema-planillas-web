@@ -17,7 +17,7 @@ GO
       Cabecera: igual largo que estándar, sin subtipo; referencia cabecera = 40 espacios.
       Detalle:  ref benef = 'Referencia Beneficiario ' + dni; ref emp = 'Ref Emp ' + dni.
 
-    Formato hm_aci (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
+    Formato hm_aci / hm_ultra (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
                 monto | espacios(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
@@ -60,12 +60,15 @@ BEGIN
     DECLARE @total_cent      BIGINT;
     DECLARE @checksum        BIGINT;
     DECLARE @parte_chk       VARCHAR(30);
-    DECLARE @es_hm_aci       BIT;
+    DECLARE @es_formato_aci  BIT;  /* hm_aci + hm_ultra: cabecera 125 / detalle 214 */
     DECLARE @es_hm_maritima  BIT;
     DECLARE @ruc_empresa     VARCHAR(12);
     DECLARE @chk_len_empresa INT;
 
-    SET @es_hm_aci = CASE WHEN LOWER(DB_NAME()) = 'hm_aci' THEN 1 ELSE 0 END;
+    SET @es_formato_aci = CASE
+        WHEN LOWER(DB_NAME()) IN ('hm_aci', 'hm_ultra') THEN 1
+        ELSE 0
+    END;
     SET @es_hm_maritima = CASE WHEN LOWER(DB_NAME()) = 'hm_maritima' THEN 1 ELSE 0 END;
     SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN '1001' ELSE '0001' END;
     SET @anio = CAST(LEFT(@par_period, 4) AS INT);
@@ -168,7 +171,7 @@ BEGIN
         CAST(ROUND(
             COALESCE(
                 CASE
-                    WHEN @es_hm_aci = 1 AND ects.Person IS NOT NULL THEN
+                    WHEN @es_formato_aci = 1 AND ects.Person IS NOT NULL THEN
                         CASE
                             WHEN @par_currency = 'EX'
                                 THEN ISNULL(ects.AmountEx, 0) + ISNULL(ects.AmountInterestEx, 0)
@@ -219,7 +222,7 @@ BEGIN
 
     /* Checksum BCP: cuenta de cargo + cuentas de abono. */
     SET @checksum = 0;
-    IF @es_hm_aci = 1
+    IF @es_formato_aci = 1
     BEGIN
         /* wf_calculate: A → mid(4,11); otro → mid(4,10). */
         SET @chk_len_empresa = CASE WHEN @abrev_salary = 'A' THEN 11 ELSE 10 END;
@@ -246,9 +249,9 @@ BEGIN
     ), 0)
     FROM #Detalle;
 
-    IF @es_hm_aci = 1
+    IF @es_formato_aci = 1
     BEGIN
-        /* Estructura mayo / wf_calculate: cabecera 125, detalle 214. */
+        /* Estructura mayo / wf_calculate (hm_aci, hm_ultra): cabecera 125, detalle 214. */
         SELECT orden, linea_txt
         FROM (
             SELECT

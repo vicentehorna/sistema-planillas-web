@@ -1,8 +1,9 @@
 /*
     Promedio Vac: promedio de un concepto en un proceso y rango de periodos.
-    Suma los importes de cada mes del rango completo.
+    Suma / mínimo / divisor variable: solo meses del rango desde ingreso/reingreso
+    (LEFT(PRPeriod,6) >= yyyymm de @fechaingreso). Meses previos al reingreso no cuentan.
     Divide entre @divisor si > 0; si no, entre meses del rango desde ingreso/reingreso.
-    Si menos de @valor_minimo meses tienen importe > 0, devuelve 0.
+    Si menos de @valor_minimo meses (post-ingreso) tienen importe > 0, devuelve 0.
 */
 CREATE OR ALTER FUNCTION [dbo].[f_getPromedioVac](
     @cia           VARCHAR(20),
@@ -30,6 +31,11 @@ BEGIN
     IF @period_begin IS NULL OR @period_end IS NULL
         RETURN 0;
 
+    IF @fechaingreso IS NOT NULL
+        SET @hire_yyyymm = LEFT(CONVERT(VARCHAR(8), CONVERT(DATE, @fechaingreso), 112), 6);
+    ELSE
+        SET @hire_yyyymm = NULL;
+
     SELECT
         @suma = SUM(ISNULL(epc.importe, 0)),
         @meses_positivos = SUM(CASE WHEN ISNULL(epc.importe, 0) > 0 THEN 1 ELSE 0 END)
@@ -47,7 +53,11 @@ BEGIN
         ) epc ON epc.PRPeriod = p.PRPeriod
     WHERE p.Company = @cia
       AND p.PayRollType = @payrolltype
-      AND p.PRPeriod BETWEEN @period_begin AND @period_end;
+      AND p.PRPeriod BETWEEN @period_begin AND @period_end
+      AND (
+            @hire_yyyymm IS NULL
+            OR LEFT(p.PRPeriod, 6) >= @hire_yyyymm
+          );
 
     IF ISNULL(@meses_positivos, 0) < ISNULL(@valor_minimo, 0)
         RETURN 0;
@@ -58,11 +68,6 @@ BEGIN
     END
     ELSE
     BEGIN
-        IF @fechaingreso IS NOT NULL
-            SET @hire_yyyymm = LEFT(CONVERT(VARCHAR(8), CONVERT(DATE, @fechaingreso), 112), 6);
-        ELSE
-            SET @hire_yyyymm = NULL;
-
         SELECT @meses_divisor = COUNT(*)
         FROM PR_Period p (NOLOCK)
         WHERE p.Company = @cia

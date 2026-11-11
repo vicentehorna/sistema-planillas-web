@@ -13,12 +13,14 @@
     Importes: siempre desde FIN_DE_MES (igual que las líneas tipo U de elclan).
 
     @valor_minimo:
-      Meses del rango con importe > 0 exigidos. Si hay menos → 0.
+      Meses del rango (desde ingreso/reingreso) con importe > 0 exigidos. Si hay menos → 0.
       Ej.: 3 = mismo criterio típico de elclan tipo U.
+      Reingreso: solo cuentan meses >= ReEntryDate (p.ej. reingreso sep → oct = 2 < 3 → 0).
 
     @divisor:
       > 0 → divide siempre entre ese valor (p.ej. 6), aunque haya ingresado hace 2 meses.
       NULL o 0 → divide entre meses del rango desde ingreso/reingreso.
+      En ambos casos la suma solo incluye meses desde ingreso/reingreso.
 
     Uso directo:
         DECLARE @r numeric(19,4);

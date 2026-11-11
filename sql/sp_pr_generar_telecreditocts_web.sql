@@ -13,6 +13,10 @@ GO
       Detalle:  2 | tipo cta A/C | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
                 ref benef(40) | ref emp(20) | moneda | importe | 'S'
 
+    Formato hm_maritima (PRIMER GRUPO CTS / mayo validado por BCP) — cabecera 112 / detalle 195:
+      Cabecera: igual largo que estándar, sin subtipo; referencia cabecera = 40 espacios.
+      Detalle:  ref benef = 'Referencia Beneficiario ' + dni; ref emp = 'Ref Emp ' + dni.
+
     Formato hm_aci (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
                 monto | espacios(40) | checksum(15)
@@ -57,10 +61,12 @@ BEGIN
     DECLARE @checksum        BIGINT;
     DECLARE @parte_chk       VARCHAR(30);
     DECLARE @es_hm_aci       BIT;
+    DECLARE @es_hm_maritima  BIT;
     DECLARE @ruc_empresa     VARCHAR(12);
     DECLARE @chk_len_empresa INT;
 
     SET @es_hm_aci = CASE WHEN LOWER(DB_NAME()) = 'hm_aci' THEN 1 ELSE 0 END;
+    SET @es_hm_maritima = CASE WHEN LOWER(DB_NAME()) = 'hm_maritima' THEN 1 ELSE 0 END;
     SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN '1001' ELSE '0001' END;
     SET @anio = CAST(LEFT(@par_period, 4) AS INT);
     SET @mes = SUBSTRING(@par_period, 5, 2);
@@ -95,6 +101,8 @@ BEGIN
       AND pt.ShortName = 'CTS';
     /* Vacío = no emitir (cabecera 112). Antes se ponía espacio y BCP rechazaba por largo. */
     IF ISNULL(@subtipo, '') = '' SET @subtipo = '';
+    /* Marítima (mayo BCP): sin subtipo en cabecera. */
+    IF @es_hm_maritima = 1 SET @subtipo = '';
 
     SELECT TOP 1 @ruc_empresa = LEFT(LTRIM(RTRIM(ISNULL(c.Ruc, ''))) + REPLICATE(' ', 12), 12)
     FROM SY_Company c
@@ -102,7 +110,10 @@ BEGIN
     IF @ruc_empresa IS NULL SET @ruc_empresa = REPLICATE(' ', 12);
 
     SET @mes_ref = CASE @mes WHEN '05' THEN 'MAY' WHEN '11' THEN 'NOV' ELSE @mes END;
-    IF @par_referencia <> ''
+    IF @es_hm_maritima = 1
+        /* PRIMER GRUPO CTS (mayo validado): referencia cabecera en blanco. */
+        SET @ref_planilla = REPLICATE(' ', 40);
+    ELSE IF @par_referencia <> ''
         SET @ref_planilla = LEFT(@par_referencia, 40);
     ELSE
         SET @ref_planilla = CASE @mes
@@ -142,8 +153,18 @@ BEGIN
         l.tipodoc_bcp,
         LEFT(l.dni, 12) AS dni,
         LEFT(l.nombre, 75) AS nombre,
-        LEFT('CTS ' + @mes_ref + CAST(@anio AS VARCHAR(4)) + ' ' + l.dni + ' ' + l.nombre, 40) AS refbeneficiario,
-        LEFT('CTS ' + l.person, 20) AS refempresa,
+        CASE
+            WHEN @es_hm_maritima = 1 THEN
+                LEFT('Referencia Beneficiario ' + LTRIM(RTRIM(ISNULL(l.dni, ''))) + REPLICATE(' ', 40), 40)
+            ELSE
+                LEFT('CTS ' + @mes_ref + CAST(@anio AS VARCHAR(4)) + ' ' + l.dni + ' ' + l.nombre, 40)
+        END AS refbeneficiario,
+        CASE
+            WHEN @es_hm_maritima = 1 THEN
+                LEFT('Ref Emp ' + LTRIM(RTRIM(ISNULL(l.dni, ''))) + REPLICATE(' ', 20), 20)
+            ELSE
+                LEFT('CTS ' + l.person, 20)
+        END AS refempresa,
         CAST(ROUND(
             COALESCE(
                 CASE

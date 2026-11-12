@@ -37625,8 +37625,27 @@ def _validar_pre_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype
     return _validacion_planilla_rows_to_mensajes(rows)
 
 
+_BDS_QUINCENA_VALIDA_REM_BASICA = frozenset({
+    'hm_divisa',
+    'hm_credireport',
+    'hm_prescription',
+})
+
+
+def _bd_activa_quincena_valida_rem_basica():
+    """BDs donde QUINCENA exige REM_BASICA en asignación (igual que fin de mes)."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() in _BDS_QUINCENA_VALIDA_REM_BASICA
+    except Exception:
+        return False
+
+
 def _proceso_aplica_validacion_post_calculo(cursor, cia, processtype):
-    """Validaciones post-cálculo (panel amarillo) solo para mensual / fin de mes."""
+    """Validaciones post-cálculo (panel amarillo): mensual / fin de mes;
+    en hm_divisa / hm_credireport / hm_prescription también QUINCENA
+    (exige REM_BASICA en asignación, igual que fin de mes).
+    """
     cursor.execute(
         """
         SELECT
@@ -37645,6 +37664,10 @@ def _proceso_aplica_validacion_post_calculo(cursor, cia, processtype):
     if shortname == 'FIN_DE_MES':
         return True
     if description == 'MENSUAL' or 'FIN DE MES' in description:
+        return True
+    if _bd_activa_quincena_valida_rem_basica() and (
+        shortname == 'QUINCENA' or description == 'QUINCENA' or 'QUINCENA' in description
+    ):
         return True
     return False
 
@@ -37672,7 +37695,8 @@ def _validar_calculo_planilla_mensajes(cursor, cia, payrolltype, processtype, pe
 
 
 def _detalle_error_calculo(msg, cia, payrolltype, processtype, period, person, database=None):
-    """Antepone la causa probable al error del SP: fin de mes sin REM_BASICA vigente en el periodo.
+    """Antepone la causa probable al error del SP: sin REM_BASICA vigente en el periodo
+    (fin de mes / mensual; en hm_divisa / hm_credireport / hm_prescription también quincena).
 
     Solo informa; no bloquea el cálculo (hay planillas que no usan REM_BASICA).
     En hm_lumat2 no aplica: la empresa del Estado no tiene Remuneración Básica.

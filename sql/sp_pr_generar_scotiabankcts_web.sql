@@ -1,6 +1,6 @@
 /*
     Archivo Scotiabank depósito CTS — plantilla SBP CTS NUEVO TBK
-    (validado contra AUXILIARES/SCOTIA/ABONOS.txt del sistema anterior, mayo).
+    (validado vs AUXILIARES/SCOTIA/CTS NOV.2025-ABR-2026_SCOTIABANK_ADM).
 
     Sin cabecera. Solo líneas de detalle de 139 caracteres:
        1  tipo documento Scotiabank (DNI=1, CE=3, Pasaporte=4)
@@ -10,11 +10,12 @@
       20  cuenta CTS del trabajador (izquierda; soles con prefijo 1)
       11  espacios
       13  importe (centavos, 13 dígitos con ceros a la izquierda)
-      20  espacios
+      20  glosa/referencia (ej. PAGO DE CTS NOV 2026)
        2  tipo/forma de pago CTS = '05'
 
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
     Cuenta por línea: PR_Employee.CTSAccount (no la cuenta empresa).
+    Glosa: @par_referencia o 'PAGO DE CTS {MES} {AAAA}' del periodo.
     Requiere #ScotiabankCtsPersonas (person) cargada por la app.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_scotiabankcts_web]
@@ -44,6 +45,30 @@ BEGIN
     END
 
     DECLARE @scotia_bank VARCHAR(20);
+    DECLARE @ref20       VARCHAR(20);
+    DECLARE @mes_num     INT;
+    DECLARE @anio        VARCHAR(4);
+    DECLARE @mes_nom     VARCHAR(10);
+
+    /* Glosa 20 + '05', igual CTS NOV.2025-ABR-2026_SCOTIABANK_ADM. */
+    IF @par_referencia <> ''
+        SET @ref20 = LEFT(@par_referencia + REPLICATE(' ', 20), 20);
+    ELSE
+    BEGIN
+        SET @mes_num = TRY_CAST(SUBSTRING(@par_period, 5, 2) AS INT);
+        SET @anio = LEFT(@par_period, 4);
+        SET @mes_nom = CASE @mes_num
+            WHEN 1 THEN 'ENE' WHEN 2 THEN 'FEB' WHEN 3 THEN 'MAR'
+            WHEN 4 THEN 'ABR' WHEN 5 THEN 'MAYO' WHEN 6 THEN 'JUN'
+            WHEN 7 THEN 'JUL' WHEN 8 THEN 'AGO' WHEN 9 THEN 'SET'
+            WHEN 10 THEN 'OCT' WHEN 11 THEN 'NOV' WHEN 12 THEN 'DIC'
+            ELSE ''
+        END;
+        IF @mes_nom = '' OR @anio = '' OR LEN(@anio) < 4
+            SET @ref20 = LEFT('PAGO DE CTS' + REPLICATE(' ', 20), 20);
+        ELSE
+            SET @ref20 = LEFT('PAGO DE CTS ' + @mes_nom + ' ' + @anio + REPLICATE(' ', 20), 20);
+    END
 
     SELECT TOP 1 @scotia_bank = LTRIM(RTRIM(b.Bank))
     FROM ERP_Bank b
@@ -172,7 +197,7 @@ BEGIN
             cuenta_fmt +
             REPLICATE(' ', 11) +
             importe13 +
-            REPLICATE(' ', 20) +
+            @ref20 +
             '05'
         ) AS linea_txt
     FROM #Detalle

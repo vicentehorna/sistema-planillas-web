@@ -13,9 +13,13 @@ GO
       Detalle:  2 | tipo cta A/C | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
                 ref benef(40) | ref emp(20) | moneda | importe | 'S'
 
-    Formato hm_maritima (PRIMER GRUPO CTS / mayo validado por BCP) — cabecera 112 / detalle 195:
-      Cabecera: igual largo que estándar, sin subtipo; referencia cabecera = 40 espacios.
-      Detalle:  ref benef = 'Referencia Beneficiario ' + dni; ref emp = 'Ref Emp ' + dni.
+    Formato hm_maritima (Estructura BCP planilla CTS NTLC) — cabecera 125 / detalle 214:
+      Cabecera: 1 | cantidad(6) | fecha | tipo cta C/M | moneda(4) | cuenta(20) | '6' | RUC(12) |
+                monto | referencia(40) | checksum(15)
+      Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
+                ref benef(40) | ref emp(20) | moneda | importe | '0001' | BASICO_CTS*4
+      Ref benef = 'Referencia Beneficiario ' + dni; ref emp = 'Ref Emp ' + dni.
+      Referencia cabecera: @par_referencia o 40 espacios.
 
     Formato hm_aci / hm_ultra / hm_alamo / hm_lumat (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
@@ -114,8 +118,11 @@ BEGIN
 
     SET @mes_ref = CASE @mes WHEN '05' THEN 'MAY' WHEN '11' THEN 'NOV' ELSE @mes END;
     IF @es_hm_maritima = 1
-        /* PRIMER GRUPO CTS (mayo validado): referencia cabecera en blanco. */
-        SET @ref_planilla = REPLICATE(' ', 40);
+        /* NTLC: referencia cabecera opcional; si no viene, 40 espacios. */
+        SET @ref_planilla = CASE
+            WHEN @par_referencia <> '' THEN LEFT(@par_referencia + REPLICATE(' ', 40), 40)
+            ELSE REPLICATE(' ', 40)
+        END;
     ELSE IF @par_referencia <> ''
         SET @ref_planilla = LEFT(@par_referencia, 40);
     ELSE
@@ -279,6 +286,46 @@ BEGIN
                 LEFT(nombre + REPLICATE(' ', 75), 75) +
                 REPLICATE(' ', 40) +
                 REPLICATE(' ', 20) +
+                @moneda_txt +
+                RIGHT(REPLICATE('0', 14) + CAST(cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(cent % 100 AS VARCHAR(2)), 2) +
+                '0001' +
+                RIGHT(REPLICATE('0', 14) + CAST(cent_cts_anios / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(cent_cts_anios % 100 AS VARCHAR(2)), 2)
+            FROM #Detalle
+        ) AS lineas
+        ORDER BY orden;
+    END
+    ELSE IF @es_hm_maritima = 1
+    BEGIN
+        /* Estructura BCP CTS NTLC (solo hm_maritima): cabecera 125, detalle 214. */
+        SELECT orden, linea_txt
+        FROM (
+            SELECT
+                0 AS orden,
+                '1' +
+                RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +
+                CONVERT(VARCHAR(8), @par_paydate, 112) +
+                @tipo_cta_origen +
+                @moneda_txt +
+                LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
+                '6' +
+                @ruc_empresa +
+                RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
+                RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
+                LEFT(@ref_planilla + REPLICATE(' ', 40), 40) +
+                RIGHT(REPLICATE('0', 15) + CAST(@checksum AS VARCHAR(20)), 15) AS linea_txt
+            UNION ALL
+            SELECT
+                ROW_NUMBER() OVER (ORDER BY nombre, person) AS orden,
+                '2' +
+                LEFT(cuenta + REPLICATE(' ', 20), 20) +
+                tipodoc_bcp +
+                LEFT(dni + REPLICATE(' ', 12), 12) +
+                '   ' +
+                LEFT(nombre + REPLICATE(' ', 75), 75) +
+                LEFT(refbeneficiario + REPLICATE(' ', 40), 40) +
+                LEFT(refempresa + REPLICATE(' ', 20), 20) +
                 @moneda_txt +
                 RIGHT(REPLICATE('0', 14) + CAST(cent / 100 AS VARCHAR(20)), 14) + '.' +
                 RIGHT('0' + CAST(cent % 100 AS VARCHAR(2)), 2) +

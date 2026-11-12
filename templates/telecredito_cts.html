@@ -108,10 +108,16 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
-            <div class="col-12 col-sm-6 col-md-6 col-lg-4">
+            <div class="col-12 col-sm-6 col-md-6 col-lg-3">
                 <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
                 <input type="text" id="txtReferencia" class="form-control form-control-sm"
                        maxlength="40" placeholder="DEPOSITO CTS" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3 d-flex align-items-end">
+                <div class="form-check mb-1">
+                    <input class="form-check-input" type="checkbox" id="chkTodosBancos">
+                    <label class="form-check-label small" for="chkTodosBancos">Incluir CTS de otros bancos</label>
+                </div>
             </div>
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnListar"><i class="bi bi-search"></i> Listar trabajadores</button>
@@ -133,11 +139,12 @@
         <div class="table-scroll-container">
             <table class="table table-bordered table-sm table-hover table-telecredito align-middle">
                 <thead>
-                    <tr>
+                    <tr id="trHeadTelecredito">
                         <th class="col-centro"><input type="checkbox" id="checkAll" class="form-check-input" title="Marcar / desmarcar todos"></th>
                         <th>DNI</th>
                         <th class="col-centro">Tipo</th>
                         <th>Nombre</th>
+                        <th id="thBanco" class="d-none">Banco</th>
                         <th>Cuenta CTS</th>
                         <th class="col-centro">Tipo cta.</th>
                         <th class="col-importe">Importe</th>
@@ -326,7 +333,10 @@ document.addEventListener('DOMContentLoaded', async function () {
         return td;
     }
 
-    function renderizar(rows, excluidos) {
+    function renderizar(rows, excluidos, mostrarBanco) {
+        const thBanco = document.getElementById('thBanco');
+        if (thBanco) thBanco.classList.toggle('d-none', !mostrarBanco);
+
         const tbody = document.getElementById('tbodyTelecredito');
         tbody.innerHTML = '';
         rows.forEach((r) => {
@@ -343,6 +353,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             celda(tr, r.dni);
             celda(tr, r.tipodoc, 'col-centro');
             celda(tr, r.nombre);
+            if (mostrarBanco) celda(tr, r.banco || '');
             celda(tr, r.cuenta, 'font-monospace');
             celda(tr, r.tipocuenta, 'col-centro');
             celda(tr, formatearImporte(r.importe), 'col-importe');
@@ -376,6 +387,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             paydate: txtFechaPago.value.trim(),
             cesados: document.getElementById('cboCesados').value.trim() || 'T',
             repunit: String(cboUnidad.value || '0').trim() || '0',
+            todos_bancos: document.getElementById('chkTodosBancos').checked ? 'Y' : 'N',
         };
     }
 
@@ -403,7 +415,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 return;
             }
             filasCache = Array.isArray(payload.rows) ? payload.rows : [];
-            renderizar(filasCache, Array.isArray(payload.excluidos) ? payload.excluidos : []);
+            const mostrarBanco = !!(payload.meta && payload.meta.todos_bancos);
+            renderizar(filasCache, Array.isArray(payload.excluidos) ? payload.excluidos : [], mostrarBanco);
         } catch (e) {
             console.error(e);
             alert('Error de red o del servidor.');
@@ -439,6 +452,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                 body: JSON.stringify({
                     ...f,
                     referencia: txtReferencia.value.trim().slice(0, 40),
+                    todos_bancos: f.todos_bancos,
                     persons: sel.map((r) => r.person)
                 })
             });

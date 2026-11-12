@@ -6,13 +6,14 @@ GO
     Listado de trabajadores con CTS calculada (proceso ShortName 'CTS', concepto
     PR_Mapping.CTSConcept) para el archivo Telecrédito CTS del BCP.
 
-    Devuelve todos los trabajadores con CTS > 0 en el periodo; elegible = 'S' solo si
-    la cuenta CTS del trabajador (PR_Employee.CTSBank/CTSAccount) es del banco
-    PR_Mapping.CreditoBank (BCP) y su moneda CTS coincide con @par_currency.
-    Los no elegibles traen el motivo.
+    Devuelve todos los trabajadores con CTS > 0 en el periodo; elegible = 'S' si
+    hay cuenta CTS y la moneda coincide. Con @todos_bancos = 'N' solo entra
+    PR_Mapping.CreditoBank (BCP); con 'Y' también cuentas CTS de otros bancos
+    (misma lógica que Interbank/Banbif/Continental/Scotiabank CTS).
 
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
     @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
+    @todos_bancos: N / Y.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecreditocts_web]
     @par_company     VARCHAR(10),
@@ -20,7 +21,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecreditocts_web]
     @par_period      VARCHAR(8),
     @par_currency    VARCHAR(2) = 'LO',
     @cesados         CHAR(1) = 'T',
-    @repunit         VARCHAR(20) = '0'
+    @repunit         VARCHAR(20) = '0',
+    @todos_bancos    CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -29,6 +31,9 @@ BEGIN
     SET @par_currency = UPPER(@par_currency);
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+    IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
+    SET @todos_bancos = UPPER(@todos_bancos);
+    IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
 
     ;WITH Pagos AS (
         SELECT
@@ -83,7 +88,12 @@ BEGIN
             )) AS nombre,
             LTRIM(RTRIM(ISNULL(eb.Name, ISNULL(e.CTSBank, '')))) AS banco,
             REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') AS cuenta,
-            CASE WHEN ISNULL(tat.abrev, '') = 'C' THEN 'C' ELSE 'A' END AS tipocuenta,
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(e.CTSBank, ''))) <> LTRIM(RTRIM(ISNULL(m.CreditoBank, '')))
+                    THEN 'B'
+                WHEN ISNULL(tat.abrev, '') = 'C' THEN 'C'
+                ELSE 'A'
+            END AS tipocuenta,
             ISNULL(NULLIF(LTRIM(RTRIM(e.CTSCurrency)), ''), 'LO') AS moneda_cts,
             CAST(ROUND(p.importe, 2) AS DECIMAL(18, 2)) AS importe,
             LTRIM(RTRIM(ISNULL(m.CreditoBank, ''))) AS banco_bcp,
@@ -123,17 +133,18 @@ BEGIN
         importe,
         CASE
             WHEN banco_bcp = '' THEN 'N'
-            WHEN banco_cts <> banco_bcp THEN 'N'
+            WHEN banco_cts = '' THEN 'N'
             WHEN cuenta = '' THEN 'N'
             WHEN moneda_cts <> @par_currency THEN 'N'
+            WHEN @todos_bancos = 'N' AND banco_cts <> banco_bcp THEN 'N'
             ELSE 'S'
         END AS elegible,
         CASE
             WHEN banco_bcp = '' THEN 'BCP no configurado (PR_Mapping.CreditoBank)'
             WHEN banco_cts = '' THEN 'Sin banco CTS'
-            WHEN banco_cts <> banco_bcp THEN 'Cuenta CTS en otro banco'
             WHEN cuenta = '' THEN 'Sin número de cuenta CTS'
             WHEN moneda_cts <> @par_currency THEN 'Cuenta CTS en otra moneda (' + moneda_cts + ')'
+            WHEN @todos_bancos = 'N' AND banco_cts <> banco_bcp THEN 'Cuenta CTS en otro banco'
             ELSE ''
         END AS motivo
     FROM Base

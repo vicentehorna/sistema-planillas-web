@@ -27785,6 +27785,7 @@ def api_telecredito_cts_listado():
         return jsonify({'error': err}), 400
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
 
     conn = None
     try:
@@ -27792,8 +27793,8 @@ def api_telecredito_cts_listado():
         cursor = conn.cursor()
         cursor.execute(
             'EXEC sp_pr_listatelecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
-            '@par_currency=?, @cesados=?, @repunit=?',
-            (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit),
+            '@par_currency=?, @cesados=?, @repunit=?, @todos_bancos=?',
+            (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit, todos_bancos),
         )
         filas = _dicts_first_nonempty_resultset(cursor)
         rows, excluidos = [], []
@@ -27820,6 +27821,7 @@ def api_telecredito_cts_listado():
                 'total': len(rows),
                 'importe_total': round(sum(r['importe'] for r in rows), 2),
                 'excluidos': len(excluidos),
+                'todos_bancos': todos_bancos == 'Y',
             },
         })
     except Exception as e:
@@ -27846,6 +27848,7 @@ def api_telecredito_cts_generar_txt():
     if not persons:
         return jsonify({'error': 'Seleccione al menos un trabajador.'}), 400
     referencia = _normalize_telecredito_referencia(body.get('referencia'))
+    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
 
     conn = None
     try:
@@ -27854,8 +27857,11 @@ def api_telecredito_cts_generar_txt():
         _telecredito_cargar_personas_temp(cursor, persons)
         cursor.execute(
             'EXEC sp_pr_generar_telecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
-            '@par_currency=?, @par_paydate=?, @par_referencia=?',
-            (p['cia'], p['payrolltype'], p['period'], p['currency'], p['paydate'], referencia or None),
+            '@par_currency=?, @par_paydate=?, @par_referencia=?, @todos_bancos=?',
+            (
+                p['cia'], p['payrolltype'], p['period'], p['currency'], p['paydate'],
+                referencia or None, todos_bancos,
+            ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         lineas = [str(r.get('linea_txt') or '').rstrip('\r\n') for r in rows]

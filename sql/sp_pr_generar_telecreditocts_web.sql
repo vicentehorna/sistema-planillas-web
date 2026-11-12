@@ -26,9 +26,10 @@ GO
                 monto | ref(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
                 espacios(40) | espacios(20) | moneda | importe | '0001' | BASICO_CTS*4
-      Ref cabecera: hm_alamo usa @par_referencia si viene; resto ACI 40 espacios.
+      Ref cabecera: hm_alamo / hm_ultra usan @par_referencia si viene; resto ACI 40 espacios.
       Checksum empresa: mid(cuenta,4,11) si SalaryAccountType=A; mid(cuenta,4,10) si no.
       Importe: AmountLo/Ex + interés de PR_EmployeeCTS si existe; si no, concepto CTS.
+      @todos_bancos: N = solo BCP; Y = también otros bancos (como listado).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecreditocts_web]
     @par_company     VARCHAR(10),
@@ -36,7 +37,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_telecreditocts_web]
     @par_period      VARCHAR(8),
     @par_currency    VARCHAR(2) = 'LO',
     @par_paydate     DATETIME = NULL,
-    @par_referencia  VARCHAR(40) = NULL
+    @par_referencia  VARCHAR(40) = NULL,
+    @todos_bancos    CHAR(1) = 'N'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -45,6 +47,9 @@ BEGIN
     SET @par_currency = UPPER(@par_currency);
     IF @par_paydate IS NULL SET @par_paydate = GETDATE();
     SET @par_referencia = LTRIM(RTRIM(ISNULL(@par_referencia, '')));
+    IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
+    SET @todos_bancos = UPPER(@todos_bancos);
+    IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
 
     IF OBJECT_ID('tempdb..#TelecreditoPersonas') IS NULL
     BEGIN
@@ -155,7 +160,8 @@ BEGIN
         @par_period = @par_period,
         @par_currency = @par_currency,
         @cesados = 'T',
-        @repunit = '0';
+        @repunit = '0',
+        @todos_bancos = @todos_bancos;
 
     SELECT
         l.person,
@@ -275,7 +281,7 @@ BEGIN
                 RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
                 RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
                 CASE
-                    WHEN LOWER(DB_NAME()) = 'hm_alamo' AND @par_referencia <> ''
+                    WHEN LOWER(DB_NAME()) IN ('hm_alamo', 'hm_ultra') AND @par_referencia <> ''
                         THEN LEFT(@par_referencia + REPLICATE(' ', 40), 40)
                     ELSE REPLICATE(' ', 40)
                 END +

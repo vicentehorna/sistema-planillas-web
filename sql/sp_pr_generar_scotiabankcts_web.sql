@@ -9,7 +9,7 @@
       60  nombre
       20  cuenta CTS del trabajador (izquierda; soles con prefijo 1)
       11  espacios
-      13  importe (centavos, 13 dígitos con ceros a la izquierda)
+      13  importe (soles enteros * 100 → siempre termina en 00, 13 dígitos)
       20  glosa/referencia (ej. PAGO DE CTS NOV 2026)
        2  tipo/forma de pago CTS = '05'
 
@@ -178,9 +178,10 @@ BEGIN
             20
         ) AS cuenta_fmt,
         importe,
+        /* Igual ADM Softland: importe en soles enteros + '00' (13 dígitos, siempre *00). */
         RIGHT(
             REPLICATE('0', 13) +
-            CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
+            CAST(CAST(ROUND(ISNULL(importe, 0), 0) * 100 AS BIGINT) AS VARCHAR(20)),
             13
         ) AS importe13
     INTO #Detalle

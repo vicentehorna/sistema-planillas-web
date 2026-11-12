@@ -23,9 +23,10 @@ GO
 
     Formato hm_aci / hm_ultra / hm_alamo / hm_lumat (wf_calculate / archivo mayo validado por BCP) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
-                monto | espacios(40) | checksum(15)
+                monto | ref(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
                 espacios(40) | espacios(20) | moneda | importe | '0001' | BASICO_CTS*4
+      Ref cabecera: hm_alamo usa @par_referencia si viene; resto ACI 40 espacios.
       Checksum empresa: mid(cuenta,4,11) si SalaryAccountType=A; mid(cuenta,4,10) si no.
       Importe: AmountLo/Ex + interés de PR_EmployeeCTS si existe; si no, concepto CTS.
 */
@@ -273,7 +274,11 @@ BEGIN
                 @ruc_empresa +
                 RIGHT(REPLICATE('0', 14) + CAST(@total_cent / 100 AS VARCHAR(20)), 14) + '.' +
                 RIGHT('0' + CAST(@total_cent % 100 AS VARCHAR(2)), 2) +
-                REPLICATE(' ', 40) +
+                CASE
+                    WHEN LOWER(DB_NAME()) = 'hm_alamo' AND @par_referencia <> ''
+                        THEN LEFT(@par_referencia + REPLICATE(' ', 40), 40)
+                    ELSE REPLICATE(' ', 40)
+                END +
                 RIGHT(REPLICATE('0', 15) + CAST(@checksum AS VARCHAR(20)), 15) AS linea_txt
             UNION ALL
             SELECT

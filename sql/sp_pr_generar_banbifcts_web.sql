@@ -10,12 +10,12 @@
       20  apellido 2
       40  nombres
       74  espacios
-      14  cuenta CTS del trabajador
+      14  cuenta CTS (prefijo C03 + número, igual BanBif_CTS_LO20)
       10  espacios
        1  moneda (1=soles, 2=dólares)
       15  importe en centavos
 
-    Cuenta destino: PR_Employee.CTSAccount.
+    Cuenta destino: 'C03' + PR_Employee.CTSAccount (si aún no trae C03).
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
     Requiere #BanbifCtsPersonas (person) cargada por la app.
 */
@@ -110,7 +110,7 @@ BEGIN
                 LTRIM(RTRIM(ISNULL(sp.name1, ''))) + ' ' +
                 LTRIM(RTRIM(ISNULL(sp.name2, '')))
             )) AS nombres,
-            REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') AS cuenta_raw,
+            REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', ''), CHAR(160), '') AS cuenta_raw,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
@@ -123,7 +123,7 @@ BEGIN
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(m.banbifbank, '') <> ''
           AND ISNULL(NULLIF(LTRIM(RTRIM(e.CTSCurrency)), ''), 'LO') = @par_currency
-          AND REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') <> ''
+          AND REPLACE(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', ''), CHAR(160), '') <> ''
           AND (
                 (@todos_bancos = 'N' AND e.CTSBank = m.banbifbank)
              OR (@todos_bancos = 'Y' AND ISNULL(e.CTSBank, '') <> '')
@@ -132,7 +132,13 @@ BEGIN
     Numerado AS (
         SELECT
             *,
-            LEFT(cuenta_raw + REPLICATE(' ', 14), 14) AS cuenta_fmt,
+            LEFT(
+                CASE
+                    WHEN UPPER(LEFT(cuenta_raw, 3)) = 'C03' THEN cuenta_raw
+                    ELSE 'C03' + cuenta_raw
+                END + REPLICATE(' ', 14),
+                14
+            ) AS cuenta_fmt,
             ROW_NUMBER() OVER (
                 ORDER BY lastname1, lastname2, nombres, person
             ) AS orden

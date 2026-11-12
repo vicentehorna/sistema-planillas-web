@@ -88,7 +88,7 @@
         <div class="mt-2 text-muted small">
             <span class="fw-bold">No. de Registros: <span id="lblRowCount">0</span></span>
             <div class="mt-1">
-                * Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION
+                * Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE/DIAS_LIC_SINGOCE (+aliases) + DIASUSPENSION
                 (días de ausencia + licencia sin goce + suspensión).
             </div>
         </div>
@@ -103,7 +103,7 @@
 document.addEventListener("DOMContentLoaded", async function() {
     const COLUMNAS_NUMERICAS = ['he_cts', 'bono_cts', 'feriado_cts', 'comision_cts', 'faltas_cts'];
     const EXCEL_HEADER = ['Periodo', 'Horas Ex', 'Bono', 'Feriado', 'Comisión', 'Ausencias*'];
-    const EXCEL_NOTA_AUSENCIAS = '* Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION (días de ausencia + licencia sin goce + suspensión).';
+    const EXCEL_NOTA_AUSENCIAS = '* Ausencias = CANT_DIAS_AUSENCIA + DIASLICSGOCE/DIAS_LIC_SINGOCE (+aliases LSG) + DIASUSPENSION (días de ausencia + licencia sin goce + suspensión).';
 
     let lastExport = null;
     let generacionFiltros = 0;

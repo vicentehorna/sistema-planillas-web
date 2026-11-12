@@ -10,7 +10,10 @@
       - Mayo YYYY: meses Noviembre(YYYY-1)..Abril(YYYY) (desc: Abr→Nov)
 
     Columnas CTS: horas extras, bono, feriado, comisión, ausencias
-    (CANT_DIAS_AUSENCIA + DIASLICSGOCE + DIASUSPENSION).
+    (CANT_DIAS_AUSENCIA + LSG + DIASUSPENSION).
+    LSG (mismos FormulaCode que f_getDiasLSG):
+      DIASLICSGOCE, DIAS_LIC_SINGOCE, DIASLICSINGOCE,
+      DIASSINGOCE, DIAS_LICENCIA_SIN_GO.
 
     Usa: f_getSumaConceptoPromedio, f_getMesesDividir.
 */
@@ -31,6 +34,10 @@ BEGIN
     DECLARE @comision     VARCHAR(50) = 'COMISION';
     DECLARE @faltas       VARCHAR(50) = 'CANT_DIAS_AUSENCIA';
     DECLARE @lsg          VARCHAR(50) = 'DIASLICSGOCE';
+    DECLARE @lsg2         VARCHAR(50) = 'DIAS_LIC_SINGOCE';
+    DECLARE @lsg3         VARCHAR(50) = 'DIASLICSINGOCE';
+    DECLARE @lsg4         VARCHAR(50) = 'DIASSINGOCE';
+    DECLARE @lsg5         VARCHAR(50) = 'DIAS_LICENCIA_SIN_GO';
     DECLARE @susp         VARCHAR(50) = 'DIASUSPENSION';
     DECLARE @mes          INT = 0;
     DECLARE @yyyy         INT;
@@ -147,6 +154,10 @@ BEGIN
         faltas_cts =
             ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @faltas, periodo), 0)
           + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @lsg, periodo), 0)
+          + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @lsg2, periodo), 0)
+          + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @lsg3, periodo), 0)
+          + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @lsg4, periodo), 0)
+          + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @lsg5, periodo), 0)
           + ISNULL(dbo.f_getSumaConceptoPromedio(@fechaIniCalc, @fechaFinCalc, @cia, @person, @susp, periodo), 0);
 
     SELECT

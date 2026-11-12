@@ -4,7 +4,8 @@
 
     Sin cabecera. Solo detalle 213 caracteres:
        7  secuencia (izquierda)
-      12  documento
+       1  tipo documento (DNI=1, CE=3, Pasaporte=4)
+      11  documento
       20  apellido 1
       20  apellido 2
       40  nombres
@@ -96,6 +97,12 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
+            CASE
+                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
+                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
+                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
+                ELSE LEFT(LTRIM(RTRIM(ISNULL(NULLIF(pdt.PDT, ''), '1'))) + '1', 1)
+            END AS tipo_doc_txt,
             LTRIM(RTRIM(ISNULL(sp.DocumentNumber, e.person))) AS documentnumber,
             LTRIM(RTRIM(ISNULL(sp.lastname1, ''))) AS lastname1,
             LTRIM(RTRIM(ISNULL(sp.lastname2, ''))) AS lastname2,
@@ -110,6 +117,8 @@ BEGIN
             INNER JOIN pr_mapping m ON m.company = e.company
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
+            LEFT JOIN SY_PersonDocumentType pdt
+                ON pdt.PersonDocumentType = sp.EmployeeDocumentType
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(m.banbifbank, '') <> ''
@@ -134,7 +143,8 @@ BEGIN
         orden,
         (
             LEFT(CAST(orden AS VARCHAR(10)) + REPLICATE(' ', 7), 7) +
-            LEFT(documentnumber + REPLICATE(' ', 12), 12) +
+            tipo_doc_txt +
+            LEFT(documentnumber + REPLICATE(' ', 11), 11) +
             LEFT(lastname1 + REPLICATE(' ', 20), 20) +
             LEFT(lastname2 + REPLICATE(' ', 20), 20) +
             LEFT(nombres + REPLICATE(' ', 40), 40) +

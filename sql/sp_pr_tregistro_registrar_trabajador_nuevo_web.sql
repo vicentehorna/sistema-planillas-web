@@ -5,6 +5,7 @@
     Tablas principales: SY_Person + PR_Employee.
     Address: solo texto libre. Nacionalidad: solo texto (columna Nacionalidad).
     No registra ubigeo ni dirección estructurada.
+    Información bancaria: Forma de pago siempre Depósito (TE_CollectionForm).
 
     Usado por: POST /api/tregistro-importacion/pdf/registrar
 */
@@ -699,18 +700,24 @@ BEGIN
        OR UPPER(LTRIM(RTRIM(ISNULL(rh.description, '')))) LIKE '%ESSALUD REGULAR%'
     ORDER BY CASE WHEN rh.regimehealth LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END, rh.regimehealth;
 
-    /* --- Forma de pago --- */
-    SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@tipo_pago, ''))));
-    IF @txt LIKE '%DEPOS%' OR @txt LIKE '%DEPÓS%'
-        SET @txt = 'DEPOSITO';
-    ELSE IF @txt LIKE '%EFECTIV%'
-        SET @txt = 'EFECTIVO';
-
+    /*
+        Forma de pago: en Importar T-Registro siempre Depósito (Información bancaria).
+        No depende del texto SUNAT (@tipo_pago); si el catálogo no tiene Depósito, se avisa.
+    */
+    SET @collection_form_id = NULL;
     SELECT TOP 1 @collection_form_id = cf.collectionform
     FROM te_collectionform cf (NOLOCK)
-    WHERE UPPER(LTRIM(RTRIM(ISNULL(cf.description, '')))) = @txt
-       OR UPPER(LTRIM(RTRIM(ISNULL(cf.description, '')))) LIKE '%' + @txt + '%'
-    ORDER BY CASE WHEN cf.collectionform LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END;
+    WHERE UPPER(REPLACE(LTRIM(RTRIM(ISNULL(cf.description, ''))), 'Ó', 'O')) LIKE '%DEPOSITO%'
+       OR UPPER(REPLACE(LTRIM(RTRIM(ISNULL(cf.name, ''))), 'Ó', 'O')) LIKE '%DEPOSITO%'
+       OR cf.collectionform LIKE '%000000000009'
+    ORDER BY
+        CASE WHEN cf.collectionform LIKE 'LIMA' + @cia + '%' THEN 0 ELSE 1 END,
+        CASE
+            WHEN UPPER(REPLACE(LTRIM(RTRIM(ISNULL(cf.description, ''))), 'Ó', 'O')) = 'DEPOSITO' THEN 0
+            WHEN cf.collectionform LIKE '%000000000009' THEN 1
+            ELSE 2
+        END,
+        cf.collectionform;
 
     /* --- Banco salario --- */
     SET @txt = UPPER(LTRIM(RTRIM(ISNULL(@entidad_financiera, ''))));
@@ -831,8 +838,8 @@ BEGIN
         SET @sin_catalogo = @sin_catalogo + ', régimen pensionario (' + LTRIM(RTRIM(@regimen_pension)) + ')';
     IF @regime_health_id IS NULL AND LTRIM(RTRIM(ISNULL(@regimen_salud, ''))) <> ''
         SET @sin_catalogo = @sin_catalogo + ', régimen de salud (' + LTRIM(RTRIM(@regimen_salud)) + ')';
-    IF @collection_form_id IS NULL AND LTRIM(RTRIM(ISNULL(@tipo_pago, ''))) <> ''
-        SET @sin_catalogo = @sin_catalogo + ', forma de pago (' + LTRIM(RTRIM(@tipo_pago)) + ')';
+    IF @collection_form_id IS NULL
+        SET @sin_catalogo = @sin_catalogo + ', forma de pago (Depósito)';
     IF @salary_bank_id IS NULL AND LTRIM(RTRIM(ISNULL(@entidad_financiera, ''))) <> ''
         SET @sin_catalogo = @sin_catalogo + ', banco (' + LTRIM(RTRIM(@entidad_financiera)) + ')';
 

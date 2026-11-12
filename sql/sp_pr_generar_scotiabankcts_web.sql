@@ -7,14 +7,14 @@
       11  documento (DNI/CE, izquierda, relleno espacios)
        1  espacio
       60  nombre
-      20  cuenta cargo empresa Scotiabank (izquierda)
+      20  cuenta CTS del trabajador (izquierda; soles con prefijo 1)
       11  espacios
       13  importe (centavos, 13 dígitos con ceros a la izquierda)
       20  espacios
        2  tipo/forma de pago CTS = '05'
 
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
-    Cuenta por línea: cuenta origen Scotiabank de la empresa (igual que ABONOS mayo).
+    Cuenta por línea: PR_Employee.CTSAccount (no la cuenta empresa).
     Requiere #ScotiabankCtsPersonas (person) cargada por la app.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_scotiabankcts_web]
@@ -43,8 +43,7 @@ BEGIN
         RETURN;
     END
 
-    DECLARE @cuenta_origen VARCHAR(20);
-    DECLARE @scotia_bank   VARCHAR(20);
+    DECLARE @scotia_bank VARCHAR(20);
 
     SELECT TOP 1 @scotia_bank = LTRIM(RTRIM(b.Bank))
     FROM ERP_Bank b
@@ -57,27 +56,6 @@ BEGIN
         RAISERROR('No se encontró banco Scotiabank en ERP_Bank para la compañía.', 16, 1);
         RETURN;
     END
-
-    /* Preferir la cuenta Scotiabank más larga en la moneda (CTS empresa). */
-    SELECT TOP 1 @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20)
-    FROM TE_BankAccount ba
-    WHERE ba.Company = @par_company
-      AND ba.Bank = @scotia_bank
-      AND ba.accountcurrency = @par_currency
-    ORDER BY LEN(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', '')) DESC,
-             ba.BankAccountNumber;
-
-    IF @cuenta_origen IS NULL OR LTRIM(RTRIM(@cuenta_origen)) = ''
-    BEGIN
-        RAISERROR('No se encontró cuenta origen Scotiabank en TE_BankAccount para la compañía/moneda.', 16, 1);
-        RETURN;
-    END
-
-    /* Mayo ABONOS / SBP CTS: soles suele ir con prefijo 1 (376153240 → 1376153240). */
-    IF @par_currency = 'LO'
-       AND LEN(@cuenta_origen) = 9
-       AND LEFT(@cuenta_origen, 1) <> '1'
-        SET @cuenta_origen = '1' + @cuenta_origen;
 
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
@@ -129,6 +107,7 @@ BEGIN
                 ISNULL(sp.name1, '') + ' ' +
                 ISNULL(sp.name2, '')
             ))) AS nombre,
+            REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') AS cuenta_raw,
             p.importe
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
@@ -142,6 +121,7 @@ BEGIN
         WHERE e.company = @par_company
           AND e.payrolltype = @par_payrolltype
           AND ISNULL(NULLIF(LTRIM(RTRIM(e.CTSCurrency)), ''), 'LO') = @par_currency
+          AND REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '') <> ''
           AND (
                 (
                     @todos_bancos = 'N'
@@ -162,7 +142,16 @@ BEGIN
         tipo_doc_txt,
         LEFT(LTRIM(RTRIM(ISNULL(documentnumber, ''))) + REPLICATE(' ', 11), 11) AS documento_fmt,
         LEFT(LTRIM(RTRIM(ISNULL(nombre, ''))) + REPLICATE(' ', 60), 60) AS nombre_fmt,
-        LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) AS cuenta_fmt,
+        LEFT(
+            CASE
+                WHEN @par_currency = 'LO'
+                     AND LEN(cuenta_raw) IN (9, 10)
+                     AND LEFT(cuenta_raw, 1) <> '1'
+                    THEN '1' + cuenta_raw
+                ELSE cuenta_raw
+            END + REPLICATE(' ', 20),
+            20
+        ) AS cuenta_fmt,
         importe,
         RIGHT(
             REPLICATE('0', 13) +

@@ -7,7 +7,7 @@
     Requiere #InterbankCtsPersonas (person) cargada por la app web.
     Cuenta destino: PR_Employee.CTSAccount / CTSBank.
     Importe abono: PR_Mapping.CTSConcept del proceso ShortName CTS.
-    Monto CTS (pos. detalle): BASICO_CTS * 4.
+    Monto CTS (pos. detalle): hm_ultra = REM_ACUM_RELACIONADA; resto = BASICO_CTS * 4.
     Código empresa en cabecera (pos. 100-104): MC001 (temporal, en duro).
     Tipo de cuenta Interbank CTS en bloque abono: 007.
     @par_referencia: texto cabecera TXT (36 chars, pos. 5-40). Si vacío, espacios.
@@ -102,21 +102,29 @@ BEGIN
             END
         ) > 0
     ),
-    BasicoCts AS (
+    RemCts AS (
         SELECT
             epc.Person,
-            MAX(
-                CASE
-                    WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0)
-                    ELSE ISNULL(epc.ConceptValueLo, 0)
-                END
-            ) AS basico_cts
+            MAX(CASE
+                WHEN UPPER(LTRIM(RTRIM(c.FormulaCode))) = 'BASICO_CTS' THEN
+                    CASE
+                        WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0)
+                        ELSE ISNULL(epc.ConceptValueLo, 0)
+                    END
+            END) AS basico_cts,
+            MAX(CASE
+                WHEN UPPER(LTRIM(RTRIM(c.FormulaCode))) = 'REM_ACUM_RELACIONADA' THEN
+                    CASE
+                        WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0)
+                        ELSE ISNULL(epc.ConceptValueLo, 0)
+                    END
+            END) AS rem_4ult
         FROM PR_EmployeePayRollConcept epc
             INNER JOIN PersonasSel ps ON ps.person = epc.Person
             INNER JOIN PR_Concept c
                 ON c.Company = epc.Company
                AND c.Concept = epc.Concept
-               AND c.FormulaCode = 'BASICO_CTS'
+               AND UPPER(LTRIM(RTRIM(c.FormulaCode))) IN ('BASICO_CTS', 'REM_ACUM_RELACIONADA')
             INNER JOIN PR_ProcessType pt
                 ON pt.Company = epc.Company
                AND pt.ProcessType = epc.ProcessType
@@ -155,13 +163,16 @@ BEGIN
                 END
             ))) AS nombres,
             p.importe,
-            ISNULL(bas.basico_cts, 0) AS basico_cts
+            CASE
+                WHEN LOWER(DB_NAME()) = 'hm_ultra' THEN ISNULL(bas.rem_4ult, 0)
+                ELSE ISNULL(bas.basico_cts, 0) * 4
+            END AS monto_4ult
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
             INNER JOIN pr_mapping m ON m.company = e.company
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
-            LEFT JOIN BasicoCts bas ON bas.Person = e.person
+            LEFT JOIN RemCts bas ON bas.Person = e.person
             LEFT JOIN SY_PersonDocumentType pdt
                 ON pdt.PersonDocumentType = sp.EmployeeDocumentType
         WHERE e.company = @par_company
@@ -232,7 +243,7 @@ BEGIN
         apellido2,
         nombres,
         importe,
-        CAST(ROUND(ISNULL(basico_cts, 0) * 4, 2) AS DECIMAL(18, 2)) AS importe_cts,
+        CAST(ROUND(ISNULL(monto_4ult, 0), 2) AS DECIMAL(18, 2)) AS importe_cts,
         RIGHT(
             REPLICATE('0', 15) +
             CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
@@ -240,7 +251,7 @@ BEGIN
         ) AS importe15,
         RIGHT(
             REPLICATE('0', 15) +
-            CAST(CAST(ROUND(ISNULL(basico_cts, 0) * 4, 2) * 100 AS BIGINT) AS VARCHAR(20)),
+            CAST(CAST(ROUND(ISNULL(monto_4ult, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
             15
         ) AS importe_cts15,
         LEFT(tipodocumento + numerodocumento + REPLICATE(' ', 20), 20) AS codigo_beneficiario,

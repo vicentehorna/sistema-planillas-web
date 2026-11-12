@@ -25,7 +25,8 @@ GO
       Cabecera: 1 | cantidad(6) | fecha | 'C' | moneda(4) | cuenta(20) | '6' | RUC(12) |
                 monto | ref(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
-                espacios(40) | espacios(20) | moneda | importe | '0001' | BASICO_CTS*4
+                espacios(40) | espacios(20) | moneda | importe | '0001' | rem_4ult
+      Rem 4 últ.: hm_ultra = REM_ACUM_RELACIONADA; resto = BASICO_CTS * 4.
       Ref cabecera: hm_alamo / hm_ultra usan @par_referencia si viene; resto ACI 40 espacios.
       Checksum empresa: mid(cuenta,4,11) si SalaryAccountType=A; mid(cuenta,4,10) si no.
       Importe: AmountLo/Ex + interés de PR_EmployeeCTS si existe; si no, concepto CTS.
@@ -198,8 +199,11 @@ BEGIN
             ) * 100, 0
         ) AS BIGINT) AS cent,
         CAST(ROUND(
-            ISNULL(bas.basico_cts, 0) * 4 * 100, 0
-        ) AS BIGINT) AS cent_cts_anios
+            CASE
+                WHEN LOWER(DB_NAME()) = 'hm_ultra' THEN ISNULL(bas.rem_4ult, 0) * 100
+                ELSE ISNULL(bas.basico_cts, 0) * 4 * 100
+            END
+        , 0) AS BIGINT) AS cent_cts_anios
     INTO #Detalle
     FROM #Lista l
         INNER JOIN (
@@ -215,12 +219,19 @@ BEGIN
         LEFT JOIN (
             SELECT
                 epc.Person,
-                MAX(CASE WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0) ELSE ISNULL(epc.ConceptValueLo, 0) END) AS basico_cts
+                MAX(CASE
+                    WHEN UPPER(LTRIM(RTRIM(c.FormulaCode))) = 'BASICO_CTS' THEN
+                        CASE WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0) ELSE ISNULL(epc.ConceptValueLo, 0) END
+                END) AS basico_cts,
+                MAX(CASE
+                    WHEN UPPER(LTRIM(RTRIM(c.FormulaCode))) = 'REM_ACUM_RELACIONADA' THEN
+                        CASE WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0) ELSE ISNULL(epc.ConceptValueLo, 0) END
+                END) AS rem_4ult
             FROM PR_EmployeePayRollConcept epc
                 INNER JOIN PR_Concept c
                     ON c.Company = epc.Company
                    AND c.Concept = epc.Concept
-                   AND c.FormulaCode = 'BASICO_CTS'
+                   AND UPPER(LTRIM(RTRIM(c.FormulaCode))) IN ('BASICO_CTS', 'REM_ACUM_RELACIONADA')
                 INNER JOIN PR_ProcessType pt
                     ON pt.Company = epc.Company
                    AND pt.ProcessType = epc.ProcessType

@@ -3,7 +3,8 @@
     (validado contra AUXILIARES/SCOTIA/ABONOS.txt del sistema anterior, mayo).
 
     Sin cabecera. Solo líneas de detalle de 139 caracteres:
-      12  documento (DNI/CE, izquierda, relleno espacios)
+       1  tipo documento Scotiabank (DNI=1, CE=3, Pasaporte=4)
+      11  documento (DNI/CE, izquierda, relleno espacios)
        1  espacio
       60  nombre
       20  cuenta cargo empresa Scotiabank (izquierda)
@@ -115,6 +116,12 @@ BEGIN
     DetalleBase AS (
         SELECT
             e.person,
+            CASE
+                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
+                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
+                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
+                ELSE LEFT(LTRIM(RTRIM(ISNULL(NULLIF(pdt.PDT, ''), '1'))) + '1', 1)
+            END AS tipo_doc_txt,
             LTRIM(RTRIM(ISNULL(sp.DocumentNumber, e.person))) AS documentnumber,
             UPPER(LTRIM(RTRIM(
                 ISNULL(sp.lastname1, '') + ' ' +
@@ -127,6 +134,8 @@ BEGIN
             INNER JOIN SY_Person sp ON sp.person = e.person
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
+            LEFT JOIN SY_PersonDocumentType pdt
+                ON pdt.PersonDocumentType = sp.EmployeeDocumentType
             LEFT JOIN ERP_Bank eb
                 ON eb.Bank = e.CTSBank
                AND eb.Company = e.Company
@@ -150,7 +159,8 @@ BEGIN
     )
     SELECT
         person,
-        LEFT(LTRIM(RTRIM(ISNULL(documentnumber, ''))) + REPLICATE(' ', 12), 12) AS documento_fmt,
+        tipo_doc_txt,
+        LEFT(LTRIM(RTRIM(ISNULL(documentnumber, ''))) + REPLICATE(' ', 11), 11) AS documento_fmt,
         LEFT(LTRIM(RTRIM(ISNULL(nombre, ''))) + REPLICATE(' ', 60), 60) AS nombre_fmt,
         LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) AS cuenta_fmt,
         importe,
@@ -166,6 +176,7 @@ BEGIN
     SELECT
         ROW_NUMBER() OVER (ORDER BY nombre_fmt, person) AS orden,
         (
+            tipo_doc_txt +
             documento_fmt +
             ' ' +
             nombre_fmt +

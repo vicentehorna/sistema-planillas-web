@@ -10,12 +10,12 @@
       20  apellido 2
       40  nombres
       74  espacios
-      14  cuenta CTS (prefijo C03 + número, igual BanBif_CTS_LO20)
+      14  cuenta CTS (prefijo C038 + número, igual BanBif_CTS_LO20)
       10  espacios
        1  moneda (1=soles, 2=dólares)
       15  importe en centavos
 
-    Cuenta destino: 'C03' + PR_Employee.CTSAccount (si aún no trae C03).
+    Cuenta destino: 'C038' + PR_Employee.CTSAccount (si aún no trae C038).
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
     Requiere #BanbifCtsPersonas (person) cargada por la app.
 */
@@ -134,8 +134,9 @@ BEGIN
             *,
             LEFT(
                 CASE
-                    WHEN UPPER(LEFT(cuenta_raw, 3)) = 'C03' THEN cuenta_raw
-                    ELSE 'C03' + cuenta_raw
+                    WHEN UPPER(LEFT(cuenta_raw, 4)) = 'C038' THEN cuenta_raw
+                    WHEN UPPER(LEFT(cuenta_raw, 3)) = 'C03' THEN 'C038' + SUBSTRING(cuenta_raw, 4, 50)
+                    ELSE 'C038' + cuenta_raw
                 END + REPLICATE(' ', 14),
                 14
             ) AS cuenta_fmt,

@@ -25288,14 +25288,14 @@ def _pago_unidad_nombres(cursor, unidades):
     return nombres
 
 
-def _pago_unidad_filename(unidad, nombre, period, usados):
-    """Telecredito_<nombre de la unidad>_<periodo>.txt. El código solo si el nombre se repite."""
+def _pago_unidad_filename(unidad, nombre, period, usados, prefix='Telecredito'):
+    """<prefix>_<nombre de la unidad>_<periodo>.txt. El código solo si el nombre se repite."""
     token = _boleta_filename_token(nombre or unidad, fallback='UNIDAD')[:60].rstrip('_')
     if token in usados and usados[token] != unidad:
         extra = _boleta_filename_token(unidad, fallback='UNIDAD')[:20].rstrip('_')
         token = f'{token}_{extra}'[:80].rstrip('_')
     usados[token] = unidad
-    return f'Telecredito_{token}_{period}.txt'
+    return f'{prefix}_{token}_{period}.txt'
 
 
 @app.route('/api/pago-haberes/pago-unidad/unidades', methods=['POST'])
@@ -28486,6 +28486,257 @@ def _build_xlsx_plantilla_apertura_cts(rows):
     wb.save(bio)
     bio.seek(0)
     return bio
+
+
+@app.route('/cts/pago-unidad')
+@login_required
+def cts_pago_por_unidad_page():
+    """Pago CTS Telecrédito por unidad (solo hm_alamo)."""
+    if not _es_cliente_alamo():
+        abort(404)
+    return render_template('cts_pago_por_unidad.html')
+
+
+@app.route('/api/cts/pago-unidad/unidades', methods=['POST'])
+@login_required
+def api_cts_pago_unidad_unidades():
+    denied = _require_hm_alamo_json('CTS Pago por Unidad')
+    if denied:
+        return denied
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_listar_unidades_bcp_pago_web")
+        rows = _dicts_first_nonempty_resultset(cursor)
+        return jsonify({
+            "rows": [
+                {
+                    "replicationunit": _jsonable_value(r.get('replicationunit')),
+                    "name": _jsonable_value(r.get('name')),
+                    "bcpaccount": _jsonable_value(r.get('bcpaccount')),
+                }
+                for r in rows
+            ]
+        })
+    except Exception as e:
+        logging.exception("api_cts_pago_unidad_unidades")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cts/pago-unidad/listado', methods=['POST'])
+@login_required
+def api_cts_pago_unidad_listado():
+    denied = _require_hm_alamo_json('CTS Pago por Unidad')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('par_period'))
+    currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+    cesados = _normalize_cesados_telecredito(body.get('cesados'))
+    paydate = _parse_report_date(body.get('paydate') or body.get('par_paydate'))
+    unidades_raw = body.get('unidades') or body.get('units') or []
+    if isinstance(unidades_raw, str):
+        unidades = [u.strip() for u in unidades_raw.split(',') if u.strip()]
+    elif isinstance(unidades_raw, list):
+        unidades = [str(u).strip() for u in unidades_raw if str(u).strip()]
+    else:
+        unidades = []
+
+    if not payroll_desc or not period:
+        return jsonify({"error": "Complete tipo planilla y periodo."}), 400
+    if currency not in ('LO', 'EX'):
+        return jsonify({"error": "Moneda inválida (use LO o EX)."}), 400
+    if not paydate:
+        return jsonify({"error": "Indique la fecha de pago."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _pago_unidad_cargar_unidades_temp(cursor, unidades)
+        cursor.execute(
+            "EXEC sp_pr_listapagocts_unidad_web "
+            "@payroll_desc=?, @par_period=?, @par_currency=?, @cesados=?, @par_paydate=?",
+            (payroll_desc, period, currency, cesados, paydate),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+
+        if _filtro_companias_usercompany_habilitado():
+            allowed = _ids_companias_usercompany(cursor, _userid_sesion_actual())
+            if allowed:
+                rows = [
+                    r for r in rows
+                    if str(r.get('company') or '').strip() in allowed
+                ]
+            else:
+                rows = []
+
+        filas = []
+        for r in rows:
+            try:
+                neto = float(r.get('neto')) if r.get('neto') is not None else 0.0
+            except Exception:
+                neto = 0.0
+            filas.append({
+                "unidad": str(r.get('unidad') or '').strip(),
+                "empresa": str(r.get('empresa') or '').strip(),
+                "company": str(r.get('company') or '').strip(),
+                "neto": neto,
+                "codigo": str(r.get('codigo') or '').strip(),
+                "nombre": str(r.get('nombre') or '').strip(),
+                "person": str(r.get('person') or '').strip(),
+                "tipodoc": str(r.get('tipodoc') or '').strip(),
+                "banco": str(r.get('banco') or '').strip(),
+            })
+        return jsonify({
+            "rows": filas,
+            "meta": {
+                "total": len(filas),
+                "paydate": paydate.strftime('%d/%m/%Y'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_cts_pago_unidad_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/cts/pago-unidad/generar-zip', methods=['POST'])
+@login_required
+def api_cts_pago_unidad_generar_zip():
+    """Genera un TXT Telecrédito CTS por unidad (layout hm_alamo) y los empaqueta en ZIP."""
+    denied = _require_hm_alamo_json('CTS Pago por Unidad')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    payroll_desc = str(body.get('payroll_desc') or body.get('payrolltype') or '').strip()
+    period = _normalize_pr_period(body.get('period') or body.get('par_period'))
+    currency = str(body.get('currency') or 'LO').strip().upper() or 'LO'
+    paydate = _parse_report_date(body.get('paydate') or body.get('par_paydate'))
+    referencia = _normalize_telecredito_referencia(
+        body.get('referencia') or body.get('par_referencia') or body.get('ref_cabecera')
+    )
+    trabajadores = body.get('trabajadores') or body.get('rows') or []
+    if not isinstance(trabajadores, list):
+        trabajadores = []
+
+    if not payroll_desc or not period:
+        return jsonify({"error": "Complete tipo planilla y periodo."}), 400
+    if currency not in ('LO', 'EX'):
+        return jsonify({"error": "Moneda inválida (use LO o EX)."}), 400
+    if not paydate:
+        return jsonify({"error": "Indique la fecha de pago."}), 400
+    if not trabajadores:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    por_unidad = {}
+    for item in trabajadores:
+        if not isinstance(item, dict):
+            continue
+        unidad = str(item.get('unidad') or '').strip()
+        person = str(item.get('person') or '').strip()
+        if not unidad or not person:
+            continue
+        por_unidad.setdefault(unidad, [])
+        if person not in por_unidad[unidad]:
+            por_unidad[unidad].append(person)
+
+    if not por_unidad:
+        return jsonify({"error": "No hay trabajadores válidos por unidad."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        archivos = []
+        omitidas = []
+        nombres_unidad = _pago_unidad_nombres(cursor, por_unidad.keys())
+        nombres_usados = {}
+
+        for unidad, persons in sorted(por_unidad.items(), key=lambda x: x[0]):
+            if not persons:
+                omitidas.append({"unidad": unidad, "motivo": "sin trabajadores"})
+                continue
+            _telecredito_cargar_personas_temp(cursor, persons)
+            cursor.execute(
+                "EXEC sp_pr_generar_pagocts_unidad_web "
+                "@par_replicationunit=?, @payroll_desc=?, @par_period=?, "
+                "@par_currency=?, @par_paydate=?, @par_referencia=?",
+                (
+                    unidad, payroll_desc, period,
+                    currency, paydate, referencia or None,
+                ),
+            )
+            rows = _dicts_first_nonempty_resultset(cursor)
+            lineas = []
+            for r in rows:
+                txt = str(r.get('linea_txt') or '').rstrip('\r\n')
+                if txt:
+                    lineas.append(txt)
+            if len(lineas) < 2:
+                omitidas.append({"unidad": unidad, "motivo": "sin líneas de detalle"})
+                continue
+            # Validar layout hm_alamo CTS
+            if len(lineas[0]) != 125 or any(len(x) != 214 for x in lineas[1:]):
+                omitidas.append({
+                    "unidad": unidad,
+                    "motivo": f"largo inválido (cab={len(lineas[0])}, det={[len(x) for x in lineas[1:3]]})",
+                })
+                continue
+            contenido = '\r\n'.join(lineas) + '\r\n'
+            fname = _pago_unidad_filename(
+                unidad, nombres_unidad.get(unidad), period, nombres_usados,
+                prefix='TelecreditoCTS',
+            )
+            archivos.append((fname, contenido.encode('latin-1', errors='replace')))
+
+        if not archivos:
+            detalle = '; '.join(
+                f"{x.get('unidad')}: {x.get('motivo')}" for x in omitidas[:10]
+            )
+            msg = 'No se generó ningún archivo TXT (unidades sin trabajadores o sin detalle).'
+            if detalle:
+                msg += ' ' + detalle
+            return jsonify({"error": msg, "omitidas": omitidas}), 400
+
+        memory_file = io.BytesIO()
+        with zipfile.ZipFile(memory_file, 'w', zipfile.ZIP_DEFLATED) as zf:
+            for fname, raw in archivos:
+                zf.writestr(fname, raw)
+        memory_file.seek(0)
+        zip_name = f'TelecreditoCTS_PorUnidad_{period}.zip'
+        resp = send_file(
+            memory_file,
+            mimetype='application/zip',
+            download_name=zip_name,
+            as_attachment=True,
+        )
+        resp.headers['X-PagoUnidad-Generados'] = str(len(archivos))
+        if omitidas:
+            resp.headers['X-PagoUnidad-Omitidas'] = str(len(omitidas))
+        return resp
+    except Exception as e:
+        logging.exception("api_cts_pago_unidad_generar_zip")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/cts/plantilla-apertura')

@@ -117,6 +117,10 @@ ENDPOINT_MENU_MAP = {
     'plantilla_apertura_cts_page': 'plantilla_apertura_cts',
     'api_plantilla_apertura_cts_listado': 'plantilla_apertura_cts',
     'api_plantilla_apertura_cts_excel': 'plantilla_apertura_cts',
+    'cts_pago_por_unidad_page': 'cts_pago_por_unidad',
+    'api_cts_pago_unidad_unidades': 'cts_pago_por_unidad',
+    'api_cts_pago_unidad_listado': 'cts_pago_por_unidad',
+    'api_cts_pago_unidad_generar_zip': 'cts_pago_por_unidad',
     'asientos_cuentas_contables_page': 'asientos_cuentas_contables',
     'tareo_tipo_dia_page': 'tareo_tipo_dia',
     'tareo_registro_page': 'tareo_registro',
@@ -307,6 +311,8 @@ PATH_PREFIX_MENU_MAP = {
     '/api/pago-haberes/scotiabank': 'pago_scotiabank',
     '/pago-haberes/pago-unidad': 'pago_por_unidad',
     '/api/pago-haberes/pago-unidad': 'pago_por_unidad',
+    '/cts/pago-unidad': 'cts_pago_por_unidad',
+    '/api/cts/pago-unidad': 'cts_pago_por_unidad',
 }
 
 ALWAYS_ALLOWED_ENDPOINTS = {

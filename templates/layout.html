@@ -1588,8 +1588,9 @@
                 </li>
                 {% endif %}
 
-                {% set cts_active = request.endpoint in ('formato_cts_page', 'reporte_detalle_cts_page', 'telecredito_cts_page', 'continental_cts_page', 'interbank_cts_page', 'banbif_cts_page', 'scotiabank_cts_page', 'plantilla_apertura_cts_page') %}
-                {% set show_cts = can_menu('formato_cts') or can_menu('reporte_detalle_cts') or can_menu('telecredito_cts') or can_menu('continental_cts') or can_menu('interbank_cts') or can_menu('banbif_cts') or can_menu('scotiabank_cts') or can_menu('plantilla_apertura_cts') %}
+                {% set es_alamo_cts = (sql_database or '')|lower == 'hm_alamo' %}
+                {% set cts_active = request.endpoint in ('formato_cts_page', 'reporte_detalle_cts_page', 'telecredito_cts_page', 'cts_pago_por_unidad_page', 'continental_cts_page', 'interbank_cts_page', 'banbif_cts_page', 'scotiabank_cts_page', 'plantilla_apertura_cts_page') %}
+                {% set show_cts = can_menu('formato_cts') or can_menu('reporte_detalle_cts') or can_menu('telecredito_cts') or (es_alamo_cts and can_menu('cts_pago_por_unidad')) or can_menu('continental_cts') or can_menu('interbank_cts') or can_menu('banbif_cts') or can_menu('scotiabank_cts') or can_menu('plantilla_apertura_cts') %}
                 {% if show_cts %}
                 <li class="sidebar-menu-parent {{ 'active' if cts_active else '' }}">
                     <a href="#submenuCts"
@@ -1620,6 +1621,13 @@
                         <li class="{{ 'active' if request.endpoint == 'telecredito_cts_page' else '' }}">
                             <a href="{{ url_for('telecredito_cts_page') }}" title="Archivo Telecrédito">
                                 <i class="bi bi-bank"></i><span class="sidebar-link-text">Archivo Telecrédito</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_alamo_cts and can_menu('cts_pago_por_unidad') %}
+                        <li class="{{ 'active' if request.endpoint == 'cts_pago_por_unidad_page' else '' }}">
+                            <a href="{{ url_for('cts_pago_por_unidad_page') }}" title="Pago por Unidad">
+                                <i class="bi bi-diagram-3"></i><span class="sidebar-link-text">Pago por Unidad</span>
                             </a>
                         </li>
                         {% endif %}

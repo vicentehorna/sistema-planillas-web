@@ -210,21 +210,23 @@ document.addEventListener('DOMContentLoaded', async function () {
     }
 
     function esProcesoCts(item) {
-        const id = String(item.id || item.value || '').trim().toUpperCase();
+        const id = String(item.id || item.value || '').trim().toUpperCase().replace(/\s+/g, ' ');
         const text = String(item.text || item.label || '').trim().toUpperCase().replace(/\s+/g, ' ');
-        if (text.includes('PROVISION')) return false;
+        if (text.includes('PROVISION') || id.includes('PROVISION')) return false;
         return id === 'CTS' || text === 'CTS' || text === 'PAGO DE CTS' || /\bCTS\b/.test(text);
     }
 
-    function fijarProcesoCts(desc) {
+    /** Conserva Description exacta de BD (p.ej. "PAGO DE  CTS") para el selector consolidado. */
+    function fijarProcesoCts(descRaw, descShow) {
         const cbo = document.getElementById('cboProceso');
         cbo.innerHTML = '';
         const opt = document.createElement('option');
-        opt.value = desc || '';
-        opt.textContent = desc || 'Pago de CTS';
+        const raw = String(descRaw || '').trim();
+        opt.value = raw;
+        opt.textContent = String(descShow || raw || 'Pago de CTS').trim().replace(/\s+/g, ' ');
         opt.selected = true;
         cbo.appendChild(opt);
-        procesoCtsDesc = desc || '';
+        procesoCtsDesc = raw;
     }
 
     function poblarSelect(url, selectElement, opciones) {
@@ -422,10 +424,12 @@ document.addEventListener('DOMContentLoaded', async function () {
                 cboPeriodo.disabled = true;
                 return false;
             }
-            const desc = String(match.text || match.label || 'Pago de CTS').trim().replace(/\s+/g, ' ');
-            fijarProcesoCts(desc);
+            /* No colapsar espacios: en hm_alamo el Description es "PAGO DE  CTS". */
+            const descRaw = String(match.id || match.text || match.label || '').trim();
+            const descShow = String(match.text || match.label || descRaw || 'Pago de CTS').trim();
+            fijarProcesoCts(descRaw, descShow);
             return poblarSelect(
-                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(desc)}`,
+                `${URL_PERIODOS}?payroll_desc=${encodeURIComponent(payroll)}&proceso_desc=${encodeURIComponent(descRaw)}`,
                 cboPeriodo,
                 { textoVacio: 'Sin periodos de CTS' }
             );

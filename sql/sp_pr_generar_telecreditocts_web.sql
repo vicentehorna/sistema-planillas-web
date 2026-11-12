@@ -13,7 +13,7 @@ GO
       Detalle:  2 | tipo cta A/C | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
                 ref benef(40) | ref emp(20) | moneda | importe | 'S'
 
-    Formato hm_maritima (Estructura BCP planilla CTS NTLC) — cabecera 125 / detalle 214:
+    Formato hm_maritima / hm_globaltec (Estructura BCP planilla CTS NTLC) — cabecera 125 / detalle 214:
       Cabecera: 1 | cantidad(6) | fecha | tipo cta C/M | moneda(4) | cuenta(20) | '6' | RUC(12) |
                 monto | referencia(40) | checksum(15)
       Detalle:  2 | cuenta(20) | tipodoc | doc(12) | 3 esp | nombre(75) |
@@ -72,7 +72,7 @@ BEGIN
     DECLARE @checksum        BIGINT;
     DECLARE @parte_chk       VARCHAR(30);
     DECLARE @es_formato_aci  BIT;  /* hm_aci + hm_ultra + hm_alamo + hm_lumat: cabecera 125 / detalle 214 */
-    DECLARE @es_hm_maritima  BIT;
+    DECLARE @es_hm_maritima  BIT;  /* NTLC: hm_maritima + hm_globaltec */
     DECLARE @ruc_empresa     VARCHAR(12);
     DECLARE @chk_len_empresa INT;
 
@@ -80,7 +80,10 @@ BEGIN
         WHEN LOWER(DB_NAME()) IN ('hm_aci', 'hm_ultra', 'hm_alamo', 'hm_lumat') THEN 1
         ELSE 0
     END;
-    SET @es_hm_maritima = CASE WHEN LOWER(DB_NAME()) = 'hm_maritima' THEN 1 ELSE 0 END;
+    SET @es_hm_maritima = CASE
+        WHEN LOWER(DB_NAME()) IN ('hm_maritima', 'hm_globaltec') THEN 1
+        ELSE 0
+    END;
     SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN '1001' ELSE '0001' END;
     SET @anio = CAST(LEFT(@par_period, 4) AS INT);
     SET @mes = SUBSTRING(@par_period, 5, 2);
@@ -320,7 +323,7 @@ BEGIN
     END
     ELSE IF @es_hm_maritima = 1
     BEGIN
-        /* Estructura BCP CTS NTLC (solo hm_maritima): cabecera 125, detalle 214. */
+        /* Estructura BCP CTS NTLC (hm_maritima / hm_globaltec): cabecera 125, detalle 214. */
         SELECT orden, linea_txt
         FROM (
             SELECT

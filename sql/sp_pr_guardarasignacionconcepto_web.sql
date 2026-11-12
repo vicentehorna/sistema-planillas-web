@@ -9,6 +9,8 @@
     Reglas:
       Permanente (P): PRPeriodEnd = NULL.
       Temporal (T): PRPeriodStart y PRPeriodEnd obligatorios; fin >= inicio.
+      No puede haber dos permanentes del mismo concepto para la misma
+      persona y empresa (aunque el periodo inicio sea distinto).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_guardarasignacionconcepto_web]
     @modo                CHAR(1),
@@ -152,10 +154,34 @@ BEGIN
     WHERE e.Company = @par_company
       AND e.Person = @par_person;
 
+    /* Centro de costo de la clave (param o del trabajador). */
+    IF @par_costcenter <> ''
+        SET @costcenter = @par_costcenter;
+
+    /* Un solo permanente del mismo concepto por persona/empresa. */
+    IF @par_flagfrecuencytype = 'P'
+       AND EXISTS (
+            SELECT 1
+            FROM PR_EmployeeConcept ec
+            WHERE ec.Person = @par_person
+              AND ec.Company = @par_company
+              AND ec.Concept = @par_concept
+              AND UPPER(LTRIM(RTRIM(ISNULL(ec.FlagFrecuencyType, '')))) = 'P'
+              /* En actualización, no contar la propia fila. */
+              AND NOT (
+                    @modo = 'U'
+                AND ec.PayRollType = @par_payrolltype
+                AND ec.PRPeriodStart = @par_prperiodstart
+                AND ec.CostCenter = @costcenter
+              )
+       )
+    BEGIN
+        RAISERROR('Ya existe una asignación permanente del mismo concepto para este trabajador y empresa. Cierre o elimine la anterior antes de crear otra.', 16, 1);
+        RETURN;
+    END
+
     IF @modo = 'I'
     BEGIN
-        IF @par_costcenter <> ''
-            SET @costcenter = @par_costcenter;
 
         IF EXISTS (
             SELECT 1 FROM PR_EmployeeConcept ec

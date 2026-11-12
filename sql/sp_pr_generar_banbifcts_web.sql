@@ -13,7 +13,7 @@
       14  cuenta CTS (prefijo C038 + número, igual BanBif_CTS_LO20)
       10  espacios
        1  moneda (1=soles, 2=dólares)
-      15  importe en centavos
+      15  importe en milésimas (*1000; ej. 1033.34 → 000000001033340)
 
     Cuenta destino: 'C038' + PR_Employee.CTSAccount (si aún no trae C038).
     Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
@@ -159,9 +159,10 @@ BEGIN
             cuenta_fmt +
             REPLICATE(' ', 10) +
             @tipo_moneda +
+            /* BanBif_CTS_LO20: 1033.34 → 000000001033340 (*1000, no *100). */
             RIGHT(
                 REPLICATE('0', 15) +
-                CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
+                CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 1000 AS BIGINT) AS VARCHAR(20)),
                 15
             )
         ) AS linea_txt

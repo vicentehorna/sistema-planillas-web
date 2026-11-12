@@ -1,16 +1,16 @@
 /*
-    Archivo Interbank de depósito de CTS (layout fijo según AUXILIARES/INTERBANK).
+    Genera líneas del archivo Interbank CTS (cabecera tipo 01 + detalle tipo 02).
+    Layout Macro Pagos Masivos Interbank (mismo que haberes, servicio 06 CTS):
+      Cabecera 104 chars | Detalle 380 chars.
+    Validado contra AUXILIARES/SCOTIA/CTS 05 TECNICOS.txt (hm_ultra mayo 2026).
 
-    Cabecera (96): 1 + servicio CTS (3) + cuenta cargo 20 + PEN/USD + total 15
-                   + cantidad 6 + fecha AAAAMMDD + referencia 40.
-    Detalle (130): 2 + P/I + cuenta CTS 20 + tipo doc 1 + documento 12
-                   + nombre 40 + importe 15 + referencia individual 40.
-
-    Servicio fijo: CTS.
-    Cuenta destino: PR_Employee.CTSAccount.
-    P si CTSBank = PR_Mapping.interbankbank; I si es otro banco.
-    Importe: PR_Mapping.CTSConcept del proceso ShortName CTS.
-    Requiere #InterbankCtsPersonas (person) cargada por la app.
+    Requiere #InterbankCtsPersonas (person) cargada por la app web.
+    Cuenta destino: PR_Employee.CTSAccount / CTSBank.
+    Importe abono: PR_Mapping.CTSConcept del proceso ShortName CTS.
+    Monto CTS (pos. detalle): BASICO_CTS * 4.
+    Código empresa en cabecera (pos. 100-104): MC001 (temporal, en duro).
+    Tipo de cuenta Interbank CTS en bloque abono: 007.
+    @par_referencia: texto cabecera TXT (36 chars, pos. 5-40). Si vacío, espacios.
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_generar_interbankcts_web]
     @par_company     VARCHAR(10),
@@ -38,15 +38,16 @@ BEGIN
         RETURN;
     END
 
-    DECLARE @cuenta_origen VARCHAR(20);
-    DECLARE @interbankbank VARCHAR(20);
-    DECLARE @moneda_txt    CHAR(3);
-    DECLARE @fecha_txt     CHAR(8);
-    DECLARE @ref_txt       VARCHAR(40);
-    DECLARE @total_reg     INT;
-    DECLARE @total_importe DECIMAL(18, 2);
-    DECLARE @importe15     VARCHAR(15);
-    DECLARE @linea_cabecera VARCHAR(96);
+    DECLARE @fecha_envio     VARCHAR(14);
+    DECLARE @codigo_empresa  VARCHAR(5);
+    DECLARE @ref_cabecera    VARCHAR(36);
+    DECLARE @total_reg       INT;
+    DECLARE @total_soles     DECIMAL(18, 2);
+    DECLARE @total_dolares   DECIMAL(18, 2);
+    DECLARE @importe_soles   VARCHAR(17);
+    DECLARE @importe_dolares VARCHAR(13);
+    DECLARE @linea_cabecera  VARCHAR(104);
+    DECLARE @interbankbank   VARCHAR(20);
 
     SELECT @interbankbank = LTRIM(RTRIM(ISNULL(m.interbankbank, '')))
     FROM pr_mapping m
@@ -58,21 +59,14 @@ BEGIN
         RETURN;
     END
 
-    SELECT @cuenta_origen = LEFT(REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(ba.BankAccountNumber, ''))), '-', ''), ' ', ''), 20)
-    FROM TE_BankAccount ba
-    WHERE ba.Company = @par_company
-      AND ba.Bank = @interbankbank
-      AND ba.accountcurrency = @par_currency;
+    SET @fecha_envio =
+        CONVERT(VARCHAR(8), GETDATE(), 112) +
+        RIGHT('0' + CAST(DATEPART(HOUR, GETDATE()) AS VARCHAR(2)), 2) +
+        RIGHT('0' + CAST(DATEPART(MINUTE, GETDATE()) AS VARCHAR(2)), 2) +
+        RIGHT('0' + CAST(DATEPART(SECOND, GETDATE()) AS VARCHAR(2)), 2);
 
-    IF @cuenta_origen IS NULL OR LTRIM(RTRIM(@cuenta_origen)) = ''
-    BEGIN
-        RAISERROR('No se encontró cuenta origen Interbank en TE_BankAccount para la compañía/moneda.', 16, 1);
-        RETURN;
-    END
-
-    SET @moneda_txt = CASE WHEN @par_currency = 'EX' THEN 'USD' ELSE 'PEN' END;
-    SET @fecha_txt = CONVERT(CHAR(8), @par_paydate, 112);
-    SET @ref_txt = LEFT(@par_referencia + REPLICATE(' ', 40), 40);
+    SET @codigo_empresa = 'MC001';
+    SET @ref_cabecera = LEFT(@par_referencia + REPLICATE(' ', 36), 36);
 
     ;WITH PersonasSel AS (
         SELECT DISTINCT LTRIM(RTRIM(tp.person)) AS person
@@ -108,35 +102,66 @@ BEGIN
             END
         ) > 0
     ),
+    BasicoCts AS (
+        SELECT
+            epc.Person,
+            MAX(
+                CASE
+                    WHEN @par_currency = 'EX' THEN ISNULL(epc.ConceptValueEx, 0)
+                    ELSE ISNULL(epc.ConceptValueLo, 0)
+                END
+            ) AS basico_cts
+        FROM PR_EmployeePayRollConcept epc
+            INNER JOIN PersonasSel ps ON ps.person = epc.Person
+            INNER JOIN PR_Concept c
+                ON c.Company = epc.Company
+               AND c.Concept = epc.Concept
+               AND c.FormulaCode = 'BASICO_CTS'
+            INNER JOIN PR_ProcessType pt
+                ON pt.Company = epc.Company
+               AND pt.ProcessType = epc.ProcessType
+               AND pt.ShortName = 'CTS'
+        WHERE epc.Company = @par_company
+          AND epc.PayRollType = @par_payrolltype
+          AND epc.PRPeriod = @par_period
+        GROUP BY epc.Person
+    ),
     DetalleBase AS (
         SELECT
             e.person,
-            /* 1=DNI, 3=CE; resto espacio */
+            LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))) AS cuenta_raw,
+            CASE WHEN e.CTSBank = m.interbankbank THEN 'P' ELSE 'I' END AS tipo_abono_pi,
             CASE
-                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '1'
-                WHEN ISNULL(pdt.PDT, '') IN ('04', '4') THEN '3'
-                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '4'
-                ELSE ' '
-            END AS tipo_doc,
-            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) AS documentnumber,
+                WHEN ISNULL(pdt.PDT, '') IN ('01', '1') THEN '01'
+                WHEN ISNULL(pdt.PDT, '') IN ('04', '4', '03', '3') THEN '03'
+                WHEN ISNULL(pdt.PDT, '') IN ('07', '7') THEN '04'
+                WHEN ISNULL(pdt.PDT, '') IN ('06', '6') THEN '06'
+                ELSE '01'
+            END AS tipodocumento,
+            LTRIM(RTRIM(
+                CASE
+                    WHEN ISNULL(sp.DocumentNumber, '') = '' THEN ISNULL(sp.Ruc, '')
+                    ELSE sp.DocumentNumber
+                END
+            )) AS numerodocumento,
+            UPPER(LTRIM(RTRIM(ISNULL(sp.lastname1, '')))) AS apellido1,
+            UPPER(LTRIM(RTRIM(ISNULL(sp.lastname2, '')))) AS apellido2,
             UPPER(LTRIM(RTRIM(
-                ISNULL(sp.lastname1, '') + ' ' +
-                ISNULL(sp.lastname2, '') + ' ' +
-                ISNULL(sp.name1, '') + ' ' +
-                ISNULL(sp.name2, '')
-            ))) AS nombre,
-            CASE WHEN e.CTSBank = m.interbankbank THEN 'P' ELSE 'I' END AS tipo_abono,
-            LEFT(
-                REPLACE(REPLACE(LTRIM(RTRIM(ISNULL(e.CTSAccount, ''))), '-', ''), ' ', '')
-                + REPLICATE(' ', 20),
-                20
-            ) AS cuenta_empleado,
-            p.importe
+                LTRIM(RTRIM(ISNULL(sp.name1, ''))) +
+                CASE
+                    WHEN LTRIM(RTRIM(ISNULL(sp.name2, ''))) <> ''
+                        THEN ' ' + LTRIM(RTRIM(sp.name2))
+                    ELSE ''
+                END
+            ))) AS nombres,
+            p.importe,
+            ISNULL(bas.basico_cts, 0) AS basico_cts
         FROM PR_Employee e
             INNER JOIN SY_Person sp ON sp.person = e.person
             INNER JOIN pr_mapping m ON m.company = e.company
             INNER JOIN Pagos p ON p.person = e.person
             INNER JOIN PersonasSel ps ON ps.person = e.person
+            LEFT JOIN BasicoCts bas ON bas.Person = e.person
             LEFT JOIN SY_PersonDocumentType pdt
                 ON pdt.PersonDocumentType = sp.EmployeeDocumentType
         WHERE e.company = @par_company
@@ -148,60 +173,159 @@ BEGIN
                 (@todos_bancos = 'N' AND e.CTSBank = m.interbankbank)
              OR (@todos_bancos = 'Y' AND ISNULL(e.CTSBank, '') <> '')
           )
+          AND sp.status = 'A'
+          AND (
+                CASE
+                    WHEN e.status IS NULL THEN 'N'
+                    WHEN e.status = '' THEN 'N'
+                    WHEN e.status = 'N' THEN 'N'
+                    ELSE 'Y'
+                END = 'N'
+             OR e.ineffectivedate >= GETDATE()
+          )
+    ),
+    DetalleCuenta AS (
+        SELECT
+            db.*,
+            CASE
+                WHEN LEFT(REPLACE(REPLACE(db.cuenta_raw, '-', ''), ' ', ''), 2) = '09'
+                 AND LEN(REPLACE(REPLACE(db.cuenta_raw, '-', ''), ' ', '')) > 13
+                    THEN SUBSTRING(REPLACE(REPLACE(db.cuenta_raw, '-', ''), ' ', ''), 3,
+                                   LEN(REPLACE(REPLACE(db.cuenta_raw, '-', ''), ' ', '')))
+                ELSE REPLACE(REPLACE(db.cuenta_raw, '-', ''), ' ', '')
+            END AS cuenta_limpia,
+            CASE WHEN db.tipo_abono_pi = 'P' THEN '09' ELSE '99' END AS tipo_abono
+        FROM DetalleBase db
     )
     SELECT
         person,
-        tipo_doc,
-        LEFT(documentnumber + REPLICATE(' ', 12), 12) AS documento_fmt,
-        tipo_abono,
-        cuenta_empleado,
-        LEFT(nombre + REPLICATE(' ', 40), 40) AS nombre_fmt,
+        LEFT(
+            dc.tipo_abono +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 3)
+                ELSE '007' /* tipo cuenta CTS Interbank Macro Pagos */
+            END +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 2)
+                WHEN @par_currency = 'EX' THEN '10'
+                ELSE '01'
+            END +
+            CASE
+                WHEN dc.tipo_abono = '99' THEN REPLICATE(' ', 3)
+                WHEN LEN(dc.cuenta_limpia) >= 3 THEN LEFT(dc.cuenta_limpia, 3)
+                ELSE REPLICATE(' ', 3)
+            END +
+            LEFT(
+                CASE
+                    WHEN dc.tipo_abono = '99' THEN dc.cuenta_limpia
+                    WHEN LEN(dc.cuenta_limpia) >= 4 THEN SUBSTRING(dc.cuenta_limpia, 4, 10)
+                    ELSE dc.cuenta_limpia
+                END + REPLICATE(' ', 20),
+                20
+            ),
+            30
+        ) AS bloque_abono,
+        CASE WHEN @par_currency = 'EX' THEN '10' ELSE '01' END AS moneda_abono,
+        tipodocumento,
+        numerodocumento,
+        apellido1,
+        apellido2,
+        nombres,
         importe,
+        CAST(ROUND(ISNULL(basico_cts, 0) * 4, 2) AS DECIMAL(18, 2)) AS importe_cts,
         RIGHT(
             REPLICATE('0', 15) +
             CAST(CAST(ROUND(ISNULL(importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
             15
-        ) AS importe15
+        ) AS importe15,
+        RIGHT(
+            REPLICATE('0', 15) +
+            CAST(CAST(ROUND(ISNULL(basico_cts, 0) * 4, 2) * 100 AS BIGINT) AS VARCHAR(20)),
+            15
+        ) AS importe_cts15,
+        LEFT(tipodocumento + numerodocumento + REPLICATE(' ', 20), 20) AS codigo_beneficiario,
+        LEFT(numerodocumento + REPLICATE(' ', 15), 15) AS numdoc_fmt,
+        LEFT(apellido1 + REPLICATE(' ', 20), 20) +
+        LEFT(apellido2 + REPLICATE(' ', 20), 20) +
+        LEFT(nombres + REPLICATE(' ', 20), 20) AS nombre_fmt
     INTO #Detalle
-    FROM DetalleBase
-    WHERE LTRIM(RTRIM(cuenta_empleado)) <> '';
+    FROM DetalleCuenta dc;
 
-    SELECT @total_reg = COUNT(*), @total_importe = ISNULL(SUM(importe), 0)
-    FROM #Detalle;
+    SELECT @total_reg = COUNT(*) FROM #Detalle;
 
-    SET @importe15 = RIGHT(
-        REPLICATE('0', 15) +
-        CAST(CAST(ROUND(ISNULL(@total_importe, 0), 2) * 100 AS BIGINT) AS VARCHAR(20)),
-        15
+    IF @par_currency = 'LO'
+    BEGIN
+        SELECT @total_soles = ISNULL(SUM(importe), 0) FROM #Detalle;
+        SET @total_dolares = 0;
+    END
+    ELSE
+    BEGIN
+        SELECT @total_dolares = ISNULL(SUM(importe), 0) FROM #Detalle;
+        SET @total_soles = 0;
+    END
+
+    SET @importe_soles = RIGHT(
+        REPLICATE('0', 17) +
+        CAST(CAST(ROUND(ISNULL(@total_soles, 0), 2) * 10000 AS BIGINT) AS VARCHAR(20)),
+        17
+    );
+    SET @importe_dolares = RIGHT(
+        REPLICATE('0', 13) +
+        CAST(CAST(ROUND(ISNULL(@total_dolares, 0), 2) * 10000 AS BIGINT) AS VARCHAR(20)),
+        13
     );
 
     SET @linea_cabecera =
-        '1' +
-        'CTS' +
-        LEFT(@cuenta_origen + REPLICATE(' ', 20), 20) +
-        @moneda_txt +
-        @importe15 +
-        RIGHT(REPLICATE('0', 6) + CAST(ISNULL(@total_reg, 0) AS VARCHAR(10)), 6) +
-        @fecha_txt +
-        @ref_txt;
+        '01' +
+        '06' +
+        @ref_cabecera +
+        @fecha_envio +
+        REPLICATE(' ', 9) +
+        RIGHT(REPLICATE('0', 6) + CAST(@total_reg AS VARCHAR(10)), 6) +
+        @importe_soles +
+        @importe_dolares +
+        LEFT(@codigo_empresa + REPLICATE(' ', 5), 5);
 
+    /*
+        Detalle tipo 02 (380 chars, Macro Pagos CTS servicio 06):
+        02(2) + cod.beneficiario(20) + doc.pago(21) + fecha(8) + moneda abono(2)
+        + monto(15) + filler(1) + abono cuenta(30) + tipo persona(1) + tipo doc(2)
+        + num doc(15) + ape1(20)+ape2(20)+nombres(20) + moneda CTS(2) + monto CTS(15)
+        + filler(6) + celular(40) + email(140)
+    */
+    ;WITH DetalleSeq AS (
+        SELECT
+            d.*,
+            ROW_NUMBER() OVER (ORDER BY d.apellido1, d.apellido2, d.nombres, d.person) AS seq
+        FROM #Detalle d
+    )
     SELECT orden, linea_txt
     FROM (
         SELECT 0 AS orden, @linea_cabecera AS linea_txt
         UNION ALL
         SELECT
-            ROW_NUMBER() OVER (ORDER BY nombre_fmt, person) AS orden,
-            (
-                '2' +
-                tipo_abono +
-                cuenta_empleado +
-                tipo_doc +
-                documento_fmt +
-                nombre_fmt +
+            seq AS orden,
+            LEFT(
+                '02' +
+                codigo_beneficiario +
+                REPLICATE(' ', 21) +
+                REPLICATE(' ', 8) +
+                moneda_abono +
                 importe15 +
-                @ref_txt
+                ' ' +
+                bloque_abono +
+                'P' +
+                tipodocumento +
+                numdoc_fmt +
+                nombre_fmt +
+                moneda_abono +
+                importe_cts15 +
+                REPLICATE(' ', 6) +
+                REPLICATE(' ', 40) +
+                REPLICATE(' ', 140),
+                380
             ) AS linea_txt
-        FROM #Detalle
+        FROM DetalleSeq
     ) AS lineas
     ORDER BY orden;
 END

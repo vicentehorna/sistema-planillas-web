@@ -28146,10 +28146,16 @@ def descargar_zip_formatos_cts():
 def enviar_formatos_cts_masivo():
     data = request.get_json(silent=True) or {}
     ensure_user_session()
-    cia = session.get('company')
+    cia = str(data.get('cia') or data.get('company') or session.get('company') or '').strip()
     payroll_type = str(data.get('payroll_type') or '').strip()
     period = _normalize_pr_period(data.get('period'))
     seleccionados = data.get('empleados', data.get('trabajadores', []))
+    repunit = _normalize_replicationunit_asig(
+        data.get('repunit') or data.get('unidad') or data.get('replicationunit')
+    )
+    costcenter = _normalize_replicationunit_asig(
+        data.get('costcenter') or data.get('centrocosto')
+    )
 
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
@@ -28164,7 +28170,9 @@ def enviar_formatos_cts_masivo():
     )
 
     try:
-        empleados_periodo = _listar_trabajadores_cts(cia, payroll_type, period, '0', None)
+        empleados_periodo = _listar_trabajadores_cts(
+            cia, payroll_type, period, '0', None, repunit, costcenter
+        )
     except Exception:
         logging.exception('enviar_formatos_cts_masivo listado')
         empleados_periodo = []

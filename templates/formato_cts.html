@@ -1048,12 +1048,15 @@ document.addEventListener('DOMContentLoaded', async function () {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    cia: filtros.cia,
                     empleados: ids,
                     period: filtros.period,
                     payroll_type: filtros.payroll_type,
                     process: filtros.process,
                     fecha_pago: filtros.fecha_pago,
-                    sin_firma: filtros.sin_firma || '0'
+                    sin_firma: filtros.sin_firma || '0',
+                    repunit: filtrosListaActuales?.repunit || '0',
+                    costcenter: filtrosListaActuales?.costcenter || '0'
                 })
             });
             if (!resEnv.ok) {

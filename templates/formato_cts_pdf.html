@@ -171,6 +171,16 @@
             color: #1a4b84;
             text-align: right;
         }
+        .ausencias-cts {
+            margin: 4px 0 2px;
+            font-size: 9px;
+            color: #333;
+        }
+        .ausencias-cts .lbl {
+            font-weight: bold;
+            color: #444;
+            margin-right: 6px;
+        }
         .total-deposito {
             display: table;
             width: 100%;
@@ -352,6 +362,10 @@
                     </tr>
                 </tbody>
             </table>
+
+            {% if mostrar_ausencias_cts %}
+            <div class="ausencias-cts"><span class="lbl">Ausencias:</span>{{ ausencias_cts_fmt }}</div>
+            {% endif %}
 
             {% if mostrar_detalle_calculo %}
             <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>

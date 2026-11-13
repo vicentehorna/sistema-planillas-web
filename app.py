@@ -8414,8 +8414,35 @@ def _formato_cts_reordenar_conceptos_ultra(conceptos):
     return basico + grati + proms + otros
 
 
+def _formato_cts_ausencias_xfaltascts(cursor, cia, payroll_type, period, person):
+    """Valor de XFALTASCTS del proceso CTS (PR_EmployeePayRollConcept). Si no hay fila, 0."""
+    cursor.execute(
+        """
+        SELECT TOP 1 ISNULL(ep.ConceptValue, 0)
+        FROM PR_EmployeePayRollConcept ep (NOLOCK)
+        INNER JOIN PR_Concept c (NOLOCK)
+            ON c.Company = ep.Company AND c.Concept = ep.Concept
+        INNER JOIN PR_ProcessType pt (NOLOCK)
+            ON pt.Company = ep.Company AND pt.ProcessType = ep.ProcessType
+        WHERE ep.Company = ?
+          AND ep.PayRollType = ?
+          AND ep.PRPeriod = ?
+          AND ep.Person = ?
+          AND LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) = 'XFALTASCTS'
+          AND LTRIM(RTRIM(ISNULL(pt.ShortName, ''))) = 'CTS'
+        """,
+        (cia, payroll_type, period, person),
+    )
+    row = cursor.fetchone()
+    try:
+        return float(row[0] or 0) if row else 0.0
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None, sin_firma=False):
     conn = None
+    ausencias_cts = 0.0
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -8424,6 +8451,11 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
             'EXEC sp_pr_formatocts_web @cia=?, @payrolltype=?, @period=?, @person=?',
             (cia, payroll_type, period, person),
         )
+        # hm_ultra: formato propio; no mostrar Ausencias.
+        if rows and not _es_cliente_ultraseguros():
+            ausencias_cts = _formato_cts_ausencias_xfaltascts(
+                cursor, cia, payroll_type, period, person
+            )
     finally:
         if conn:
             try:
@@ -8532,6 +8564,13 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         'mostrar_detalle_calculo': not _es_cliente_ultraseguros(),
         # hm_ultra: periodo computable solo Desde/Hasta (sin ingreso ni depósito).
         'mostrar_fechas_periodo_cts': not _es_cliente_ultraseguros(),
+        # Excepto hm_ultra: Ausencias = XFALTASCTS del proceso CTS.
+        'mostrar_ausencias_cts': not _es_cliente_ultraseguros(),
+        'ausencias_cts_fmt': (
+            f'{int(ausencias_cts)}'
+            if abs(ausencias_cts - round(ausencias_cts)) < 1e-9
+            else f'{ausencias_cts:,.2f}'
+        ),
         **_formato_cts_config(),
     }
 

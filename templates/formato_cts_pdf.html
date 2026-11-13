@@ -286,16 +286,20 @@
                     <tr>
                         <th>Desde</th>
                         <th>Hasta</th>
+                        {% if mostrar_fechas_periodo_cts %}
                         <th>Fecha de ingreso</th>
                         <th>Fecha de depósito</th>
+                        {% endif %}
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
                         <td class="centro">{{ periodo_desde }}</td>
                         <td class="centro">{{ periodo_hasta }}</td>
+                        {% if mostrar_fechas_periodo_cts %}
                         <td class="centro">{{ fecha_ingreso }}</td>
                         <td class="centro">{{ fecha_pago }}</td>
+                        {% endif %}
                     </tr>
                 </tbody>
             </table>

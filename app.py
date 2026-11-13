@@ -8524,6 +8524,8 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         'importe_fmt': f'{importe:,.2f}',
         # hm_ultra: no mostrar la línea "rem / 360 × días" encima del total.
         'mostrar_detalle_calculo': not _es_cliente_ultraseguros(),
+        # hm_ultra: periodo computable solo Desde/Hasta (sin ingreso ni depósito).
+        'mostrar_fechas_periodo_cts': not _es_cliente_ultraseguros(),
         **_formato_cts_config(),
     }
 

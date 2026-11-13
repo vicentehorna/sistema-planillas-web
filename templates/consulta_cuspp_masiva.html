@@ -1,0 +1,532 @@
+{% extends "layout.html" %}
+
+{% block title %}Consulta CUSPP Masiva{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table-scroll-container {
+        max-height: 65vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+    }
+
+    .table-consulta-cuspp {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+
+    .table-consulta-cuspp th,
+    .table-consulta-cuspp td {
+        padding: 0.25rem 0.5rem;
+        vertical-align: middle;
+    }
+
+    .table-consulta-cuspp thead th {
+        position: sticky;
+        top: 0;
+        background-color: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+    }
+
+    .table-consulta-cuspp .col-monto {
+        min-width: 5.5rem;
+        text-align: right;
+    }
+
+    .table-consulta-cuspp .col-cuspp {
+        min-width: 7rem;
+    }
+
+    .table-consulta-cuspp .col-nro {
+        width: 2.5rem;
+        text-align: center;
+    }
+
+    .table-consulta-cuspp tfoot td {
+        font-weight: 700;
+        background-color: #f8f9fa;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body pt-3">
+        <form id="frmConsultaCuspp" class="row g-3">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCompania" class="form-label small fw-bold text-muted">Compañía</label>
+                <select id="cboCompania" class="form-select form-select-sm" required>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboPeriodo" class="form-label small fw-bold text-muted">Periodo</label>
+                <select id="cboPeriodo" class="form-select form-select-sm" required disabled>
+                    <option value="">Seleccione...</option>
+                </select>
+            </div>
+            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-1">
+                <button type="submit" class="btn btn-primary btn-sm px-4">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+                <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarConsulta" disabled>
+                    <i class="bi bi-file-earmark-excel"></i> Generar Consulta AFP
+                </button>
+                <button type="button" class="btn btn-outline-primary btn-sm px-4" id="btnImportarConsulta" disabled>
+                    <i class="bi bi-upload"></i> Importar Consulta AFP
+                </button>
+                <input type="file" id="fileImportarConsulta" class="d-none"
+                       accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel">
+                <span class="ms-auto text-muted small fw-bold">
+                    Registros: <span id="lblRowCount">0</span>
+                </span>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 d-none" id="cardResultado">
+    <div class="card-body pt-3">
+        <h5 class="fw-bold mb-3 text-center" id="tituloListado">Consulta CUSPP Masiva</h5>
+        <div class="table-scroll-container">
+            <table class="table table-bordered table-sm table-hover table-consulta-cuspp align-middle">
+                <thead>
+                    <tr>
+                        <th class="col-nro">N°</th>
+                        <th>AFP</th>
+                        <th>Código</th>
+                        <th class="col-cuspp">CUSSP</th>
+                        <th>DNI</th>
+                        <th>Apellido Paterno</th>
+                        <th>Apellido Materno</th>
+                        <th>Nombres</th>
+                        <th>Mov. de Personal</th>
+                        <th class="col-monto">Remuneración Asegurable</th>
+                        <th class="col-monto">Aporte Obligatorio</th>
+                        <th class="col-monto">Aporte Empleador</th>
+                        <th class="col-monto">Total Fondo de Pensiones</th>
+                        <th class="col-monto">Seguros</th>
+                        <th class="col-monto">Comisión % sobre RA</th>
+                        <th class="col-monto">Total Ret.</th>
+                        <th class="col-monto">Ap. Riesgo Trab</th>
+                        <th class="col-monto">Ap. Riesgo Emp</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-consulta-cuspp"></tbody>
+                <tfoot id="tfoot-consulta-cuspp"></tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalDiferenciasCuspp" tabindex="-1" aria-labelledby="tituloModalDiferencias" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="tituloModalDiferencias">Diferencias Tipo de Comisión</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <p class="small text-muted mb-3" id="lblResumenDiferencias"></p>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-sm align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>DNI</th>
+                                <th>Trabajador</th>
+                                <th>AFP</th>
+                                <th>Asignación</th>
+                                <th>Excel</th>
+                                <th>Diferencia</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyDiferenciasCuspp"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', async function () {
+    const URL_LISTADO = {{ url_for('api_consulta_cuspp_listado') | tojson }};
+    const URL_GENERAR = {{ url_for('api_consulta_cuspp_generar_xlsx') | tojson }};
+    const URL_IMPORTAR = {{ url_for('api_consulta_cuspp_importar') | tojson }};
+    const DEFAULT_CIA = 'BGT';
+    let lastRows = [];
+
+    function escapeHtml(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function formatearMonto(valor) {
+        const n = Number(valor);
+        if (!Number.isFinite(n)) return '0.00';
+        return n.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function sumCampo(rows, campo) {
+        return (Array.isArray(rows) ? rows : []).reduce((acc, row) => {
+            const n = Number(row[campo]);
+            return acc + (Number.isFinite(n) ? n : 0);
+        }, 0);
+    }
+
+    function periodoYyyymm(prperiod) {
+        const s = String(prperiod || '').replace(/\D/g, '');
+        return s.length >= 6 ? s.slice(0, 6) : s;
+    }
+
+    function optionExists(select, value) {
+        if (!select || value === '' || value == null) return false;
+        const v = String(value).trim();
+        return Array.from(select.options).some((o) => String(o.value).trim() === v);
+    }
+
+    function seleccionarCompaniaInsensitive(select, codigoDeseado) {
+        if (!select) return false;
+        const want = String(codigoDeseado || '').trim().toUpperCase();
+        if (!want) return false;
+        const opt = Array.from(select.options).find((o) => String(o.value || '').trim().toUpperCase() === want);
+        if (!opt) return false;
+        select.value = opt.value;
+        return true;
+    }
+
+    function payloadFiltros() {
+        return {
+            cia: document.getElementById('cboCompania').value.trim(),
+            period: document.getElementById('cboPeriodo').value.trim()
+        };
+    }
+
+    function actualizarContadores() {
+        const total = Array.isArray(lastRows) ? lastRows.length : 0;
+        document.getElementById('lblRowCount').textContent = String(total);
+        document.getElementById('btnGenerarConsulta').disabled = total === 0;
+        document.getElementById('btnImportarConsulta').disabled = total === 0;
+    }
+
+    function actualizarTitulo() {
+        const period = document.getElementById('cboPeriodo').value.trim();
+        const yyyymm = periodoYyyymm(period);
+        const el = document.getElementById('tituloListado');
+        if (/^\d{6}$/.test(yyyymm)) {
+            el.textContent = `Consulta CUSPP Masiva ${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}`;
+        } else {
+            el.textContent = 'Consulta CUSPP Masiva';
+        }
+    }
+
+    function renderizarTotales(rows) {
+        const tfoot = document.getElementById('tfoot-consulta-cuspp');
+        const filas = Array.isArray(rows) ? rows : [];
+        if (!filas.length) {
+            tfoot.innerHTML = '';
+            return;
+        }
+        tfoot.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-end">Totales</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'remuneracion')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_obligatorio')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_empleador')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'total_fondo_pensiones')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'seguro')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'comision')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'total_retenciones')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_riesgo_trab')))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(sumCampo(filas, 'aporte_riesgo_emp')))}</td>
+            </tr>
+        `;
+    }
+
+    function renderizarTabla(rows) {
+        const tbody = document.getElementById('tbody-consulta-cuspp');
+        tbody.innerHTML = '';
+        const filas = Array.isArray(rows) ? rows : [];
+        filas.forEach((row, index) => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td class="col-nro">${index + 1}</td>
+                <td>${escapeHtml(row.afp_description)}</td>
+                <td>${escapeHtml(row.person)}</td>
+                <td class="col-cuspp">${escapeHtml(row.cuspp)}</td>
+                <td>${escapeHtml(row.documentnumber)}</td>
+                <td>${escapeHtml(row.lastname1)}</td>
+                <td>${escapeHtml(row.lastname2)}</td>
+                <td>${escapeHtml(row.names)}</td>
+                <td>${escapeHtml(row.fecha_cese)}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.remuneracion))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_obligatorio))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_empleador))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.total_fondo_pensiones))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.seguro))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.comision))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.total_retenciones))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_riesgo_trab))}</td>
+                <td class="col-monto">${escapeHtml(formatearMonto(row.aporte_riesgo_emp))}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+        renderizarTotales(filas);
+        actualizarContadores();
+        actualizarTitulo();
+        document.getElementById('cardResultado').classList.toggle('d-none', filas.length === 0);
+    }
+
+    async function poblarSelect(url, selectElement, primeraOpcion) {
+        selectElement.innerHTML = '<option value="">Cargando...</option>';
+        selectElement.disabled = true;
+        try {
+            const res = await fetch(url);
+            const data = await res.json();
+            selectElement.innerHTML = primeraOpcion || '<option value="">Seleccione...</option>';
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const opt = document.createElement('option');
+                opt.value = item.id != null ? String(item.id) : '';
+                opt.textContent = item.text != null ? String(item.text) : '';
+                selectElement.appendChild(opt);
+            });
+            selectElement.disabled = false;
+        } catch (e) {
+            console.error(e);
+            selectElement.innerHTML = '<option value="">Error</option>';
+            selectElement.disabled = true;
+        }
+    }
+
+    async function cargarPeriodos(cia, periodoPreferido) {
+        const cboPeriodo = document.getElementById('cboPeriodo');
+        cboPeriodo.disabled = true;
+        cboPeriodo.innerHTML = '<option value="">Seleccione...</option>';
+        if (!cia) return;
+
+        try {
+            const res = await fetch(`/api/selectores/periodos-plame?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            const vistos = new Set();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const yyyymm = periodoYyyymm(item.id);
+                if (!/^\d{6}$/.test(yyyymm) || vistos.has(yyyymm)) return;
+                vistos.add(yyyymm);
+                const opt = document.createElement('option');
+                opt.value = yyyymm;
+                opt.textContent = item.text != null ? String(item.text) : yyyymm;
+                cboPeriodo.appendChild(opt);
+            });
+            cboPeriodo.disabled = false;
+
+            let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+            if (!preferido || !optionExists(cboPeriodo, preferido)) {
+                const primera = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
+                preferido = primera ? String(primera.value).trim() : '';
+            }
+            if (preferido && optionExists(cboPeriodo, preferido)) {
+                cboPeriodo.value = preferido;
+            }
+        } catch (e) {
+            console.error(e);
+            cboPeriodo.innerHTML = '<option value="">Error</option>';
+            cboPeriodo.disabled = true;
+        }
+    }
+
+    function descargarBase64(filename, b64) {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const blob = new Blob([bytes], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'consulta_cuspp.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    }
+
+    function mostrarDiferencias(data) {
+        const diffs = Array.isArray(data.diferencias) ? data.diferencias : [];
+        const tbody = document.getElementById('tbodyDiferenciasCuspp');
+        const resumen = document.getElementById('lblResumenDiferencias');
+        resumen.textContent = diffs.length
+            ? `Se encontraron ${diffs.length} diferencia(s) entre asignación permanente y Tipo de Comisión del Excel.`
+            : 'No hay diferencias entre asignación permanente y el Excel.';
+        tbody.innerHTML = '';
+        if (!diffs.length) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Sin diferencias</td></tr>';
+        } else {
+            diffs.forEach((d) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${escapeHtml(d.documentnumber)}</td>
+                    <td>${escapeHtml(d.nombre)}</td>
+                    <td>${escapeHtml(d.afp_description)}</td>
+                    <td>${escapeHtml(d.asignacion)}</td>
+                    <td>${escapeHtml(d.excel_tipo_comision)}</td>
+                    <td>${escapeHtml(d.diferencia)}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiferenciasCuspp'));
+        modal.show();
+    }
+
+    document.getElementById('cboCompania').addEventListener('change', async function () {
+        lastRows = [];
+        renderizarTabla([]);
+        await cargarPeriodos(this.value.trim());
+    });
+
+    document.getElementById('frmConsultaCuspp').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
+        const payload = payloadFiltros();
+        if (!payload.cia || !payload.period) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        const btn = ev.submitter || this.querySelector('button[type="submit"]');
+        const texto = btn ? btn.innerHTML : '';
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Consultando...';
+        }
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert((data && data.error) || 'No se pudo consultar.');
+                lastRows = [];
+                renderizarTabla([]);
+                return;
+            }
+            lastRows = Array.isArray(data.rows) ? data.rows : [];
+            renderizarTabla(lastRows);
+            if (!lastRows.length) {
+                alert('No hay registros para el periodo seleccionado.');
+            }
+        } catch (e) {
+            console.error(e);
+            alert('Error al consultar.');
+            lastRows = [];
+            renderizarTabla([]);
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = texto;
+            }
+        }
+    });
+
+    document.getElementById('btnGenerarConsulta').addEventListener('click', async function () {
+        const payload = payloadFiltros();
+        if (!payload.cia || !payload.period) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        if (!lastRows.length) {
+            alert('Consulte el listado antes de generar.');
+            return;
+        }
+        const btn = this;
+        const texto = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generando...';
+        try {
+            const res = await fetch(URL_GENERAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert((data && data.error) || 'No se pudo generar el Excel.');
+                return;
+            }
+            if (Array.isArray(data.rows)) {
+                lastRows = data.rows;
+                renderizarTabla(lastRows);
+            }
+            descargarBase64(data.filename, data.file_base64);
+        } catch (e) {
+            console.error(e);
+            alert('Error al generar el Excel.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = texto;
+            actualizarContadores();
+        }
+    });
+
+    document.getElementById('btnImportarConsulta').addEventListener('click', function () {
+        if (!lastRows.length) {
+            alert('Consulte el listado antes de importar.');
+            return;
+        }
+        document.getElementById('fileImportarConsulta').click();
+    });
+
+    document.getElementById('fileImportarConsulta').addEventListener('change', async function () {
+        const file = this.files && this.files[0];
+        this.value = '';
+        if (!file) return;
+        const payload = payloadFiltros();
+        if (!payload.cia || !payload.period) {
+            alert('Seleccione compañía y periodo.');
+            return;
+        }
+        const btn = document.getElementById('btnImportarConsulta');
+        const texto = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Importando...';
+        try {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('cia', payload.cia);
+            fd.append('period', payload.period);
+            const res = await fetch(URL_IMPORTAR, { method: 'POST', body: fd });
+            const data = await res.json();
+            if (!res.ok) {
+                alert((data && data.error) || 'No se pudo importar el Excel.');
+                return;
+            }
+            mostrarDiferencias(data);
+        } catch (e) {
+            console.error(e);
+            alert('Error al importar el Excel.');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = texto;
+            actualizarContadores();
+        }
+    });
+
+    await poblarSelect('/api/selectores/companias', document.getElementById('cboCompania'));
+    seleccionarCompaniaInsensitive(document.getElementById('cboCompania'), DEFAULT_CIA);
+    const cia = document.getElementById('cboCompania').value.trim();
+    if (cia) {
+        await cargarPeriodos(cia);
+    }
+});
+</script>
+{% endblock %}

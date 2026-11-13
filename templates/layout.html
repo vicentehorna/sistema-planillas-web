@@ -1163,9 +1163,10 @@
                 </li>
                 {% endif %}
 
-                {% set afp_active = request.endpoint in ('afps_page', 'declaracion_afp_page', 'declaracion_afp_masivo_page', 'control_pagos_afp_page') %}
+                {% set afp_active = request.endpoint in ('afps_page', 'declaracion_afp_page', 'declaracion_afp_masivo_page', 'control_pagos_afp_page', 'consulta_cuspp_masiva_page') %}
                 {% set es_alamo = (sql_database or '')|lower == 'hm_alamo' %}
-                {% set show_afp = can_menu('afps') or can_menu('afpnet') or can_menu('afpnet_masivo') or can_menu('control_pagos_afp') %}
+                {% set es_lumat = (sql_database or '')|lower == 'hm_lumat' %}
+                {% set show_afp = can_menu('afps') or can_menu('afpnet') or can_menu('afpnet_masivo') or can_menu('control_pagos_afp') or can_menu('consulta_cuspp_masiva') %}
                 {% if show_afp %}
                 <li class="sidebar-menu-parent {{ 'active' if afp_active else '' }}">
                     <a href="#submenuAfp"
@@ -1203,6 +1204,13 @@
                         <li class="{{ 'active' if request.endpoint == 'control_pagos_afp_page' else '' }}">
                             <a href="{{ url_for('control_pagos_afp_page') }}" title="Control de Pagos AFP">
                                 <i class="bi bi-table"></i><span class="sidebar-link-text">Control de Pagos AFP</span>
+                            </a>
+                        </li>
+                        {% endif %}
+                        {% if es_lumat and can_menu('consulta_cuspp_masiva') %}
+                        <li class="{{ 'active' if request.endpoint == 'consulta_cuspp_masiva_page' else '' }}">
+                            <a href="{{ url_for('consulta_cuspp_masiva_page') }}" title="Consulta CUSPP Masiva">
+                                <i class="bi bi-person-vcard"></i><span class="sidebar-link-text">Consulta CUSPP Masiva</span>
                             </a>
                         </li>
                         {% endif %}

@@ -54,6 +54,7 @@ INSERT INTO dbo.WEB_MenuOption (MenuCode, Title, ParentCode, SortOrder, Endpoint
 ('afps', 'AFPs', 'afp', 600, 'afps_page', '/afps', 'A'),
 ('afpnet', 'AFPnet', 'afp', 610, 'declaracion_afp_page', '/afp/declaracion', 'A'),
 ('control_pagos_afp', 'Control de Pagos AFP', 'afp', 620, 'control_pagos_afp_page', '/afp/control-pagos', 'A'),
+('consulta_cuspp_masiva', 'Consulta CUSPP Masiva', 'afp', 630, 'consulta_cuspp_masiva_page', '/afp/consulta-cuspp', 'A'),
 
 ('pago_telecredito', 'Archivo Telecredito', 'pago_haberes', 710, 'pago_haberes_telecredito_page', '/pago-haberes/telecredito', 'A'),
 ('pago_interbank', 'Archivo Interbank', 'pago_haberes', 720, 'pago_haberes_interbank_page', '/pago-haberes/interbank', 'A'),

@@ -4178,6 +4178,253 @@ def _declaracion_afp_resumen_tiene_diferencias(resumen):
     return False
 
 
+def _consulta_cuspp_params_from_json(body):
+    """Solo compañía + periodo (sin filtro de planilla)."""
+    body = body or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    period_raw = str(body.get('period') or body.get('periodo') or '').strip()
+    period = re.sub(r'[^0-9]', '', period_raw)[:6]
+    return {
+        'cia': cia,
+        'period': period,
+        'payroll_all': 'Y',
+        'payroll': '',
+        'afp_all': 'Y',
+        'afp': '',
+        'employee_all': 'Y',
+        'employee': '',
+    }
+
+
+def _consulta_cuspp_nombre_archivo(empresa_nombre, period, fallback='EMPRESA'):
+    raw = str(empresa_nombre or '').strip() or fallback
+    normalized = unicodedata.normalize('NFKD', raw)
+    empresa = ''.join(c for c in normalized if not unicodedata.combining(c)).upper()
+    empresa = empresa.replace('.', '')
+    empresa = re.sub(r'[\\/:*?"<>|\r\n\t]+', ' ', empresa)
+    empresa = re.sub(r'\s+', ' ', empresa).strip() or fallback
+    digits = re.sub(r'[^0-9]+', '', str(period or ''))[:6]
+    periodo = digits if len(digits) == 6 else (digits or 'PERIODO')
+    return f'consulta_cuspp_{periodo}_{empresa}.xlsx'
+
+
+def _consulta_cuspp_generar_xlsx_bytes(filas):
+    """Excel SUBIR Consulta CUSPP: 5 cols sin cabecera (tipodoc, DNI, ape1, ape2, nombres)."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'ConsultaCUSPP'
+    anchos = {}
+    vistos = set()
+    for row in filas or []:
+        dni = str(row.get('documentnumber') or '').strip()
+        if not dni or dni in vistos:
+            continue
+        vistos.add(dni)
+        tipodoc = str(row.get('tipodoc') or '0').strip() or '0'
+        valores = [
+            tipodoc,
+            dni,
+            str(row.get('lastname1') or '').strip(),
+            str(row.get('lastname2') or '').strip(),
+            str(row.get('names') or '').strip(),
+        ]
+        ws.append(valores)
+        fila_excel = ws.max_row
+        for col in (1, 2):
+            celda = ws.cell(row=fila_excel, column=col)
+            celda.number_format = '@'
+            celda.value = str(valores[col - 1])
+        for col, valor in enumerate(valores, start=1):
+            largo = len(str(valor)) if valor is not None else 0
+            if largo > anchos.get(col, 0):
+                anchos[col] = largo
+    for col, largo in anchos.items():
+        ws.column_dimensions[get_column_letter(col)].width = max(largo + 2, 4)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def _consulta_cuspp_norm_header(valor):
+    s = unicodedata.normalize('NFKD', str(valor or ''))
+    s = ''.join(c for c in s if not unicodedata.combining(c))
+    s = re.sub(r'[^A-Za-z0-9]+', ' ', s).strip().upper()
+    return s
+
+
+def _consulta_cuspp_norm_dni(valor):
+    if valor is None:
+        return ''
+    if isinstance(valor, float):
+        if valor.is_integer():
+            return str(int(valor))
+        return re.sub(r'\D', '', str(valor))
+    s = str(valor).strip()
+    if re.fullmatch(r'\d+\.0+', s):
+        s = s.split('.', 1)[0]
+    return re.sub(r'\s+', '', s)
+
+
+def _consulta_cuspp_norm_tipo_comision(valor):
+    s = _consulta_cuspp_norm_header(valor)
+    if 'MIXTA' in s or s in ('MIXTO', 'MIXT'):
+        return 'MIXTA'
+    if 'FLUJO' in s:
+        return 'FLUJO'
+    return s
+
+
+def _consulta_cuspp_parse_devuelve_rows(rows_raw):
+    """Parsea Excel DEVUELVE (con cabecera) → [{dni, tipo_comision, ...}]."""
+    if not rows_raw:
+        return [], 'El archivo está vacío.'
+    header_idx = None
+    col_dni = None
+    col_tipo = None
+    col_ape1 = None
+    col_ape2 = None
+    col_nombres = None
+    col_afp = None
+    for i, row in enumerate(rows_raw[:40]):
+        cells = [_consulta_cuspp_norm_header(c) for c in (row or [])]
+        dni_i = next(
+            (
+                j for j, c in enumerate(cells)
+                if c in ('NUMERO DOCUMENTO', 'NRO DOCUMENTO', 'DOCUMENTO', 'DNI', 'NUM DOC')
+                or ('DOCUMENTO' in c and 'TIPO' not in c)
+            ),
+            None,
+        )
+        tipo_i = next(
+            (j for j, c in enumerate(cells) if 'TIPO' in c and 'COMISION' in c),
+            None,
+        )
+        if dni_i is not None and tipo_i is not None:
+            header_idx = i
+            col_dni = dni_i
+            col_tipo = tipo_i
+            col_ape1 = next((j for j, c in enumerate(cells) if c == 'APELLIDO PATERNO'), None)
+            col_ape2 = next((j for j, c in enumerate(cells) if c == 'APELLIDO MATERNO'), None)
+            col_nombres = next((j for j, c in enumerate(cells) if c == 'NOMBRES'), None)
+            col_afp = next((j for j, c in enumerate(cells) if c == 'AFP'), None)
+            break
+    if header_idx is None:
+        return [], 'No se encontró cabecera con «Número Documento» y «Tipo de Comisión».'
+
+    out = []
+    for row in rows_raw[header_idx + 1:]:
+        if not row:
+            continue
+        dni = _consulta_cuspp_norm_dni(row[col_dni] if col_dni < len(row) else '')
+        if not dni:
+            continue
+        tipo = _consulta_cuspp_norm_tipo_comision(row[col_tipo] if col_tipo < len(row) else '')
+        if tipo not in ('MIXTA', 'FLUJO'):
+            continue
+
+        def _cell(idx):
+            if idx is None or idx >= len(row):
+                return ''
+            return str(row[idx] or '').strip()
+
+        out.append({
+            'dni': dni,
+            'tipo_comision': tipo,
+            'lastname1': _cell(col_ape1),
+            'lastname2': _cell(col_ape2),
+            'names': _cell(col_nombres),
+            'afp': _cell(col_afp),
+        })
+    if not out:
+        return [], 'No hay filas con Tipo de Comisión MIXTA/FLUJO.'
+    return out, None
+
+
+def _consulta_cuspp_personas_mixta(cursor, cia, period):
+    """Personas con AFP_FLUJO / AFP_COMISION_MIXTA permanente vigente al periodo YYYYMM."""
+    period = str(period or '').strip()[:6]
+    if not re.fullmatch(r'\d{6}', period):
+        return set()
+    period_ref = period + '01'
+    cursor.execute(
+        """
+        SELECT DISTINCT LTRIM(RTRIM(ec.Person)) AS person
+        FROM PR_EmployeeConcept ec (NOLOCK)
+        INNER JOIN PR_Concept c (NOLOCK)
+            ON c.Company = ec.Company AND c.Concept = ec.Concept
+        WHERE ec.Company = ?
+          AND ec.FlagFrecuencyType = 'P'
+          AND (
+                 LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) IN ('AFP_FLUJO', 'AFP_COMISION_MIXTA')
+              OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'AFP_COMISION_MIXTA'
+          )
+          AND (
+                (
+                    (
+                        CASE
+                            WHEN ec.PRPeriodEnd IS NULL THEN 'N'
+                            WHEN RTRIM(CONVERT(varchar(30), ec.PRPeriodEnd)) = '' THEN 'N'
+                            ELSE 'Y'
+                        END = 'N'
+                    )
+                    AND ec.PRPeriodStart <= ?
+                )
+             OR (? BETWEEN ec.PRPeriodStart AND ec.PRPeriodEnd)
+          )
+        """,
+        (cia, period_ref, period_ref),
+    )
+    return {str(r[0] or '').strip() for r in cursor.fetchall() if r and str(r[0] or '').strip()}
+
+
+def _consulta_cuspp_comparar_diferencias(filas_listado, excel_rows, personas_mixta):
+    """
+    Diferencias:
+      - sin mixta en asignación + MIXTA en Excel
+      - mixta en asignación + FLUJO en Excel
+    """
+    excel_by_dni = {}
+    for er in excel_rows or []:
+        dni = str(er.get('dni') or '').strip()
+        if dni:
+            excel_by_dni[dni] = er
+
+    diffs = []
+    vistos = set()
+    for row in filas_listado or []:
+        dni = _consulta_cuspp_norm_dni(row.get('documentnumber'))
+        if not dni or dni in vistos:
+            continue
+        vistos.add(dni)
+        er = excel_by_dni.get(dni)
+        if not er:
+            continue
+        person = str(row.get('person') or '').strip()
+        tiene_mixta = person in personas_mixta
+        excel_tipo = str(er.get('tipo_comision') or '').strip().upper()
+        if not tiene_mixta and excel_tipo == 'MIXTA':
+            motivo = 'Sin mixta en asignación; Excel indica MIXTA'
+        elif tiene_mixta and excel_tipo == 'FLUJO':
+            motivo = 'Mixta en asignación; Excel indica FLUJO'
+        else:
+            continue
+        nombre = _declaracion_afp_nombre_completo_trabajador(row) or _declaracion_afp_nombre_completo_trabajador(er)
+        diffs.append({
+            'person': person,
+            'documentnumber': dni,
+            'nombre': nombre,
+            'afp_description': str(row.get('afp_description') or er.get('afp') or '').strip(),
+            'asignacion': 'MIXTA' if tiene_mixta else 'NO MIXTA',
+            'excel_tipo_comision': excel_tipo,
+            'diferencia': motivo,
+        })
+    return diffs
+
+
 def _es_bd_hm_alamo():
     try:
         from database import get_active_database
@@ -4189,6 +4436,20 @@ def _es_bd_hm_alamo():
 def _require_hm_alamo_json(feature='Esta opción'):
     if not _es_bd_hm_alamo():
         return jsonify({'error': f'{feature} solo está disponible en hm_alamo.'}), 403
+    return None
+
+
+def _es_bd_hm_lumat():
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_lumat'
+    except Exception:
+        return False
+
+
+def _require_hm_lumat_json(feature='Esta opción'):
+    if not _es_bd_hm_lumat():
+        return jsonify({'error': f'{feature} solo está disponible en hm_lumat.'}), 403
     return None
 
 
@@ -22601,6 +22862,148 @@ def declaracion_afp_masivo_page():
 @login_required
 def control_pagos_afp_page():
     return render_template('reporte_control_pagos_afp.html')
+
+
+@app.route('/afp/consulta-cuspp')
+@login_required
+def consulta_cuspp_masiva_page():
+    if not _es_bd_hm_lumat():
+        flash('Consulta CUSPP Masiva solo está disponible en hm_lumat.', 'warning')
+        return redirect(url_for('declaracion_afp_page'))
+    return render_template('consulta_cuspp_masiva.html')
+
+
+@app.route('/api/consulta-cuspp/listado', methods=['POST'])
+@login_required
+def api_consulta_cuspp_listado():
+    denied = _require_hm_lumat_json('Consulta CUSPP Masiva')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _consulta_cuspp_params_from_json(body)
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        sync_afp = _declaracion_afp_sincronizar_planilla(cursor, conn, p)
+        resultado = _declaracion_afp_ejecutar_listado(cursor, p)
+        return jsonify({
+            "rows": resultado,
+            "total": len(resultado),
+            "sync_afp": {
+                "actualizado": sync_afp.get('actualizado'),
+                "filas_afp": sync_afp.get('filas_afp'),
+                "mensaje": sync_afp.get('mensaje'),
+            },
+        })
+    except Exception as e:
+        logging.exception("api_consulta_cuspp_listado")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/consulta-cuspp/generar-xlsx', methods=['POST'])
+@login_required
+def api_consulta_cuspp_generar_xlsx():
+    denied = _require_hm_lumat_json('Consulta CUSPP Masiva')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    p = _consulta_cuspp_params_from_json(body)
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _declaracion_afp_sincronizar_planilla(cursor, conn, p)
+        filas = _declaracion_afp_ejecutar_listado(cursor, p)
+        if not filas:
+            return jsonify({"error": "No hay registros para generar la Consulta CUSPP."}), 400
+
+        empresa_nombre = _company_description(cursor, p['cia'])
+        buf = _consulta_cuspp_generar_xlsx_bytes(filas)
+        filename = _consulta_cuspp_nombre_archivo(
+            empresa_nombre, p['period'], fallback=p['cia'] or 'EMPRESA'
+        )
+        return jsonify({
+            'filename': filename,
+            'file_base64': base64.b64encode(buf.getvalue()).decode('ascii'),
+            'total': len(filas),
+            'rows': filas,
+        })
+    except Exception as e:
+        logging.exception("api_consulta_cuspp_generar_xlsx")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/consulta-cuspp/importar', methods=['POST'])
+@login_required
+def api_consulta_cuspp_importar():
+    denied = _require_hm_lumat_json('Consulta CUSPP Masiva')
+    if denied:
+        return denied
+
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    period_raw = str(request.form.get('period') or request.form.get('periodo') or '').strip()
+    period = re.sub(r'[^0-9]', '', period_raw)[:6]
+    p = _consulta_cuspp_params_from_json({'cia': cia, 'period': period})
+    err = _declaracion_afp_validar_params(p)
+    if err:
+        return jsonify({"error": err}), 400
+
+    up = request.files.get('file') or request.files.get('archivo')
+    if not up or not getattr(up, 'filename', None):
+        return jsonify({"error": "Seleccione el Excel DEVUELVE de Consulta CUSPP."}), 400
+
+    rows_raw, read_err = _tareong_read_sheet_rows(up)
+    if read_err:
+        return jsonify({"error": read_err}), 400
+    excel_rows, parse_err = _consulta_cuspp_parse_devuelve_rows(rows_raw)
+    if parse_err:
+        return jsonify({"error": parse_err}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        _declaracion_afp_sincronizar_planilla(cursor, conn, p)
+        filas = _declaracion_afp_ejecutar_listado(cursor, p)
+        personas_mixta = _consulta_cuspp_personas_mixta(cursor, p['cia'], p['period'])
+        diferencias = _consulta_cuspp_comparar_diferencias(filas, excel_rows, personas_mixta)
+        return jsonify({
+            "diferencias": diferencias,
+            "total_diferencias": len(diferencias),
+            "total_excel": len(excel_rows),
+            "total_listado": len(filas),
+            "total_mixta_asignacion": len(personas_mixta),
+        })
+    except Exception as e:
+        logging.exception("api_consulta_cuspp_importar")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/reporte_control_pagos_afp', methods=['POST'])

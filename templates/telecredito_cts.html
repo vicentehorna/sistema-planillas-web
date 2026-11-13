@@ -567,7 +567,11 @@ document.addEventListener('DOMContentLoaded', async function () {
         try {
             let restaurado = false;
             if (filtrosPersist) {
-                restaurado = await filtrosPersist.aplicarRestauracionCascada({ poblarSelect, cargarPeriodosLiquidacion: cargarPeriodosCts });
+                restaurado = await filtrosPersist.aplicarRestauracionCascada({
+                    poblarSelect,
+                    cargarPeriodosLiquidacion: cargarPeriodosCts,
+                    cargarCentrosCosto,
+                });
             }
             if (!restaurado) {
                 if (!valorValido(cboCia)) {
@@ -577,8 +581,8 @@ document.addEventListener('DOMContentLoaded', async function () {
                 if (valorValido(cboCia)) {
                     await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(valorValido(cboCia))}`, cboPt);
                 }
+                await cargarCentrosCosto('0');
             }
-            await cargarCentrosCosto('0');
         } finally {
             cboCia.disabled = false;
         }

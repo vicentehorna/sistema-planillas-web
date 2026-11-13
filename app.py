@@ -1677,22 +1677,36 @@ def _fecha_emision_retiro_cts_ng(cert):
     )
 
 
-def _listar_trabajadores_cts(cia, payroll_type, period, person='0', nombre=None):
+def _listar_trabajadores_cts(cia, payroll_type, period, person='0', nombre=None,
+                             repunit='0', costcenter='0'):
     return _listar_trabajadores_liquidacion(
-        cia, payroll_type, period, person, nombre, sp_name='sp_pr_listadoformatocts_web'
+        cia, payroll_type, period, person, nombre,
+        sp_name='sp_pr_listadoformatocts_web',
+        repunit=repunit,
+        costcenter=costcenter,
     )
 
 
 def _listar_trabajadores_liquidacion(cia, payroll_type, period, person='0', nombre=None,
-                                     sp_name='sp_pr_listadocertificadotrabajo_web'):
+                                     sp_name='sp_pr_listadocertificadotrabajo_web',
+                                     repunit='0', costcenter='0'):
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            f'EXEC {sp_name} @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?',
-            (cia, payroll_type, period, person, nombre),
-        )
+        if sp_name == 'sp_pr_listadoformatocts_web':
+            repunit_val = _normalize_replicationunit_asig(repunit)
+            costcenter_val = _normalize_replicationunit_asig(costcenter)
+            cursor.execute(
+                f'EXEC {sp_name} @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?, '
+                f'@repunit=?, @costcenter=?',
+                (cia, payroll_type, period, person, nombre, repunit_val, costcenter_val),
+            )
+        else:
+            cursor.execute(
+                f'EXEC {sp_name} @cia=?, @payrolltype=?, @period=?, @person=?, @nombre=?',
+                (cia, payroll_type, period, person, nombre),
+            )
         rows = _dicts_first_nonempty_resultset(cursor)
         trabajadores = []
         for r in rows:
@@ -27865,12 +27879,27 @@ def get_lista_formato_cts():
     period = _normalize_pr_period(body.get('period'))
     person = str(body.get('person') or '0').strip() or '0'
     nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
+    # Unidad / centro de costo: UI activa en hm_divisa y hm_ultra.
+    try:
+        from database import get_active_database
+        _bd = str(get_active_database() or '').strip().lower()
+    except Exception:
+        _bd = ''
+    es_filtro_unidad_cc = _bd in ('hm_divisa', 'hm_ultra')
+    repunit = _normalize_replicationunit_asig(
+        body.get('repunit') or body.get('unidad') or body.get('replicationunit')
+    ) if es_filtro_unidad_cc else '0'
+    costcenter = _normalize_replicationunit_asig(
+        body.get('costcenter') or body.get('centrocosto')
+    ) if es_filtro_unidad_cc else '0'
 
     if not cia or not payroll_type or not period:
         return jsonify({'error': 'Faltan compañía, tipo de planilla o periodo.'}), 400
 
     try:
-        return jsonify(_listar_trabajadores_cts(cia, payroll_type, period, person, nombre))
+        return jsonify(_listar_trabajadores_cts(
+            cia, payroll_type, period, person, nombre, repunit, costcenter
+        ))
     except Exception as e:
         logging.exception('get_lista_formato_cts')
         return jsonify({'error': str(e)}), 500

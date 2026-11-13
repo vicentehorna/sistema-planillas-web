@@ -2274,6 +2274,20 @@
                 if (chkSinFirma) {
                     estado.sin_firma = chkSinFirma.checked ? '1' : '0';
                 }
+                if (document.getElementById('cboUnidad')) {
+                    estado.repunit = val('cboUnidad') || '0';
+                }
+                if (document.getElementById('cboCentroCosto')) {
+                    estado.costcenter = val('cboCentroCosto') || '0';
+                }
+                const cboCesados = document.getElementById('cboCesados');
+                if (cboCesados) {
+                    estado.cesados = val('cboCesados') || 'T';
+                }
+                const cboMoneda = document.getElementById('cboMoneda');
+                if (cboMoneda) {
+                    estado.currency = val('cboMoneda') || 'LO';
+                }
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(estado));
             } catch (e) {
                 console.warn('filtros formato liquidacion: no se pudo guardar', e);
@@ -2295,7 +2309,7 @@
         async function aplicarRestauracionCascada(opts) {
             if (!opts || typeof opts.poblarSelect !== 'function') return false;
 
-            const { poblarSelect, cargarPeriodosLiquidacion } = opts;
+            const { poblarSelect, cargarPeriodosLiquidacion, cargarCentrosCosto } = opts;
             const filtros = leer();
             if (!filtros || !filtros.cia) return false;
 
@@ -2316,6 +2330,14 @@
             if (!payroll || !optionExists(cboPt, payroll)) {
                 if (txtNombre && filtros.nombre != null) {
                     txtNombre.value = String(filtros.nombre);
+                }
+                if (typeof cargarCentrosCosto === 'function') {
+                    await cargarCentrosCosto(filtros.costcenter || '0');
+                }
+                const cboUnidadEarly = document.getElementById('cboUnidad');
+                if (cboUnidadEarly) {
+                    const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                    cboUnidadEarly.value = optionExists(cboUnidadEarly, repunit) ? repunit : '0';
                 }
                 guardar();
                 return true;
@@ -2346,12 +2368,38 @@
                 chkSinFirma.checked = ['1', 'true', 'yes', 'y', 'on', 's', 'si'].includes(sinFirma);
             }
 
+            const cboUnidad = document.getElementById('cboUnidad');
+            if (cboUnidad) {
+                const repunit = filtros.repunit != null ? String(filtros.repunit).trim() : '0';
+                cboUnidad.value = optionExists(cboUnidad, repunit) ? repunit : '0';
+            }
+            if (typeof cargarCentrosCosto === 'function') {
+                await cargarCentrosCosto(filtros.costcenter || '0');
+            } else {
+                const cboCentroCosto = document.getElementById('cboCentroCosto');
+                if (cboCentroCosto) {
+                    const costcenter = filtros.costcenter != null ? String(filtros.costcenter).trim() : '0';
+                    cboCentroCosto.value = optionExists(cboCentroCosto, costcenter) ? costcenter : '0';
+                }
+            }
+
+            const cboCesados = document.getElementById('cboCesados');
+            if (cboCesados && filtros.cesados != null) {
+                const cesados = String(filtros.cesados).trim().toUpperCase();
+                if (optionExists(cboCesados, cesados)) cboCesados.value = cesados;
+            }
+            const cboMoneda = document.getElementById('cboMoneda');
+            if (cboMoneda && filtros.currency != null) {
+                const currency = String(filtros.currency).trim().toUpperCase();
+                if (optionExists(cboMoneda, currency)) cboMoneda.value = currency;
+            }
+
             guardar();
             return true;
         }
 
         function registrarGuardadoEnCambio() {
-            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo'].forEach((id) => {
+            ['cboCompania', 'cboTipoPlanilla', 'cboPeriodo', 'cboUnidad', 'cboCentroCosto', 'cboCesados', 'cboMoneda'].forEach((id) => {
                 const el = document.getElementById(id);
                 if (el) el.addEventListener('change', guardar);
             });

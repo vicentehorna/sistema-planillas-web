@@ -4359,11 +4359,14 @@ def _consulta_cuspp_parse_devuelve_rows(rows_raw):
 
 
 def _consulta_cuspp_personas_mixta(cursor, cia, period):
-    """Personas con AFP_FLUJO / AFP_COMISION_MIXTA permanente vigente al periodo YYYYMM."""
+    """Personas con AFP_FLUJO / AFP_COMISION_MIXTA permanente vigente al periodo YYYYMM.
+
+    La vigencia se evalúa por año-mes (no por día 01): un permanente con
+    PRPeriodStart=20261010 sí aplica al periodo 202610.
+    """
     period = str(period or '').strip()[:6]
     if not re.fullmatch(r'\d{6}', period):
         return set()
-    period_ref = period + '01'
     cursor.execute(
         """
         SELECT DISTINCT LTRIM(RTRIM(ec.Person)) AS person
@@ -4376,21 +4379,14 @@ def _consulta_cuspp_personas_mixta(cursor, cia, period):
                  LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) IN ('AFP_FLUJO', 'AFP_COMISION_MIXTA')
               OR UPPER(LTRIM(RTRIM(ISNULL(c.Description, '')))) = 'AFP_COMISION_MIXTA'
           )
+          AND LEFT(REPLACE(LTRIM(RTRIM(CONVERT(varchar(30), ISNULL(ec.PRPeriodStart, '19000101')))), '-', ''), 6) <= ?
           AND (
-                (
-                    (
-                        CASE
-                            WHEN ec.PRPeriodEnd IS NULL THEN 'N'
-                            WHEN RTRIM(CONVERT(varchar(30), ec.PRPeriodEnd)) = '' THEN 'N'
-                            ELSE 'Y'
-                        END = 'N'
-                    )
-                    AND ec.PRPeriodStart <= ?
-                )
-             OR (? BETWEEN ec.PRPeriodStart AND ec.PRPeriodEnd)
+                ec.PRPeriodEnd IS NULL
+             OR RTRIM(CONVERT(varchar(30), ISNULL(ec.PRPeriodEnd, ''))) = ''
+             OR LEFT(REPLACE(LTRIM(RTRIM(CONVERT(varchar(30), ec.PRPeriodEnd))), '-', ''), 6) >= ?
           )
         """,
-        (cia, period_ref, period_ref),
+        (cia, period, period),
     )
     return {str(r[0] or '').strip() for r in cursor.fetchall() if r and str(r[0] or '').strip()}
 

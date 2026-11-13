@@ -349,7 +349,9 @@
                 </tbody>
             </table>
 
+            {% if mostrar_detalle_calculo %}
             <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>
+            {% endif %}
 
             <div class="total-deposito">
                 <div>Total depositado</div>

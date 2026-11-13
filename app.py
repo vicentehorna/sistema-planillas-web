@@ -8444,6 +8444,8 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         'dias_computables': dias_comp,
         'dias_cts': dias,
         'importe_fmt': f'{importe:,.2f}',
+        # hm_ultra: no mostrar la línea "rem / 360 × días" encima del total.
+        'mostrar_detalle_calculo': not _es_cliente_ultraseguros(),
         **_formato_cts_config(),
     }
 

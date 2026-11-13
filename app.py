@@ -28188,17 +28188,32 @@ def api_telecredito_cts_listado():
         return jsonify({'error': err}), 400
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
-    todos_bancos = _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    # hm_divisa no usa "otros bancos"; el filtro de CC solo aplica ahí.
+    es_divisa = _es_cliente_divisa() or _es_bd_hm_divisa()
+    todos_bancos = 'N' if es_divisa else _normalize_todos_bancos_banbif(body.get('todos_bancos'))
+    costcenter = _normalize_replicationunit_asig(
+        body.get('costcenter') or body.get('centrocosto')
+    ) if es_divisa else '0'
 
     conn = None
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
-        cursor.execute(
-            'EXEC sp_pr_listatelecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
-            '@par_currency=?, @cesados=?, @repunit=?, @todos_bancos=?',
-            (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit, todos_bancos),
-        )
+        if es_divisa:
+            cursor.execute(
+                'EXEC sp_pr_listatelecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+                '@par_currency=?, @cesados=?, @repunit=?, @todos_bancos=?, @costcenter=?',
+                (
+                    p['cia'], p['payrolltype'], p['period'], p['currency'],
+                    cesados, repunit, todos_bancos, costcenter,
+                ),
+            )
+        else:
+            cursor.execute(
+                'EXEC sp_pr_listatelecreditocts_web @par_company=?, @par_payrolltype=?, @par_period=?, '
+                '@par_currency=?, @cesados=?, @repunit=?, @todos_bancos=?',
+                (p['cia'], p['payrolltype'], p['period'], p['currency'], cesados, repunit, todos_bancos),
+            )
         filas = _dicts_first_nonempty_resultset(cursor)
         rows, excluidos = [], []
         for r in filas:

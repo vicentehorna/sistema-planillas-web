@@ -14,6 +14,7 @@ GO
     @cesados: T = Todos, Y = solo con fecha de cese, N = sin fecha de cese.
     @repunit: '0' = todas las unidades; otro valor filtra SY_Person.ReplicationUnit.
     @todos_bancos: N / Y.
+    @costcenter: '0' = todos; otro valor filtra PR_Employee.CostCenter (hm_divisa).
 */
 CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecreditocts_web]
     @par_company     VARCHAR(10),
@@ -22,7 +23,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_listatelecreditocts_web]
     @par_currency    VARCHAR(2) = 'LO',
     @cesados         CHAR(1) = 'T',
     @repunit         VARCHAR(20) = '0',
-    @todos_bancos    CHAR(1) = 'N'
+    @todos_bancos    CHAR(1) = 'N',
+    @costcenter      VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -31,6 +33,7 @@ BEGIN
     SET @par_currency = UPPER(@par_currency);
     IF RTRIM(ISNULL(@cesados, '')) = '' SET @cesados = 'T';
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+    IF RTRIM(ISNULL(@costcenter, '')) = '' SET @costcenter = '0';
     IF RTRIM(ISNULL(@todos_bancos, '')) = '' SET @todos_bancos = 'N';
     SET @todos_bancos = UPPER(@todos_bancos);
     IF @todos_bancos NOT IN ('Y', 'N') SET @todos_bancos = 'N';
@@ -114,6 +117,7 @@ BEGIN
                 ON eb.Bank = e.CTSBank
                AND eb.Company = e.Company
         WHERE (@repunit = '0' OR sp.ReplicationUnit = @repunit)
+          AND (@costcenter = '0' OR LTRIM(RTRIM(ISNULL(e.CostCenter, ''))) = @costcenter)
           AND (
                 @cesados = 'T'
              OR (@cesados = 'Y' AND e.CeaseDate IS NOT NULL)

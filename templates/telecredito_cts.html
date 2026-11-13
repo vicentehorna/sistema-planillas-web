@@ -83,13 +83,14 @@
                     <option value="">Seleccione...</option>
                 </select>
             </div>
-            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
                 <label for="cboMoneda" class="form-label small fw-bold text-muted">Moneda</label>
                 <select id="cboMoneda" class="form-select form-select-sm" required>
                     <option value="LO" selected>Soles (LO)</option>
                     <option value="EX">Dólares (EX)</option>
                 </select>
             </div>
+            <div class="w-100"></div>
             <div class="col-12 col-sm-6 col-md-4 col-lg-2">
                 <label for="txtFechaPago" class="form-label small fw-bold text-muted">Fecha de abono</label>
                 <input type="date" id="txtFechaPago" class="form-control form-control-sm" required>
@@ -108,17 +109,27 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
+            {% if (sql_database or '')|lower == 'hm_divisa' %}
+            <div class="col-12 col-sm-6 col-md-4 col-lg-3">
+                <label for="cboCentroCosto" class="form-label small fw-bold text-muted">Centro de costo</label>
+                <select id="cboCentroCosto" class="form-select form-select-sm">
+                    <option value="0">Todos</option>
+                </select>
+            </div>
+            {% endif %}
             <div class="col-12 col-sm-6 col-md-6 col-lg-3">
                 <label for="txtReferencia" class="form-label small fw-bold text-muted">Referencia</label>
                 <input type="text" id="txtReferencia" class="form-control form-control-sm"
                        maxlength="40" placeholder="DEPOSITO CTS" autocomplete="off" spellcheck="false">
             </div>
+            {% if (sql_database or '')|lower != 'hm_divisa' %}
             <div class="col-12 col-sm-6 col-md-4 col-lg-3 d-flex align-items-end">
                 <div class="form-check mb-1">
                     <input class="form-check-input" type="checkbox" id="chkTodosBancos">
                     <label class="form-check-label small" for="chkTodosBancos">Incluir CTS de otros bancos</label>
                 </div>
             </div>
+            {% endif %}
             <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
                 <button type="submit" class="btn btn-primary btn-sm px-4" id="btnListar"><i class="bi bi-search"></i> Listar trabajadores</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnGenerarTxt" disabled>
@@ -193,6 +204,7 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     const URL_LISTADO = {{ url_for('api_telecredito_cts_listado') | tojson }};
     const URL_GENERAR_TXT = {{ url_for('api_telecredito_cts_generar_txt') | tojson }};
+    const ES_DIVISA = {{ ((sql_database or '')|lower == 'hm_divisa') | tojson }};
     const { poblarSelect, poblarConTodos, resetSelect, valorValido, textoValido, seleccionarPorTexto, iniciarCarga, mostrarError } = CombosCarga;
 
     const cboCia = document.getElementById('cboCompania');
@@ -200,9 +212,28 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboProc = document.getElementById('cboProceso');
     const cboPer = document.getElementById('cboPeriodo');
     const cboUnidad = document.getElementById('cboUnidad');
+    const cboCentroCosto = document.getElementById('cboCentroCosto');
+    const chkTodosBancos = document.getElementById('chkTodosBancos');
     const txtFechaPago = document.getElementById('txtFechaPago');
     const txtReferencia = document.getElementById('txtReferencia');
     let filasCache = [];
+
+    async function cargarCentrosCosto(preferido) {
+        if (!ES_DIVISA || !cboCentroCosto) return true;
+        const cia = valorValido(cboCia);
+        const prev = preferido != null ? String(preferido).trim() : String(cboCentroCosto.value || '0').trim() || '0';
+        const ok = await poblarConTodos(
+            cia ? `/api/selectores/costcenter?cia=${encodeURIComponent(cia)}` : '',
+            cboCentroCosto,
+            { valorTodos: '0', textoTodos: 'Todos' }
+        );
+        if (ok && prev && Array.from(cboCentroCosto.options).some((o) => String(o.value).trim() === prev)) {
+            cboCentroCosto.value = prev;
+        } else if (ok) {
+            cboCentroCosto.value = '0';
+        }
+        return ok;
+    }
 
     function hoyIsoLocal() {
         const d = new Date();
@@ -387,7 +418,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             paydate: txtFechaPago.value.trim(),
             cesados: document.getElementById('cboCesados').value.trim() || 'T',
             repunit: String(cboUnidad.value || '0').trim() || '0',
-            todos_bancos: document.getElementById('chkTodosBancos').checked ? 'Y' : 'N',
+            costcenter: ES_DIVISA
+                ? (String(cboCentroCosto?.value || '0').trim() || '0')
+                : '0',
+            todos_bancos: (!ES_DIVISA && chkTodosBancos && chkTodosBancos.checked) ? 'Y' : 'N',
         };
     }
 
@@ -503,10 +537,14 @@ document.addEventListener('DOMContentLoaded', async function () {
         const cia = valorValido(cboCia);
         if (!cia) {
             resetSelect(cboPt);
+            if (cboCentroCosto) {
+                cboCentroCosto.innerHTML = '<option value="0">Todos</option>';
+            }
             return;
         }
         const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt);
         if (gen !== generacionFiltros) return;
+        await cargarCentrosCosto('0');
         if (ok && planillaPrevia && seleccionarPorTexto(cboPt, planillaPrevia)) {
             await cargarPeriodosCts(periodoPrevio);
         }
@@ -540,6 +578,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(valorValido(cboCia))}`, cboPt);
                 }
             }
+            await cargarCentrosCosto('0');
         } finally {
             cboCia.disabled = false;
         }

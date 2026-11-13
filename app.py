@@ -8247,10 +8247,20 @@ def enviar_correo_formato_liquidacion(destinatario, nombre_empleado, periodo, se
         return False, str(e)
 
 
-def _formato_cts_pdf_filename(person, period_raw):
-    person_safe = re.sub(r'[^A-Za-z0-9_\\-]+', '_', str(person or 'preview').strip()).strip('_') or 'preview'
-    period_safe = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw)) or 'periodo'
-    return f'formato_cts_{person_safe}_{period_safe}.pdf'
+def _formato_cts_pdf_filename(person, period_raw, nombre=None):
+    """Ej.: 202605_CTS_16490910_SEGURA MURGA MARITA YOLI.pdf"""
+    person_safe = re.sub(r'[^A-Za-z0-9]+', '', str(person or 'preview').strip()) or 'preview'
+    period_digits = re.sub(r'[^0-9]+', '', _normalize_pr_period(period_raw))
+    period_safe = period_digits[:6] if len(period_digits) >= 6 else (period_digits or 'periodo')
+    name_raw = str(nombre or '').strip()
+    if name_raw:
+        normalized = unicodedata.normalize('NFKD', name_raw)
+        ascii_txt = ''.join(c for c in normalized if not unicodedata.combining(c)).upper()
+        name_safe = re.sub(r'[\\/:*?"<>|]+', '', ascii_txt)
+        name_safe = re.sub(r'\s+', ' ', name_safe).strip()
+        if name_safe:
+            return f'{period_safe}_CTS_{person_safe}_{name_safe}.pdf'
+    return f'{period_safe}_CTS_{person_safe}.pdf'
 
 
 _FORMATO_CTS_CONFIG = {
@@ -8601,7 +8611,9 @@ def enviar_correo_formato_cts(destinatario, nombre_empleado, periodo, sexo, pdf_
             'attachments': [
                 {
                     'content': pdf_base64,
-                    'filename': _formato_cts_pdf_filename(person or nombre_empleado, periodo),
+                    'filename': _formato_cts_pdf_filename(
+                        person or nombre_empleado, periodo, nombre=nombre_empleado
+                    ),
                 }
             ],
         }
@@ -27931,6 +27943,7 @@ def preview_formato_cts():
     params = request.args
     person = str(params.get('person') or '').strip()
     period = _normalize_pr_period(params.get('period'))
+    nombre = str(params.get('nombre') or params.get('name') or '').strip()
     try:
         pdf_buffer = generar_pdf_formato_cts(params)
     except ValueError as e:
@@ -27942,7 +27955,7 @@ def preview_formato_cts():
         pdf_buffer,
         mimetype='application/pdf',
         as_attachment=False,
-        download_name=_formato_cts_pdf_filename(person, period),
+        download_name=_formato_cts_pdf_filename(person, period, nombre=nombre),
     )
 
 
@@ -27988,6 +28001,14 @@ def procesar_formatos_cts_masivo():
         sin_firma = _truthy_param(
             body.get('sin_firma') if body.get('sin_firma') is not None else body.get('sinfirma')
         )
+        nombres_por_person = {}
+        try:
+            for emp in _listar_trabajadores_cts(cia, payroll_type, period, '0', None):
+                pid_emp = str(emp.get('person') or '').strip()
+                if pid_emp:
+                    nombres_por_person[pid_emp] = str(emp.get('nombre') or '').strip()
+        except Exception:
+            logging.exception('procesar_formatos_cts_masivo listado nombres')
         try:
             for pid in ids:
                 try:
@@ -28001,7 +28022,12 @@ def procesar_formatos_cts_masivo():
                             'sin_firma': '1' if sin_firma else '0',
                         }
                     )
-                    pdf_parts.append((_formato_cts_pdf_filename(pid, period), pdf_data.getvalue()))
+                    pdf_parts.append((
+                        _formato_cts_pdf_filename(
+                            pid, period, nombre=nombres_por_person.get(pid)
+                        ),
+                        pdf_data.getvalue(),
+                    ))
                     generadas += 1
                 except Exception:
                     omitidas += 1
@@ -28123,7 +28149,12 @@ def descargar_zip_formatos_cts():
                         ),
                     }
                 )
-                zip_file.writestr(_formato_cts_pdf_filename(person_id, period), pdf_io.getvalue())
+                zip_file.writestr(
+                    _formato_cts_pdf_filename(
+                        person_id, period, nombre=emp.get('nombre')
+                    ),
+                    pdf_io.getvalue(),
+                )
             except Exception:
                 logging.exception('descargar_zip_formatos_cts persona=%s', person_id)
                 continue

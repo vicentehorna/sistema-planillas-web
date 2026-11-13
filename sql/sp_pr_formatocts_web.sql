@@ -53,6 +53,7 @@ BEGIN
         H.ExchangeRate AS tipo_cambio,
         D.Concept AS concepto,
         ISNULL(NULLIF(LTRIM(RTRIM(CO.PrintText)), ''), CO.Description) AS concepto_texto,
+        LTRIM(RTRIM(ISNULL(CO.FormulaCode, ''))) AS formulacode,
         CO.ConceptOrder AS concepto_orden,
         D.ConceptValueLo AS valor_lo,
         D.ConceptValueEx AS valor_ex

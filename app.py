@@ -8344,6 +8344,56 @@ def _control_datos_cts_persona(cia, payroll_type, period, person):
                 pass
 
 
+def _formato_cts_reordenar_conceptos_ultra(conceptos):
+    """hm_ultra: Básico, 1/6 gratificación y promedios en una sola fila (formato antiguo)."""
+    if not conceptos:
+        return conceptos
+
+    basico, grati, proms, otros = [], [], [], []
+    for c in conceptos:
+        fc = str(c.get('formulacode') or '').strip().upper()
+        texto = str(c.get('texto') or '').strip().upper()
+        if fc == 'BASICO_CTS' or texto == 'BASICO CTS':
+            basico.append(c)
+        elif fc == 'PROMEDIO_GRATI' or '1/6' in texto:
+            grati.append(c)
+        elif fc == 'PROMEDIOSCTSLIQ' or texto.startswith('PROM ('):
+            proms.append(c)
+        elif (
+            fc.startswith('PROM')
+            or 'PROM' in texto
+            or 'PROMEDIO' in texto
+            or fc in ('HRS_EXT_HIST', 'BONONOCHECTS', 'SUMA_COMISION')
+        ):
+            proms.append(c)
+        else:
+            otros.append(c)
+
+    # Si ya viene el concepto agrupado, no sumar también sus componentes sueltos.
+    ya_agrupado = [
+        c for c in proms
+        if str(c.get('formulacode') or '').strip().upper() == 'PROMEDIOSCTSLIQ'
+        or str(c.get('texto') or '').strip().upper().startswith('PROM (')
+    ]
+    if ya_agrupado:
+        proms = ya_agrupado[:1]
+    elif proms:
+        total_prom = 0.0
+        for c in proms:
+            try:
+                total_prom += float(str(c.get('valor_fmt') or '0').replace(',', ''))
+            except (TypeError, ValueError):
+                pass
+        # Misma etiqueta del formato antiguo de Ultrasegur.
+        proms = [{
+            'texto': 'PROM (HE,BONIF NOCHE,FERIADO,COMISION)',
+            'valor_fmt': f'{total_prom:,.2f}',
+            'formulacode': 'PROMEDIOSCTSLIQ',
+        }]
+
+    return basico + grati + proms + otros
+
+
 def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None, sin_firma=False):
     conn = None
     try:
@@ -8380,10 +8430,24 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         grupo = r.get('grupo') or 1
         if not grupos or grupos[-1]['grupo'] != grupo:
             grupos.append({'grupo': grupo, 'conceptos': [], 'total': 0.0})
-        grupos[-1]['conceptos'].append(
-            {'texto': str(r.get('concepto_texto') or '').strip(), 'valor_fmt': f'{valor:,.2f}'}
-        )
+        grupos[-1]['conceptos'].append({
+            'texto': str(r.get('concepto_texto') or '').strip(),
+            'valor_fmt': f'{valor:,.2f}',
+            'formulacode': str(r.get('formulacode') or '').strip(),
+        })
         grupos[-1]['total'] += valor
+
+    if _es_cliente_ultraseguros():
+        for g in grupos:
+            g['conceptos'] = _formato_cts_reordenar_conceptos_ultra(g.get('conceptos') or [])
+            total = 0.0
+            for c in g['conceptos']:
+                try:
+                    total += float(str(c.get('valor_fmt') or '0').replace(',', ''))
+                except (TypeError, ValueError):
+                    pass
+            g['total'] = total
+
     for g in grupos:
         g['total_fmt'] = f"{g['total']:,.2f}"
     remuneracion = grupos[0]['total'] if grupos else 0.0

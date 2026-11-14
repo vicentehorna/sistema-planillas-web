@@ -134,6 +134,9 @@
                     <table class="table table-bordered table-sm align-middle">
                         <thead class="table-light">
                             <tr>
+                                <th class="text-center" style="width:2.5rem;">
+                                    <input type="checkbox" class="form-check-input" id="chkDiffAll" title="Seleccionar todos">
+                                </th>
                                 <th>DNI</th>
                                 <th>Trabajador</th>
                                 <th>AFP</th>
@@ -147,6 +150,9 @@
                 </div>
             </div>
             <div class="modal-footer">
+                <button type="button" class="btn btn-primary btn-sm" id="btnActualizarComisionDiff" disabled>
+                    <i class="bi bi-arrow-repeat"></i> Actualizar
+                </button>
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
             </div>
         </div>
@@ -160,8 +166,11 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_consulta_cuspp_listado') | tojson }};
     const URL_GENERAR = {{ url_for('api_consulta_cuspp_generar_xlsx') | tojson }};
     const URL_IMPORTAR = {{ url_for('api_consulta_cuspp_importar') | tojson }};
+    const URL_PERIODO_DEFAULT = {{ url_for('api_consulta_cuspp_periodo_default') | tojson }};
+    const URL_ACTUALIZAR = {{ url_for('api_consulta_cuspp_actualizar_comision') | tojson }};
     const DEFAULT_CIA = 'BGT';
     let lastRows = [];
+    let lastDiferencias = [];
 
     function escapeHtml(s) {
         return String(s || '')
@@ -307,6 +316,18 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function obtenerPeriodoFinMesAbierto(cia) {
+        if (!cia) return '';
+        try {
+            const res = await fetch(`${URL_PERIODO_DEFAULT}?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            return periodoYyyymm(data && data.period);
+        } catch (e) {
+            console.error(e);
+            return '';
+        }
+    }
+
     async function cargarPeriodos(cia, periodoPreferido) {
         const cboPeriodo = document.getElementById('cboPeriodo');
         cboPeriodo.disabled = true;
@@ -329,6 +350,9 @@ document.addEventListener('DOMContentLoaded', async function () {
             cboPeriodo.disabled = false;
 
             let preferido = periodoPreferido ? periodoYyyymm(periodoPreferido) : '';
+            if (!preferido) {
+                preferido = await obtenerPeriodoFinMesAbierto(cia);
+            }
             if (!preferido || !optionExists(cboPeriodo, preferido)) {
                 const primera = Array.from(cboPeriodo.options).find((o) => /^\d{6}$/.test(String(o.value || '').trim()));
                 preferido = primera ? String(primera.value).trim() : '';
@@ -360,20 +384,33 @@ document.addEventListener('DOMContentLoaded', async function () {
         URL.revokeObjectURL(url);
     }
 
+    function syncBtnActualizarDiff() {
+        const n = document.querySelectorAll('#tbodyDiferenciasCuspp .chk-diff-row:checked').length;
+        const btn = document.getElementById('btnActualizarComisionDiff');
+        btn.disabled = n === 0;
+    }
+
     function mostrarDiferencias(data) {
         const diffs = Array.isArray(data.diferencias) ? data.diferencias : [];
+        lastDiferencias = diffs.slice();
         const tbody = document.getElementById('tbodyDiferenciasCuspp');
         const resumen = document.getElementById('lblResumenDiferencias');
+        const chkAll = document.getElementById('chkDiffAll');
+        chkAll.checked = false;
         resumen.textContent = diffs.length
             ? `Se encontraron ${diffs.length} diferencia(s) entre asignación permanente y Tipo de Comisión del Excel.`
             : 'No hay diferencias entre asignación permanente y el Excel.';
         tbody.innerHTML = '';
         if (!diffs.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Sin diferencias</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Sin diferencias</td></tr>';
         } else {
-            diffs.forEach((d) => {
+            diffs.forEach((d, idx) => {
                 const tr = document.createElement('tr');
+                tr.dataset.idx = String(idx);
                 tr.innerHTML = `
+                    <td class="text-center">
+                        <input type="checkbox" class="form-check-input chk-diff-row" data-idx="${idx}">
+                    </td>
                     <td>${escapeHtml(d.documentnumber)}</td>
                     <td>${escapeHtml(d.nombre)}</td>
                     <td>${escapeHtml(d.afp_description)}</td>
@@ -384,9 +421,90 @@ document.addEventListener('DOMContentLoaded', async function () {
                 tbody.appendChild(tr);
             });
         }
+        syncBtnActualizarDiff();
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('modalDiferenciasCuspp'));
         modal.show();
     }
+
+    document.getElementById('chkDiffAll').addEventListener('change', function () {
+        const on = !!this.checked;
+        document.querySelectorAll('#tbodyDiferenciasCuspp .chk-diff-row').forEach((chk) => {
+            chk.checked = on;
+        });
+        syncBtnActualizarDiff();
+    });
+
+    document.getElementById('tbodyDiferenciasCuspp').addEventListener('change', function (ev) {
+        if (ev.target && ev.target.classList.contains('chk-diff-row')) {
+            const all = Array.from(document.querySelectorAll('#tbodyDiferenciasCuspp .chk-diff-row'));
+            const chkAll = document.getElementById('chkDiffAll');
+            chkAll.checked = all.length > 0 && all.every((c) => c.checked);
+            syncBtnActualizarDiff();
+        }
+    });
+
+    document.getElementById('btnActualizarComisionDiff').addEventListener('click', async function () {
+        const payload = payloadFiltros();
+        if (!payload.cia) {
+            alert('Seleccione compañía.');
+            return;
+        }
+        const seleccionados = Array.from(
+            document.querySelectorAll('#tbodyDiferenciasCuspp .chk-diff-row:checked')
+        ).map((chk) => {
+            const idx = Number(chk.getAttribute('data-idx'));
+            return lastDiferencias[idx];
+        }).filter(Boolean);
+        if (!seleccionados.length) {
+            alert('Seleccione al menos un trabajador.');
+            return;
+        }
+        const n = seleccionados.length;
+        const okConfirm = window.confirm(
+            `¿Actualizar ${n} trabajador(es)?\n` +
+            'Se ajustará el check AFP MIXTA en la ficha y el concepto en Asignación de Conceptos ' +
+            'según el Tipo de Comisión del Excel.'
+        );
+        if (!okConfirm) return;
+
+        const btn = this;
+        const texto = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Actualizando...';
+        try {
+            const res = await fetch(URL_ACTUALIZAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cia: payload.cia,
+                    period: payload.period,
+                    items: seleccionados.map((d) => ({
+                        person: d.person,
+                        documentnumber: d.documentnumber,
+                        nombre: d.nombre,
+                        excel_tipo_comision: d.excel_tipo_comision
+                    }))
+                })
+            });
+            const data = await res.json();
+            if (!res.ok) {
+                alert((data && data.error) || 'No se pudo actualizar.');
+                return;
+            }
+            const okPersons = new Set(
+                (Array.isArray(data.items) ? data.items : []).map((x) => String(x.person || '').trim())
+            );
+            lastDiferencias = lastDiferencias.filter((d) => !okPersons.has(String(d.person || '').trim()));
+            mostrarDiferencias({ diferencias: lastDiferencias });
+            alert((data && data.mensaje) || `Actualizados: ${okPersons.size}.`);
+        } catch (e) {
+            console.error(e);
+            alert('Error al actualizar.');
+        } finally {
+            btn.innerHTML = texto;
+            syncBtnActualizarDiff();
+        }
+    });
 
     document.getElementById('cboCompania').addEventListener('change', async function () {
         lastRows = [];

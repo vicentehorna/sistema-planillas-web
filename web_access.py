@@ -78,6 +78,8 @@ ENDPOINT_MENU_MAP = {
     'api_consulta_cuspp_listado': 'consulta_cuspp_masiva',
     'api_consulta_cuspp_generar_xlsx': 'consulta_cuspp_masiva',
     'api_consulta_cuspp_importar': 'consulta_cuspp_masiva',
+    'api_consulta_cuspp_periodo_default': 'consulta_cuspp_masiva',
+    'api_consulta_cuspp_actualizar_comision': 'consulta_cuspp_masiva',
     'pago_haberes_telecredito_page': 'pago_telecredito',
     'pago_haberes_pago_unidad_page': 'pago_por_unidad',
     'pago_haberes_interbank_page': 'pago_interbank',

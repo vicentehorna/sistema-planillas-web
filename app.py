@@ -4435,6 +4435,100 @@ def _consulta_cuspp_comparar_diferencias(filas_listado, excel_rows, personas_mix
     return diffs
 
 
+def _consulta_cuspp_periodo_finmes_abierto(cursor, cia):
+    """YYYYMM del último periodo Fin de Mes abierto (Status A/G) de la compañía."""
+    cia = str(cia or '').strip()
+    if not cia:
+        return ''
+    cursor.execute(
+        """
+        SELECT TOP 1
+            LEFT(REPLACE(LTRIM(RTRIM(CONVERT(varchar(30), pc.PRPeriod))), '-', ''), 6) AS yyyymm
+        FROM PR_ProcessControl pc (NOLOCK)
+        INNER JOIN PR_ProcessType pt (NOLOCK)
+            ON pt.Company = pc.Company
+           AND pt.ProcessType = pc.ProcessType
+        WHERE pc.Company = ?
+          AND pc.Status IN ('A', 'G')
+          AND (
+                UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) IN ('FIN_DE_MES', 'MENSUAL', 'FINMES')
+             OR UPPER(LTRIM(RTRIM(ISNULL(pt.ShortName, '')))) LIKE '%FIN%MES%'
+             OR UPPER(LTRIM(RTRIM(ISNULL(pt.Description, '')))) LIKE '%FIN%MES%'
+          )
+        ORDER BY pc.PRPeriod DESC
+        """,
+        (cia,),
+    )
+    row = cursor.fetchone()
+    yyyymm = str(row[0] or '').strip() if row else ''
+    return yyyymm if re.fullmatch(r'\d{6}', yyyymm) else ''
+
+
+def _consulta_cuspp_aplicar_tipo_comision(cursor, cia, person, excel_tipo, xuser):
+    """
+    Alinea FlagMixta + asignación permanente AFP_FLUJO / AFP_COMISION_MIXTA
+    según Tipo de Comisión del Excel (MIXTA/FLUJO), reutilizando el SP de pensiones.
+    """
+    cia = str(cia or '').strip()
+    person = str(person or '').strip()
+    excel_tipo = str(excel_tipo or '').strip().upper()
+    if not cia or not person:
+        raise ValueError('Falta compañía o trabajador.')
+    if excel_tipo not in ('MIXTA', 'FLUJO'):
+        raise ValueError('Tipo de comisión Excel inválido (use MIXTA o FLUJO).')
+
+    flagmixta = 'Y' if excel_tipo == 'MIXTA' else 'N'
+    cursor.execute(
+        """
+        SELECT
+            LTRIM(RTRIM(ISNULL(e.PensionType, ''))) AS pensiontype,
+            e.PensionInscriptionDate AS pensioninscriptiondate,
+            LTRIM(RTRIM(ISNULL(e.RegimeHealth, ''))) AS regimehealth,
+            LTRIM(RTRIM(ISNULL(e.AFPCard, ''))) AS cuspp,
+            CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(e.FlagEssaludVida, 'N')))) = 'Y' THEN 'Y' ELSE 'N' END AS flagessaludvida
+        FROM PR_Employee e (NOLOCK)
+        WHERE e.Company = ?
+          AND e.Person = ?
+        """,
+        (cia, person),
+    )
+    row = cursor.fetchone()
+    if not row:
+        raise ValueError(f'Trabajador {person} no encontrado.')
+
+    pensiontype = str(row[0] or '').strip()
+    inscription = _sql_date_str_param(row[1])
+    regimehealth = str(row[2] or '').strip()
+    cuspp = str(row[3] or '').strip() or None
+    flagessaludvida = str(row[4] or 'N').strip() or 'N'
+
+    cursor.execute(
+        'EXEC sp_pr_actualizar_pensiones_trabajador_web '
+        '@cia=?, @person=?, @pensiontype=?, @pensioninscriptiondate=?, '
+        '@regimehealth=?, @flagmixta=?, @cuspp=?, @xlastuser=?, @flagessaludvida=?',
+        (
+            cia,
+            person,
+            pensiontype or None,
+            inscription,
+            regimehealth or None,
+            flagmixta,
+            cuspp,
+            xuser,
+            flagessaludvida,
+        ),
+    )
+    try:
+        _dicts_first_nonempty_resultset(cursor)
+    except Exception:
+        pass
+    return {
+        'person': person,
+        'flagmixta': flagmixta,
+        'excel_tipo_comision': excel_tipo,
+    }
+
+
 def _es_bd_hm_alamo():
     try:
         from database import get_active_database
@@ -23126,6 +23220,127 @@ def api_consulta_cuspp_importar():
         })
     except Exception as e:
         logging.exception("api_consulta_cuspp_importar")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/consulta-cuspp/periodo-default')
+@login_required
+def api_consulta_cuspp_periodo_default():
+    """Periodo YYYYMM abierto de Fin de Mes (Status A/G) para el filtro de CUSPP."""
+    denied = _require_hm_lumat_json('Consulta CUSPP Masiva')
+    if denied:
+        return denied
+    cia = str(request.args.get('cia') or request.args.get('company') or '').strip()
+    if not cia:
+        return jsonify({"period": ""})
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        period = _consulta_cuspp_periodo_finmes_abierto(cursor, cia)
+        return jsonify({"period": period})
+    except Exception as e:
+        logging.exception("api_consulta_cuspp_periodo_default")
+        return jsonify({"period": "", "error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/consulta-cuspp/actualizar-comision', methods=['POST'])
+@login_required
+def api_consulta_cuspp_actualizar_comision():
+    """Aplica Tipo de Comisión del Excel a FlagMixta + asignación AFP_FLUJO."""
+    denied = _require_hm_lumat_json('Consulta CUSPP Masiva')
+    if denied:
+        return denied
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    items = body.get('items') or body.get('filas') or []
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not isinstance(items, list) or not items:
+        return jsonify({"error": "Seleccione al menos un trabajador."}), 400
+
+    conn = None
+    ok_count = 0
+    actualizados = []
+    errores = []
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        xuser = _xlastuser_id()
+        for idx, item in enumerate(items):
+            if not isinstance(item, dict):
+                continue
+            person = str(item.get('person') or '').strip()
+            excel_tipo = str(
+                item.get('excel_tipo_comision') or item.get('excel') or ''
+            ).strip().upper()
+            if not person:
+                errores.append({
+                    "fila": idx + 1,
+                    "person": "",
+                    "documentnumber": str(item.get('documentnumber') or '').strip(),
+                    "error": "Falta person.",
+                })
+                continue
+            try:
+                res = _consulta_cuspp_aplicar_tipo_comision(
+                    cursor, cia, person, excel_tipo, xuser
+                )
+                ok_count += 1
+                actualizados.append({
+                    "person": res['person'],
+                    "documentnumber": str(item.get('documentnumber') or '').strip(),
+                    "nombre": str(item.get('nombre') or '').strip(),
+                    "flagmixta": res['flagmixta'],
+                    "excel_tipo_comision": res['excel_tipo_comision'],
+                })
+            except Exception as ex_item:
+                logging.exception(
+                    "api_consulta_cuspp_actualizar_comision item %s", person
+                )
+                errores.append({
+                    "fila": idx + 1,
+                    "person": person,
+                    "documentnumber": str(item.get('documentnumber') or '').strip(),
+                    "nombre": str(item.get('nombre') or '').strip(),
+                    "error": str(ex_item),
+                })
+        conn.commit()
+        if ok_count == 0 and errores:
+            return jsonify({
+                "error": "No se pudo actualizar ningún trabajador.",
+                "errores": errores,
+            }), 400
+        return jsonify({
+            "ok": True,
+            "actualizados": ok_count,
+            "items": actualizados,
+            "errores": errores,
+            "mensaje": (
+                f"Se actualizaron {ok_count} trabajador(es)."
+                if not errores
+                else f"Actualizados: {ok_count}. Con error: {len(errores)}."
+            ),
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_consulta_cuspp_actualizar_comision")
         return jsonify({"error": str(e)}), 500
     finally:
         if conn:

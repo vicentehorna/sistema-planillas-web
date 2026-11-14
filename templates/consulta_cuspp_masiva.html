@@ -172,6 +172,27 @@ document.addEventListener('DOMContentLoaded', async function () {
     let lastRows = [];
     let lastDiferencias = [];
 
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmExito(mensaje) {
+        if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        const msg = opciones.mensaje || opciones.message || '¿Continuar?';
+        return confirm(msg);
+    }
+
     function escapeHtml(s) {
         return String(s || '')
             .replace(/&/g, '&amp;')
@@ -446,7 +467,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     document.getElementById('btnActualizarComisionDiff').addEventListener('click', async function () {
         const payload = payloadFiltros();
         if (!payload.cia) {
-            alert('Seleccione compañía.');
+            hmAdvertencia('Seleccione compañía.');
             return;
         }
         const seleccionados = Array.from(
@@ -456,15 +477,20 @@ document.addEventListener('DOMContentLoaded', async function () {
             return lastDiferencias[idx];
         }).filter(Boolean);
         if (!seleccionados.length) {
-            alert('Seleccione al menos un trabajador.');
+            hmAdvertencia('Seleccione al menos un trabajador.');
             return;
         }
         const n = seleccionados.length;
-        const okConfirm = window.confirm(
-            `¿Actualizar ${n} trabajador(es)?\n` +
-            'Se ajustará el check AFP MIXTA en la ficha y el concepto en Asignación de Conceptos ' +
-            'según el Tipo de Comisión del Excel.'
-        );
+        const okConfirm = await hmConfirmar({
+            titulo: 'Actualizar tipo de comisión',
+            mensaje:
+                `¿Actualizar ${n} trabajador(es)?\n` +
+                'Se ajustará el check AFP MIXTA en la ficha y el concepto en Asignación de Conceptos ' +
+                'según el Tipo de Comisión del Excel.',
+            textoOk: 'Actualizar',
+            textoCancelar: 'Cancelar',
+            variant: 'primary'
+        });
         if (!okConfirm) return;
 
         const btn = this;
@@ -488,7 +514,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             });
             const data = await res.json();
             if (!res.ok) {
-                alert((data && data.error) || 'No se pudo actualizar.');
+                hmError((data && data.error) || 'No se pudo actualizar.');
                 return;
             }
             const okPersons = new Set(
@@ -496,10 +522,10 @@ document.addEventListener('DOMContentLoaded', async function () {
             );
             lastDiferencias = lastDiferencias.filter((d) => !okPersons.has(String(d.person || '').trim()));
             mostrarDiferencias({ diferencias: lastDiferencias });
-            alert((data && data.mensaje) || `Actualizados: ${okPersons.size}.`);
+            hmExito((data && data.mensaje) || `Se actualizaron ${okPersons.size} trabajador(es).`);
         } catch (e) {
             console.error(e);
-            alert('Error al actualizar.');
+            hmError('Error al actualizar.');
         } finally {
             btn.innerHTML = texto;
             syncBtnActualizarDiff();

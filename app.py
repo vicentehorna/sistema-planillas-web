@@ -6038,7 +6038,7 @@ def enviar_correo_certificado_quinta(destinatario, nombre_empleado, anio, sexo, 
         return False, str(e)
 
 
-_BOLETA_DOBLE_DBS = frozenset({'hm_ultra', 'hm_lumat', 'hm_maritima'})
+_BOLETA_DOBLE_DBS = frozenset({'hm_ultra', 'hm_lumat', 'hm_maritima', 'hm_servigen'})
 _BOLETA_CABECERA_MODELO_ANTERIOR_DBS = frozenset({'hm_ultra', 'hm_maritima'})
 
 

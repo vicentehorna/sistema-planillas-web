@@ -181,13 +181,15 @@
             color: #444;
             margin-right: 6px;
         }
-        table.fmt tr.descuento-prestamo-fila td {
-            font-weight: bold;
-            background-color: #fff8f0;
+        .descuento-prestamo-cts {
+            margin: 4px 0 2px;
+            font-size: 9px;
             color: #333;
         }
-        table.fmt tr.descuento-prestamo-fila td.monto {
-            color: #1a4b84;
+        .descuento-prestamo-cts .lbl {
+            font-weight: bold;
+            color: #444;
+            margin-right: 6px;
         }
         .total-deposito {
             display: table;
@@ -345,27 +347,9 @@
                         <td class="concepto">Total remuneración computable</td>
                         <td class="monto">{{ g.total_fmt }}</td>
                     </tr>
-                    {% if loop.last and mostrar_descuento_prestamo %}
-                    <tr class="descuento-prestamo-fila">
-                        <td class="num"></td>
-                        <td class="concepto">Descuento de préstamos</td>
-                        <td class="monto">{{ descuento_prestamo_fmt }}</td>
-                    </tr>
-                    {% endif %}
                 </tbody>
             </table>
             {% endfor %}
-            {% if mostrar_descuento_prestamo and not grupos %}
-            <table class="fmt">
-                <tbody>
-                    <tr class="descuento-prestamo-fila">
-                        <td class="num"></td>
-                        <td class="concepto">Descuento de préstamos</td>
-                        <td class="monto">{{ descuento_prestamo_fmt }}</td>
-                    </tr>
-                </tbody>
-            </table>
-            {% endif %}
 
             <div class="subseccion-titulo">3. Cálculo del depósito</div>
             <table class="fmt">
@@ -388,6 +372,12 @@
                     </tr>
                 </tbody>
             </table>
+
+            {% if mostrar_descuento_prestamo %}
+            <div class="descuento-prestamo-cts">
+                <span class="lbl">Descuento de préstamos:</span>{{ moneda_simbolo }} {{ descuento_prestamo_fmt }}
+            </div>
+            {% endif %}
 
             {% if mostrar_ausencias_cts %}
             <div class="ausencias-cts"><span class="lbl">Ausencias:</span>{{ ausencias_cts_fmt }}</div>

@@ -8673,6 +8673,9 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         importe = round(importe / tipo_cambio, 2) if tipo_cambio else 0.0
     if descuento_prestamo > 0:
         descuento_prestamo = round(descuento_prestamo, 2)
+    # hm_globaltec con PRESTAMOSCTS: Total a pagar = rem / 360 × días.
+    if es_globaltec and descuento_prestamo > 0 and dias > 0:
+        importe = round(remuneracion / 360.0 * dias, 2)
 
     fecha_ingreso = _formato_cts_fecha(h.get('fecha_ingreso'))
     fecha_inicio = _formato_cts_fecha(h.get('fecha_inicio'))

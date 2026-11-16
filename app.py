@@ -8534,9 +8534,57 @@ def _formato_cts_ausencias_xfaltascts(cursor, cia, payroll_type, period, person)
         return 0.0
 
 
+# hm_globaltec: descuento de préstamos en Formato de CTS (no va en remuneración computable).
+_FORMATO_CTS_DESCUENTO_PRESTAMO_CODES = frozenset({'PRESTAMOSCTS'})
+
+
+def _formato_cts_descuento_prestamo(cursor, cia, payroll_type, period, person):
+    """
+    hm_globaltec: valor de PRESTAMOSCTS en proceso CTS.
+    Retorna (monto_abs, set_concept_ids). Si no hay valor, monto=0.
+    """
+    cursor.execute(
+        """
+        SELECT c.Concept, ISNULL(ep.ConceptValue, 0)
+        FROM PR_Concept c (NOLOCK)
+        LEFT JOIN PR_EmployeePayRollConcept ep (NOLOCK)
+            ON ep.Company = c.Company
+           AND ep.Concept = c.Concept
+           AND ep.PayRollType = ?
+           AND ep.PRPeriod = ?
+           AND ep.Person = ?
+           AND ep.ProcessType IN (
+                SELECT pt.ProcessType
+                FROM PR_ProcessType pt (NOLOCK)
+                WHERE pt.Company = c.Company
+                  AND LTRIM(RTRIM(ISNULL(pt.ShortName, ''))) = 'CTS'
+           )
+        WHERE c.Company = ?
+          AND LTRIM(RTRIM(ISNULL(c.FormulaCode, ''))) = 'PRESTAMOSCTS'
+        """,
+        (payroll_type, period, person, cia),
+    )
+    concept_ids = set()
+    monto = 0.0
+    for row in cursor.fetchall() or []:
+        cid = str(row[0] or '').strip()
+        if cid:
+            concept_ids.add(cid)
+        try:
+            val = abs(float(row[1] or 0))
+        except (TypeError, ValueError):
+            val = 0.0
+        if val > monto:
+            monto = val
+    return monto, concept_ids
+
+
 def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override=None, sin_firma=False):
     conn = None
     ausencias_cts = 0.0
+    descuento_prestamo = 0.0
+    desc_prestamo_concept_ids = set()
+    es_globaltec = _es_cliente_globaltec()
     try:
         conn = get_db_connection()
         cursor = conn.cursor()
@@ -8548,6 +8596,10 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         # hm_ultra: formato propio; no mostrar Ausencias.
         if rows and not _es_cliente_ultraseguros():
             ausencias_cts = _formato_cts_ausencias_xfaltascts(
+                cursor, cia, payroll_type, period, person
+            )
+        if rows and es_globaltec:
+            descuento_prestamo, desc_prestamo_concept_ids = _formato_cts_descuento_prestamo(
                 cursor, cia, payroll_type, period, person
             )
     finally:
@@ -8571,6 +8623,19 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
     grupos = []
     for r in rows:
         if not r.get('concepto'):
+            continue
+        concept_id = str(r.get('concepto') or '').strip()
+        fc = str(r.get('formulacode') or '').strip().upper()
+        texto_u = str(r.get('concepto_texto') or '').strip().upper()
+        # PRESTAMOSCTS es descuento del depósito, no remuneración computable.
+        es_desc_prestamo = es_globaltec and (
+            concept_id in desc_prestamo_concept_ids
+            or fc in _FORMATO_CTS_DESCUENTO_PRESTAMO_CODES
+            or texto_u in ('PRESTAMOS CTS', 'PRESTAMOSCTS', 'DESCUENTO DE PRESTAMOS', 'DESCUENTO DE PRÉSTAMOS')
+        )
+        if es_desc_prestamo:
+            if descuento_prestamo <= 0:
+                descuento_prestamo = abs(_num(r.get('valor_lo') if moneda_lo else r.get('valor_ex')))
             continue
         valor = _num(r.get('valor_lo') if moneda_lo else r.get('valor_ex'))
         grupo = r.get('grupo') or 1
@@ -8606,6 +8671,9 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
     tipo_cambio = _num(h.get('tipo_cambio'))
     if not moneda_lo:
         importe = round(importe / tipo_cambio, 2) if tipo_cambio else 0.0
+    if descuento_prestamo > 0:
+        descuento_prestamo = round(descuento_prestamo, 2)
+    total_depositado = round(importe - descuento_prestamo, 2) if descuento_prestamo > 0 else importe
 
     fecha_ingreso = _formato_cts_fecha(h.get('fecha_ingreso'))
     fecha_inicio = _formato_cts_fecha(h.get('fecha_inicio'))
@@ -8654,6 +8722,10 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         'dias_computables': dias_comp,
         'dias_cts': dias,
         'importe_fmt': f'{importe:,.2f}',
+        # Total depositado: en hm_globaltec resta PRESTAMOSCTS si tiene valor.
+        'total_depositado_fmt': f'{total_depositado:,.2f}',
+        'mostrar_descuento_prestamo': es_globaltec and descuento_prestamo > 0,
+        'descuento_prestamo_fmt': f'{descuento_prestamo:,.2f}',
         # hm_ultra: no mostrar la línea "rem / 360 × días" encima del total.
         'mostrar_detalle_calculo': not _es_cliente_ultraseguros(),
         # hm_ultra: periodo computable solo Desde/Hasta (sin ingreso ni depósito).

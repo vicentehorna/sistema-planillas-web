@@ -181,29 +181,12 @@
             color: #444;
             margin-right: 6px;
         }
-        .descuento-prestamo-cts {
-            display: table;
-            width: 100%;
-            margin: 4px 0 2px;
-            font-size: 9px;
+        table.fmt tr.descuento-prestamo-fila td {
+            font-weight: bold;
+            background-color: #fff8f0;
             color: #333;
-            border: 1px solid #ddd;
-            background: #fff;
         }
-        .descuento-prestamo-cts .lbl,
-        .descuento-prestamo-cts .monto {
-            display: table-cell;
-            padding: 4px 8px;
-            vertical-align: middle;
-        }
-        .descuento-prestamo-cts .lbl {
-            font-weight: bold;
-            color: #444;
-        }
-        .descuento-prestamo-cts .monto {
-            text-align: right;
-            white-space: nowrap;
-            font-weight: bold;
+        table.fmt tr.descuento-prestamo-fila td.monto {
             color: #1a4b84;
         }
         .total-deposito {
@@ -362,9 +345,27 @@
                         <td class="concepto">Total remuneración computable</td>
                         <td class="monto">{{ g.total_fmt }}</td>
                     </tr>
+                    {% if loop.last and mostrar_descuento_prestamo %}
+                    <tr class="descuento-prestamo-fila">
+                        <td class="num"></td>
+                        <td class="concepto">Descuento de préstamos</td>
+                        <td class="monto">{{ descuento_prestamo_fmt }}</td>
+                    </tr>
+                    {% endif %}
                 </tbody>
             </table>
             {% endfor %}
+            {% if mostrar_descuento_prestamo and not grupos %}
+            <table class="fmt">
+                <tbody>
+                    <tr class="descuento-prestamo-fila">
+                        <td class="num"></td>
+                        <td class="concepto">Descuento de préstamos</td>
+                        <td class="monto">{{ descuento_prestamo_fmt }}</td>
+                    </tr>
+                </tbody>
+            </table>
+            {% endif %}
 
             <div class="subseccion-titulo">3. Cálculo del depósito</div>
             <table class="fmt">
@@ -396,16 +397,9 @@
             <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>
             {% endif %}
 
-            {% if mostrar_descuento_prestamo %}
-            <div class="descuento-prestamo-cts">
-                <div class="lbl">Descuento de préstamos</div>
-                <div class="monto">{{ moneda_simbolo }} {{ descuento_prestamo_fmt }}</div>
-            </div>
-            {% endif %}
-
             <div class="total-deposito">
                 <div>Total depositado</div>
-                <div class="importe">{{ moneda_simbolo }} {{ total_depositado_fmt }}</div>
+                <div class="importe">{{ moneda_simbolo }} {{ importe_fmt }}</div>
             </div>
         </div>
 

@@ -8673,7 +8673,6 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         importe = round(importe / tipo_cambio, 2) if tipo_cambio else 0.0
     if descuento_prestamo > 0:
         descuento_prestamo = round(descuento_prestamo, 2)
-    total_depositado = round(importe - descuento_prestamo, 2) if descuento_prestamo > 0 else importe
 
     fecha_ingreso = _formato_cts_fecha(h.get('fecha_ingreso'))
     fecha_inicio = _formato_cts_fecha(h.get('fecha_inicio'))
@@ -8722,8 +8721,7 @@ def _contexto_formato_cts(cia, payroll_type, period, person, fecha_pago_override
         'dias_computables': dias_comp,
         'dias_cts': dias,
         'importe_fmt': f'{importe:,.2f}',
-        # Total depositado: en hm_globaltec resta PRESTAMOSCTS si tiene valor.
-        'total_depositado_fmt': f'{total_depositado:,.2f}',
+        # hm_globaltec: fila informativa PRESTAMOSCTS debajo de Total remuneración computable.
         'mostrar_descuento_prestamo': es_globaltec and descuento_prestamo > 0,
         'descuento_prestamo_fmt': f'{descuento_prestamo:,.2f}',
         # hm_ultra: no mostrar la línea "rem / 360 × días" encima del total.

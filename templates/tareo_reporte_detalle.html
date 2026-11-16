@@ -31,6 +31,14 @@
         text-align: right;
         font-variant-numeric: tabular-nums;
     }
+    .table-trd tfoot td {
+        font-weight: 700;
+        background: #f8f9fa;
+        border-top: 2px solid #dee2e6;
+        position: sticky;
+        bottom: 0;
+        z-index: 1;
+    }
 </style>
 {% endblock %}
 
@@ -107,11 +115,13 @@
         <tbody id="tbodyReporte">
             <tr><td colspan="10" class="text-center text-muted py-4">Seleccione filtros y pulse Buscar</td></tr>
         </tbody>
+        <tfoot id="tfootReporte" class="d-none"></tfoot>
     </table>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/exceljs@4.4.0/dist/exceljs.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', async function () {
     const selCia = document.getElementById('selCia');
@@ -121,11 +131,13 @@ document.addEventListener('DOMContentLoaded', async function () {
     const selTrabajador = document.getElementById('selTrabajador');
     const selTipoDia = document.getElementById('selTipoDia');
     const tbody = document.getElementById('tbodyReporte');
+    const tfoot = document.getElementById('tfootReporte');
     const msg = document.getElementById('msgReporte');
     const btnExcel = document.getElementById('btnExcel');
     const sessionCia = {{ (session.get('company') or '')|tojson }};
     const DEFAULT_CIA = 'BGT';
     const DEFAULT_PLANILLA_TEXT = 'EMPLEADOS';
+    const NUM_KEYS = ['hourday', 'extrahour25', 'extrahour35', 'extrahour100'];
     let lastRows = [];
 
     function esc(v) {
@@ -143,10 +155,29 @@ document.addEventListener('DOMContentLoaded', async function () {
         selectEl.value = opt.value;
         return true;
     }
+    function toNum(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
     function num(v) {
         if (v == null || v === '') return '';
         const n = Number(v);
-        return Number.isFinite(n) ? String(n) : esc(v);
+        return Number.isFinite(n) ? n.toLocaleString('es-PE', { maximumFractionDigits: 2 }) : esc(v);
+    }
+    function fmtNumExcel(v) {
+        const n = Number(v);
+        return Number.isFinite(n) ? n : 0;
+    }
+    function sumTotales(rows) {
+        const t = { hourday: 0, extrahour25: 0, extrahour35: 0, extrahour100: 0 };
+        (rows || []).forEach((r) => {
+            NUM_KEYS.forEach((k) => { t[k] += toNum(r[k]); });
+        });
+        return t;
+    }
+    function textoOpcion(selectEl) {
+        const opt = selectEl.options[selectEl.selectedIndex];
+        return opt ? String(opt.textContent || '').trim() : '';
     }
     function toastErr(t) { if (window.HmUi) HmUi.error(t); else alert(t); }
     async function leerJson(res) {
@@ -296,6 +327,8 @@ document.addEventListener('DOMContentLoaded', async function () {
         btnExcel.disabled = !lastRows.length;
         if (!lastRows.length) {
             tbody.innerHTML = '<tr><td colspan="10" class="text-center text-muted py-4">Sin registros</td></tr>';
+            tfoot.classList.add('d-none');
+            tfoot.innerHTML = '';
             msg.textContent = '0 registros';
             return;
         }
@@ -313,7 +346,151 @@ document.addEventListener('DOMContentLoaded', async function () {
                 <td class="num">${num(r.extrahour100)}</td>
             </tr>
         `).join('');
+        const tot = sumTotales(lastRows);
+        tfoot.classList.remove('d-none');
+        tfoot.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-end">Totales</td>
+                <td class="num">${num(tot.hourday)}</td>
+                <td class="num">${num(tot.extrahour25)}</td>
+                <td class="num">${num(tot.extrahour35)}</td>
+                <td class="num">${num(tot.extrahour100)}</td>
+            </tr>
+        `;
         msg.textContent = lastRows.length + ' registro(s)';
+    }
+
+    async function exportarExcel() {
+        if (!lastRows.length) return;
+        if (typeof ExcelJS === 'undefined') {
+            toastErr('No se pudo cargar la librería de Excel (ExcelJS). Recargue la página e intente de nuevo.');
+            return;
+        }
+        const headers = [
+            'Código', 'Nombre', 'Fecha', 'Tipo Día', 'Cliente', 'Sede',
+            'Horas', 'HE 25', 'HE 35', 'H NOC'
+        ];
+        const keys = [
+            'person', 'name', 'fecha', 'tipodia', 'cliente', 'sede',
+            'hourday', 'extrahour25', 'extrahour35', 'extrahour100'
+        ];
+        const tot = sumTotales(lastRows);
+        const F = {
+            title: 'FF1F4E78',
+            meta: 'FFF8F9FA',
+            header: 'FF1F4E78',
+            zebra: 'FFF7FBFF',
+            total: 'FFE2EFDA',
+            data: 'FFFFFFFF'
+        };
+        const fill = (argb) => ({ type: 'pattern', pattern: 'solid', fgColor: { argb } });
+        const borderThin = { style: 'thin', color: { argb: 'FFD9D9D9' } };
+        const allBorders = { top: borderThin, left: borderThin, bottom: borderThin, right: borderThin };
+
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Detalle Tareo', { views: [{ state: 'frozen', ySplit: 4 }] });
+        const ncols = headers.length;
+
+        ws.mergeCells(1, 1, 1, ncols);
+        const titleCell = ws.getCell(1, 1);
+        titleCell.value = 'REPORTE DETALLE DE TAREOS';
+        titleCell.font = { bold: true, size: 14, color: { argb: 'FFFFFFFF' } };
+        titleCell.alignment = { horizontal: 'center', vertical: 'middle' };
+        titleCell.fill = fill(F.title);
+        titleCell.border = allBorders;
+        ws.getRow(1).height = 24;
+
+        const metaVals = [
+            'Compañía', textoOpcion(selCia) || selCia.value,
+            'Tipo planilla', textoOpcion(selPlanilla) || '(Todas)',
+            'Periodo', textoOpcion(selPeriodo) || selPeriodo.value,
+            'Unidad', textoOpcion(selUnidad) || '(Todas)',
+            'Trabajador', textoOpcion(selTrabajador) || '(Todos)',
+            'Tipo de Día', textoOpcion(selTipoDia) || '(Todos)'
+        ];
+        const metaRow = ws.addRow(metaVals);
+        metaRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (colNumber > 12) return;
+            cell.fill = fill(F.meta);
+            cell.font = { bold: colNumber % 2 === 1, size: 9 };
+            cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+            cell.border = allBorders;
+        });
+        ws.getRow(2).height = 20;
+
+        ws.addRow([]);
+
+        const hRow = ws.addRow(headers);
+        hRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+        hRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.fill = fill(F.header);
+            cell.border = allBorders;
+            cell.alignment = {
+                horizontal: colNumber >= 7 ? 'right' : (colNumber === 2 ? 'left' : 'center'),
+                vertical: 'middle'
+            };
+        });
+
+        lastRows.forEach((r, idx) => {
+            const vals = keys.map((k, i) => (i >= 6 ? fmtNumExcel(r[k]) : (r[k] == null ? '' : r[k])));
+            const row = ws.addRow(vals);
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.border = allBorders;
+                cell.fill = fill(idx % 2 === 1 ? F.zebra : F.data);
+                if (colNumber >= 7) {
+                    cell.numFmt = '#,##0.00';
+                    cell.alignment = { horizontal: 'right', vertical: 'middle' };
+                } else if (colNumber === 2) {
+                    cell.alignment = { horizontal: 'left', vertical: 'middle' };
+                } else {
+                    cell.alignment = { horizontal: 'center', vertical: 'middle' };
+                }
+            });
+        });
+
+        const totalVals = [
+            '', 'TOTALES', '', '', '', '',
+            fmtNumExcel(tot.hourday),
+            fmtNumExcel(tot.extrahour25),
+            fmtNumExcel(tot.extrahour35),
+            fmtNumExcel(tot.extrahour100)
+        ];
+        const tRow = ws.addRow(totalVals);
+        tRow.font = { bold: true };
+        tRow.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            cell.fill = fill(F.total);
+            cell.border = allBorders;
+            if (colNumber >= 7) {
+                cell.numFmt = '#,##0.00';
+                cell.alignment = { horizontal: 'right', vertical: 'middle' };
+            } else if (colNumber === 2) {
+                cell.alignment = { horizontal: 'left', vertical: 'middle' };
+            } else {
+                cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            }
+        });
+
+        ws.getColumn(1).width = 14;
+        ws.getColumn(2).width = 36;
+        ws.getColumn(3).width = 12;
+        ws.getColumn(4).width = 18;
+        ws.getColumn(5).width = 18;
+        ws.getColumn(6).width = 16;
+        for (let c = 7; c <= 10; c++) ws.getColumn(c).width = 12;
+
+        const buffer = await wb.xlsx.writeBuffer();
+        const blob = new Blob([buffer], {
+            type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const safe = (s) => String(s || 'export').replace(/[\\/:*?"<>|]+/g, '_').trim().slice(0, 60);
+        a.download = `detalle_tareo_${safe(selPeriodo.value || 'periodo')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
     }
 
     async function buscar() {
@@ -337,33 +514,18 @@ document.addEventListener('DOMContentLoaded', async function () {
             renderRows(data.rows || []);
         } catch (e) {
             tbody.innerHTML = '<tr><td colspan="10" class="text-center text-danger py-4">Error al consultar</td></tr>';
+            tfoot.classList.add('d-none');
+            tfoot.innerHTML = '';
             btnExcel.disabled = true;
             toastErr(e.message || String(e));
         }
     }
 
     btnExcel.addEventListener('click', () => {
-        if (!lastRows.length) return;
-        const headers = [
-            'Código','Nombre','Fecha','Tipo Día','Cliente','Sede','Horas','HE 25','HE 35','H NOC'
-        ];
-        const keys = [
-            'person','name','fecha','tipodia','cliente','sede','hourday','extrahour25','extrahour35','extrahour100'
-        ];
-        const lines = [headers.join(';')];
-        lastRows.forEach(r => {
-            lines.push(keys.map(k => {
-                let v = r[k] == null ? '' : String(r[k]);
-                if (v.includes(';') || v.includes('"')) v = '"' + v.replace(/"/g, '""') + '"';
-                return v;
-            }).join(';'));
+        exportarExcel().catch((e) => {
+            console.error(e);
+            toastErr(e.message || 'No se pudo exportar el Excel.');
         });
-        const blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `detalle_tareo_${selPeriodo.value || 'periodo'}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
     });
 
     document.getElementById('frmReporte').addEventListener('submit', (ev) => {

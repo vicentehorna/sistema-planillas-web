@@ -122,6 +122,24 @@
             padding-left: 5px;
             border-left: 3px solid #1a4b84;
         }
+        .subseccion-titulo-fila {
+            display: table;
+            width: 100%;
+            margin: 8px 0 3px;
+        }
+        .subseccion-titulo-fila .subseccion-titulo {
+            display: table-cell;
+            margin: 0;
+            vertical-align: middle;
+        }
+        .subseccion-titulo-fila .detalle-calculo {
+            display: table-cell;
+            margin: 0;
+            vertical-align: middle;
+            text-align: right;
+            white-space: nowrap;
+            padding-left: 8px;
+        }
         table.fmt {
             width: 100%;
             border-collapse: collapse;
@@ -351,7 +369,12 @@
             </table>
             {% endfor %}
 
-            <div class="subseccion-titulo">3. Cálculo del depósito</div>
+            <div class="subseccion-titulo-fila">
+                <div class="subseccion-titulo">3. Cálculo del depósito</div>
+                {% if mostrar_detalle_calculo %}
+                <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>
+                {% endif %}
+            </div>
             <table class="fmt">
                 <thead>
                     <tr>
@@ -381,10 +404,6 @@
 
             {% if mostrar_ausencias_cts %}
             <div class="ausencias-cts"><span class="lbl">Ausencias:</span>{{ ausencias_cts_fmt }}</div>
-            {% endif %}
-
-            {% if mostrar_detalle_calculo %}
-            <div class="detalle-calculo">{{ remuneracion_fmt }} / 360 &times; {{ dias_cts }}</div>
             {% endif %}
 
             <div class="total-deposito">

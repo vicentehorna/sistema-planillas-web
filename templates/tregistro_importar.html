@@ -711,6 +711,12 @@ document.addEventListener('DOMContentLoaded', async function () {
         return parts.join('');
     }
 
+    function primerIdSelector(items) {
+        if (!items || !items.length) return '';
+        const id = items[0].id;
+        return id != null && String(id).trim() !== '' ? String(id) : '';
+    }
+
     async function cargarSelectoresLaborales(cia) {
         const urls = {
             position: `/api/selectores/position?cia=${encodeURIComponent(cia)}`,
@@ -764,27 +770,33 @@ document.addEventListener('DOMContentLoaded', async function () {
                 tbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted py-3">No se encontraron trabajadores.</td></tr>';
                 return;
             }
+            const defPosition = primerIdSelector(selectoresLaborales.position);
+            const defCostCenter = primerIdSelector(selectoresLaborales.costcenter);
+            const defAccountProfile = primerIdSelector(selectoresLaborales.accountprofile);
             tbody.innerHTML = rows.map((r) => {
                 const person = escapeHtml(r.person || '');
                 const nombre = escapeHtml(r.nombre || '');
                 const doc = escapeHtml(r.documento || '');
+                const selPosition = String(r.position || '').trim() || defPosition;
+                const selCostCenter = String(r.costcenter || '').trim() || defCostCenter;
+                const selAccountProfile = String(r.accountprofile || '').trim() || defAccountProfile;
                 return `
                     <tr data-person="${person}" data-nombre="${nombre}">
                         <td class="font-monospace">${doc}</td>
                         <td class="text-truncate" style="max-width: 14rem;" title="${nombre}">${nombre}</td>
                         <td>
                             <select class="form-select form-select-sm tri-position">
-                                ${optionsHtmlSelect(selectoresLaborales.position, r.position, { value: '', text: '—' })}
+                                ${optionsHtmlSelect(selectoresLaborales.position, selPosition, { value: '', text: '—' })}
                             </select>
                         </td>
                         <td>
                             <select class="form-select form-select-sm tri-costcenter">
-                                ${optionsHtmlSelect(selectoresLaborales.costcenter, r.costcenter, { value: '', text: '—' })}
+                                ${optionsHtmlSelect(selectoresLaborales.costcenter, selCostCenter, { value: '', text: '—' })}
                             </select>
                         </td>
                         <td>
                             <select class="form-select form-select-sm tri-accountprofile">
-                                ${optionsHtmlSelect(selectoresLaborales.accountprofile, r.accountprofile, { value: '', text: '—' })}
+                                ${optionsHtmlSelect(selectoresLaborales.accountprofile, selAccountProfile, { value: '', text: '—' })}
                             </select>
                         </td>
                         <td class="text-center">

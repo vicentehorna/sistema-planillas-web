@@ -193,6 +193,20 @@
                 <td class="label">Cuenta Salario:</td>
                 <td class="value">{{ cabecera.numerocuenta or '---' }}</td>
             </tr>
+            {% if ocultar_horas_trabajadas %}
+            <tr>
+                <td class="label">Horas 25%:</td>
+                <td class="value">{{ cabecera.cant_horas_25|dias }}</td>
+                <td class="label">Horas 35%:</td>
+                <td class="value">{{ cabecera.cant_horas_35|dias }}</td>
+            </tr>
+            <tr>
+                <td class="label">Horas 100%:</td>
+                <td class="value">{{ cabecera.cant_horas_100|dias }}</td>
+                <td class="label"></td>
+                <td class="value"></td>
+            </tr>
+            {% else %}
             <tr>
                 <td class="label">Horas Trabajadas:</td>
                 <td class="value">{{ cabecera.horassemana|dias }}</td>
@@ -205,6 +219,7 @@
                 <td class="label">Horas 100%:</td>
                 <td class="value">{{ cabecera.cant_horas_100|dias }}</td>
             </tr>
+            {% endif %}
         </table>
 
         <table class="conceptos-table">

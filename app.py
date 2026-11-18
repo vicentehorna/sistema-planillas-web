@@ -6719,6 +6719,7 @@ def generar_pdf_en_memoria(params):
             ),
             'etiqueta_dias_fallecimiento': _boleta_etiqueta_dias_fallecimiento(),
             'etiqueta_dias_faltas': _boleta_etiqueta_dias_faltas(),
+            'ocultar_horas_trabajadas': _es_cliente_globaltec(),
             'boleta_he_lumat_semanal': he_lumat_semanal,
             'boleta_dual_moneda': boleta_cristal_dual,
             'etiqueta_firma_empleador': 'APODERADO' if boleta_cristal_dual else 'EMPLEADOR',
@@ -22115,6 +22116,15 @@ def plame_archivo14_page():
     return render_template('plame_archivo14.html')
 
 
+@app.route('/plame/config-14')
+@login_required
+def plame_config_14_page():
+    if not _es_cliente_zilicom():
+        flash('Configurar Plame 14 solo está disponible en hm_zilicom.', 'warning')
+        return redirect(url_for('plame_archivo14_page'))
+    return render_template('plame_config_14.html')
+
+
 @app.route('/plame/archivo-14-masivo')
 @login_required
 def plame_archivo14_masivo_page():
@@ -24503,6 +24513,158 @@ def api_plame_validar_neto_r01():
     except Exception as e:
         logging.exception('api_plame_validar_neto_r01')
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/config-14', methods=['GET'])
+@login_required
+def api_plame_config_14_obtener():
+    """sp_pr_companyplame14_obtener_web: conceptos WH/HE de Plame 14."""
+    if not _es_cliente_zilicom():
+        return jsonify({"error": "Configurar Plame 14 solo está disponible en hm_zilicom."}), 403
+    cia = str(request.args.get('cia') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_companyplame14_obtener_web @cia=?", (cia,))
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        items = []
+        for row in cursor.fetchall():
+            rd = _row_dict_from_columns(col_names, row)
+            items.append({
+                "company": _jsonable_value(rd.get("company")),
+                "line": _jsonable_value(rd.get("line")),
+                "plame": _jsonable_value(rd.get("plame")),
+                "concept": _jsonable_value(rd.get("concept")),
+                "description": _jsonable_value(rd.get("description")),
+                "formulacode": _jsonable_value(rd.get("formulacode")),
+                "type": _jsonable_value(rd.get("type")),
+                "applysum": _jsonable_value(rd.get("applysum")),
+            })
+        return jsonify({"cia": cia, "items": items, "total": len(items)})
+    except Exception as e:
+        logging.exception("api_plame_config_14_obtener")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/config-14/guardar', methods=['POST'])
+@login_required
+def api_plame_config_14_guardar():
+    """sp_pr_companyplame14_guardar_web: reemplaza Plame 14 de la compañía."""
+    if not _es_cliente_zilicom():
+        return jsonify({"error": "Configurar Plame 14 solo está disponible en hm_zilicom."}), 403
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    detalle_xml = body.get('detalle_xml')
+    if detalle_xml is None:
+        detalle_xml = ''
+    detalle_xml = str(detalle_xml)
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    xlastuser = (
+        getattr(current_user, 'id', None)
+        or session.get('login_userid')
+        or 'web'
+    )
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_companyplame14_guardar_web @cia=?, @detalle_xml=?, @xlastuser=?",
+            (cia, detalle_xml, str(xlastuser)[:20]),
+        )
+        col_names = [str(c[0]).strip() for c in (cursor.description or [])]
+        row = cursor.fetchone()
+        conn.commit()
+        rd = _row_dict_from_columns(col_names, row) if row else {}
+        return jsonify({
+            "ok": True,
+            "cia": cia,
+            "total": _jsonable_value(rd.get("total")),
+            "total_wh": _jsonable_value(rd.get("total_wh")),
+            "total_he": _jsonable_value(rd.get("total_he")),
+            "mensaje": _jsonable_value(rd.get("mensaje")) or "Configuración PLAME 14 guardada correctamente.",
+        })
+    except Exception as e:
+        logging.exception("api_plame_config_14_guardar")
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/plame/config-14/replicar', methods=['POST'])
+@login_required
+def api_plame_config_14_replicar():
+    """sp_pr_companyplame14_replicar_web: copia Plame 14 a demás empresas por FormulaCode."""
+    if not _es_cliente_zilicom():
+        return jsonify({"error": "Configurar Plame 14 solo está disponible en hm_zilicom."}), 403
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('cia_origen') or body.get('company') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione la compañía origen."}), 400
+    xlastuser = (
+        getattr(current_user, 'id', None)
+        or session.get('login_userid')
+        or 'web'
+    )
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_companyplame14_replicar_web @cia_origen=?, @xlastuser=?",
+            (cia, str(xlastuser)[:20]),
+        )
+        # RS1: detalle por empresa
+        col1 = [str(c[0]).strip() for c in (cursor.description or [])]
+        detalle = []
+        for row in cursor.fetchall() or []:
+            rd = _row_dict_from_columns(col1, row)
+            detalle.append({
+                "company": _jsonable_value(rd.get("company")),
+                "ok": bool(rd.get("ok")),
+                "insertados": _jsonable_value(rd.get("insertados")),
+                "omitidos": _jsonable_value(rd.get("omitidos")),
+                "mensaje": _jsonable_value(rd.get("mensaje")),
+            })
+        resumen = {}
+        if cursor.nextset() and cursor.description:
+            col2 = [str(c[0]).strip() for c in cursor.description]
+            row2 = cursor.fetchone()
+            if row2:
+                resumen = _row_dict_from_columns(col2, row2)
+        conn.commit()
+        return jsonify({
+            "ok": True,
+            "cia_origen": cia,
+            "detalle": detalle,
+            "empresas_ok": _jsonable_value(resumen.get("empresas_ok")),
+            "empresas_error": _jsonable_value(resumen.get("empresas_error")),
+            "empresas_total": _jsonable_value(resumen.get("empresas_total")),
+            "mensaje": _jsonable_value(resumen.get("mensaje")) or "Replicación PLAME 14 finalizada.",
+        })
+    except Exception as e:
+        logging.exception("api_plame_config_14_replicar")
+        return jsonify({"error": _sp_error_message(e)}), 500
     finally:
         if conn:
             try:

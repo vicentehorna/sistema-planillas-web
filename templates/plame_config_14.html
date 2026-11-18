@@ -1,0 +1,645 @@
+{% extends "layout.html" %}
+
+{% block title %}Configurar Plame 14{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pc14-layout {
+        display: flex;
+        gap: 1rem;
+        min-height: 72vh;
+    }
+    .pc14-panel-izq {
+        flex: 0 0 28%;
+        max-width: 28%;
+        min-width: 220px;
+        display: flex;
+        flex-direction: column;
+    }
+    .pc14-panel-der {
+        flex: 1 1 72%;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+    }
+    .pc14-grilla {
+        flex: 1;
+        min-height: 0;
+        max-height: calc(72vh - 4rem);
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .pc14-tabla-tipo {
+        max-height: 28vh;
+        overflow: auto;
+        border: 1px solid #dee2e6;
+        border-radius: 0.375rem;
+        background: #fff;
+    }
+    .table-pc14 {
+        font-size: 12px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-pc14 th,
+    .table-pc14 td {
+        padding: 0.28rem 0.45rem;
+        vertical-align: middle;
+    }
+    .table-pc14 thead th {
+        position: sticky;
+        top: 0;
+        background: #f8f9fa;
+        z-index: 2;
+        box-shadow: 0 1px 0 #dee2e6;
+        color: #1a4b84;
+        font-weight: 700;
+    }
+    .table-pc14 tbody tr.pc14-cia {
+        cursor: pointer;
+    }
+    .table-pc14 tbody tr.pc14-cia:hover {
+        background: #f8f9fa;
+    }
+    .table-pc14 tbody tr.pc14-cia.active {
+        background: #cfe2ff;
+    }
+    .pc14-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 12rem;
+        color: #6c757d;
+        border: 1px dashed #ced4da;
+        border-radius: 0.375rem;
+        background: #fafbfc;
+    }
+    .pc14-tipo-card .card-header {
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: 0.45rem 0.75rem;
+    }
+    .pc14-badge-count {
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .pc14-msg {
+        min-height: 1.25rem;
+        font-size: 0.82rem;
+    }
+    .pc14-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.35);
+        z-index: 2000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .pc14-overlay.d-none { display: none !important; }
+    .pc14-overlay-card {
+        background: #fff;
+        border-radius: 0.5rem;
+        padding: 1.25rem 1.5rem;
+        text-align: center;
+        box-shadow: 0 0.5rem 1.5rem rgba(0,0,0,.15);
+        min-width: 260px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card shadow-sm border-0 mb-3">
+    <div class="card-body py-3">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+            <div>
+                <h5 class="mb-0">Configurar Plame 14</h5>
+                <div class="small text-muted">
+                    Conceptos de horas ordinarias (WH) y horas extras (HE) para el archivo .jor.
+                </div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-success btn-sm px-3" id="btnGuardar" disabled>
+                    <i class="bi bi-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+        <div class="pc14-msg text-success" id="msgGuardado"></div>
+
+        <div class="pc14-layout mt-2">
+            <div class="pc14-panel-izq">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="small fw-bold text-muted">Empresas</span>
+                    <span class="badge text-bg-light border pc14-badge-count" id="badgeCias">0</span>
+                </div>
+                <div class="pc14-grilla">
+                    <table class="table table-sm table-hover table-pc14">
+                        <thead>
+                            <tr>
+                                <th>Cia</th>
+                                <th>Descripción</th>
+                                <th class="text-end">WH</th>
+                                <th class="text-end">HE</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyCias"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="pc14-panel-der">
+                <div id="placeholderConfig" class="pc14-placeholder">
+                    Seleccione una empresa para editar la configuración PLAME 14.
+                </div>
+
+                <div id="panelConfig" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                        <div>
+                            <span class="fw-semibold" id="lblCiaActiva">—</span>
+                            <span class="text-muted small ms-1" id="lblCiaDesc"></span>
+                        </div>
+                    </div>
+
+                    <div class="card pc14-tipo-card mb-2">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-clock me-1"></i> Horas ordinarias (WH)</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnAddWH">
+                                <i class="bi bi-plus-lg"></i> Agregar
+                            </button>
+                        </div>
+                        <div class="pc14-tabla-tipo">
+                            <table class="table table-sm table-pc14">
+                                <thead>
+                                    <tr>
+                                        <th style="width:3rem">#</th>
+                                        <th>Concepto</th>
+                                        <th>Descripción</th>
+                                        <th style="width:7rem">Aplicación</th>
+                                        <th style="width:3rem"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyWH"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card pc14-tipo-card">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <span><i class="bi bi-clock-history me-1"></i> Horas extras (HE)</span>
+                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnAddHE">
+                                <i class="bi bi-plus-lg"></i> Agregar
+                            </button>
+                        </div>
+                        <div class="pc14-tabla-tipo">
+                            <table class="table table-sm table-pc14">
+                                <thead>
+                                    <tr>
+                                        <th style="width:3rem">#</th>
+                                        <th>Concepto</th>
+                                        <th>Descripción</th>
+                                        <th style="width:7rem">Aplicación</th>
+                                        <th style="width:3rem"></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyHE"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal agregar concepto -->
+<div class="modal fade" id="modalConcepto" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modalConceptoTitle">Agregar concepto</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body">
+                <input type="search" id="txtFiltroConcepto" class="form-control form-control-sm mb-2"
+                       placeholder="Filtrar concepto o descripción..." autocomplete="off">
+                <div class="border rounded" style="max-height:50vh; overflow:auto;">
+                    <table class="table table-sm table-hover table-pc14 mb-0">
+                        <thead>
+                            <tr>
+                                <th>Concepto</th>
+                                <th>Descripción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyConceptosModal"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="overlayReplicar" class="pc14-overlay d-none">
+    <div class="pc14-overlay-card" role="status" aria-live="polite">
+        <div class="spinner-border text-primary mb-2" role="status" aria-hidden="true"></div>
+        <div class="fw-semibold">Replicando en las demás empresas…</div>
+        <div class="text-muted small mt-1">Puede tardar unos segundos.</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+
+    const tbodyCias = document.getElementById('tbodyCias');
+    const badgeCias = document.getElementById('badgeCias');
+    const placeholderConfig = document.getElementById('placeholderConfig');
+    const panelConfig = document.getElementById('panelConfig');
+    const lblCiaActiva = document.getElementById('lblCiaActiva');
+    const lblCiaDesc = document.getElementById('lblCiaDesc');
+    const tbodyWH = document.getElementById('tbodyWH');
+    const tbodyHE = document.getElementById('tbodyHE');
+    const btnGuardar = document.getElementById('btnGuardar');
+    const btnAddWH = document.getElementById('btnAddWH');
+    const btnAddHE = document.getElementById('btnAddHE');
+    const msgGuardado = document.getElementById('msgGuardado');
+    const overlayReplicar = document.getElementById('overlayReplicar');
+    const modalEl = document.getElementById('modalConcepto');
+    const modalTitle = document.getElementById('modalConceptoTitle');
+    const tbodyConceptosModal = document.getElementById('tbodyConceptosModal');
+    const txtFiltroConcepto = document.getElementById('txtFiltroConcepto');
+    const modalBs = modalEl ? new bootstrap.Modal(modalEl) : null;
+
+    let cias = [];
+    let ciaActiva = null;
+    let itemsWH = [];
+    let itemsHE = [];
+    let dirty = false;
+    let conceptosCache = [];
+    let tipoAgregar = 'WH';
+    let msgTimer = null;
+
+    function hmOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
+    function hmAdvertencia(m) { if (window.HmUi) HmUi.advertencia(m); else alert(m); }
+    function hmError(m) { if (window.HmUi) HmUi.error(m); else alert(m); }
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        return confirm((opciones && (opciones.mensaje || opciones.message)) || '¿Continuar?');
+    }
+
+    async function leerJson(res) {
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            throw new Error(data.error || data.mensaje || ('Error HTTP ' + res.status));
+        }
+        return data;
+    }
+
+    function mostrarMsg(texto, esError) {
+        if (msgTimer) clearTimeout(msgTimer);
+        msgGuardado.className = 'pc14-msg ' + (esError ? 'text-danger' : 'text-success');
+        msgGuardado.textContent = texto || '';
+        if (texto) {
+            msgTimer = setTimeout(() => { msgGuardado.textContent = ''; }, 6000);
+        }
+    }
+
+    function setDirty(v) {
+        dirty = !!v;
+        btnGuardar.disabled = !ciaActiva;
+    }
+
+    function esc(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    function renderCias() {
+        tbodyCias.innerHTML = cias.map((c) => {
+            const active = ciaActiva && c.id === ciaActiva ? ' active' : '';
+            return (
+                `<tr class="pc14-cia${active}" data-cia="${esc(c.id)}">` +
+                `<td class="fw-semibold">${esc(c.id)}</td>` +
+                `<td>${esc(c.text || '')}</td>` +
+                `<td class="text-end">${c.wh != null ? c.wh : '—'}</td>` +
+                `<td class="text-end">${c.he != null ? c.he : '—'}</td>` +
+                `</tr>`
+            );
+        }).join('');
+        badgeCias.textContent = String(cias.length);
+    }
+
+    function renderTipo(tbody, items, tipo) {
+        if (!items.length) {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-muted text-center py-3">Sin conceptos</td></tr>`;
+            return;
+        }
+        tbody.innerHTML = items.map((it, idx) => {
+            const apply = String(it.applysum || 'P').toUpperCase() === 'M' ? 'M' : 'P';
+            return (
+                `<tr data-idx="${idx}" data-tipo="${tipo}">` +
+                `<td>${idx + 1}</td>` +
+                `<td class="fw-semibold">${esc(it.concept)}</td>` +
+                `<td>${esc(it.description || '')}</td>` +
+                `<td>` +
+                `<select class="form-select form-select-sm pc14-apply" data-tipo="${tipo}" data-idx="${idx}">` +
+                `<option value="P"${apply === 'P' ? ' selected' : ''}>Suma (P)</option>` +
+                `<option value="M"${apply === 'M' ? ' selected' : ''}>Resta (M)</option>` +
+                `</select>` +
+                `</td>` +
+                `<td class="text-center">` +
+                `<button type="button" class="btn btn-link btn-sm text-danger p-0 pc14-del" data-tipo="${tipo}" data-idx="${idx}" title="Quitar">` +
+                `<i class="bi bi-trash"></i></button>` +
+                `</td>` +
+                `</tr>`
+            );
+        }).join('');
+    }
+
+    function renderDetalle() {
+        renderTipo(tbodyWH, itemsWH, 'WH');
+        renderTipo(tbodyHE, itemsHE, 'HE');
+    }
+
+    function mostrarPanel(visible) {
+        placeholderConfig.classList.toggle('d-none', visible);
+        panelConfig.classList.toggle('d-none', !visible);
+        btnGuardar.disabled = !visible;
+    }
+
+    async function cargarCias() {
+        const res = await fetch('/api/selectores/companias');
+        const data = await leerJson(res);
+        cias = (Array.isArray(data) ? data : []).map((x) => ({
+            id: String(x.id || x.company || '').trim(),
+            text: String(x.text || x.description || '').trim(),
+            wh: null,
+            he: null,
+        })).filter((x) => x.id);
+        renderCias();
+    }
+
+    async function refrescarConteosCia(cia) {
+        try {
+            const res = await fetch('/api/plame/config-14?cia=' + encodeURIComponent(cia));
+            const data = await leerJson(res);
+            const wh = (data.items || []).filter((x) => String(x.type).toUpperCase() === 'WH').length;
+            const he = (data.items || []).filter((x) => String(x.type).toUpperCase() === 'HE').length;
+            const row = cias.find((c) => c.id === cia);
+            if (row) {
+                row.wh = wh;
+                row.he = he;
+                renderCias();
+            }
+        } catch (_) { /* ignore */ }
+    }
+
+    async function seleccionarCia(cia) {
+        if (dirty) {
+            const ok = await hmConfirmar({
+                titulo: 'Cambios sin guardar',
+                mensaje: 'Hay cambios sin guardar. ¿Descartarlos y cambiar de empresa?',
+                textoOk: 'Descartar',
+                variant: 'warning',
+            });
+            if (!ok) return;
+        }
+
+        ciaActiva = cia;
+        const meta = cias.find((c) => c.id === cia);
+        lblCiaActiva.textContent = cia;
+        lblCiaDesc.textContent = meta ? (meta.text || '') : '';
+        renderCias();
+        mostrarPanel(true);
+
+        const res = await fetch('/api/plame/config-14?cia=' + encodeURIComponent(cia));
+        const data = await leerJson(res);
+        const items = data.items || [];
+        itemsWH = items
+            .filter((x) => String(x.type).toUpperCase() === 'WH')
+            .map((x) => ({
+                concept: String(x.concept || '').trim(),
+                description: String(x.description || '').trim(),
+                formulacode: String(x.formulacode || '').trim(),
+                applysum: String(x.applysum || 'P').toUpperCase() === 'M' ? 'M' : 'P',
+            }));
+        itemsHE = items
+            .filter((x) => String(x.type).toUpperCase() === 'HE')
+            .map((x) => ({
+                concept: String(x.concept || '').trim(),
+                description: String(x.description || '').trim(),
+                formulacode: String(x.formulacode || '').trim(),
+                applysum: String(x.applysum || 'P').toUpperCase() === 'M' ? 'M' : 'P',
+            }));
+        setDirty(false);
+        renderDetalle();
+
+        const row = cias.find((c) => c.id === cia);
+        if (row) {
+            row.wh = itemsWH.length;
+            row.he = itemsHE.length;
+            renderCias();
+        }
+    }
+
+    async function cargarConceptos(cia) {
+        const res = await fetch('/api/selectores/conceptos?cia=' + encodeURIComponent(cia));
+        const data = await leerJson(res);
+        conceptosCache = (Array.isArray(data) ? data : []).map((x) => ({
+            id: String(x.id || '').trim(),
+            text: String(x.text || '').trim(),
+        })).filter((x) => x.id);
+    }
+
+    function conceptosDisponibles() {
+        const usados = new Set(
+            (tipoAgregar === 'WH' ? itemsWH : itemsHE).map((x) => x.concept)
+        );
+        const filtro = String(txtFiltroConcepto.value || '').trim().toLowerCase();
+        return conceptosCache.filter((c) => {
+            if (usados.has(c.id)) return false;
+            if (!filtro) return true;
+            return c.id.toLowerCase().includes(filtro) || c.text.toLowerCase().includes(filtro);
+        });
+    }
+
+    function renderModalConceptos() {
+        const list = conceptosDisponibles();
+        if (!list.length) {
+            tbodyConceptosModal.innerHTML =
+                '<tr><td colspan="2" class="text-muted text-center py-3">No hay conceptos disponibles</td></tr>';
+            return;
+        }
+        tbodyConceptosModal.innerHTML = list.map((c) => (
+            `<tr class="pc14-pick" data-concept="${esc(c.id)}" style="cursor:pointer">` +
+            `<td class="fw-semibold">${esc(c.id)}</td>` +
+            `<td>${esc(c.text)}</td>` +
+            `</tr>`
+        )).join('');
+    }
+
+    async function abrirAgregar(tipo) {
+        if (!ciaActiva) return;
+        tipoAgregar = tipo;
+        modalTitle.textContent = tipo === 'WH'
+            ? 'Agregar concepto — Horas ordinarias (WH)'
+            : 'Agregar concepto — Horas extras (HE)';
+        txtFiltroConcepto.value = '';
+        await cargarConceptos(ciaActiva);
+        renderModalConceptos();
+        if (modalBs) modalBs.show();
+    }
+
+    function agregarConcepto(conceptId) {
+        const meta = conceptosCache.find((c) => c.id === conceptId);
+        if (!meta) return;
+        const item = {
+            concept: meta.id,
+            description: meta.text,
+            formulacode: '',
+            applysum: 'P',
+        };
+        if (tipoAgregar === 'WH') itemsWH.push(item);
+        else itemsHE.push(item);
+        setDirty(true);
+        renderDetalle();
+        if (modalBs) modalBs.hide();
+    }
+
+    function buildXml() {
+        const parts = ['<root>'];
+        itemsWH.forEach((it, i) => {
+            parts.push(
+                `<l><line>${i + 1}</line><type>WH</type><concept>${escXml(it.concept)}</concept>` +
+                `<applysum>${it.applysum === 'M' ? 'M' : 'P'}</applysum></l>`
+            );
+        });
+        itemsHE.forEach((it, i) => {
+            parts.push(
+                `<l><line>${i + 1}</line><type>HE</type><concept>${escXml(it.concept)}</concept>` +
+                `<applysum>${it.applysum === 'M' ? 'M' : 'P'}</applysum></l>`
+            );
+        });
+        parts.push('</root>');
+        return parts.join('');
+    }
+
+    function escXml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&apos;');
+    }
+
+    async function guardar() {
+        if (!ciaActiva) return;
+        const payload = {
+            cia: ciaActiva,
+            detalle_xml: buildXml(),
+        };
+        const res = await fetch('/api/plame/config-14/guardar', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+        });
+        const data = await leerJson(res);
+        setDirty(false);
+        mostrarMsg(data.mensaje || 'Guardado correctamente.');
+        await refrescarConteosCia(ciaActiva);
+
+        const replicar = await hmConfirmar({
+            titulo: 'Replicar configuración',
+            mensaje: '¿Desea replicar esta configuración PLAME 14 en las demás empresas?\n\n' +
+                     'Los conceptos se mapearán por FormulaCode.',
+            textoOk: 'Sí, replicar',
+            textoCancelar: 'No',
+        });
+        if (!replicar) return;
+
+        overlayReplicar.classList.remove('d-none');
+        try {
+            const res2 = await fetch('/api/plame/config-14/replicar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cia: ciaActiva }),
+            });
+            const data2 = await leerJson(res2);
+            const okN = data2.empresas_ok != null ? data2.empresas_ok : 0;
+            const errN = data2.empresas_error != null ? data2.empresas_error : 0;
+            const detalle = (data2.detalle || [])
+                .filter((d) => !d.ok || d.omitidos > 0)
+                .slice(0, 8)
+                .map((d) => `• ${d.company}: ${d.mensaje || (d.ok ? 'omitidos ' + d.omitidos : 'error')}`)
+                .join('\n');
+            const msg = data2.mensaje || `Replicado en ${okN} empresa(s).`;
+            mostrarMsg(msg + (errN ? ` (${errN} con error)` : ''));
+            if (detalle) hmAdvertencia(msg + '\n' + detalle);
+            else hmOk(msg);
+            // refrescar conteos visibles
+            for (const c of cias) {
+                if (c.id !== ciaActiva) await refrescarConteosCia(c.id);
+            }
+        } finally {
+            overlayReplicar.classList.add('d-none');
+        }
+    }
+
+    tbodyCias.addEventListener('click', (ev) => {
+        const tr = ev.target.closest('tr.pc14-cia');
+        if (!tr) return;
+        const cia = tr.getAttribute('data-cia');
+        if (cia) seleccionarCia(cia).catch((e) => hmError(e.message || String(e)));
+    });
+
+    tbodyWH.addEventListener('change', onDetalleChange);
+    tbodyHE.addEventListener('change', onDetalleChange);
+    tbodyWH.addEventListener('click', onDetalleClick);
+    tbodyHE.addEventListener('click', onDetalleClick);
+
+    function onDetalleChange(ev) {
+        const sel = ev.target.closest('select.pc14-apply');
+        if (!sel) return;
+        const tipo = sel.getAttribute('data-tipo');
+        const idx = Number(sel.getAttribute('data-idx'));
+        const list = tipo === 'WH' ? itemsWH : itemsHE;
+        if (!list[idx]) return;
+        list[idx].applysum = sel.value === 'M' ? 'M' : 'P';
+        setDirty(true);
+    }
+
+    function onDetalleClick(ev) {
+        const btn = ev.target.closest('button.pc14-del');
+        if (!btn) return;
+        const tipo = btn.getAttribute('data-tipo');
+        const idx = Number(btn.getAttribute('data-idx'));
+        if (tipo === 'WH') itemsWH.splice(idx, 1);
+        else itemsHE.splice(idx, 1);
+        setDirty(true);
+        renderDetalle();
+    }
+
+    btnAddWH.addEventListener('click', () => abrirAgregar('WH').catch((e) => hmError(e.message || String(e))));
+    btnAddHE.addEventListener('click', () => abrirAgregar('HE').catch((e) => hmError(e.message || String(e))));
+    btnGuardar.addEventListener('click', () => guardar().catch((e) => hmError(e.message || String(e))));
+
+    txtFiltroConcepto.addEventListener('input', renderModalConceptos);
+    tbodyConceptosModal.addEventListener('click', (ev) => {
+        const tr = ev.target.closest('tr.pc14-pick');
+        if (!tr) return;
+        const concept = tr.getAttribute('data-concept');
+        if (concept) agregarConcepto(concept);
+    });
+
+    cargarCias().catch((e) => hmError(e.message || String(e)));
+})();
+</script>
+{% endblock %}

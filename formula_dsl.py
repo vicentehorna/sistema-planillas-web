@@ -78,6 +78,13 @@ FORMULA_PROCEDURES: dict[str, dict[str, Any]] = {
         "max_args": 1,
         "param_names": ["periodo"],
     },
+    "SP_PR_OBTENERAUSENCIASGRATIFICACION": {
+        "display": "sp_pr_obtenerAusenciasGratificacion",
+        "description": "Faltas + licencia sin goce + suspensión del semestre de gratificación (julio: enero-junio; diciembre: julio-diciembre; el ingreso acorta el inicio)",
+        "min_args": 0,
+        "max_args": 1,
+        "param_names": ["periodo"],
+    },
     "SP_PR_OBTENERJORNAL": {
         "display": "sp_pr_obtenerJornal",
         "description": "Jornal del cargo del trabajador (PR_Position.jornal). Sin argumentos; usa compañía y persona del cálculo",

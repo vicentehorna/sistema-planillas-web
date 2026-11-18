@@ -101,6 +101,23 @@ BEGIN
         RETURN;
     END
 
+    IF @p = 'SP_PR_OBTENERAUSENCIASGRATIFICACION'
+    BEGIN
+        IF OBJECT_ID('dbo.sp_pr_obtenerAusenciasGratificacion', 'P') IS NULL
+            RETURN;
+
+        DECLARE @periodo_grati varchar(20) = @period;
+        IF @nargs >= 1 AND ISNULL(@arg1, 0) > 0
+            SET @periodo_grati = CONVERT(varchar(20), CONVERT(bigint, @arg1));
+
+        EXEC dbo.sp_pr_obtenerAusenciasGratificacion
+            @cia = @cia,
+            @person = @person,
+            @period = @periodo_grati,
+            @dias = @result OUTPUT;
+        RETURN;
+    END
+
     IF @p = 'SP_PR_OBTENERJORNAL'
     BEGIN
         IF OBJECT_ID('dbo.sp_pr_obtenerJornal', 'P') IS NULL

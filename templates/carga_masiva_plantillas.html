@@ -65,6 +65,16 @@
         background: #cfe2ff;
     }
 
+    .table-pi-lista .col-eliminar {
+        width: 3rem;
+        text-align: center;
+    }
+
+    .table-pi-lista .btn-eliminar-plantilla {
+        padding: 0.05rem 0.3rem;
+        line-height: 1.1;
+    }
+
     .pi-form-card .form-label {
         font-size: 0.78rem;
         margin-bottom: 0.15rem;
@@ -204,11 +214,12 @@
                     <tr>
                         <th>Plantilla</th>
                         <th class="text-center">Líneas</th>
+                        <th class="col-eliminar" title="Eliminar">Eliminar</th>
                     </tr>
                 </thead>
                 <tbody id="tbodyPlantillas">
                     <tr>
-                        <td colspan="2" class="text-center text-muted py-3">Seleccione una compañía</td>
+                        <td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td>
                     </tr>
                 </tbody>
             </table>
@@ -285,7 +296,15 @@ document.addEventListener('DOMContentLoaded', async function () {
     const URL_LISTADO = {{ url_for('api_plantillas_importacion_listado') | tojson }};
     const URL_OBTENER = {{ url_for('api_plantillas_importacion_obtener') | tojson }};
     const URL_GUARDAR = {{ url_for('api_plantillas_importacion_guardar') | tojson }};
+    const URL_ELIMINAR = {{ url_for('api_plantillas_importacion_eliminar') | tojson }};
     const URL_CONCEPTOS = {{ url_for('api_plantillas_importacion_conceptos') | tojson }};
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi && typeof HmUi.confirmar === 'function') {
+            return HmUi.confirmar(opciones);
+        }
+        return confirm((opciones && (opciones.mensaje || opciones.message)) || '¿Continuar?');
+    }
 
     function escHtml(s) {
         return String(s == null ? '' : s)
@@ -475,29 +494,85 @@ document.addEventListener('DOMContentLoaded', async function () {
     function renderPlantillas(rows) {
         plantillasCache = Array.isArray(rows) ? rows : [];
         if (!plantillasCache.length) {
-            tbodyPlantillas.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">Sin registros</td></tr>';
+            tbodyPlantillas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin registros</td></tr>';
             document.getElementById('lblConteoPlantillas').textContent = '0 registros';
             return;
         }
 
         tbodyPlantillas.innerHTML = plantillasCache.map((p) => {
             const id = String(p.importconcept || '').trim();
+            const name = String(p.name || '').trim();
             const active = plantillaSeleccionada === id ? ' active' : '';
             return `
-                <tr class="pi-row${active}" data-id="${escHtml(id)}">
-                    <td>${escHtml(p.name || '')}</td>
+                <tr class="pi-row${active}" data-id="${escHtml(id)}" data-name="${escHtml(name)}">
+                    <td>${escHtml(name)}</td>
                     <td class="text-center">${escHtml(p.lineas != null ? p.lineas : 0)}</td>
+                    <td class="col-eliminar">
+                        <button type="button" class="btn btn-link btn-sm text-danger btn-eliminar-plantilla"
+                                data-id="${escHtml(id)}" data-name="${escHtml(name)}" title="Eliminar plantilla">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </td>
                 </tr>`;
         }).join('');
 
         tbodyPlantillas.querySelectorAll('.pi-row').forEach((tr) => {
-            tr.addEventListener('click', function () {
+            tr.addEventListener('click', function (e) {
+                if (e.target.closest('.btn-eliminar-plantilla')) return;
                 abrirPlantilla(this.dataset.id);
+            });
+        });
+
+        tbodyPlantillas.querySelectorAll('.btn-eliminar-plantilla').forEach((btn) => {
+            btn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                eliminarPlantilla(this.dataset.id, this.dataset.name)
+                    .catch((err) => alert(err.message || 'No se pudo eliminar.'));
             });
         });
 
         document.getElementById('lblConteoPlantillas').textContent =
             `${plantillasCache.length} registro${plantillasCache.length === 1 ? '' : 's'}`;
+    }
+
+    async function eliminarPlantilla(importconcept, name) {
+        const cia = cboCia.value.trim();
+        const id = String(importconcept || '').trim();
+        const etiqueta = String(name || '').trim() || id;
+        if (!cia || !id) return;
+
+        const ok = await hmConfirmar({
+            titulo: 'Eliminar plantilla',
+            mensaje: `¿Eliminar la plantilla "${etiqueta}" y todos sus conceptos?\n\nTambién se eliminará en las demás empresas si existe con el mismo nombre.`,
+            textoOk: 'Sí, eliminar',
+            variant: 'danger',
+        });
+        if (!ok) return;
+
+        const data = await leerJson(await fetch(URL_ELIMINAR, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cia, importconcept: id }),
+        }));
+
+        if (plantillaSeleccionada === id) {
+            plantillaSeleccionada = null;
+            mostrarPanelEdicion(false);
+            limpiarFormulario();
+        }
+        await listarPlantillas();
+        if (window.HmUi && typeof HmUi.exito === 'function') {
+            HmUi.exito(data.mensaje || 'Plantilla eliminada.');
+        } else {
+            alert(data.mensaje || 'Plantilla eliminada.');
+        }
+        if (Array.isArray(data.errores) && data.errores.length) {
+            const det = data.errores.slice(0, 5)
+                .map((e) => `• ${e.company}: ${e.error}`)
+                .join('\n');
+            alert((data.mensaje || 'Eliminación parcial.') + '\n' + det);
+        }
     }
 
     async function cargarConceptos() {
@@ -637,7 +712,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     cboCia.addEventListener('change', function () {
         plantillaSeleccionada = null;
         plantillasCache = [];
-        tbodyPlantillas.innerHTML = '<tr><td colspan="2" class="text-center text-muted py-3">Seleccione una compañía</td></tr>';
+        tbodyPlantillas.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Seleccione una compañía</td></tr>';
         document.getElementById('lblConteoPlantillas').textContent = '0 registros';
         mostrarPanelEdicion(false);
         limpiarFormulario();

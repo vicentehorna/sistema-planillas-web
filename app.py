@@ -11548,6 +11548,116 @@ def api_plantillas_importacion_guardar():
                 pass
 
 
+@app.route('/api/plantillas-importacion/eliminar', methods=['POST'])
+@login_required
+def api_plantillas_importacion_eliminar():
+    """sp_pr_eliminarimportconcept_web: borra plantilla (+detalle) y réplica por nombre en otras cias."""
+    body = request.get_json(silent=True) or {}
+    cia = str(body.get('cia') or body.get('company') or '').strip()
+    importconcept = str(body.get('importconcept') or '').strip()
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if not importconcept:
+        return jsonify({"error": "Seleccione una plantilla."}), 400
+
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT LTRIM(RTRIM(ISNULL(Name, ''))) AS name
+            FROM PR_ImportConcept (NOLOCK)
+            WHERE Company = ?
+              AND ImportConcept = ?
+            """,
+            (cia, importconcept),
+        )
+        row_name = cursor.fetchone()
+        if not row_name:
+            return jsonify({"error": "Plantilla no encontrada."}), 404
+        name = str(row_name[0] or '').strip()
+
+        cursor.execute(
+            "EXEC sp_pr_eliminarimportconcept_web @company=?, @importconcept=?",
+            (cia, importconcept),
+        )
+        _dicts_first_nonempty_resultset(cursor)
+        conn.commit()
+
+        destinos = _concepto_destinos_activos(cursor, cia)
+        eliminados = []
+        no_existia = []
+        errores = []
+
+        for dest in destinos:
+            cursor.execute(
+                """
+                SELECT TOP 1 ImportConcept
+                FROM PR_ImportConcept (NOLOCK)
+                WHERE Company = ?
+                  AND UPPER(LTRIM(RTRIM(ISNULL(Name, '')))) = UPPER(?)
+                ORDER BY ImportConcept
+                """,
+                (dest, name),
+            )
+            row = cursor.fetchone()
+            if not row:
+                no_existia.append(dest)
+                continue
+            ic_dest = str(row[0]).strip()
+            try:
+                cursor.execute(
+                    "EXEC sp_pr_eliminarimportconcept_web @company=?, @importconcept=?",
+                    (dest, ic_dest),
+                )
+                _dicts_first_nonempty_resultset(cursor)
+                conn.commit()
+                eliminados.append(dest)
+            except Exception as ex:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                errores.append({
+                    "company": dest,
+                    "error": _sp_error_message(ex),
+                })
+
+        partes = [f'Plantilla "{name}" eliminada en {cia}.']
+        if eliminados:
+            partes.append(f'También en: {", ".join(eliminados)}.')
+        if no_existia:
+            partes.append(f'Sin plantilla homónima: {", ".join(no_existia)}.')
+        if errores:
+            partes.append(f'Con error: {len(errores)}.')
+
+        return jsonify({
+            "ok": True,
+            "cia": cia,
+            "importconcept": importconcept,
+            "name": name,
+            "eliminados": eliminados,
+            "no_existia": no_existia,
+            "errores": errores,
+            "mensaje": ' '.join(partes),
+        })
+    except Exception as e:
+        logging.exception("api_plantillas_importacion_eliminar")
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        return jsonify({"error": _sp_error_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 @app.route('/api/plantillas-importacion/conceptos', methods=['GET'])
 @login_required
 def api_plantillas_importacion_conceptos():

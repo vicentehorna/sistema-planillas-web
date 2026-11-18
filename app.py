@@ -1608,6 +1608,9 @@ def _texto_autorizacion_retiro_cts(cert):
 
 def _pie_retiro_cts(cert):
     """Líneas de pie de página (dirección / teléfono / correo / web)."""
+    # hm_credireport: sin pie de dirección/teléfono (igual que el certificado de trabajo).
+    if _es_cliente_credireport():
+        return []
     cert = cert or {}
     address = str(cert.get('company_address') or '').strip()
     phone = str(cert.get('company_telephone') or '').strip()

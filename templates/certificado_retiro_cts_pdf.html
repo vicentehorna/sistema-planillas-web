@@ -130,11 +130,10 @@
         <div class="firma-block">
             {% if firma_src %}
             <img src="{{ firma_src }}" alt="Firma" class="firma-img">
-            {% else %}
+            {% endif %}
             <div class="linea-firma"></div>
             <p class="rep-nombre">{{ cert.representative or '' }}</p>
             <p class="rep-cargo">{{ cert.rep_position or 'REPRESENTANTE LEGAL' }}</p>
-            {% endif %}
         </div>
 
         {% if pie_lineas %}

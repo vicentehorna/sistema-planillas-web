@@ -46,6 +46,8 @@ DEFAULT_CLIENT_DBS = [
     "hm_maritima",
     "hm_rincon",
     "hm_safari",
+    "hm_servigen",
+    "hm_aricruz",
 ]
 
 DEFAULT_SERVER = "179.61.14.224,54982"

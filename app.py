@@ -1360,6 +1360,15 @@ def _es_cliente_globaltec():
         return False
 
 
+def _es_cliente_credireport():
+    """True cuando la BD activa es hm_credireport."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_credireport'
+    except Exception:
+        return False
+
+
 def _usa_ingresos_config_formato_liquidacion():
     """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima / hm_lumat)."""
     return _es_cliente_alamo() or _es_cliente_maritima() or _es_cliente_lumat()
@@ -1557,7 +1566,16 @@ def _texto_intro_retiro_cts(cert):
     if rep:
         partes.append(f', y debidamente representada por su {cargo_lbl}, {rep}')
         if rep_doc:
-            if rep_doc.lower().startswith('identificado'):
+            if _es_cliente_credireport():
+                # Credireport: "Cedula N° 038629112" (sin "identificado con DNI").
+                num = re.sub(
+                    r'(?i)\b(DNI|CE|CARNET|PASAPORTE|C[EÉ]DULA)\b',
+                    '',
+                    rep_doc,
+                )
+                num = re.sub(r'\s+', ' ', num).strip() or rep_doc
+                partes.append(f', Cedula N° {num}')
+            elif rep_doc.lower().startswith('identificado'):
                 partes.append(f', {rep_doc}')
             else:
                 partes.append(f', identificado con {rep_doc}')

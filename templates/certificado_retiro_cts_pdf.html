@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Certificado Retiro CTS</title>
     <style>
-        @page { size: A4; margin: 14mm 18mm 18mm; }
+        @page { size: A4; margin: 12mm 14mm; }
         body {
             font-family: Arial, Helvetica, sans-serif;
             font-size: 12px;
@@ -14,7 +14,9 @@
             line-height: 1.45;
         }
         .documento {
-            min-height: 260mm;
+            border: 1px solid #1a4b84;
+            padding: 18px 22px 24px;
+            min-height: 255mm;
             box-sizing: border-box;
             position: relative;
             padding-bottom: 28mm;
@@ -29,13 +31,22 @@
             vertical-align: top;
         }
         .logo-img {
-            max-height: 56px;
-            max-width: 220px;
+            max-height: 72px;
+            max-width: 240px;
             width: auto;
             height: auto;
             object-fit: contain;
             object-position: left top;
             display: block;
+        }
+        .titulo-principal {
+            text-align: center;
+            font-size: 14px;
+            font-weight: bold;
+            color: #1a4b84;
+            letter-spacing: 0.5px;
+            margin: 12px 0 28px;
+            text-transform: uppercase;
         }
         .bloque-destino { margin: 0 0 18px; }
         .bloque-destino p { margin: 0 0 4px; font-size: 12px; }
@@ -57,14 +68,14 @@
         }
         .cierre { margin: 18px 0 22px; font-size: 12px; }
         .fecha-linea { margin: 0 0 22px; font-size: 12px; }
-        .atentamente { margin: 0 0 36px; font-size: 12px; }
+        .atentamente { margin: 0 0 28px; font-size: 12px; }
         .firma-block {
             text-align: center;
             margin-top: 8px;
         }
         .firma-img {
-            max-height: 110px;
-            max-width: 280px;
+            max-height: 88px;
+            max-width: 260px;
             width: auto;
             height: auto;
             object-fit: contain;
@@ -73,15 +84,15 @@
             margin: 0 auto 4px;
         }
         .linea-firma {
-            border-top: 1px solid #000;
-            width: 260px;
-            margin: 48px auto 8px;
+            border-top: 1.5px solid #000;
+            width: 300px;
+            margin: 0 auto 8px;
         }
         .rep-nombre {
-            font-size: 11px;
+            font-size: 10px;
             font-weight: bold;
             text-transform: uppercase;
-            margin: 0 0 2px;
+            margin: 0 0 4px;
         }
         .rep-cargo {
             font-size: 10px;
@@ -111,6 +122,8 @@
                 {% endif %}
             </div>
         </div>
+
+        <div class="titulo-principal">Certificado Retiro CTS</div>
 
         <div class="bloque-destino">
             <p>Señores</p>

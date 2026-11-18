@@ -1,11 +1,11 @@
 /*
   ALTER SCHEMA WEB - columnas/tablas requeridas por SPs web
-  Generado: 2026-10-28 15:59
+  Generado: 2026-11-16 15:45
 
   Ejecutar PRIMERO sobre la BD destino (hm_alamo, hm_aci, ...)
   antes o como parte de deploy_planillas_web_completo.sql.
 
-  Archivos (22):
+  Archivos (23):
     - alter_pr_mapping_add_banbifbank.sql
     - alter_pr_payrolltype_add_diasvacaciones.sql
     - alter_pr_employee_add_diasvacaciones.sql
@@ -26,6 +26,7 @@
     - alter_pr_position_add_status.sql
     - alter_pr_position_description_255.sql
     - alter_sy_company_add_branding_blobs.sql
+    - alter_sy_person_documentnumberbcp.sql
     - alter_sy_replicationunit_add_bcpaccount.sql
     - tables_pr_parametroformula_web.sql
 */
@@ -34,7 +35,7 @@ SET NOCOUNT ON;
 GO
 
 
--- [1/22] alter_pr_mapping_add_banbifbank.sql
+-- [1/23] alter_pr_mapping_add_banbifbank.sql
 
 /*
     Agrega la columna BanbifBank en PR_Mapping y la inicializa
@@ -69,7 +70,7 @@ GO
 
 
 
--- [2/22] alter_pr_payrolltype_add_diasvacaciones.sql
+-- [2/23] alter_pr_payrolltype_add_diasvacaciones.sql
 
 /*
     Agrega dias anuales de vacaciones por tipo de planilla.
@@ -91,7 +92,7 @@ GO
 
 
 
--- [3/22] alter_pr_employee_add_diasvacaciones.sql
+-- [3/23] alter_pr_employee_add_diasvacaciones.sql
 
 /*
     Agrega dias anuales de vacaciones por trabajador (PR_Employee).
@@ -109,7 +110,7 @@ GO
 
 
 
--- [4/22] alter_pr_processtype_add_procedurename.sql
+-- [4/23] alter_pr_processtype_add_procedurename.sql
 
 /*
     Agrega la columna ProcedureName en PR_ProcessType y asigna el SP de cálculo
@@ -148,7 +149,7 @@ GO
 
 
 
--- [5/22] alter_pr_importconcept_xlastuser_20.sql
+-- [5/23] alter_pr_importconcept_xlastuser_20.sql
 
 /*
     Amplía XlastUser de VARCHAR(4) a VARCHAR(20) en plantillas de importación.
@@ -191,7 +192,7 @@ GO
 
 
 
--- [6/22] alter_sy_company_add_logoname_signaturename.sql
+-- [6/23] alter_sy_company_add_logoname_signaturename.sql
 
 /*
     Agrega columnas de logo y firma por compañía en SY_Company.
@@ -213,7 +214,7 @@ GO
 
 
 
--- [7/22] alter_sy_person_add_nacionalidad.sql
+-- [7/23] alter_sy_person_add_nacionalidad.sql
 
 /*
     Agrega campo de texto Nacionalidad en SY_Person.
@@ -228,7 +229,7 @@ GO
 
 
 
--- [8/22] alter_pr_concept_add_flagafectoutilidad.sql
+-- [8/23] alter_pr_concept_add_flagafectoutilidad.sql
 
 /*
     Agrega flag afecto a utilidades en PR_Concept (maestro Conceptos).
@@ -243,7 +244,7 @@ GO
 
 
 
--- [9/22] alter_pr_formuladetail_conceptlist.sql
+-- [9/23] alter_pr_formuladetail_conceptlist.sql
 
 /*
     Lista de conceptos para líneas SumaConc (tipo S).
@@ -259,7 +260,7 @@ GO
 
 
 
--- [10/22] alter_pr_formuladetail_divisor.sql
+-- [10/23] alter_pr_formuladetail_divisor.sql
 
 /*
     Divisor fijo para líneas Promedio Vac (tipo M), Promedio Grati (tipo H) y Promedio CTS (tipo U).
@@ -275,7 +276,7 @@ GO
 
 
 
--- [11/22] tables_pr_plame_sunat_web.sql
+-- [11/23] tables_pr_plame_sunat_web.sql
 
 /*
     Tablas para carga de archivos XML SUNAT (R01, R04, R5) — validación PLAME.
@@ -348,7 +349,7 @@ GO
 
 
 
--- [12/22] alter_pr_concept_add_flagformatocts.sql
+-- [12/23] alter_pr_concept_add_flagformatocts.sql
 
 /*
     Agrega flag Formato de CTS en PR_Concept (maestro Conceptos).
@@ -364,7 +365,7 @@ GO
 
 
 
--- [13/22] alter_pr_concept_add_flagformatoliquidacion.sql
+-- [13/23] alter_pr_concept_add_flagformatoliquidacion.sql
 
 /*
     Agrega flag Formato Liquidacion en PR_Concept (maestro Conceptos).
@@ -380,7 +381,7 @@ GO
 
 
 
--- [14/22] alter_pr_documentperson_confirmacion.sql
+-- [14/23] alter_pr_documentperson_confirmacion.sql
 
 /*
     Confirmación de recepción de boletas enviadas por correo (BD cliente).
@@ -392,9 +393,12 @@ GO
       IpConfirmacion         — IP del cliente (X-Forwarded-For)
       UserAgentConfirmacion  — navegador del cliente
 
-    IMPORTANTE — no usar UNIQUE FILTERED INDEX en TokenConfirmacion:
-      el desktop (envío boletas) falla con error 1934 por SET options.
-      Índice no único sin filtro; unicidad del token la garantiza la app (UUID4).
+    IMPORTANTE — índice de TokenConfirmacion:
+      Un UNIQUE FILTERED INDEX exige ANSI_NULLS / QUOTED_IDENTIFIER / etc. ON
+      en toda sesión que haga INSERT/UPDATE/DELETE sobre PR_DocumentPerson.
+      El cliente desktop (PowerBuilder / envío de boletas) no cumple esos SET
+      y falla con error 1934. Por eso se usa índice NO único y SIN filtro;
+      la unicidad del token la garantiza la app web (UUID4).
 */
 SET ANSI_NULLS ON;
 SET QUOTED_IDENTIFIER ON;
@@ -407,6 +411,7 @@ IF COL_LENGTH('dbo.PR_DocumentPerson', 'EstadoConfirmacion') IS NULL
     ALTER TABLE dbo.PR_DocumentPerson ADD EstadoConfirmacion SMALLINT NOT NULL
         CONSTRAINT DF_PR_DocumentPerson_EstadoConfirmacion DEFAULT (0);
 GO
+/* Si la columna ya existía sin DEFAULT, el desktop falla al INSERT sin EstadoConfirmacion. */
 IF COL_LENGTH('dbo.PR_DocumentPerson', 'EstadoConfirmacion') IS NOT NULL
    AND NOT EXISTS (
         SELECT 1
@@ -428,6 +433,7 @@ IF COL_LENGTH('dbo.PR_DocumentPerson', 'UserAgentConfirmacion') IS NULL
     ALTER TABLE dbo.PR_DocumentPerson ADD UserAgentConfirmacion NVARCHAR(300) NULL;
 GO
 
+/* Quitar índice filtrado legado (rompe INSERT del sistema antiguo). */
 IF EXISTS (
     SELECT 1 FROM sys.indexes
     WHERE object_id = OBJECT_ID('dbo.PR_DocumentPerson')
@@ -436,6 +442,7 @@ IF EXISTS (
     DROP INDEX UX_PR_DocumentPerson_TokenConfirmacion ON dbo.PR_DocumentPerson;
 GO
 
+/* Índice de búsqueda por token (sin filtro / sin unique → compatible con desktop). */
 IF NOT EXISTS (
     SELECT 1 FROM sys.indexes
     WHERE object_id = OBJECT_ID('dbo.PR_DocumentPerson')
@@ -447,7 +454,7 @@ GO
 
 
 
--- [15/22] alter_pr_documentperson_fecha_envio.sql
+-- [15/23] alter_pr_documentperson_fecha_envio.sql
 
 /*
     Asegura columnas de envío de boletas en PR_DocumentPerson.
@@ -476,7 +483,7 @@ GO
 
 
 
--- [16/22] alter_pr_documentperson_longitud.sql
+-- [16/23] alter_pr_documentperson_longitud.sql
 
 /*
     PR_DocumentPerson.longitud — requerido por el registro de FechaEnvio al enviar boletas
@@ -491,7 +498,7 @@ GO
 
 
 
--- [17/22] alter_pr_formuladetail_script_codigo.sql
+-- [17/23] alter_pr_formuladetail_script_codigo.sql
 
 /*
     Soporte tipo K (Código condicional) en el formulador.
@@ -510,7 +517,7 @@ GO
 
 
 
--- [18/22] alter_pr_position_add_status.sql
+-- [18/23] alter_pr_position_add_status.sql
 
 /*
     Agrega PR_Position.Status (A = Activo, I = Inactivo).
@@ -537,7 +544,7 @@ GO
 
 
 
--- [19/22] alter_pr_position_description_255.sql
+-- [19/23] alter_pr_position_description_255.sql
 
 /*
     Amplía PR_Position.Description (antes varchar(50) truncaba cargos largos)
@@ -571,7 +578,7 @@ GO
 
 
 
--- [20/22] alter_sy_company_add_branding_blobs.sql
+-- [20/23] alter_sy_company_add_branding_blobs.sql
 
 /*
     Branding por compañía: logo y firma en VARBINARY (autoservicio web).
@@ -609,7 +616,28 @@ GO
 
 
 
--- [21/22] alter_sy_replicationunit_add_bcpaccount.sql
+-- [21/23] alter_sy_person_documentnumberbcp.sql
+
+/*
+    Documento opcional para TXT Telecrédito BCP (haberes / CTS / pago unidad).
+    Si está vacío, los SP usan DocumentNumber.
+    UI editable solo en hm_alamo; columna en todas las BD para SPs compartidos.
+*/
+IF COL_LENGTH('dbo.SY_Person', 'DocumentNumberBcp') IS NULL
+BEGIN
+    ALTER TABLE dbo.SY_Person ADD DocumentNumberBcp VARCHAR(15) NULL;
+END
+GO
+
+UPDATE dbo.SY_Person
+SET DocumentNumberBcp = LEFT(LTRIM(RTRIM(DocumentNumber)), 15)
+WHERE DocumentNumberBcp IS NULL
+  AND NULLIF(LTRIM(RTRIM(ISNULL(DocumentNumber, ''))), '') IS NOT NULL;
+GO
+
+
+
+-- [22/23] alter_sy_replicationunit_add_bcpaccount.sql
 
 /*
     Asegura columna bcpAccount en SY_ReplicationUnit (Nro Cuenta BCP).
@@ -624,7 +652,7 @@ GO
 
 
 
--- [22/22] tables_pr_parametroformula_web.sql
+-- [23/23] tables_pr_parametroformula_web.sql
 
 /*
     Catálogo de parámetros de fórmula (validación tipo V).
@@ -647,6 +675,43 @@ IF OBJECT_ID(N'dbo.PR_FormulaHeader', N'U') IS NOT NULL
    AND COL_LENGTH(N'dbo.PR_FormulaHeader', N'parametroformula') IS NULL
 BEGIN
     EXEC(N'ALTER TABLE dbo.PR_FormulaHeader ADD parametroformula VARCHAR(20) NULL');
+END
+GO
+
+
+-- [24] alter_sy_company_add_flagsendemail.sql
+
+/*
+    Flag de envío por email de documentos (boletas, CTS, liquidación, certificados, etc.).
+    SY_Company.FlagSendEmail: Y = permite; N = oculta Enviar por Email.
+*/
+IF OBJECT_ID(N'dbo.SY_Company', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.SY_Company', N'FlagSendEmail') IS NULL
+BEGIN
+    EXEC(N'ALTER TABLE dbo.SY_Company ADD FlagSendEmail CHAR(1) NULL');
+END
+GO
+
+IF OBJECT_ID(N'dbo.SY_Company', N'U') IS NOT NULL
+   AND COL_LENGTH(N'dbo.SY_Company', N'FlagSendEmail') IS NOT NULL
+BEGIN
+    UPDATE dbo.SY_Company
+    SET FlagSendEmail = 'Y'
+    WHERE FlagSendEmail IS NULL
+       OR LTRIM(RTRIM(FlagSendEmail)) = '';
+
+    IF NOT EXISTS (
+        SELECT 1
+        FROM sys.default_constraints dc
+        INNER JOIN sys.columns c
+            ON c.default_object_id = dc.object_id
+        WHERE dc.parent_object_id = OBJECT_ID(N'dbo.SY_Company')
+          AND c.name = 'FlagSendEmail'
+    )
+    BEGIN
+        ALTER TABLE dbo.SY_Company
+        ADD CONSTRAINT DF_SY_Company_FlagSendEmail DEFAULT ('Y') FOR FlagSendEmail;
+    END
 END
 GO
 

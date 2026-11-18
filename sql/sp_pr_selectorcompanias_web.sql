@@ -12,7 +12,8 @@ BEGIN
 
     SELECT
         Company,
-        description
+        description,
+        UPPER(LTRIM(RTRIM(ISNULL(FlagSendEmail, 'Y')))) AS FlagSendEmail
     FROM SY_Company (NOLOCK)
     WHERE UPPER(LTRIM(RTRIM(ISNULL([status], '')))) = 'A'
     ORDER BY description ASC;

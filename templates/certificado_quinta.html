@@ -132,10 +132,12 @@
                         <input class="form-check-input" type="radio" name="modoProceso" id="radioDescargar" value="zip" checked>
                         <label class="form-check-label small" for="radioDescargar">Descargar ZIP</label>
                     </div>
-                    <div class="form-check form-check-inline m-0">
+                    {% if puede_enviar_email %}
+                    <div class="form-check form-check-inline m-0" id="wrapEnviarEmail">
                         <input class="form-check-input" type="radio" name="modoProceso" id="radioEnviar" value="mail">
                         <label class="form-check-label small" for="radioEnviar">Enviar por Email</label>
                     </div>
+                    {% endif %}
                     <button type="button" class="btn btn-danger btn-sm px-4" id="btnEjecutarCertificados" disabled>
                         <i class="bi bi-play-fill"></i> Ejecutar Acción
                     </button>

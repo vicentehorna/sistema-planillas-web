@@ -278,6 +278,14 @@ def inject_now():
         except Exception:
             logging.exception("favoritos: inject")
 
+    puede_enviar_email = True
+    if current_user.is_authenticated and not es_vhornac:
+        try:
+            puede_enviar_email = _db_permite_enviar_email()
+        except Exception:
+            logging.exception("inject_now: FlagSendEmail")
+            puede_enviar_email = True
+
     return {
         'favoritos_habilitado': bool(favoritos.get('enabled')),
         'favoritos_items': favoritos.get('items') or [],
@@ -292,6 +300,7 @@ def inject_now():
         'web_access_unrestricted': bool(session.get('web_access_unrestricted', True))
             if current_user.is_authenticated else True,
         'can_menu': can_menu,
+        'puede_enviar_email': puede_enviar_email,
     }
 
 
@@ -1367,6 +1376,103 @@ def _es_cliente_credireport():
         return str(get_active_database() or '').strip().lower() == 'hm_credireport'
     except Exception:
         return False
+
+
+def _flag_send_email_truthy(value):
+    return str(value or 'Y').strip().upper() in ('Y', '1', 'S', 'SI', 'SÍ', 'TRUE')
+
+
+def _company_permite_enviar_email(cia, cursor=None):
+    """SY_Company.FlagSendEmail para la compañía. Sin columna/cia → True."""
+    cia = str(cia or '').strip()
+    if not cia:
+        return True
+
+    owns_conn = cursor is None
+    conn = None
+    try:
+        if owns_conn:
+            conn = get_db_connection()
+            cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT CASE
+                     WHEN COL_LENGTH('dbo.SY_Company', 'FlagSendEmail') IS NULL THEN CAST(1 AS bit)
+                     ELSE CAST(0 AS bit)
+                   END
+            """
+        )
+        row = cursor.fetchone()
+        if row and int(row[0] or 0) == 1:
+            return True
+        cursor.execute(
+            """
+            SELECT TOP 1 UPPER(LTRIM(RTRIM(ISNULL(FlagSendEmail, 'Y'))))
+            FROM dbo.SY_Company (NOLOCK)
+            WHERE Company = ?
+            """,
+            (cia,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return True
+        return _flag_send_email_truthy(row[0])
+    except Exception:
+        logging.exception("_company_permite_enviar_email cia=%s", cia)
+        return True
+    finally:
+        if owns_conn and conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _db_permite_enviar_email():
+    """True si alguna compañía activa tiene FlagSendEmail=Y (o no existe la columna)."""
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT CASE
+                     WHEN COL_LENGTH('dbo.SY_Company', 'FlagSendEmail') IS NULL THEN CAST(1 AS bit)
+                     ELSE CAST(0 AS bit)
+                   END
+            """
+        )
+        row = cursor.fetchone()
+        if row and int(row[0] or 0) == 1:
+            return True
+        cursor.execute(
+            """
+            SELECT TOP 1 1
+            FROM dbo.SY_Company (NOLOCK)
+            WHERE UPPER(LTRIM(RTRIM(ISNULL([status], '')))) = 'A'
+              AND UPPER(LTRIM(RTRIM(ISNULL(FlagSendEmail, 'Y')))) = 'Y'
+            """
+        )
+        return cursor.fetchone() is not None
+    except Exception:
+        logging.exception("_db_permite_enviar_email")
+        return True
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _require_enviar_email_habilitado(cia):
+    """None si OK; respuesta JSON 403 si la empresa no permite envío por email."""
+    if _company_permite_enviar_email(cia):
+        return None
+    return jsonify({
+        "error": "El envío por email no está habilitado para esta empresa.",
+        "flagsendemail": False,
+    }), 403
 
 
 def _usa_ingresos_config_formato_liquidacion():
@@ -27537,6 +27643,10 @@ def procesar_formatos_utilidades_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not processtype or not period:
@@ -27686,6 +27796,9 @@ def enviar_formatos_utilidades_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and processtype and period):
         return jsonify({'error': 'Faltan filtros para envío de formatos de utilidades.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     try:
         empleados_periodo = _listar_trabajadores_formato_utilidades(cia, payroll_type, processtype, period, '0', None)
@@ -27858,6 +27971,10 @@ def procesar_certificados_retiro_cts_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
@@ -27981,6 +28098,9 @@ def enviar_certificados_retiro_cts_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and period):
         return jsonify({'error': 'Faltan filtros para envío de certificados.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     try:
         empleados_periodo = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
@@ -28145,6 +28265,10 @@ def procesar_formatos_liquidacion_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
@@ -28268,6 +28392,9 @@ def enviar_formatos_liquidacion_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and period):
         return jsonify({'error': 'Faltan filtros para envío de formatos.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     try:
         empleados_periodo = _listar_trabajadores_liquidacion(cia, payroll_type, period, '0', None)
@@ -28481,6 +28608,10 @@ def procesar_formatos_cts_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'pdf', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip, pdf o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
@@ -28702,6 +28833,9 @@ def enviar_formatos_cts_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and period):
         return jsonify({'error': 'Faltan filtros para envío de formatos.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
     try:
         fecha_pago = _formato_cts_fecha_pago_solicitada(data.get('fecha_pago'))
     except ValueError as e:
@@ -29936,6 +30070,10 @@ def procesar_certificados_trabajo_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not period:
@@ -30073,6 +30211,9 @@ def enviar_certificados_trabajo_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and period):
         return jsonify({'error': 'Faltan filtros para envío de certificados.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     conn = None
     empleados_periodo = []
@@ -30407,6 +30548,10 @@ def procesar_certificados_quinta_masivo():
     seleccionados = body.get('trabajadores') or []
     if modo not in ('zip', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not anio:
@@ -30535,6 +30680,9 @@ def enviar_certificados_quinta_masivo():
         return jsonify({'error': 'Faltan filtros para envío de certificados de quinta.'}), 400
     if len(anio) != 4 or not anio.isdigit():
         return jsonify({'error': 'Año inválido. Use cuatro dígitos (ej. 2026).'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     empleados_periodo = get_listado_certificado_quinta(cia, payroll_type, anio, '0')
     by_person = {}
@@ -30862,6 +31010,10 @@ def procesar_boletas_masivo():
     sin_firma = _truthy_param(body.get('sin_firma') if body.get('sin_firma') is not None else body.get('sinfirma'))
     if modo not in ('zip', 'pdf', 'mail'):
         return jsonify({'error': 'Modo inválido. Use zip, pdf o mail.'}), 400
+    if modo == 'mail':
+        denied = _require_enviar_email_habilitado(cia)
+        if denied:
+            return denied
     if not isinstance(seleccionados, list) or not seleccionados:
         return jsonify({'error': 'No hay trabajadores seleccionados.'}), 400
     if not cia or not payroll_type or not process or not period:
@@ -31077,6 +31229,9 @@ def enviar_boletas_masivo():
         return jsonify({'error': 'Debe enviar una lista de empleados.'}), 400
     if not (cia and payroll_type and process and period):
         return jsonify({'error': 'Faltan filtros para envío de boletas.'}), 400
+    denied = _require_enviar_email_habilitado(cia)
+    if denied:
+        return denied
 
     # Trae email/nombre del mismo SP de listado para el periodo.
     empleados_periodo = get_listado_generar_boletas(cia, payroll_type, process, period, '0')
@@ -31651,12 +31806,32 @@ def api_companias():
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("EXEC sp_pr_selectorcompanias_web")
+        col_names = [str(c[0]).strip().lower() for c in (cursor.description or [])]
         rows = cursor.fetchall()
         raw_flag = str(request.args.get('filtro_usuario') or '').strip().lower()
         aplicar_filtro = raw_flag in ('1', 'true', 'y', 's', 'si', 'sí')
         if aplicar_filtro:
             rows = _filtrar_rows_companias_por_usercompany(cursor, rows)
-        data = [{"id": r.Company, "text": r.description} for r in rows]
+        data = []
+        for r in rows:
+            rd = {}
+            for i, cname in enumerate(col_names):
+                try:
+                    rd[cname] = r[i]
+                except Exception:
+                    break
+            company = str(rd.get('company') or getattr(r, 'Company', '') or '').strip()
+            description = str(rd.get('description') or getattr(r, 'description', '') or '').strip()
+            if not company:
+                continue
+            flag_raw = rd.get('flagsendemail')
+            if flag_raw is None:
+                flag_raw = getattr(r, 'FlagSendEmail', 'Y')
+            data.append({
+                "id": company,
+                "text": description,
+                "flagsendemail": _flag_send_email_truthy(flag_raw),
+            })
         return jsonify(data)
     except Exception:
         logging.exception("api_companias")

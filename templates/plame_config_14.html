@@ -7,66 +7,92 @@
     .pc14-layout {
         display: flex;
         gap: 1rem;
+        align-items: stretch;
         min-height: 72vh;
     }
+
     .pc14-panel-izq {
-        flex: 0 0 28%;
-        max-width: 28%;
+        flex: 0 0 30%;
+        max-width: 30%;
         min-width: 220px;
         display: flex;
         flex-direction: column;
+        align-self: stretch;
     }
+
     .pc14-panel-der {
-        flex: 1 1 72%;
+        flex: 1 1 70%;
         min-width: 0;
         display: flex;
         flex-direction: column;
-        gap: 0.75rem;
+        gap: 1rem;
+        align-self: stretch;
     }
-    .pc14-grilla {
-        flex: 1;
+
+    .pc14-grilla-empresas {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 12rem;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+
+    .pc14-grilla-scroll {
+        flex: 1 1 auto;
         min-height: 0;
-        max-height: calc(72vh - 4rem);
         overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
-        background: #fff;
     }
-    .pc14-tabla-tipo {
-        max-height: 28vh;
-        overflow: auto;
-        border: 1px solid #dee2e6;
-        border-radius: 0.375rem;
-        background: #fff;
-    }
-    .table-pc14 {
-        font-size: 12px;
+
+    .table-pc14-cias {
+        font-size: 11px;
         white-space: nowrap;
         margin-bottom: 0;
     }
-    .table-pc14 th,
-    .table-pc14 td {
-        padding: 0.28rem 0.45rem;
+
+    .table-pc14-cias th,
+    .table-pc14-cias td {
+        padding: 0.2rem 0.4rem;
         vertical-align: middle;
     }
-    .table-pc14 thead th {
+
+    .table-pc14-cias thead th {
         position: sticky;
         top: 0;
-        background: #f8f9fa;
-        z-index: 2;
-        box-shadow: 0 1px 0 #dee2e6;
+        background-color: #f1f4f8;
         color: #1a4b84;
         font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
     }
-    .table-pc14 tbody tr.pc14-cia {
+
+    .table-pc14-cias tbody tr.pc14-cia {
         cursor: pointer;
+        border-color: #eef1f5;
     }
-    .table-pc14 tbody tr.pc14-cia:hover {
-        background: #f8f9fa;
+
+    .table-pc14-cias tbody tr.pc14-cia:hover {
+        background-color: #eef4fb;
     }
-    .table-pc14 tbody tr.pc14-cia.active {
-        background: #cfe2ff;
+
+    .table-pc14-cias tbody tr.pc14-cia.active {
+        background-color: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
     }
+
+    .table-pc14-cias tbody tr.pc14-cia.active td {
+        font-weight: 600;
+    }
+
+    .table-pc14-cias .col-codigo {
+        width: 4.5rem;
+        max-width: 4.5rem;
+    }
+
     .pc14-placeholder {
         display: flex;
         align-items: center;
@@ -74,22 +100,137 @@
         min-height: 12rem;
         color: #6c757d;
         border: 1px dashed #ced4da;
-        border-radius: 0.375rem;
+        border-radius: 0.4rem;
         background: #fafbfc;
     }
-    .pc14-tipo-card .card-header {
-        font-size: 0.85rem;
-        font-weight: 600;
+
+    .pc14-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+    }
+
+    .pc14-dw-titlebar {
+        background: #1a4b84;
+        border-bottom: none;
         padding: 0.45rem 0.75rem;
+        min-height: 2rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        color: #fff;
     }
-    .pc14-badge-count {
-        font-size: 0.72rem;
+
+    .pc14-dw-titlebar .pc14-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+    }
+
+    .pc14-dw-titlebar .btn {
+        font-size: 0.75rem;
+        padding: 0.15rem 0.55rem;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        border: 1px solid rgba(255, 255, 255, 0.35);
+        color: #1a4b84;
+        background: #fff;
         font-weight: 600;
     }
+
+    .pc14-dw-titlebar .btn:hover {
+        background: #eef4fb;
+        color: #1a4b84;
+    }
+
+    .pc14-dw-body {
+        background: #fff;
+        padding: 0.65rem 0.7rem 0.75rem;
+    }
+
+    .pc14-tabla-tipo {
+        max-height: 28vh;
+        overflow: auto;
+        border: 1px solid #d7dee8;
+        border-radius: 0.25rem;
+        background: #fff;
+    }
+
+    .table-pc14-detalle {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+        border-color: #e6ebf1;
+    }
+
+    .table-pc14-detalle th,
+    .table-pc14-detalle td {
+        padding: 0.35rem 0.5rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+
+    .table-pc14-detalle thead th {
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 1;
+        border-bottom: 1px solid #d7dee8;
+        box-shadow: none;
+    }
+
+    .table-pc14-detalle tbody tr:nth-child(even) {
+        background-color: #f8fafc;
+    }
+
+    .table-pc14-detalle .col-num {
+        width: 2.5rem;
+        text-align: center;
+    }
+
+    .table-pc14-detalle .col-apply {
+        width: 4.5rem;
+    }
+
+    .table-pc14-detalle .col-acciones {
+        width: 2.75rem;
+        text-align: center;
+    }
+
+    .table-pc14-detalle .pc14-concept-select {
+        min-width: 14rem;
+        max-width: 100%;
+        font-size: 11px;
+    }
+
+    .table-pc14-detalle .pc14-apply {
+        font-size: 12px;
+        font-weight: 700;
+        text-align: center;
+        min-width: 3.5rem;
+    }
+
     .pc14-msg {
         min-height: 1.25rem;
         font-size: 0.82rem;
     }
+
+    .pc14-cia-titulo {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: #1a4b84;
+    }
+
     .pc14-overlay {
         position: fixed;
         inset: 0;
@@ -99,7 +240,9 @@
         align-items: center;
         justify-content: center;
     }
+
     .pc14-overlay.d-none { display: none !important; }
+
     .pc14-overlay-card {
         background: #fff;
         border-radius: 0.5rem;
@@ -131,22 +274,21 @@
 
         <div class="pc14-layout mt-2">
             <div class="pc14-panel-izq">
-                <div class="d-flex justify-content-between align-items-center mb-1">
+                <div class="mb-1">
                     <span class="small fw-bold text-muted">Empresas</span>
-                    <span class="badge text-bg-light border pc14-badge-count" id="badgeCias">0</span>
                 </div>
-                <div class="pc14-grilla">
-                    <table class="table table-sm table-hover table-pc14">
-                        <thead>
-                            <tr>
-                                <th>Cia</th>
-                                <th>Descripción</th>
-                                <th class="text-end">WH</th>
-                                <th class="text-end">HE</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyCias"></tbody>
-                    </table>
+                <div class="pc14-grilla-empresas">
+                    <div class="pc14-grilla-scroll">
+                        <table class="table table-sm table-hover table-pc14-cias mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="col-codigo">Código</th>
+                                    <th>Descripción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tbodyCias"></tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
 
@@ -156,85 +298,59 @@
                 </div>
 
                 <div id="panelConfig" class="d-none">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-                        <div>
-                            <span class="fw-semibold" id="lblCiaActiva">—</span>
-                            <span class="text-muted small ms-1" id="lblCiaDesc"></span>
-                        </div>
-                    </div>
+                    <div class="pc14-cia-titulo mb-1" id="lblCiaDesc">—</div>
 
-                    <div class="card pc14-tipo-card mb-2">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-clock me-1"></i> Horas ordinarias (WH)</span>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnAddWH">
+                    <div class="pc14-dw-panel">
+                        <div class="pc14-dw-titlebar">
+                            <span class="pc14-dw-title-text">
+                                <i class="bi bi-clock me-1"></i> Horas ordinarias (WH)
+                            </span>
+                            <button type="button" class="btn btn-sm" id="btnAddWH">
                                 <i class="bi bi-plus-lg"></i> Agregar
                             </button>
                         </div>
-                        <div class="pc14-tabla-tipo">
-                            <table class="table table-sm table-pc14">
-                                <thead>
-                                    <tr>
-                                        <th style="width:3rem">#</th>
-                                        <th>Concepto</th>
-                                        <th>Descripción</th>
-                                        <th style="width:7rem">Aplicación</th>
-                                        <th style="width:3rem"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyWH"></tbody>
-                            </table>
+                        <div class="pc14-dw-body">
+                            <div class="pc14-tabla-tipo">
+                                <table class="table table-sm table-pc14-detalle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="col-num">#</th>
+                                            <th>Concepto</th>
+                                            <th class="col-apply">Aplicación</th>
+                                            <th class="col-acciones"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbodyWH"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="card pc14-tipo-card">
-                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                            <span><i class="bi bi-clock-history me-1"></i> Horas extras (HE)</span>
-                            <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" id="btnAddHE">
+                    <div class="pc14-dw-panel">
+                        <div class="pc14-dw-titlebar">
+                            <span class="pc14-dw-title-text">
+                                <i class="bi bi-clock-history me-1"></i> Horas extras (HE)
+                            </span>
+                            <button type="button" class="btn btn-sm" id="btnAddHE">
                                 <i class="bi bi-plus-lg"></i> Agregar
                             </button>
                         </div>
-                        <div class="pc14-tabla-tipo">
-                            <table class="table table-sm table-pc14">
-                                <thead>
-                                    <tr>
-                                        <th style="width:3rem">#</th>
-                                        <th>Concepto</th>
-                                        <th>Descripción</th>
-                                        <th style="width:7rem">Aplicación</th>
-                                        <th style="width:3rem"></th>
-                                    </tr>
-                                </thead>
-                                <tbody id="tbodyHE"></tbody>
-                            </table>
+                        <div class="pc14-dw-body">
+                            <div class="pc14-tabla-tipo">
+                                <table class="table table-sm table-pc14-detalle mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th class="col-num">#</th>
+                                            <th>Concepto</th>
+                                            <th class="col-apply">Aplicación</th>
+                                            <th class="col-acciones"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="tbodyHE"></tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal agregar concepto -->
-<div class="modal fade" id="modalConcepto" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title mb-0" id="modalConceptoTitle">Agregar concepto</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
-            </div>
-            <div class="modal-body">
-                <input type="search" id="txtFiltroConcepto" class="form-control form-control-sm mb-2"
-                       placeholder="Filtrar concepto o descripción..." autocomplete="off">
-                <div class="border rounded" style="max-height:50vh; overflow:auto;">
-                    <table class="table table-sm table-hover table-pc14 mb-0">
-                        <thead>
-                            <tr>
-                                <th>Concepto</th>
-                                <th>Descripción</th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyConceptosModal"></tbody>
-                    </table>
                 </div>
             </div>
         </div>
@@ -256,10 +372,8 @@
     'use strict';
 
     const tbodyCias = document.getElementById('tbodyCias');
-    const badgeCias = document.getElementById('badgeCias');
     const placeholderConfig = document.getElementById('placeholderConfig');
     const panelConfig = document.getElementById('panelConfig');
-    const lblCiaActiva = document.getElementById('lblCiaActiva');
     const lblCiaDesc = document.getElementById('lblCiaDesc');
     const tbodyWH = document.getElementById('tbodyWH');
     const tbodyHE = document.getElementById('tbodyHE');
@@ -268,11 +382,6 @@
     const btnAddHE = document.getElementById('btnAddHE');
     const msgGuardado = document.getElementById('msgGuardado');
     const overlayReplicar = document.getElementById('overlayReplicar');
-    const modalEl = document.getElementById('modalConcepto');
-    const modalTitle = document.getElementById('modalConceptoTitle');
-    const tbodyConceptosModal = document.getElementById('tbodyConceptosModal');
-    const txtFiltroConcepto = document.getElementById('txtFiltroConcepto');
-    const modalBs = modalEl ? new bootstrap.Modal(modalEl) : null;
 
     let cias = [];
     let ciaActiva = null;
@@ -280,7 +389,6 @@
     let itemsHE = [];
     let dirty = false;
     let conceptosCache = [];
-    let tipoAgregar = 'WH';
     let msgTimer = null;
 
     function hmOk(m) { if (window.HmUi) HmUi.exito(m); else alert(m); }
@@ -326,35 +434,61 @@
             const active = ciaActiva && c.id === ciaActiva ? ' active' : '';
             return (
                 `<tr class="pc14-cia${active}" data-cia="${esc(c.id)}">` +
-                `<td class="fw-semibold">${esc(c.id)}</td>` +
+                `<td class="col-codigo fw-semibold">${esc(c.id)}</td>` +
                 `<td>${esc(c.text || '')}</td>` +
-                `<td class="text-end">${c.wh != null ? c.wh : '—'}</td>` +
-                `<td class="text-end">${c.he != null ? c.he : '—'}</td>` +
                 `</tr>`
             );
         }).join('');
-        badgeCias.textContent = String(cias.length);
+    }
+
+    function opcionesConcepto(selectedId, tipo, idx) {
+        const usados = new Set(
+            (tipo === 'WH' ? itemsWH : itemsHE)
+                .map((x, i) => (i === idx ? '' : x.concept))
+                .filter(Boolean)
+        );
+        const opts = ['<option value="">Seleccione…</option>'];
+        const sorted = conceptosCache.slice().sort((a, b) =>
+            String(a.text || '').localeCompare(String(b.text || ''), 'es', { sensitivity: 'base' })
+        );
+        sorted.forEach((c) => {
+            if (usados.has(c.id) && c.id !== selectedId) return;
+            const sel = c.id === selectedId ? ' selected' : '';
+            const label = c.text || c.id;
+            opts.push(`<option value="${esc(c.id)}"${sel}>${esc(label)}</option>`);
+        });
+        // Si el concepto actual no está en el cache, conservarlo
+        if (selectedId && !conceptosCache.some((c) => c.id === selectedId)) {
+            const list = tipo === 'WH' ? itemsWH : itemsHE;
+            const it = list[idx];
+            const label = (it && it.description) || selectedId;
+            opts.push(`<option value="${esc(selectedId)}" selected>${esc(label)}</option>`);
+        }
+        return opts.join('');
     }
 
     function renderTipo(tbody, items, tipo) {
         if (!items.length) {
-            tbody.innerHTML = `<tr><td colspan="5" class="text-muted text-center py-3">Sin conceptos</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="4" class="text-muted text-center py-3">Sin conceptos</td></tr>`;
             return;
         }
         tbody.innerHTML = items.map((it, idx) => {
             const apply = String(it.applysum || 'P').toUpperCase() === 'M' ? 'M' : 'P';
             return (
                 `<tr data-idx="${idx}" data-tipo="${tipo}">` +
-                `<td>${idx + 1}</td>` +
-                `<td class="fw-semibold">${esc(it.concept)}</td>` +
-                `<td>${esc(it.description || '')}</td>` +
+                `<td class="col-num">${idx + 1}</td>` +
                 `<td>` +
-                `<select class="form-select form-select-sm pc14-apply" data-tipo="${tipo}" data-idx="${idx}">` +
-                `<option value="P"${apply === 'P' ? ' selected' : ''}>Suma (P)</option>` +
-                `<option value="M"${apply === 'M' ? ' selected' : ''}>Resta (M)</option>` +
+                `<select class="form-select form-select-sm pc14-concept-select" data-tipo="${tipo}" data-idx="${idx}">` +
+                opcionesConcepto(it.concept || '', tipo, idx) +
                 `</select>` +
                 `</td>` +
-                `<td class="text-center">` +
+                `<td class="col-apply">` +
+                `<select class="form-select form-select-sm pc14-apply" data-tipo="${tipo}" data-idx="${idx}">` +
+                `<option value="P"${apply === 'P' ? ' selected' : ''}>(+)</option>` +
+                `<option value="M"${apply === 'M' ? ' selected' : ''}>(-)</option>` +
+                `</select>` +
+                `</td>` +
+                `<td class="col-acciones">` +
                 `<button type="button" class="btn btn-link btn-sm text-danger p-0 pc14-del" data-tipo="${tipo}" data-idx="${idx}" title="Quitar">` +
                 `<i class="bi bi-trash"></i></button>` +
                 `</td>` +
@@ -380,25 +514,17 @@
         cias = (Array.isArray(data) ? data : []).map((x) => ({
             id: String(x.id || x.company || '').trim(),
             text: String(x.text || x.description || '').trim(),
-            wh: null,
-            he: null,
         })).filter((x) => x.id);
         renderCias();
     }
 
-    async function refrescarConteosCia(cia) {
-        try {
-            const res = await fetch('/api/plame/config-14?cia=' + encodeURIComponent(cia));
-            const data = await leerJson(res);
-            const wh = (data.items || []).filter((x) => String(x.type).toUpperCase() === 'WH').length;
-            const he = (data.items || []).filter((x) => String(x.type).toUpperCase() === 'HE').length;
-            const row = cias.find((c) => c.id === cia);
-            if (row) {
-                row.wh = wh;
-                row.he = he;
-                renderCias();
-            }
-        } catch (_) { /* ignore */ }
+    async function cargarConceptos(cia) {
+        const res = await fetch('/api/selectores/conceptos?cia=' + encodeURIComponent(cia));
+        const data = await leerJson(res);
+        conceptosCache = (Array.isArray(data) ? data : []).map((x) => ({
+            id: String(x.id || '').trim(),
+            text: String(x.text || '').trim(),
+        })).filter((x) => x.id);
     }
 
     async function seleccionarCia(cia) {
@@ -414,10 +540,11 @@
 
         ciaActiva = cia;
         const meta = cias.find((c) => c.id === cia);
-        lblCiaActiva.textContent = cia;
-        lblCiaDesc.textContent = meta ? (meta.text || '') : '';
+        lblCiaDesc.textContent = meta ? (meta.text || cia) : cia;
         renderCias();
         mostrarPanel(true);
+
+        await cargarConceptos(cia);
 
         const res = await fetch('/api/plame/config-14?cia=' + encodeURIComponent(cia));
         const data = await leerJson(res);
@@ -440,88 +567,28 @@
             }));
         setDirty(false);
         renderDetalle();
-
-        const row = cias.find((c) => c.id === cia);
-        if (row) {
-            row.wh = itemsWH.length;
-            row.he = itemsHE.length;
-            renderCias();
-        }
     }
 
-    async function cargarConceptos(cia) {
-        const res = await fetch('/api/selectores/conceptos?cia=' + encodeURIComponent(cia));
-        const data = await leerJson(res);
-        conceptosCache = (Array.isArray(data) ? data : []).map((x) => ({
-            id: String(x.id || '').trim(),
-            text: String(x.text || '').trim(),
-        })).filter((x) => x.id);
-    }
-
-    function conceptosDisponibles() {
-        const usados = new Set(
-            (tipoAgregar === 'WH' ? itemsWH : itemsHE).map((x) => x.concept)
-        );
-        const filtro = String(txtFiltroConcepto.value || '').trim().toLowerCase();
-        return conceptosCache.filter((c) => {
-            if (usados.has(c.id)) return false;
-            if (!filtro) return true;
-            return c.id.toLowerCase().includes(filtro) || c.text.toLowerCase().includes(filtro);
-        });
-    }
-
-    function renderModalConceptos() {
-        const list = conceptosDisponibles();
-        if (!list.length) {
-            tbodyConceptosModal.innerHTML =
-                '<tr><td colspan="2" class="text-muted text-center py-3">No hay conceptos disponibles</td></tr>';
-            return;
-        }
-        tbodyConceptosModal.innerHTML = list.map((c) => (
-            `<tr class="pc14-pick" data-concept="${esc(c.id)}" style="cursor:pointer">` +
-            `<td class="fw-semibold">${esc(c.id)}</td>` +
-            `<td>${esc(c.text)}</td>` +
-            `</tr>`
-        )).join('');
-    }
-
-    async function abrirAgregar(tipo) {
+    function agregarFila(tipo) {
         if (!ciaActiva) return;
-        tipoAgregar = tipo;
-        modalTitle.textContent = tipo === 'WH'
-            ? 'Agregar concepto — Horas ordinarias (WH)'
-            : 'Agregar concepto — Horas extras (HE)';
-        txtFiltroConcepto.value = '';
-        await cargarConceptos(ciaActiva);
-        renderModalConceptos();
-        if (modalBs) modalBs.show();
-    }
-
-    function agregarConcepto(conceptId) {
-        const meta = conceptosCache.find((c) => c.id === conceptId);
-        if (!meta) return;
-        const item = {
-            concept: meta.id,
-            description: meta.text,
-            formulacode: '',
-            applysum: 'P',
-        };
-        if (tipoAgregar === 'WH') itemsWH.push(item);
+        const item = { concept: '', description: '', formulacode: '', applysum: 'P' };
+        if (tipo === 'WH') itemsWH.push(item);
         else itemsHE.push(item);
         setDirty(true);
         renderDetalle();
-        if (modalBs) modalBs.hide();
     }
 
     function buildXml() {
         const parts = ['<root>'];
         itemsWH.forEach((it, i) => {
+            if (!it.concept) return;
             parts.push(
                 `<l><line>${i + 1}</line><type>WH</type><concept>${escXml(it.concept)}</concept>` +
                 `<applysum>${it.applysum === 'M' ? 'M' : 'P'}</applysum></l>`
             );
         });
         itemsHE.forEach((it, i) => {
+            if (!it.concept) return;
             parts.push(
                 `<l><line>${i + 1}</line><type>HE</type><concept>${escXml(it.concept)}</concept>` +
                 `<applysum>${it.applysum === 'M' ? 'M' : 'P'}</applysum></l>`
@@ -542,6 +609,13 @@
 
     async function guardar() {
         if (!ciaActiva) return;
+
+        const vacios = [...itemsWH, ...itemsHE].some((it) => !it.concept);
+        if (vacios) {
+            hmAdvertencia('Hay filas sin concepto. Seleccione un concepto o elimine la fila.');
+            return;
+        }
+
         const payload = {
             cia: ciaActiva,
             detalle_xml: buildXml(),
@@ -554,7 +628,6 @@
         const data = await leerJson(res);
         setDirty(false);
         mostrarMsg(data.mensaje || 'Guardado correctamente.');
-        await refrescarConteosCia(ciaActiva);
 
         const replicar = await hmConfirmar({
             titulo: 'Replicar configuración',
@@ -584,10 +657,6 @@
             mostrarMsg(msg + (errN ? ` (${errN} con error)` : ''));
             if (detalle) hmAdvertencia(msg + '\n' + detalle);
             else hmOk(msg);
-            // refrescar conteos visibles
-            for (const c of cias) {
-                if (c.id !== ciaActiva) await refrescarConteosCia(c.id);
-            }
         } finally {
             overlayReplicar.classList.add('d-none');
         }
@@ -600,19 +669,28 @@
         if (cia) seleccionarCia(cia).catch((e) => hmError(e.message || String(e)));
     });
 
-    tbodyWH.addEventListener('change', onDetalleChange);
-    tbodyHE.addEventListener('change', onDetalleChange);
-    tbodyWH.addEventListener('click', onDetalleClick);
-    tbodyHE.addEventListener('click', onDetalleClick);
-
     function onDetalleChange(ev) {
-        const sel = ev.target.closest('select.pc14-apply');
-        if (!sel) return;
-        const tipo = sel.getAttribute('data-tipo');
-        const idx = Number(sel.getAttribute('data-idx'));
+        const conceptSel = ev.target.closest('select.pc14-concept-select');
+        if (conceptSel) {
+            const tipo = conceptSel.getAttribute('data-tipo');
+            const idx = Number(conceptSel.getAttribute('data-idx'));
+            const list = tipo === 'WH' ? itemsWH : itemsHE;
+            if (!list[idx]) return;
+            const conceptId = conceptSel.value || '';
+            const meta = conceptosCache.find((c) => c.id === conceptId);
+            list[idx].concept = conceptId;
+            list[idx].description = meta ? meta.text : '';
+            setDirty(true);
+            renderDetalle();
+            return;
+        }
+        const applySel = ev.target.closest('select.pc14-apply');
+        if (!applySel) return;
+        const tipo = applySel.getAttribute('data-tipo');
+        const idx = Number(applySel.getAttribute('data-idx'));
         const list = tipo === 'WH' ? itemsWH : itemsHE;
         if (!list[idx]) return;
-        list[idx].applysum = sel.value === 'M' ? 'M' : 'P';
+        list[idx].applysum = applySel.value === 'M' ? 'M' : 'P';
         setDirty(true);
     }
 
@@ -627,17 +705,14 @@
         renderDetalle();
     }
 
-    btnAddWH.addEventListener('click', () => abrirAgregar('WH').catch((e) => hmError(e.message || String(e))));
-    btnAddHE.addEventListener('click', () => abrirAgregar('HE').catch((e) => hmError(e.message || String(e))));
-    btnGuardar.addEventListener('click', () => guardar().catch((e) => hmError(e.message || String(e))));
+    tbodyWH.addEventListener('change', onDetalleChange);
+    tbodyHE.addEventListener('change', onDetalleChange);
+    tbodyWH.addEventListener('click', onDetalleClick);
+    tbodyHE.addEventListener('click', onDetalleClick);
 
-    txtFiltroConcepto.addEventListener('input', renderModalConceptos);
-    tbodyConceptosModal.addEventListener('click', (ev) => {
-        const tr = ev.target.closest('tr.pc14-pick');
-        if (!tr) return;
-        const concept = tr.getAttribute('data-concept');
-        if (concept) agregarConcepto(concept);
-    });
+    btnAddWH.addEventListener('click', () => agregarFila('WH'));
+    btnAddHE.addEventListener('click', () => agregarFila('HE'));
+    btnGuardar.addEventListener('click', () => guardar().catch((e) => hmError(e.message || String(e))));
 
     cargarCias().catch((e) => hmError(e.message || String(e)));
 })();

@@ -1154,8 +1154,9 @@ def periodo_clave_envio_boleta(cursor, company, payrolltype, period_raw):
     return period_raw if int((row[0] if row else 0) or 0) > 1 else period_raw[:6]
 
 
-def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
-    """{person: 'dd/mm/yyyy hh:mm'} con el último envío de boleta por correo del periodo."""
+def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period, tipodoc='BOL'):
+    """{person: 'dd/mm/yyyy hh:mm'} con el último envío por correo del periodo (BOL, CTS, …)."""
+    tipodoc = str(tipodoc or 'BOL').strip() or 'BOL'
     try:
         clave = periodo_clave_envio_boleta(cursor, company, payrolltype, period)
         cursor.execute(
@@ -1163,7 +1164,7 @@ def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
             SELECT Person, MAX(FechaEnvio)
             FROM PR_DocumentPerson
             WHERE Company = ?
-              AND Tipodocumento = 'BOL'
+              AND Tipodocumento = ?
               AND FechaEnvio IS NOT NULL
               AND period = ?
               AND (
@@ -1172,7 +1173,13 @@ def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
               )
             GROUP BY Person
             """,
-            (company, clave, str(payrolltype or '').strip(), str(processtype or '').strip()),
+            (
+                company,
+                tipodoc,
+                clave,
+                str(payrolltype or '').strip(),
+                str(processtype or '').strip(),
+            ),
         )
         return {
             str(r[0] or '').strip(): r[1].strftime('%d/%m/%Y %H:%M')
@@ -1184,12 +1191,13 @@ def get_fechas_envio_boletas(cursor, company, payrolltype, processtype, period):
         return {}
 
 
-def get_confirmaciones_boletas(cursor, company, payrolltype, processtype, period):
+def get_confirmaciones_boletas(cursor, company, payrolltype, processtype, period, tipodoc='BOL'):
     """
-    {person: {'fecha': 'dd/mm/yyyy hh:mm', 'estado': 1|2}} de las boletas del periodo
-    con respuesta del trabajador (1 confirmado, 2 con observación).
+    {person: {'fecha': 'dd/mm/yyyy hh:mm', 'estado': 1|2}} de documentos del periodo
+    con respuesta del trabajador (1 confirmado, 2 con observación). tipodoc: BOL, CTS, …
     {} si la BD no tiene las columnas de confirmación.
     """
+    tipodoc = str(tipodoc or 'BOL').strip() or 'BOL'
     try:
         if not _confirmacion_boleta_soportada(cursor):
             return {}
@@ -1204,7 +1212,7 @@ def get_confirmaciones_boletas(cursor, company, payrolltype, processtype, period
                        ROW_NUMBER() OVER (PARTITION BY Person ORDER BY FechaConfirmacion DESC) AS rn
                 FROM PR_DocumentPerson
                 WHERE Company = ?
-                  AND Tipodocumento = 'BOL'
+                  AND Tipodocumento = ?
                   AND EstadoConfirmacion IN (1, 2)
                   AND FechaConfirmacion IS NOT NULL
                   AND period = ?
@@ -1215,7 +1223,13 @@ def get_confirmaciones_boletas(cursor, company, payrolltype, processtype, period
             ) x
             WHERE rn = 1
             """,
-            (company, clave, str(payrolltype or '').strip(), str(processtype or '').strip()),
+            (
+                company,
+                tipodoc,
+                clave,
+                str(payrolltype or '').strip(),
+                str(processtype or '').strip(),
+            ),
         )
         return {
             str(r[0] or '').strip(): {'estado': int(r[1]), 'fecha': str(r[2] or '').strip()}
@@ -1630,7 +1644,7 @@ def resolver_bd_token_confirmacion(token):
 
 
 def obtener_confirmacion_boleta(database, token):
-    """Datos de la boleta del token para la página pública; None si no existe."""
+    """Datos del documento del token (boleta/CTS) para la página pública; None si no existe."""
     conn = None
     try:
         conn = DatabaseConfig.get_connection(database=database)
@@ -1645,7 +1659,8 @@ def obtener_confirmacion_boleta(database, token):
                 CONVERT(VARCHAR(10), dp.FechaConfirmacion, 103) + ' a las '
                     + CONVERT(VARCHAR(5), dp.FechaConfirmacion, 108),
                 LTRIM(RTRIM(ISNULL(p.Name, ''))),
-                LTRIM(RTRIM(ISNULL(c.description, '')))
+                LTRIM(RTRIM(ISNULL(c.description, ''))),
+                LTRIM(RTRIM(ISNULL(dp.Tipodocumento, '')))
             FROM PR_DocumentPerson dp
                 LEFT JOIN SY_Person p ON p.Person = dp.Person
                 LEFT JOIN SY_Company c ON c.Company = dp.Company
@@ -1664,6 +1679,7 @@ def obtener_confirmacion_boleta(database, token):
             'fecha_confirmacion': str(row[4] or '').strip(),
             'nombre': str(row[5] or '').strip(),
             'empresa': str(row[6] or '').strip(),
+            'tipodocumento': str(row[7] or '').strip().upper() or 'BOL',
         }
     except Exception as e:
         print(f"Error en obtener_confirmacion_boleta: {e}")

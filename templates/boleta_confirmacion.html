@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="robots" content="noindex, nofollow">
-    <title>Confirmación de boleta{% if empresa %} - {{ empresa }}{% endif %}</title>
+    <title>Confirmación de {{ documento_etiqueta or 'boleta de pago' }}{% if empresa %} - {{ empresa }}{% endif %}</title>
     <style>
         * { box-sizing: border-box; }
         body {
@@ -123,11 +123,11 @@
     {% elif estado_pagina == 'confirmar' %}
         <div class="icono {{ 'ok' if respuesta == 'SI' else 'obs' }}">{{ '&#10004;'|safe if respuesta == 'SI' else '!' }}</div>
         {% if respuesta == 'SI' %}
-            <h1>Confirmar recepción de boleta</h1>
-            <p>Confirme que recibió su boleta de pago conforme.</p>
+            <h1>Confirmar recepción de {{ documento_etiqueta or 'boleta de pago' }}</h1>
+            <p>Confirme que recibió su {{ documento_etiqueta or 'boleta de pago' }} conforme.</p>
         {% else %}
             <h1>Reportar observación</h1>
-            <p>Confirme que tiene una observación sobre su boleta de pago. Recursos Humanos se comunicará con usted.</p>
+            <p>Confirme que tiene una observación sobre su {{ documento_etiqueta or 'boleta de pago' }}. Recursos Humanos se comunicará con usted.</p>
         {% endif %}
         <div class="detalle">
             {% if nombre %}<div><span>Trabajador:</span> {{ nombre }}</div>{% endif %}
@@ -137,7 +137,7 @@
             <input type="hidden" name="token" value="{{ token }}">
             <input type="hidden" name="respuesta" value="{{ respuesta }}">
             {% if respuesta == 'SI' %}
-                <button type="submit" class="btn btn-si">Sí, recibí mi boleta conforme</button>
+                <button type="submit" class="btn btn-si">Sí, recibí mi {{ documento_etiqueta or 'boleta de pago' }} conforme</button>
             {% else %}
                 <button type="submit" class="btn btn-no">Sí, tengo una observación</button>
             {% endif %}
@@ -147,18 +147,23 @@
         {% if respuesta == 'SI' %}
             <div class="icono ok">&#10004;</div>
             <h1>¡Gracias por confirmar!</h1>
-            <p>Hemos registrado la recepción conforme de su boleta de pago{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}.</p>
+            <p>Hemos registrado la recepción conforme de su {{ documento_etiqueta or 'boleta de pago' }}{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}.</p>
         {% else %}
             <div class="icono obs">!</div>
             <h1>Observación registrada</h1>
-            <p>Hemos registrado que tiene una observación sobre su boleta de pago{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}. Recursos Humanos se comunicará con usted.</p>
+            <p>Hemos registrado que tiene una observación sobre su {{ documento_etiqueta or 'boleta de pago' }}{% if periodo_legible %} de <strong>{{ periodo_legible }}</strong>{% endif %}. Recursos Humanos se comunicará con usted.</p>
         {% endif %}
         <p>Ya puede cerrar esta ventana.</p>
 
     {% elif estado_pagina == 'ya_respondida' %}
         <div class="icono info">i</div>
-        <h1>Boleta ya respondida</h1>
-        <p>Esta boleta ya fue respondida anteriormente{% if fecha_confirmacion %} el <strong>{{ fecha_confirmacion }}</strong>{% endif %}{% if estado_previo == 1 %} como <strong>recibida conforme</strong>{% elif estado_previo == 2 %} <strong>con observación</strong>{% endif %}.</p>
+        {% if tipodocumento == 'CTS' %}
+            <h1>Formato de CTS ya respondido</h1>
+            <p>Este formato de CTS ya fue respondido anteriormente{% if fecha_confirmacion %} el <strong>{{ fecha_confirmacion }}</strong>{% endif %}{% if estado_previo == 1 %} como <strong>recibido conforme</strong>{% elif estado_previo == 2 %} <strong>con observación</strong>{% endif %}.</p>
+        {% else %}
+            <h1>Boleta ya respondida</h1>
+            <p>Esta boleta ya fue respondida anteriormente{% if fecha_confirmacion %} el <strong>{{ fecha_confirmacion }}</strong>{% endif %}{% if estado_previo == 1 %} como <strong>recibida conforme</strong>{% elif estado_previo == 2 %} <strong>con observación</strong>{% endif %}.</p>
+        {% endif %}
         <p>Si necesita cambiar su respuesta, comuníquese con Recursos Humanos.</p>
 
     {% else %}

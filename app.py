@@ -6051,7 +6051,15 @@ def _public_base_url():
     return f"{proto}://{request.host}".rstrip('/')
 
 
-def _html_botones_confirmacion_boleta(token):
+def _etiqueta_documento_confirmacion(tipodoc='BOL'):
+    tipodoc = str(tipodoc or 'BOL').strip().upper()
+    if tipodoc == 'CTS':
+        return 'formato de CTS'
+    return 'boleta de pago'
+
+
+def _html_botones_confirmacion_boleta(token, tipodoc='BOL'):
+    etiqueta = _etiqueta_documento_confirmacion(tipodoc)
     base = f"{_public_base_url()}/api/v1/boletas/confirmar?token={token}&respuesta="
     url_si = f"{base}SI"
     url_no = f"{base}NO"
@@ -6060,11 +6068,11 @@ def _html_botones_confirmacion_boleta(token):
         "font-family:Arial,Helvetica,sans-serif;font-size:14px;text-decoration:none;border-radius:6px;"
     )
     return f"""
-                <p style="margin-top:22px">Por favor, confirme la recepci&oacute;n de su boleta:</p>
+                <p style="margin-top:22px">Por favor, confirme la recepci&oacute;n de su {etiqueta}:</p>
                 <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:8px 0 18px 0">
                     <tr>
                         <td style="background:#16a34a;border-radius:6px;padding:0 0 6px 0">
-                            <a href="{url_si}" target="_blank" style="{estilo_a}background:#16a34a;">&#10004; S&iacute;, recib&iacute; mi boleta conforme</a>
+                            <a href="{url_si}" target="_blank" style="{estilo_a}background:#16a34a;">&#10004; S&iacute;, recib&iacute; mi {etiqueta} conforme</a>
                         </td>
                         <td width="12" style="padding:0 0 6px 0">&nbsp;</td>
                         <td style="background:#dc2626;border-radius:6px;padding:0 0 6px 0">
@@ -6096,7 +6104,11 @@ def enviar_correo_boleta(destinatario, nombre_empleado, periodo, sexo, pdf_io, p
     trato = "Estimada" if sexo_val == 2 else "Estimado"
     periodo_legible = formatear_periodo_texto(periodo)
     pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
-    botones = _html_botones_confirmacion_boleta(token_confirmacion) if token_confirmacion else ''
+    botones = (
+        _html_botones_confirmacion_boleta(token_confirmacion, tipodoc='BOL')
+        if token_confirmacion
+        else ''
+    )
 
     try:
         params = {
@@ -8915,7 +8927,9 @@ def generar_pdf_formato_cts(params):
     )
 
 
-def enviar_correo_formato_cts(destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None):
+def enviar_correo_formato_cts(
+    destinatario, nombre_empleado, periodo, sexo, pdf_io, person=None, token_confirmacion=None
+):
     if not destinatario or '@' not in str(destinatario):
         return False, 'Sin correo'
 
@@ -8931,6 +8945,11 @@ def enviar_correo_formato_cts(destinatario, nombre_empleado, periodo, sexo, pdf_
     trato = 'Estimada' if sexo_val == 2 else 'Estimado'
     periodo_legible = formatear_periodo_texto(periodo)
     pdf_base64 = base64.b64encode(pdf_io.getvalue()).decode('utf-8')
+    botones = (
+        _html_botones_confirmacion_boleta(token_confirmacion, tipodoc='CTS')
+        if token_confirmacion
+        else ''
+    )
 
     try:
         params = {
@@ -8940,6 +8959,7 @@ def enviar_correo_formato_cts(destinatario, nombre_empleado, periodo, sexo, pdf_
             'html': f"""
                 <p>{trato} {nombre_empleado},</p>
                 <p>Le hacemos entrega de su formato de CTS correspondiente al periodo de <b>{periodo_legible}</b>.</p>
+                {botones}
                 <p>Saludos,<br>Recursos Humanos</p>
             """,
             'attachments': [
@@ -28589,7 +28609,10 @@ def enviar_formatos_liquidacion_masivo():
 @app.route('/cts/formato_cts')
 @login_required
 def formato_cts_page():
-    return render_template('formato_cts.html')
+    return render_template(
+        'formato_cts.html',
+        confirmacion_boleta_habilitada=_confirmacion_boleta_habilitada(),
+    )
 
 
 @app.route('/cts/reporte_detalle_cts')
@@ -28637,6 +28660,7 @@ def get_lista_formato_cts():
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or session.get('company') or '').strip()
     payroll_type = str(body.get('payroll_type') or '').strip()
+    processtype = str(body.get('process') or body.get('processtype') or '').strip()
     period = _normalize_pr_period(body.get('period'))
     person = str(body.get('person') or '0').strip() or '0'
     nombre = str(body.get('nombre') or body.get('busqueda') or body.get('name') or '').strip() or None
@@ -28657,13 +28681,42 @@ def get_lista_formato_cts():
     if not cia or not payroll_type or not period:
         return jsonify({'error': 'Faltan compañía, tipo de planilla o periodo.'}), 400
 
+    conn = None
     try:
-        return jsonify(_listar_trabajadores_cts(
+        trabajadores = _listar_trabajadores_cts(
             cia, payroll_type, period, person, nombre, repunit, costcenter
-        ))
+        )
+        if not trabajadores:
+            return jsonify(trabajadores)
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        fechas_envio = get_fechas_envio_boletas(
+            cursor, cia, payroll_type, processtype, period, tipodoc='CTS'
+        )
+        confirmaciones = (
+            get_confirmaciones_boletas(
+                cursor, cia, payroll_type, processtype, period, tipodoc='CTS'
+            )
+            if _confirmacion_boleta_habilitada()
+            else {}
+        )
+        for t in trabajadores:
+            pid = str(t.get('person') or '').strip()
+            t['fecha_envio'] = fechas_envio.get(pid, '')
+            conf = confirmaciones.get(pid) or {}
+            t['fecha_confirmacion'] = conf.get('fecha', '')
+            t['estado_confirmacion'] = conf.get('estado')
+        return jsonify(trabajadores)
     except Exception as e:
         logging.exception('get_lista_formato_cts')
         return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
 
 
 @app.route('/api/formato-cts/fecha-pago')
@@ -28930,6 +28983,7 @@ def enviar_formatos_cts_masivo():
     ensure_user_session()
     cia = str(data.get('cia') or data.get('company') or session.get('company') or '').strip()
     payroll_type = str(data.get('payroll_type') or '').strip()
+    process = str(data.get('process') or data.get('processtype') or '').strip()
     period = _normalize_pr_period(data.get('period'))
     seleccionados = data.get('empleados', data.get('trabajadores', []))
     repunit = _normalize_replicationunit_asig(
@@ -28973,7 +29027,11 @@ def enviar_formatos_cts_masivo():
     if total == 0:
         return jsonify({'error': 'No hay códigos de empleado válidos.'}), 400
 
+    con_confirmacion = _confirmacion_boleta_habilitada()
+
     def generar_progreso_envio():
+        from database import preparar_confirmacion_boleta, revertir_preparacion_confirmacion
+
         enviados = 0
         errores = 0
         for idx, emp_code in enumerate(ids, start=1):
@@ -28987,6 +29045,7 @@ def enviar_formatos_cts_masivo():
                 yield f"data: {json.dumps({'empleado': emp_nombre, 'codigo': emp_code, 'status': 'Error', 'detalle': motivo, 'motivo': motivo, 'actual': idx, 'total': total, 'progreso': int((idx / total) * 100)})}\n\n"
                 continue
 
+            confirmacion = None
             try:
                 pdf_buffer = generar_pdf_formato_cts(
                     {
@@ -28998,6 +29057,24 @@ def enviar_formatos_cts_masivo():
                         'sin_firma': '1' if sin_firma else '0',
                     }
                 )
+                filename = _formato_cts_pdf_filename(emp_code, period, nombre=emp_nombre)
+                if con_confirmacion:
+                    confirmacion = preparar_confirmacion_boleta(
+                        company=cia,
+                        person=emp_code,
+                        period=period,
+                        payrolltype=payroll_type,
+                        processtype=process or None,
+                        userid=_xlastuser_id() or 'WEB',
+                        filename=filename,
+                        tipodoc='CTS',
+                    )
+                    if not confirmacion:
+                        logging.warning(
+                            'enviar_formatos_cts_masivo: sin token de confirmación person=%s period=%s',
+                            emp_code,
+                            period,
+                        )
                 exito, msg = enviar_correo_formato_cts(
                     destinatario=emp_email,
                     nombre_empleado=emp_nombre,
@@ -29005,19 +29082,55 @@ def enviar_formatos_cts_masivo():
                     sexo=emp.get('sex', 0),
                     pdf_io=pdf_buffer,
                     person=emp_code,
+                    token_confirmacion=(
+                        confirmacion['token']
+                        if confirmacion and confirmacion.get('estado') == 0
+                        else None
+                    ),
                 )
                 if exito:
                     enviados += 1
                     status = 'Enviado'
                     detalle = msg
                     motivo = ''
+                    try:
+                        from database import registrar_fecha_envio_boleta
+
+                        ok_fecha = registrar_fecha_envio_boleta(
+                            company=cia,
+                            person=emp_code,
+                            period=period,
+                            payrolltype=payroll_type,
+                            processtype=process or None,
+                            userid=_xlastuser_id() or 'WEB',
+                            filename=filename,
+                            tipodoc='CTS',
+                        )
+                        if not ok_fecha:
+                            logging.warning(
+                                'enviar_formatos_cts_masivo: no se guardó FechaEnvio person=%s period=%s',
+                                emp_code,
+                                period,
+                            )
+                            detalle = f"{detalle} (aviso: no se guardó FechaEnvio)"
+                    except Exception:
+                        logging.exception(
+                            'enviar_formatos_cts_masivo FechaEnvio person=%s', emp_code
+                        )
+                        detalle = f"{detalle} (aviso: no se guardó FechaEnvio)"
                 else:
+                    revertir_preparacion_confirmacion(
+                        cia, emp_code, confirmacion, tipodoc='CTS'
+                    )
                     errores += 1
                     status = 'Error'
                     detalle = msg or 'No se pudo enviar el correo.'
                     motivo = detalle
             except Exception as e:
                 logging.exception('enviar_formatos_cts_masivo persona=%s', emp_code)
+                revertir_preparacion_confirmacion(
+                    cia, emp_code, confirmacion, tipodoc='CTS'
+                )
                 errores += 1
                 status = 'Error'
                 detalle = str(e)
@@ -31535,6 +31648,7 @@ def boleta_confirmar_publico():
     except Exception:
         logging.exception('boleta_confirmar_publico logo cia=%s', info['company'])
         logo_src = ''
+    tipodoc = str(info.get('tipodocumento') or 'BOL').strip().upper() or 'BOL'
     ctx = {
         'logo_src': logo_src,
         'empresa': info['empresa'],
@@ -31542,6 +31656,8 @@ def boleta_confirmar_publico():
         'periodo_legible': formatear_periodo_texto(info['period']),
         'token': token,
         'respuesta': respuesta,
+        'tipodocumento': tipodoc,
+        'documento_etiqueta': _etiqueta_documento_confirmacion(tipodoc),
     }
 
     def _ya_respondida(datos):

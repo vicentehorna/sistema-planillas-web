@@ -109,6 +109,8 @@ BEGIN
     DECLARE @tipo_contrato_raw      VARCHAR(80);
     DECLARE @pos_space              INT;
     DECLARE @sin_catalogo           VARCHAR(1000);
+    DECLARE @tipo_trab_key          VARCHAR(80);
+    DECLARE @payroll_hint           VARCHAR(40);
 
     SET @cia = LTRIM(RTRIM(ISNULL(@cia, '')));
     SET @tipo_doc = LTRIM(RTRIM(ISNULL(@tipo_doc, '')));
@@ -131,26 +133,33 @@ BEGIN
         RETURN;
     END;
 
-    /* Normalizar documento (sin ceros a la izquierda si es numérico). */
+    /*
+      Conservar el número tal cual (incl. ceros a la izquierda: CARNÉ EXT. 005066421).
+      Solo se usa comparación numérica para detectar duplicados ya grabados sin ceros.
+    */
     SET @num_doc_norm = @num_doc;
-    IF @num_doc_norm NOT LIKE '%[^0-9]%'
-    BEGIN
-        WHILE LEN(@num_doc_norm) > 1 AND LEFT(@num_doc_norm, 1) = '0'
-            SET @num_doc_norm = SUBSTRING(@num_doc_norm, 2, 15);
-    END;
 
+    /* TRY_CAST: SQL Server no garantiza cortocircuito de ISNUMERIC+CAST;
+       un DocumentNumber no numérico (p.ej. BOLETAKUSI) dispara 8114 varchar→bigint. */
     IF EXISTS (
         SELECT 1
         FROM pr_employee e (NOLOCK)
             INNER JOIN sy_person sp (NOLOCK) ON sp.person = e.person
         WHERE e.company = @cia
           AND (
-                LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) = @num_doc
-             OR LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) = @num_doc_norm
+                LTRIM(RTRIM(ISNULL(sp.documentnumber, ''))) = @num_doc_norm
+             OR LTRIM(RTRIM(ISNULL(sp.person, ''))) = @num_doc_norm
              OR (
-                    ISNUMERIC(sp.documentnumber) = 1
-                AND ISNUMERIC(@num_doc_norm) = 1
-                AND CAST(sp.documentnumber AS BIGINT) = CAST(@num_doc_norm AS BIGINT)
+                    TRY_CAST(LTRIM(RTRIM(sp.documentnumber)) AS BIGINT) IS NOT NULL
+                AND TRY_CAST(@num_doc_norm AS BIGINT) IS NOT NULL
+                AND TRY_CAST(LTRIM(RTRIM(sp.documentnumber)) AS BIGINT)
+                    = TRY_CAST(@num_doc_norm AS BIGINT)
+             )
+             OR (
+                    TRY_CAST(LTRIM(RTRIM(sp.person)) AS BIGINT) IS NOT NULL
+                AND TRY_CAST(@num_doc_norm AS BIGINT) IS NOT NULL
+                AND TRY_CAST(LTRIM(RTRIM(sp.person)) AS BIGINT)
+                    = TRY_CAST(@num_doc_norm AS BIGINT)
              )
           )
     )
@@ -770,9 +779,10 @@ BEGIN
     SET @position_id = NULL;
     SET @costcenter_id = NULL;
     SET @costcentername = NULL;
+    SET @payroll_type_id = NULL;
 
+    /* Perfil bancario / SCTR: sí se toma de un peer; la planilla NO (T-Registro manda). */
     SELECT TOP 1
-        @payroll_type_id = e.payrolltype,
         @accountprofile_id = e.accountprofile,
         @salaryaccounttype_id = e.salaryaccounttype,
         @sctr_health_id = e.sctrhealth,
@@ -787,18 +797,51 @@ BEGIN
         CASE WHEN @employee_type_id IS NOT NULL AND e.employeetype = @employee_type_id THEN 0 ELSE 1 END,
         e.xlastdate DESC;
 
-    /* SIN PLANILLA (LIMA<cia>...) va antes que EMPLEADOS por código: no usarla como default. */
-    IF @payroll_type_id IS NOT NULL AND EXISTS (
-        SELECT 1
-        FROM pr_payrolltype pt (NOLOCK)
-        WHERE pt.payrolltype = @payroll_type_id
-          AND (
-                UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'SIN PLANILLA'
-             OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'SIN PLANILLA'
-          )
-    )
-        SET @payroll_type_id = NULL;
+    /*
+      Planilla según Tipo de trabajador del PDF (no del peer).
+      EMPLEADO → EMPLEADO/EMPLEADOS; CONSTRUCCIÓN CIVIL/OBRERO → CONSTRUCCION;
+      PRACTICANTE → PRACTICANTES.
+    */
+    SET @tipo_trab_key = UPPER(LTRIM(RTRIM(ISNULL(@tipo_trabajador, ''))));
+    IF @tipo_trab_key = '' AND @employee_type_id IS NOT NULL
+    BEGIN
+        SELECT TOP 1 @tipo_trab_key = UPPER(LTRIM(RTRIM(ISNULL(et.description, ''))))
+        FROM pr_employeetype et (NOLOCK)
+        WHERE et.company = @cia
+          AND et.employeetype = @employee_type_id;
+    END;
 
+    SET @payroll_hint = NULL;
+    IF @tipo_trab_key LIKE '%CONSTRUCC%' OR @tipo_trab_key LIKE '%OBRERO%'
+        SET @payroll_hint = 'CONSTRUCCION';
+    ELSE IF @tipo_trab_key LIKE '%PRACTIC%'
+        SET @payroll_hint = 'PRACTICANTE';
+    ELSE IF @tipo_trab_key LIKE '%EMPLEAD%'
+        SET @payroll_hint = 'EMPLEADO';
+
+    IF @payroll_hint IS NOT NULL
+    BEGIN
+        SELECT TOP 1 @payroll_type_id = pt.payrolltype
+        FROM pr_payrolltype pt (NOLOCK)
+        WHERE pt.company = @cia
+          AND (
+                UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) LIKE '%' + @payroll_hint + '%'
+             OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE '%' + @payroll_hint + '%'
+          )
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) <> 'SIN PLANILLA'
+          AND UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) <> 'SIN PLANILLA'
+        ORDER BY
+            CASE
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = @payroll_hint
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = @payroll_hint THEN 0
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) LIKE @payroll_hint + '%'
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE @payroll_hint + '%' THEN 1
+                ELSE 2
+            END,
+            pt.payrolltype;
+    END;
+
+    /* Fallback: preferir EMPLEADO/EMPLEADOS; nunca SIN PLANILLA. */
     IF @payroll_type_id IS NULL
     BEGIN
         SELECT TOP 1 @payroll_type_id = pt.payrolltype
@@ -807,10 +850,12 @@ BEGIN
         ORDER BY
             CASE
                 WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'SIN PLANILLA'
-                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'SIN PLANILLA' THEN 2
-                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'EMPLEADOS'
-                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) = 'EMPLEADOS' THEN 0
-                ELSE 1
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) = 'SIN PLANILLA' THEN 3
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) IN ('EMPLEADO', 'EMPLEADOS')
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) IN ('EMPLEADO', 'EMPLEADOS') THEN 0
+                WHEN UPPER(LTRIM(RTRIM(ISNULL(pt.shortname, '')))) LIKE 'EMPLEAD%'
+                  OR UPPER(LTRIM(RTRIM(ISNULL(pt.description, '')))) LIKE 'EMPLEAD%' THEN 1
+                ELSE 2
             END,
             pt.payrolltype;
     END;

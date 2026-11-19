@@ -178,6 +178,12 @@
                     <input type="date" id="txtFechaIngresoHasta" class="form-control form-control-sm input-fecha-ingreso" title="Hasta" disabled>
                 </div>
             </div>
+            <div class="col-12 col-sm-6 col-md-3 col-lg-2">
+                <label for="cboCentroCosto" class="form-label small fw-bold text-muted">Centro de costo</label>
+                <select id="cboCentroCosto" class="form-select form-select-sm" disabled>
+                    <option value="0" selected>Todos</option>
+                </select>
+            </div>
             {% if (sql_database or '')|lower == 'hm_divisa' %}
             <div class="col-12 col-md-auto d-flex align-items-end">
                 <div class="form-check mb-1">
@@ -663,6 +669,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         if (!person) person = '0';
         const salarybank = document.getElementById('cboBancoHaberes').value.trim();
         const repunit = String(document.getElementById('cboUnidad')?.value || '0').trim() || '0';
+        const costcenter = String(document.getElementById('cboCentroCosto')?.value || '0').trim() || '0';
         const cesados = document.getElementById('cboCesados')?.value.trim() || 'T';
         const fechaIngreso = leerFiltroFechaIngreso();
         if (fechaIngreso.activo) {
@@ -689,6 +696,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     person,
                     salarybank,
                     repunit,
+                    costcenter,
                     cesados,
                     agrupar_cc,
                     fecha_ingreso_activo: fechaIngreso.activo,
@@ -879,6 +887,41 @@ document.addEventListener('DOMContentLoaded', async function () {
         }
     }
 
+    async function cargarCentrosCosto(cia) {
+        const cbo = document.getElementById('cboCentroCosto');
+        if (!cbo) return;
+        const prev = String(cbo.value || '0').trim() || '0';
+        cbo.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todos';
+        cbo.appendChild(optAll);
+        if (!cia) {
+            cbo.value = '0';
+            cbo.disabled = true;
+            return;
+        }
+        cbo.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cbo.appendChild(opt);
+            });
+            cbo.disabled = false;
+            cbo.value = Array.from(cbo.options).some((o) => String(o.value).trim() === prev) ? prev : '0';
+        } catch (e) {
+            console.error(e);
+            cbo.disabled = false;
+            cbo.value = '0';
+        }
+    }
+
     async function poblarBancosHaberes(cia) {
         const cboBanco = document.getElementById('cboBancoHaberes');
         if (!cboBanco) return;
@@ -951,6 +994,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             resetSelect(cboTrabajador);
             etiquetaTrabajadorTodosPorDefecto(cboTrabajador);
             await poblarBancosHaberes('');
+            await cargarCentrosCosto('');
             return;
         }
 
@@ -958,7 +1002,8 @@ document.addEventListener('DOMContentLoaded', async function () {
             poblarSelect(`/api/selectores/trabajadores?cia=${encodeURIComponent(cia)}`, cboTrabajador, {
                 alCargar: etiquetaTrabajadorTodosPorDefecto
             }),
-            poblarBancosHaberes(cia)
+            poblarBancosHaberes(cia),
+            cargarCentrosCosto(cia)
         ]);
 
         const ok = await poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPlanilla);

@@ -9362,6 +9362,40 @@ def _guardar_sede_elclan(cursor, person, sede):
     )
 
 
+# Correo opcional en ficha: si se indica, exige local@domin.tld (rechaza p.ej. user@gmail.).
+_EMAIL_TRABAJADOR_RE = re.compile(
+    r'^[A-Za-z0-9](?:[A-Za-z0-9._%+\-]*[A-Za-z0-9])?'
+    r'@[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?'
+    r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)+$'
+)
+
+
+def _mensaje_email_trabajador_invalido(email):
+    """None si vacío o válido; mensaje de error si el formato es inválido."""
+    email = str(email or '').strip()
+    if not email:
+        return None
+    if len(email) > 255 or email.count('@') != 1:
+        return 'Ingrese un correo electrónico válido (ej. nombre@dominio.com).'
+    local, _, dominio = email.partition('@')
+    if (
+        not local
+        or not dominio
+        or '..' in email
+        or email.startswith('.')
+        or email.endswith('.')
+        or dominio.startswith('.')
+        or dominio.endswith('.')
+        or '.' not in dominio
+        or not _EMAIL_TRABAJADOR_RE.match(email)
+    ):
+        return 'Ingrese un correo electrónico válido (ej. nombre@dominio.com).'
+    tld = dominio.rsplit('.', 1)[-1]
+    if len(tld) < 2 or not tld.isalpha():
+        return 'Ingrese un correo electrónico válido (ej. nombre@dominio.com).'
+    return None
+
+
 def _empleado_generales_desde_form(form):
     sex = str(form.get('sex') or '').strip()
     return {
@@ -9682,6 +9716,12 @@ def trabajadores_editar(person_id):
 
         if request.method == 'POST' and seccion == 'generales':
             datos = _empleado_generales_desde_form(request.form)
+            err_email = _mensaje_email_trabajador_invalido(datos.get('email'))
+            if err_email:
+                flash(err_email, 'warning')
+                return redirect(
+                    url_for('trabajadores_editar', person_id=person_id, cia=cia, seccion='generales')
+                )
             tipos_documento_post, _, _ = _cargar_selectores_generales(cursor, cia)
             datos['employeedocumenttype'] = _resolver_employeedocumenttype_cia(
                 cursor, cia, datos['employeedocumenttype'], tipos_documento_post
@@ -10185,6 +10225,10 @@ def trabajadores_nuevo():
 
         if request.method == 'POST':
             generales = _empleado_generales_desde_form(request.form)
+            err_email = _mensaje_email_trabajador_invalido(generales.get('email'))
+            if err_email:
+                flash(err_email, 'warning')
+                return redirect(url_for('trabajadores_nuevo', cia=cia, seccion='generales'))
             laborales = _empleado_laborales_desde_form(request.form)
             pensiones = _empleado_pensiones_desde_form(request.form)
             educacion = _empleado_educacion_desde_form(request.form)
@@ -34267,6 +34311,7 @@ def _fetch_planilla_vertical_for_company(
     repunit='0',
     agrupar_cc='N',
     cesados='T',
+    costcenter='0',
 ):
     """
     Ejecuta sp_pr_reporteplamevertical_web para una compañía y devuelve
@@ -34277,17 +34322,20 @@ def _fetch_planilla_vertical_for_company(
     fecha_desde_sql = _sql_date_str_param(fecha_ingreso_desde) if fecha_ingreso_all == 'N' else ''
     fecha_hasta_sql = _sql_date_str_param(fecha_ingreso_hasta) if fecha_ingreso_all == 'N' else ''
     repunit_val = _normalize_replicationunit_asig(repunit)
+    costcenter_val = _normalize_replicationunit_asig(
+        costcenter if costcenter is not None else '0'
+    )
     agrupar_cc_val = _normalize_agrupar_cc_flag(agrupar_cc)
     cesados_val = _normalize_cesados_telecredito(cesados)
     cursor.execute(
         "EXEC sp_pr_reporteplamevertical_web "
         "@cia=?, @payrolltype=?, @process=?, @period=?, @person=?, @salarybank=?, "
         "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, @repunit=?, "
-        "@agrupar_cc=?, @cesados=?",
+        "@agrupar_cc=?, @cesados=?, @costcenter=?",
         (
             cia, payroll_type, process, period, person, salarybank,
             fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql, repunit_val,
-            agrupar_cc_val, cesados_val,
+            agrupar_cc_val, cesados_val, costcenter_val,
         ),
     )
     _drain_all_cursor_resultsets(cursor)
@@ -34681,7 +34729,8 @@ def _resolve_bank_id_by_name(cursor, cia, bank_name):
 def reporte_planilla_vertical_post():
     """
     sp_pr_reporteplamevertical_web @cia, @payrolltype, @process, @period, @person, @salarybank,
-    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta, @repunit, @agrupar_cc, @cesados.
+    @fecha_ingreso_all, @fecha_ingreso_desde, @fecha_ingreso_hasta, @repunit, @agrupar_cc, @cesados,
+    @costcenter.
     Cabeceras dinámicas desde xx_plamevertical2 + PR_Concept; datos desde xx_reporteplanilla.
     @agrupar_cc='Y' solo aplica en hm_divisa (otras BD siempre ven el detalle por trabajador).
     """
@@ -34694,6 +34743,9 @@ def reporte_planilla_vertical_post():
     salarybank = str(body.get('salarybank') if body.get('salarybank') is not None else body.get('salary_bank') or '').strip()
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    costcenter = _normalize_replicationunit_asig(
+        body.get('costcenter') or body.get('centrocosto')
+    )
     agrupar_cc = _normalize_agrupar_cc_flag(
         body.get('agrupar_cc') if body.get('agrupar_cc') is not None else body.get('agrupar')
     )
@@ -34722,6 +34774,7 @@ def reporte_planilla_vertical_post():
             repunit=repunit,
             agrupar_cc=agrupar_cc,
             cesados=cesados,
+            costcenter=costcenter,
         )
         omitir_pago_cts = agrupar_cc != 'Y' and _es_proceso_pago_cts(cursor, cia, process)
         if agrupar_cc == 'Y':

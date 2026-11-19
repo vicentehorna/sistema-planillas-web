@@ -406,7 +406,11 @@
                         <div class="col-md-8">
                             <label for="txtEmail" class="form-label small fw-bold text-muted">Email</label>
                             <input type="email" id="txtEmail" name="email" class="form-control form-control-sm"
-                                   maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off">
+                                   maxlength="255" value="{{ empleado.email or '' }}" autocomplete="off"
+                                   inputmode="email"
+                                   pattern="^[A-Za-z0-9](?:[A-Za-z0-9._%+\-]*[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)+$"
+                                   title="Ingrese un correo válido, por ejemplo nombre@dominio.com">
+                            <div class="invalid-feedback">Ingrese un correo electrónico válido (ej. nombre@dominio.com).</div>
 </div>
                         <div class="col-md-6">
                             <label for="txtAddress" class="form-label small fw-bold text-muted">Dirección</label>
@@ -1121,6 +1125,35 @@ document.addEventListener('DOMContentLoaded', function () {
     let snapshotInicial = '';
     let dirty = false;
     let docEditadoManual = false;
+
+    const EMAIL_TRABAJADOR_RE = /^[A-Za-z0-9](?:[A-Za-z0-9._%+\-]*[A-Za-z0-9])?@[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?)+$/;
+
+    function emailTrabajadorValido(raw) {
+        const email = String(raw || '').trim();
+        if (!email) return true;
+        if (email.length > 255 || email.indexOf('@') !== email.lastIndexOf('@')) return false;
+        if (email.includes('..') || email.startsWith('.') || email.endsWith('.')) return false;
+        if (!EMAIL_TRABAJADOR_RE.test(email)) return false;
+        const dominio = email.split('@')[1] || '';
+        const tld = dominio.split('.').pop() || '';
+        return tld.length >= 2 && /^[A-Za-z]+$/.test(tld);
+    }
+
+    function validarEmailTrabajadorCampo(mostrarAlerta) {
+        const txt = document.getElementById('txtEmail');
+        if (!txt) return true;
+        const email = (txt.value || '').trim();
+        txt.value = email;
+        const ok = emailTrabajadorValido(email);
+        txt.classList.toggle('is-invalid', !ok);
+        if (!ok) {
+            if (mostrarAlerta !== false) {
+                mostrarError('Ingrese un correo electrónico válido (ej. nombre@dominio.com).');
+            }
+            txt.focus();
+        }
+        return ok;
+    }
     let enviandoNuevo = false;
 
     function mostrarError(msg) {
@@ -1448,6 +1481,17 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function wireGenerales() {
+        const txtEmail = document.getElementById('txtEmail');
+        if (txtEmail) {
+            txtEmail.addEventListener('blur', function () {
+                validarEmailTrabajadorCampo(false);
+            });
+            txtEmail.addEventListener('input', function () {
+                if (this.classList.contains('is-invalid') && emailTrabajadorValido(this.value)) {
+                    this.classList.remove('is-invalid');
+                }
+            });
+        }
         ['txtName1', 'txtName2', 'txtLastName1', 'txtLastName2'].forEach((id) => {
             normalizarMayusculas(document.getElementById(id));
             const el = document.getElementById(id);
@@ -1508,6 +1552,10 @@ document.addEventListener('DOMContentLoaded', function () {
                 if (!(document.getElementById('cboUnidad')?.value || '').trim()) {
                     e.preventDefault();
                     mostrarError('Seleccione la unidad.');
+                    return;
+                }
+                if (!validarEmailTrabajadorCampo()) {
+                    e.preventDefault();
                 }
             });
         }
@@ -1888,6 +1936,12 @@ document.addEventListener('DOMContentLoaded', function () {
                 cusppEl.focus();
                 return;
             }
+        }
+
+        if (!emailTrabajadorValido(document.getElementById('txtEmail')?.value)) {
+            mostrarPanelNuevo('generales');
+            validarEmailTrabajadorCampo();
+            return;
         }
 
         const anioEgreso = (document.getElementById('txtAnioEgreso')?.value || '').trim();

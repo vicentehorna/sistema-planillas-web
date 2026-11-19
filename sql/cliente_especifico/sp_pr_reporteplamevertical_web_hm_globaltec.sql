@@ -37,7 +37,7 @@
            @salarybank = '',
            @agrupar_cc = 'N';
 */
-CREATE   PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
+CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @cia         CHAR(4),
     @payrolltype VARCHAR(20),
     @process     VARCHAR(20),
@@ -49,7 +49,8 @@ CREATE   PROCEDURE [dbo].[sp_pr_reporteplamevertical_web]
     @fecha_ingreso_hasta  VARCHAR(10) = '',
     @repunit              VARCHAR(20) = '0',
     @agrupar_cc           CHAR(1)     = 'N',
-    @cesados              CHAR(1)     = 'T'
+    @cesados              CHAR(1)     = 'T',
+    @costcenter           VARCHAR(20) = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -59,6 +60,7 @@ BEGIN
     SET @fecha_ingreso_desde = LTRIM(RTRIM(ISNULL(@fecha_ingreso_desde, '')));
     SET @fecha_ingreso_hasta = LTRIM(RTRIM(ISNULL(@fecha_ingreso_hasta, '')));
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+    IF RTRIM(ISNULL(@costcenter, '')) = '' SET @costcenter = '0';
     SET @agrupar_cc = UPPER(LTRIM(RTRIM(ISNULL(@agrupar_cc, 'N'))));
     IF @agrupar_cc NOT IN ('Y', 'N') SET @agrupar_cc = 'N';
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
@@ -159,9 +161,14 @@ BEGIN
       AND (@person = '0' OR SY_PERSON.person = @person)
       AND (@repunit = '0' OR SY_PERSON.ReplicationUnit = @repunit)
       AND (
+            @costcenter = '0'
+         OR LTRIM(RTRIM(ISNULL(ep.costcenter, ''))) = @costcenter
+         OR LTRIM(RTRIM(ISNULL(E.CostCenter, ''))) = @costcenter
+      )
+      AND (
             @cesados = 'T'
-         OR (@cesados = 'Y' AND E.CeaseDate IS NOT NULL)
-         OR (@cesados = 'N' AND E.CeaseDate IS NULL)
+         OR (@cesados = 'Y' AND ep.CeaseDate IS NOT NULL)
+         OR (@cesados = 'N' AND ep.CeaseDate IS NULL)
       )
       AND (
             @fecha_ingreso_all = 'Y'

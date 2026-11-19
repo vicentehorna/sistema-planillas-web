@@ -1378,6 +1378,15 @@ def _es_cliente_credireport():
         return False
 
 
+def _es_cliente_servigen():
+    """True cuando la BD activa es hm_servigen."""
+    try:
+        from database import get_active_database
+        return str(get_active_database() or '').strip().lower() == 'hm_servigen'
+    except Exception:
+        return False
+
+
 def _flag_send_email_truthy(value):
     return str(value or 'Y').strip().upper() in ('Y', '1', 'S', 'SI', 'SÍ', 'TRUE')
 
@@ -6718,6 +6727,54 @@ def _boleta_ultra_dias_pagados(cursor, cabecera, cia, processtype, payroll_type,
     return cabecera
 
 
+def _boleta_rango_fechas_cts_servigen(period):
+    """Rango semestral CTS para boleta hm_servigen.
+
+    Noviembre AAAA → Del 01/05/AAAA al 31/10/AAAA
+    Mayo AAAA      → Del 01/11/(AAAA-1) al 30/04/AAAA
+    """
+    yyyymm = str(period or '').strip()[:6]
+    if len(yyyymm) != 6 or not yyyymm.isdigit():
+        return None
+    year = int(yyyymm[:4])
+    month = int(yyyymm[4:6])
+    if month == 11:
+        return f'Del 01/05/{year} al 31/10/{year}'
+    if month == 5:
+        return f'Del 01/11/{year - 1} al 30/04/{year}'
+    return None
+
+
+def _boleta_aplicar_rango_cts_servigen(cursor, cabecera, cia, processtype, period):
+    """En hm_servigen + proceso CTS, reemplaza RangoFechas por el semestre CTS."""
+    if not cabecera or not _es_cliente_servigen():
+        return cabecera
+    try:
+        cursor.execute(
+            """
+            SELECT TOP 1 UPPER(LTRIM(RTRIM(ISNULL(ShortName, ''))))
+            FROM PR_ProcessType
+            WHERE ProcessType = ? AND (Company = ? OR Company IS NULL)
+            ORDER BY CASE WHEN Company = ? THEN 0 ELSE 1 END
+            """,
+            (processtype, cia, cia),
+        )
+        row = cursor.fetchone()
+        short_name = str(row[0] or '').strip().upper() if row else ''
+    except Exception:
+        logging.exception('_boleta_aplicar_rango_cts_servigen processtype=%s', processtype)
+        return cabecera
+    if short_name != 'CTS':
+        return cabecera
+    rango = _boleta_rango_fechas_cts_servigen(period)
+    if not rango:
+        return cabecera
+    cabecera = dict(cabecera)
+    cabecera['RangoFechas'] = rango
+    cabecera['rangofechas'] = rango
+    return cabecera
+
+
 def _boleta_titulo_por_proceso(cursor, cia, processtype, titulo_sp):
     """
     El SP arma 'BOLETA DE PAGO <tipo periodo> - <MES AÑO>' para todo proceso salvo
@@ -6785,6 +6842,9 @@ def generar_pdf_en_memoria(params):
         if cabecera:
             cabecera['titulo_boleta'] = _boleta_titulo_por_proceso(
                 cursor, cia, processtype, cabecera.get('titulo_boleta')
+            )
+            cabecera = _boleta_aplicar_rango_cts_servigen(
+                cursor, cabecera, cia, processtype, period
             )
             if _es_cliente_globaltec():
                 cabecera = _boleta_sumar_dias_por_fuera_faltas_injust(

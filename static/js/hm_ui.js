@@ -79,12 +79,12 @@
                     <strong class="me-auto">${escHtml(options.titulo || tituloPorTipo(tipoNorm))}</strong>
                     <button type="button" class="btn-close ${tipoNorm === 'warning' ? '' : 'btn-close-white'}" data-bs-dismiss="toast" aria-label="Cerrar"></button>
                 </div>
-                <div class="toast-body">${escHtml(texto)}</div>
+                <div class="toast-body">${escHtml(texto).replace(/\n/g, '<br>')}</div>
             `
             : `
                 <div class="toast-body d-flex align-items-start gap-2">
                     <i class="bi ${toastIconClass(tipoNorm)} mt-1" aria-hidden="true"></i>
-                    <div class="flex-grow-1">${escHtml(texto)}</div>
+                    <div class="flex-grow-1">${escHtml(texto).replace(/\n/g, '<br>')}</div>
                     <button type="button" class="btn-close ms-2" data-bs-dismiss="toast" aria-label="Cerrar"></button>
                 </div>
             `;

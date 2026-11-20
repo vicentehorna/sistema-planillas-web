@@ -332,18 +332,51 @@ document.addEventListener('DOMContentLoaded', async function () {
             clearTimeout(msgGuardadoTimer);
             msgGuardadoTimer = null;
         }
+        if (window.HmUi && msgGuardado) {
+            HmUi.hideFormBanner(msgGuardado);
+            return;
+        }
         if (msgGuardado) {
             msgGuardado.textContent = '';
             msgGuardado.classList.add('d-none');
         }
     }
 
-    function mostrarMensajeGuardado(texto) {
+    function mostrarMensajeGuardado(texto, tipo) {
         if (!msgGuardado) return;
+        const mensaje = texto || 'Registro guardado correctamente.';
+        if (window.HmUi) {
+            HmUi.showFormBanner(msgGuardado, mensaje, tipo || 'success', {
+                delay: 8000,
+                scrollIntoView: true,
+            });
+            return;
+        }
         ocultarMensajeGuardado();
-        msgGuardado.textContent = texto || 'Registro guardado correctamente.';
+        msgGuardado.textContent = mensaje;
         msgGuardado.classList.remove('d-none');
         msgGuardadoTimer = setTimeout(ocultarMensajeGuardado, 6000);
+    }
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+
+    function hmExito(mensaje) {
+        if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    async function hmConfirmar(opciones) {
+        if (window.HmUi) return HmUi.confirmar(opciones);
+        const msg = (opciones && (opciones.mensaje || opciones.message)) || '¿Continuar?';
+        return confirm(msg);
     }
 
     function syncVisibilidadModo() {
@@ -422,7 +455,13 @@ document.addEventListener('DOMContentLoaded', async function () {
 
     async function eliminarCargo(row) {
         const nombre = row.name || 'cargo';
-        if (!confirm(`¿Eliminar el cargo "${nombre}"?\n\nEsta acción no se puede deshacer.`)) return;
+        const ok = await hmConfirmar({
+            titulo: 'Eliminar cargo',
+            mensaje: `¿Eliminar el cargo "${nombre}"?\n\nEsta acción no se puede deshacer.`,
+            textoOk: 'Eliminar',
+            variant: 'danger',
+        });
+        if (!ok) return;
 
         try {
             const res = await fetch('/api/cargos/eliminar', {
@@ -442,7 +481,7 @@ document.addEventListener('DOMContentLoaded', async function () {
             await cargarListado();
             mostrarMensajeGuardado(data.mensaje || 'Cargo eliminado correctamente.');
         } catch (err) {
-            alert(err.message);
+            hmError(err.message);
         }
     }
 
@@ -499,18 +538,18 @@ document.addEventListener('DOMContentLoaded', async function () {
             cargarFormulario(data);
         } catch (err) {
             if (err.name === 'AbortError') return;
-            alert(err.message);
+            hmError(err.message);
         }
     }
 
     async function guardarCargo() {
         const payload = payloadFormulario();
         if (!payload.cia) {
-            alert('Seleccione una compañía.');
+            hmAdvertencia('Seleccione una compañía.');
             return;
         }
         if (!payload.name) {
-            alert('Indique el nombre del cargo.');
+            hmAdvertencia('Indique el nombre del cargo.');
             return;
         }
 
@@ -531,13 +570,13 @@ document.addEventListener('DOMContentLoaded', async function () {
             }
             mostrarMensajeGuardado(data.mensaje || 'Registro guardado correctamente.');
         } catch (err) {
-            alert(err.message);
+            hmError(err.message);
         }
     }
 
     function iniciarNuevoCargo() {
         if (!cboCia.value.trim()) {
-            alert('Seleccione una compañía.');
+            hmAdvertencia('Seleccione una compañía.');
             return;
         }
         cargoSeleccionado = null;
@@ -595,17 +634,20 @@ document.addEventListener('DOMContentLoaded', async function () {
     async function importarExcelCargos(file) {
         const cia = cboCia.value.trim();
         if (!cia) {
-            alert('Seleccione una compañía.');
+            hmAdvertencia('Seleccione una compañía.');
             return;
         }
         if (!file) {
-            alert('Seleccione el archivo Excel.');
+            hmAdvertencia('Seleccione el archivo Excel.');
             return;
         }
-        const ok = window.confirm(
-            'Se importarán cargos nuevos y se asignarán al DNI en la ficha.\n'
-            + 'El Excel debe tener 2 columnas: DNI y Cargo.\n\n¿Continuar?'
-        );
+        const ok = await hmConfirmar({
+            titulo: 'Importar Excel de cargos',
+            mensaje: 'Se importarán cargos nuevos y se asignarán al DNI en la ficha.\n'
+                + 'El Excel debe tener 2 columnas: DNI y Cargo.\n\n¿Continuar?',
+            textoOk: 'Importar',
+            variant: 'primary',
+        });
         if (!ok) return;
 
         btnImportarExcel.disabled = true;
@@ -630,10 +672,16 @@ document.addEventListener('DOMContentLoaded', async function () {
                 const sample = errs.slice(0, 5).map((r) => `Fila ${r.fila}: ${r.error || ''}`).join('\n');
                 msg += `\n\nErrores (${errs.length}):\n${sample}`;
             }
-            alert(msg);
-            mostrarMensajeGuardado(data.mensaje || 'Importación completada.');
+            const hayObs = sin.length > 0 || errs.length > 0;
+            if (hayObs) {
+                hmAdvertencia(msg);
+                mostrarMensajeGuardado(data.mensaje || 'Importación completada con observaciones.', 'warning');
+            } else {
+                hmExito(msg);
+                mostrarMensajeGuardado(data.mensaje || 'Importación completada.');
+            }
         } catch (err) {
-            alert(err.message || 'No se pudo importar el Excel.');
+            hmError(err.message || 'No se pudo importar el Excel.');
         } finally {
             btnImportarExcel.innerHTML = prevTexto;
             syncBotonImportarExcel();
@@ -645,7 +693,7 @@ document.addEventListener('DOMContentLoaded', async function () {
         syncBotonImportarExcel();
         btnImportarExcel.addEventListener('click', function () {
             if (!cboCia.value.trim()) {
-                alert('Seleccione una compañía.');
+                hmAdvertencia('Seleccione una compañía.');
                 return;
             }
             fileCargosExcel.click();

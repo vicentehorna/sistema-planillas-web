@@ -1,4 +1,5 @@
 import json
+import math
 import os
 import re
 import sys
@@ -18173,6 +18174,304 @@ def api_cargos_eliminar():
             if len(parts) > 1:
                 err = parts[-1].strip(" ()'\"")
         return jsonify({"error": err}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+def _cargo_excel_celda_texto(val):
+    if val is None:
+        return ''
+    if isinstance(val, bool):
+        return ''
+    if isinstance(val, int):
+        return str(val)
+    if isinstance(val, float):
+        if not math.isfinite(val):
+            return ''
+        if val == int(val):
+            return str(int(val))
+        return str(val).strip()
+    return str(val).strip()
+
+
+def _cargo_excel_es_encabezado(dni, cargo):
+    d = str(dni or '').strip().upper()
+    c = str(cargo or '').strip().upper()
+    return d in ('DNI', 'DOCUMENTO', 'NRO DOCUMENTO', 'NUMERO DOCUMENTO', 'N° DOCUMENTO', 'DOC') and (
+        c in ('CARGO', 'POSITION', 'PUESTO', 'NOMBRE CARGO', 'DESCRIPCION')
+        or 'CARGO' in c
+    )
+
+
+def _cargo_excel_parse_filas(archivo):
+    """Lee Excel de 2 columnas (DNI, Cargo). Retorna (filas, error)."""
+    try:
+        from openpyxl import load_workbook
+    except ImportError:
+        return None, 'Falta openpyxl para leer Excel.'
+
+    filename = str(getattr(archivo, 'filename', '') or '').strip().lower()
+    if filename and not (filename.endswith('.xlsx') or filename.endswith('.xlsm')):
+        return None, 'El archivo debe ser Excel (.xlsx).'
+
+    try:
+        wb = load_workbook(archivo, data_only=True, read_only=True)
+    except Exception as e:
+        return None, f'No se pudo leer el Excel: {e}'
+
+    try:
+        ws = wb.active
+        filas = []
+        for idx, row in enumerate(ws.iter_rows(min_row=1, max_col=2, values_only=True), start=1):
+            cells = list(row) if row else []
+            while len(cells) < 2:
+                cells.append(None)
+            dni = _cargo_excel_celda_texto(cells[0])
+            cargo = _cargo_excel_celda_texto(cells[1]).upper()
+            if not dni and not cargo:
+                continue
+            if idx == 1 and _cargo_excel_es_encabezado(dni, cargo):
+                continue
+            if not dni or not cargo:
+                continue
+            filas.append({'fila': idx, 'dni': dni, 'cargo': cargo})
+        if not filas:
+            return None, 'El Excel no tiene filas con DNI y Cargo.'
+        return filas, None
+    finally:
+        try:
+            wb.close()
+        except Exception:
+            pass
+
+
+def _cargo_excel_buscar_trabajador(cursor, cia, dni):
+    """Person + nombre por DocumentNumber/Person (incluye equivalencia numérica por ceros)."""
+    dni = str(dni or '').strip()
+    if not dni:
+        return None
+    cursor.execute(
+        """
+        SELECT TOP 1
+            LTRIM(RTRIM(e.Person)) AS person,
+            LTRIM(RTRIM(ISNULL(sp.Name, ''))) AS nombre,
+            LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) AS documentnumber
+        FROM PR_Employee e (NOLOCK)
+            INNER JOIN SY_Person sp (NOLOCK) ON sp.Person = e.Person
+        WHERE e.Company = ?
+          AND (
+                LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) = ?
+             OR LTRIM(RTRIM(ISNULL(e.Person, ''))) = ?
+             OR (
+                    TRY_CAST(LTRIM(RTRIM(sp.DocumentNumber)) AS BIGINT) IS NOT NULL
+                AND TRY_CAST(? AS BIGINT) IS NOT NULL
+                AND TRY_CAST(LTRIM(RTRIM(sp.DocumentNumber)) AS BIGINT) = TRY_CAST(? AS BIGINT)
+             )
+             OR (
+                    TRY_CAST(LTRIM(RTRIM(e.Person)) AS BIGINT) IS NOT NULL
+                AND TRY_CAST(? AS BIGINT) IS NOT NULL
+                AND TRY_CAST(LTRIM(RTRIM(e.Person)) AS BIGINT) = TRY_CAST(? AS BIGINT)
+             )
+          )
+        ORDER BY
+            CASE
+                WHEN LTRIM(RTRIM(ISNULL(sp.DocumentNumber, ''))) = ? THEN 0
+                WHEN LTRIM(RTRIM(ISNULL(e.Person, ''))) = ? THEN 1
+                ELSE 2
+            END,
+            e.Person
+        """,
+        (cia, dni, dni, dni, dni, dni, dni, dni, dni),
+    )
+    row = cursor.fetchone()
+    if not row:
+        return None
+    return {
+        'person': str(row[0] or '').strip(),
+        'nombre': str(row[1] or '').strip(),
+        'documentnumber': str(row[2] or '').strip(),
+    }
+
+
+def _cargo_excel_obtener_o_crear(cursor, conn, cia, nombre, xlastuser, cache):
+    """Devuelve Position id; crea el cargo si no existe. Actualiza cache {NOMBRE: id}."""
+    key = str(nombre or '').strip().upper()
+    if not key:
+        return None
+    if key in cache:
+        return cache[key]
+
+    cursor.execute(
+        """
+        SELECT TOP 1 LTRIM(RTRIM(Position))
+        FROM PR_Position (NOLOCK)
+        WHERE Company = ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(name, '')))) = ?
+        ORDER BY CASE WHEN UPPER(LTRIM(RTRIM(ISNULL(Status, 'A')))) = 'A' THEN 0 ELSE 1 END,
+                 Position
+        """,
+        (cia, key),
+    )
+    row = cursor.fetchone()
+    if row and row[0]:
+        position_id = str(row[0]).strip()
+        cache[key] = position_id
+        # Reactivar si estaba inactivo.
+        cursor.execute(
+            """
+            UPDATE PR_Position
+            SET Status = 'A',
+                XLastUser = ?,
+                XLastDate = GETDATE()
+            WHERE Company = ?
+              AND Position = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(Status, 'A')))) = 'I'
+            """,
+            (xlastuser, cia, position_id),
+        )
+        return position_id
+
+    cursor.execute(
+        "EXEC sp_pr_guardarposition_web "
+        "@modo=?, @company=?, @position=?, @name=?, @status=?, @xlastuser=?",
+        ('I', cia, None, key, 'A', xlastuser),
+    )
+    rows = _dicts_first_nonempty_resultset(cursor)
+    _drain_pyodbc_cursor(cursor)
+    position_id = str((rows[0] if rows else {}).get('position') or '').strip()
+    if not position_id:
+        raise RuntimeError(f'No se pudo crear el cargo "{key}".')
+    cache[key] = position_id
+    return position_id
+
+
+@app.route('/api/cargos/importar-excel', methods=['POST'])
+@login_required
+def api_cargos_importar_excel():
+    """
+    Importa Excel de 2 columnas (DNI, Cargo):
+      - registra cargos nuevos en PR_Position
+      - asigna Position al trabajador de la compañía (por DocumentNumber/Person)
+    """
+    cia = str(request.form.get('cia') or request.form.get('company') or '').strip()
+    archivo = request.files.get('archivo') or request.files.get('file')
+    if not cia:
+        return jsonify({"error": "Seleccione una compañía."}), 400
+    if archivo is None or not getattr(archivo, 'filename', None):
+        return jsonify({"error": "Seleccione el archivo Excel (DNI, Cargo)."}), 400
+
+    filas, err = _cargo_excel_parse_filas(archivo)
+    if err:
+        return jsonify({"error": err}), 400
+
+    xlastuser = _xlastuser_id() or 'WEB'
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cache_cargos = {}
+        cargos_creados = set()
+        cargos_existentes = set()
+        asignados = 0
+        sin_trabajador = []
+        errores = []
+        personas_vistas = set()
+
+        # Detectar cargos ya existentes antes de crear.
+        nombres = sorted({f['cargo'] for f in filas})
+        for nombre in nombres:
+            cursor.execute(
+                """
+                SELECT TOP 1 1
+                FROM PR_Position (NOLOCK)
+                WHERE Company = ?
+                  AND UPPER(LTRIM(RTRIM(ISNULL(name, '')))) = ?
+                """,
+                (cia, nombre),
+            )
+            if cursor.fetchone():
+                cargos_existentes.add(nombre)
+            else:
+                cargos_creados.add(nombre)
+
+        for fila in filas:
+            dni = fila['dni']
+            cargo = fila['cargo']
+            try:
+                position_id = _cargo_excel_obtener_o_crear(
+                    cursor, conn, cia, cargo, xlastuser, cache_cargos
+                )
+                trab = _cargo_excel_buscar_trabajador(cursor, cia, dni)
+                if not trab or not trab.get('person'):
+                    sin_trabajador.append({
+                        'fila': fila['fila'],
+                        'dni': dni,
+                        'cargo': cargo,
+                    })
+                    continue
+                person = trab['person']
+                cursor.execute(
+                    """
+                    UPDATE PR_Employee
+                    SET Position = ?,
+                        XLastUser = ?,
+                        XLastDate = GETDATE()
+                    WHERE Company = ?
+                      AND Person = ?
+                    """,
+                    (position_id, xlastuser, cia, person),
+                )
+                if int(cursor.rowcount or 0) > 0:
+                    asignados += 1
+                    personas_vistas.add(person)
+            except Exception as e:
+                errores.append({
+                    'fila': fila['fila'],
+                    'dni': dni,
+                    'cargo': cargo,
+                    'error': str(e)[:200],
+                })
+
+        if errores and asignados == 0 and not personas_vistas:
+            conn.rollback()
+            return jsonify({
+                "error": "No se pudo importar el Excel.",
+                "errores": errores[:50],
+                "sin_trabajador": sin_trabajador[:50],
+            }), 500
+
+        conn.commit()
+        msg_parts = [
+            f'{len(cargos_creados)} cargo(s) nuevo(s)',
+            f'{asignados} trabajador(es) actualizado(s)',
+        ]
+        if sin_trabajador:
+            msg_parts.append(f'{len(sin_trabajador)} DNI sin ficha')
+        if errores:
+            msg_parts.append(f'{len(errores)} fila(s) con error')
+        return jsonify({
+            "ok": True,
+            "mensaje": 'Importación completada: ' + ', '.join(msg_parts) + '.',
+            "cargos_creados": sorted(cargos_creados),
+            "cargos_existentes": sorted(cargos_existentes),
+            "asignados": asignados,
+            "personas": len(personas_vistas),
+            "filas_leidas": len(filas),
+            "sin_trabajador": sin_trabajador[:100],
+            "errores": errores[:50],
+        })
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_cargos_importar_excel")
+        return jsonify({"error": str(e)}), 500
     finally:
         if conn:
             try:

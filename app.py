@@ -1486,8 +1486,13 @@ def _require_enviar_email_habilitado(cia):
 
 
 def _usa_ingresos_config_formato_liquidacion():
-    """Ingresos del formato vía flag Formato Liquidacion (hm_alamo / hm_maritima / hm_lumat)."""
-    return _es_cliente_alamo() or _es_cliente_maritima() or _es_cliente_lumat()
+    """Ingresos del formato vía flag Formato Liquidacion (alamo / maritima / lumat / divisa)."""
+    return (
+        _es_cliente_alamo()
+        or _es_cliente_maritima()
+        or _es_cliente_lumat()
+        or _es_cliente_divisa()
+    )
 
 
 def _es_cliente_garc():
@@ -7899,6 +7904,8 @@ def _build_formato_liquidacion_ingresos_configurados(conceptos, formula_values):
         if not fc:
             continue
         valor = _formato_liquidacion_fc_valor(formula_values, fc)
+        if _formato_liquidacion_r2(valor) <= 0:
+            continue
         total += valor
         filas.append({
             'label': str(item.get('label') or fc).strip() or fc,
@@ -8090,8 +8097,11 @@ def _build_formato_liquidacion_descuentos(liq, formula_values, conceptos_extra=N
         fc = str(item.get('formula_code') or '').strip()
         if not fc or fc.upper() in codes_fijos:
             continue
-        codes_fijos.add(fc.upper())
         importe = _formato_liquidacion_fc_valor(formula_values, fc)
+        # Flag Formato Liquidación: no listar descuentos sin importe.
+        if _formato_liquidacion_r2(importe) <= 0:
+            continue
+        codes_fijos.add(fc.upper())
         filas.append({
             'label': str(item.get('label') or fc).strip() or fc,
             'pct_fmt': '',

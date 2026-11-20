@@ -442,8 +442,12 @@
                 {% else %}
                 <div class="firma-spacer"></div>
                 {% endif %}
+                {% if ocultar_leyenda_firma_empleador %}
+                <div class="linea-firma"></div>
+                {% else %}
                 <div class="linea-firma">{{ etiqueta_empleador }}</div>
                 <div class="firma-info">{{ cab.nombre_representante }}{% if cab.cargo_representante %} — {{ cab.cargo_representante }}{% endif %}</div>
+                {% endif %}
             </td>
             <td width="50%">
                 <div class="firma-spacer"></div>

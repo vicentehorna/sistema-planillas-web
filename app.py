@@ -6923,6 +6923,7 @@ def generar_pdf_en_memoria(params):
             'boleta_he_lumat_semanal': he_lumat_semanal,
             'boleta_dual_moneda': boleta_cristal_dual,
             'etiqueta_firma_empleador': 'APODERADO' if boleta_cristal_dual else 'EMPLEADOR',
+            'ocultar_leyenda_firma_empleador': _es_cliente_servigen(),
         }
         if boleta_cristal_dual and cristal_dual:
             tpl_kwargs.update({

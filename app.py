@@ -1727,7 +1727,7 @@ def _texto_autorizacion_retiro_cts(cert):
     return texto.strip()
 
 
-def _pie_retiro_cts(cert):
+def _pie_retiro_cts(cert, incluir_telefono=True):
     """Líneas de pie de página (dirección / teléfono / correo / web)."""
     # hm_credireport: sin pie de dirección/teléfono (igual que el certificado de trabajo).
     if _es_cliente_credireport():
@@ -1745,15 +1745,22 @@ def _pie_retiro_cts(cert):
     linea1_parts = []
     if address:
         linea1_parts.append(address)
-    if phone:
+    if incluir_telefono and phone:
         linea1_parts.append(f'Teléfono: {phone}')
     if linea1_parts:
-        lineas.append(' - '.join(linea1_parts))
+        lineas.append(' - '.join(linea1_parts) if len(linea1_parts) > 1 else linea1_parts[0])
     if email:
         lineas.append(f'Correo: {email}')
     if web:
         lineas.append(web)
     return lineas
+
+
+def _pie_certificado_trabajo(cert):
+    """Pie del certificado de trabajo hm_ultra: dirección, correo y web (sin teléfono)."""
+    if not _es_cliente_ultraseguros():
+        return []
+    return _pie_retiro_cts(cert, incluir_telefono=False)
 
 
 def _texto_intro_retiro_cts_ng(cert):
@@ -7146,8 +7153,8 @@ def generar_pdf_certificado_trabajo(params):
             tratamiento=_tratamiento_certificado_trabajo(cert.get('sex')),
             fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
             es_ultraseguros=es_ultra,
-            # Pie solo en hm_ultra (modelo CT Ultrasegur).
-            pie_lineas=_pie_retiro_cts(cert) if es_ultra else [],
+            # Pie solo en hm_ultra (modelo CT Ultrasegur; sin teléfono).
+            pie_lineas=_pie_certificado_trabajo(cert) if es_ultra else [],
         )
 
     if WEASYPRINT_AVAILABLE:

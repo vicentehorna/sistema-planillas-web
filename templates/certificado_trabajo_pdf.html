@@ -145,21 +145,43 @@
             border-top: 0.6px solid #9a9a9a;
         }
         .pie div { margin: 0; }
+
+        /* hm_ultra: tipografía unificada + tamaños + pie sin línea */
+        .documento-ultra,
+        .documento-ultra .firma-block,
+        .documento-ultra .pie,
+        .documento-ultra .encabezado .empresa-cell {
+            font-family: 'Palatino Linotype', 'Book Antiqua', Georgia, serif;
+        }
+        .documento-ultra .titulo-principal {
+            font-size: 16px;
+        }
+        .documento-ultra .subtitulo-constar {
+            font-size: 14px;
+        }
+        .documento-ultra .pie {
+            border-top: none;
+            padding-top: 0;
+            font-size: 10px;
+            color: #333;
+        }
     </style>
 </head>
 <body>
-    <div class="documento{% if es_ultraseguros and pie_lineas %} documento-con-pie{% endif %}">
+    <div class="documento{% if es_ultraseguros %} documento-ultra{% endif %}{% if es_ultraseguros and pie_lineas %} documento-con-pie{% endif %}">
         <div class="encabezado">
             <div class="logo-cell">
                 {% if logo_src %}
                 <img src="{{ logo_src }}" alt="Logo" class="logo-img">
                 {% endif %}
             </div>
+            {% if not es_ultraseguros %}
             <div class="empresa-cell">
                 <div class="empresa-nombre">{{ cert.company_name or '' }}</div>
                 <div>RUC: {{ cert.company_ruc or '' }}</div>
                 <div>{{ cert.company_address or '' }}</div>
             </div>
+            {% endif %}
         </div>
 
         <div class="cuerpo">

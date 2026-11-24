@@ -54,7 +54,8 @@ BEGIN
         SUM(lpat) AS lpat,
         SUM(fer) AS fer,
         SUM(descanso) AS descanso,
-        SUM(normal) + SUM(descanso) AS diastrab
+        /* A + D + feriado trabajado (X) */
+        SUM(normal) + SUM(descanso) + SUM(fer) AS diastrab
     FROM (
         SELECT
             b.DocumentNumber AS dni,

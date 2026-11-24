@@ -3,6 +3,8 @@
     Fechas: VARCHAR(10) YYYY-MM-DD o vacío → NULL.
     @modo_reingreso = 'Y': limpia cese, Status='N', EntryDate inmutable y valida nueva ReEntryDate.
     Además realinea PR_Vacation al MD de reingreso (sp_pr_actualizar_vacaciones) y crea periodos faltantes.
+    Si cambia DiasVacaciones (sin reingreso), también ejecuta sp_pr_actualizar_vacaciones
+    para sincronizar Days/AcquiredDays de todos los periodos.
 
     Nota: la asignación REM_BASICA solo se crea en sp_pr_registrar_trabajador_web (alta).
     Sincroniza FLAG_ASIG_FAM permanente con @flagasigfamiliar (Y=asegura, N=elimina).
@@ -336,25 +338,36 @@ BEGIN
         END
     END;
 
-    /* Sincroniza periodos vacacionales abiertos (sin consumo) con el nuevo cupo anual. */
+    /*
+        Sincroniza cupo anual (PR_Employee.DiasVacaciones) → PR_Vacation.Days
+        vía sp_pr_actualizar_vacaciones (todos los periodos del trabajador).
+        Antes solo tocaba status='A' sin consumo; por eso un cambio a 15 no
+        actualizaba periodos con goce ya registrado.
+    */
     IF @dias_vac IS NOT NULL
-       AND OBJECT_ID(N'dbo.PR_Vacation', N'U') IS NOT NULL
+       AND @modo_reingreso <> 'Y'
+       AND OBJECT_ID(N'dbo.sp_pr_actualizar_vacaciones', N'P') IS NOT NULL
     BEGIN
+        EXEC dbo.sp_pr_actualizar_vacaciones @cia = @cia, @person = @person;
+    END
+    ELSE IF @dias_vac IS NOT NULL
+       AND OBJECT_ID(N'dbo.PR_Vacation', N'U') IS NOT NULL
+       AND OBJECT_ID(N'dbo.sp_pr_actualizar_vacaciones', N'P') IS NULL
+    BEGIN
+        /* Fallback si aún no existe el SP de realineación. */
         UPDATE v
         SET
             v.Days = @dias_vac,
-            v.AcquiredDays = @dias_vac,
+            v.AcquiredDays = CASE
+                WHEN ISNULL(v.ConsumedDays, 0) = 0 THEN @dias_vac
+                ELSE v.AcquiredDays
+            END,
             v.XLastUser = NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
             v.XLastDate = GETDATE()
         FROM PR_Vacation v
         WHERE v.Company = @cia
           AND v.Person = @person
-          AND v.status = 'A'
-          AND ISNULL(v.ConsumedDays, 0) = 0
-          AND (
-                ISNULL(v.Days, 0) <> @dias_vac
-             OR ISNULL(v.AcquiredDays, 0) <> @dias_vac
-          );
+          AND ISNULL(v.Days, 0) <> @dias_vac;
     END
 
     /* Al inactivar: permanentes → temporales con fin = periodo del cese */

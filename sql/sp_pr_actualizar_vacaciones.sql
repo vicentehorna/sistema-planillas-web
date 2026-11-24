@@ -6,20 +6,33 @@ BEGIN
     SET NOCOUNT ON;
 
     DECLARE @ingreso DATETIME;
+    DECLARE @dias_vac INT;
     DECLARE @vacsincemonths INT, @vacsinceyears INT;
     DECLARE @vactillmonths INT, @vactillyears INT;
     DECLARE @vacsincefinemonths INT, @vacsincefineyears INT;
 
-    SELECT @ingreso = ISNULL(ReEntryDate, EntryDate)
-    FROM PR_Employee
-    WHERE Person = @person
-      AND Company = @cia;
+    SELECT
+        @ingreso = ISNULL(e.ReEntryDate, e.EntryDate),
+        /* Prioridad: cupo en ficha; si no, DiasVacaciones del tipo de planilla. */
+        @dias_vac = ISNULL(
+            NULLIF(e.DiasVacaciones, 0),
+            ISNULL(pt.DiasVacaciones, 30)
+        )
+    FROM PR_Employee e
+        LEFT JOIN PR_PayRollType pt
+            ON pt.PayRollType = e.PayRollType
+           AND pt.Company = e.Company
+    WHERE e.Person = @person
+      AND e.Company = @cia;
 
     IF @ingreso IS NULL
     BEGIN
         RAISERROR('No se encontró empleado %s / %s', 16, 1, @person, @cia);
         RETURN;
     END;
+
+    IF @dias_vac IS NULL OR @dias_vac <= 0
+        SET @dias_vac = 30;
 
     SELECT
         @vacsincemonths = ISNULL(VacSinceMonths, 0),
@@ -69,6 +82,19 @@ BEGIN
             AND t.person = PR_VacationPay.person
             AND t.line = PR_VacationPay.line
       );
+
+    IF OBJECT_ID(N'dbo.PR_VacationProvisionedDays', N'U') IS NOT NULL
+    BEGIN
+        DELETE FROM PR_VacationProvisionedDays
+        WHERE Person = @person
+          AND Company = @cia
+          AND EXISTS (
+              SELECT 1 FROM #temporal t
+              WHERE t.company = PR_VacationProvisionedDays.company
+                AND t.person = PR_VacationProvisionedDays.person
+                AND t.line = PR_VacationProvisionedDays.line
+          );
+    END
 
     DELETE FROM PR_Vacation
     WHERE Person = @person
@@ -154,6 +180,9 @@ BEGIN
         DateBeginRights = c.datebeginrights,
         DateEndRights = c.dateendrights,
         DateEndNormal = c.dateendnormal,
+        Days = @dias_vac,
+        /* Cupo anual siempre desde ficha/planilla (también si ya hubo goce). */
+        AcquiredDays = @dias_vac,
         ConsumedDays = ISNULL((
             SELECT SUM(Days)
             FROM PR_VacationDetail

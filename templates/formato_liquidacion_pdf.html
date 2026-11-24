@@ -773,7 +773,7 @@
                 <thead>
                     <tr>
                         <th class="th-seccion">Aportaciones</th>
-                        {% if not es_elclan %}
+                        {% if not es_ultraseguros %}
                         <th class="monto">%</th>
                         <th class="monto">Base afecta</th>
                         {% endif %}
@@ -786,7 +786,7 @@
                     {% set oculta_eps = es_ngservicios and row.formula_code == 'APORTE_EPS' %}
                     <tr>
                         <td class="concepto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.label }}</td>
-                        {% if not es_elclan %}
+                        {% if not es_ultraseguros %}
                         <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.pct_fmt }}</td>
                         <td class="monto{% if oculta_eps %} oculto-ngservicios{% endif %}">{{ row.base_fmt }}</td>
                         {% endif %}

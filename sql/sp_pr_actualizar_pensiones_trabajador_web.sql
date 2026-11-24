@@ -46,10 +46,28 @@ BEGIN
     DECLARE @costcentercode VARCHAR(20) = '';
     DECLARE @concept_afp VARCHAR(20) = NULL;
     DECLARE @entrydate DATETIME = NULL;
+    DECLARE @old_pensiontype VARCHAR(20) = NULL;
+    DECLARE @old_fecha_inscripcion DATETIME = NULL;
+    DECLARE @old_desc VARCHAR(120) = NULL;
+    DECLARE @new_desc VARCHAR(120) = NULL;
+    DECLARE @hist_line INT = 0;
+    DECLARE @cambio_pension BIT = 0;
 
     IF RTRIM(ISNULL(@pensioninscriptiondate, '')) <> ''
        AND ISDATE(@pensioninscriptiondate) = 1
         SET @fecha_inscripcion = CONVERT(DATETIME, @pensioninscriptiondate, 120);
+
+    SELECT
+        @old_pensiontype = NULLIF(LTRIM(RTRIM(e.PensionType)), ''),
+        @old_fecha_inscripcion = e.PensionInscriptionDate
+    FROM PR_Employee e (NOLOCK)
+    WHERE e.Company = @cia
+      AND e.Person = @person;
+
+    IF ISNULL(@old_pensiontype, '') <> ISNULL(@pensiontype_norm, '')
+       OR ISNULL(CONVERT(DATE, @old_fecha_inscripcion), '19000101')
+          <> ISNULL(CONVERT(DATE, @fecha_inscripcion), '19000101')
+        SET @cambio_pension = 1;
 
     /* Resolver AFP automáticamente desde el régimen (sin UI). */
     IF @pensiontype_norm IS NOT NULL
@@ -95,6 +113,89 @@ BEGIN
         xlastuser = NULLIF(LTRIM(RTRIM(@xlastuser)), '')
     WHERE company = @cia
       AND person = @person;
+
+    /*
+        Histórico auxiliar (PR_HistoricoPension): al cambiar régimen o inscripción
+        guarda el valor anterior (si no hay histórico) y el nuevo.
+    */
+    IF @cambio_pension = 1
+       AND OBJECT_ID(N'dbo.PR_HistoricoPension', N'U') IS NOT NULL
+       AND (
+            @pensiontype_norm IS NOT NULL
+         OR @fecha_inscripcion IS NOT NULL
+         OR @old_pensiontype IS NOT NULL
+         OR @old_fecha_inscripcion IS NOT NULL
+       )
+    BEGIN
+        SELECT @old_desc = NULLIF(LTRIM(RTRIM(pt.Description)), '')
+        FROM PR_PensionType pt (NOLOCK)
+        WHERE pt.PensionType = @old_pensiontype;
+
+        SELECT @new_desc = NULLIF(LTRIM(RTRIM(pt.Description)), '')
+        FROM PR_PensionType pt (NOLOCK)
+        WHERE pt.PensionType = @pensiontype_norm;
+
+        SELECT @hist_line = ISNULL(MAX(h.Line), 0)
+        FROM dbo.PR_HistoricoPension h (NOLOCK)
+        WHERE h.Company = @cia
+          AND h.Person = @person;
+
+        IF @hist_line = 0
+           AND (
+                @old_pensiontype IS NOT NULL
+             OR @old_fecha_inscripcion IS NOT NULL
+           )
+        BEGIN
+            SET @hist_line = @hist_line + 1;
+            INSERT INTO dbo.PR_HistoricoPension (
+                Company, Person, Line, PensionType, PensionTypeDesc,
+                FechaInscripcion, XLastUser, XLastDate
+            )
+            VALUES (
+                @cia, @person, @hist_line, @old_pensiontype, @old_desc,
+                @old_fecha_inscripcion,
+                NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                GETDATE()
+            );
+        END
+
+        /* Evitar duplicar si el último registro ya es el nuevo cupo. */
+        IF NOT EXISTS (
+            SELECT 1
+            FROM dbo.PR_HistoricoPension h (NOLOCK)
+            WHERE h.Company = @cia
+              AND h.Person = @person
+              AND h.Line = (
+                    SELECT MAX(h2.Line)
+                    FROM dbo.PR_HistoricoPension h2 (NOLOCK)
+                    WHERE h2.Company = @cia AND h2.Person = @person
+              )
+              AND ISNULL(LTRIM(RTRIM(h.PensionType)), '') = ISNULL(@pensiontype_norm, '')
+              AND ISNULL(CONVERT(DATE, h.FechaInscripcion), '19000101')
+                  = ISNULL(CONVERT(DATE, @fecha_inscripcion), '19000101')
+        )
+           AND (
+                @pensiontype_norm IS NOT NULL
+             OR @fecha_inscripcion IS NOT NULL
+           )
+        BEGIN
+            SELECT @hist_line = ISNULL(MAX(h.Line), 0) + 1
+            FROM dbo.PR_HistoricoPension h (NOLOCK)
+            WHERE h.Company = @cia
+              AND h.Person = @person;
+
+            INSERT INTO dbo.PR_HistoricoPension (
+                Company, Person, Line, PensionType, PensionTypeDesc,
+                FechaInscripcion, XLastUser, XLastDate
+            )
+            VALUES (
+                @cia, @person, @hist_line, @pensiontype_norm, @new_desc,
+                @fecha_inscripcion,
+                NULLIF(LTRIM(RTRIM(@xlastuser)), ''),
+                GETDATE()
+            );
+        END
+    END
 
     /* Concepto flag mixta (FormulaCode AFP_FLUJO; Description suele ser AFP_COMISION_MIXTA) */
     SELECT TOP 1 @concept_afp = c.Concept

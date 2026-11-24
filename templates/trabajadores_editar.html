@@ -787,12 +787,21 @@
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="cboPensionType" class="form-label small fw-bold text-muted">Régimen</label>
-                            <select id="cboPensionType" name="pensiontype" class="form-select form-select-sm">
-                                <option value="">Seleccione...</option>
-                                {% for opt in pension_types %}
-                                <option value="{{ opt.id }}" {% if empleado.pensiontype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
-                                {% endfor %}
-                            </select>
+                            <div class="input-group input-group-sm">
+                                <select id="cboPensionType" name="pensiontype" class="form-select form-select-sm">
+                                    <option value="">Seleccione...</option>
+                                    {% for opt in pension_types %}
+                                    <option value="{{ opt.id }}" {% if empleado.pensiontype == opt.id %}selected{% endif %}>{{ opt.text }}</option>
+                                    {% endfor %}
+                                </select>
+                                {% if not modo_nuevo %}
+                                <button type="button" class="btn btn-outline-secondary" id="btnHistoricoPension"
+                                        title="Ver histórico de régimen e inscripción"
+                                        data-cia="{{ cia }}" data-person="{{ person_id }}">
+                                    <i class="bi bi-three-dots"></i>
+                                </button>
+                                {% endif %}
+                            </div>
                         </div>
                         <div class="col-md-6">
                             <label for="txtInscripcion" class="form-label small fw-bold text-muted">Inscripción</label>
@@ -1084,6 +1093,35 @@
                             </tr>
                         </thead>
                         <tbody id="tbodyHistoricoFechas">
+                            <tr><td colspan="2" class="text-muted text-center small">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalHistoricoPension" tabindex="-1" aria-labelledby="modalHistoricoPensionLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h5 class="modal-title fs-6" id="modalHistoricoPensionLabel">Histórico de régimen pensionario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Cerrar"></button>
+            </div>
+            <div class="modal-body py-2">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0 align-middle">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Régimen de pensión</th>
+                                <th style="width: 9rem;">Fecha de inscripción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tbodyHistoricoPension">
                             <tr><td colspan="2" class="text-muted text-center small">Cargando...</td></tr>
                         </tbody>
                     </table>
@@ -2087,6 +2125,55 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const btnHist = document.getElementById('btnHistoricoFechas');
     if (btnHist) btnHist.addEventListener('click', abrirHistoricoFechas);
+
+    async function abrirHistoricoPension(ev) {
+        const btn = (ev && ev.currentTarget) || document.getElementById('btnHistoricoPension');
+        const tbody = document.getElementById('tbodyHistoricoPension');
+        const modalEl = document.getElementById('modalHistoricoPension');
+        if (!btn || !tbody || !modalEl) return;
+
+        const ciaHist = (btn.getAttribute('data-cia') || cia || '').trim();
+        const personHist = (btn.getAttribute('data-person') || '').trim();
+        tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center small">Cargando...</td></tr>';
+
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+
+        try {
+            const url = '/api/trabajadores/historico-pension?cia=' + encodeURIComponent(ciaHist)
+                + '&person=' + encodeURIComponent(personHist);
+            const res = await fetch(url);
+            const payload = await res.json();
+            if (!res.ok || payload.error) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center small">'
+                    + (payload.error || 'No se pudo cargar el histórico.') + '</td></tr>';
+                return;
+            }
+            const rows = Array.isArray(payload.rows) ? payload.rows : [];
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="2" class="text-muted text-center small">'
+                    + (payload.mensaje || 'Sin histórico registrado.') + '</td></tr>';
+                return;
+            }
+            tbody.innerHTML = '';
+            rows.forEach((r) => {
+                const tr = document.createElement('tr');
+                const vigente = String(r.vigente || '').toUpperCase() === 'Y';
+                const regimen = (r.regimen_pension || '—');
+                tr.innerHTML = '<td>' + regimen
+                    + (vigente ? ' <span class="badge text-bg-success">Vigente</span>' : '')
+                    + '</td>'
+                    + '<td>' + fmtFechaHist(r.fecha_inscripcion) + '</td>';
+                tbody.appendChild(tr);
+            });
+        } catch (err) {
+            console.error(err);
+            tbody.innerHTML = '<tr><td colspan="2" class="text-danger text-center small">Error de red.</td></tr>';
+        }
+    }
+
+    const btnHistPension = document.getElementById('btnHistoricoPension');
+    if (btnHistPension) btnHistPension.addEventListener('click', abrirHistoricoPension);
 });
 </script>
 {% endblock %}

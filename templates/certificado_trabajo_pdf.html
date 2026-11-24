@@ -110,6 +110,26 @@
             text-transform: uppercase;
             margin: 0;
         }
+        .subtitulo-constar {
+            text-align: center;
+            font-size: 12px;
+            font-weight: bold;
+            letter-spacing: 0.4px;
+            margin: 0 0 28px;
+            text-transform: uppercase;
+        }
+        .pie {
+            position: absolute;
+            left: 22px;
+            right: 22px;
+            bottom: 14px;
+            text-align: center;
+            font-family: Arial, Helvetica, sans-serif;
+            font-size: 9px;
+            color: #555;
+            line-height: 1.45;
+        }
+        .pie div { margin: 0; }
     </style>
 </head>
 <body>
@@ -130,6 +150,22 @@
         <div class="cuerpo">
             <div class="titulo-principal">Certificado de Trabajo</div>
 
+            {% if es_ultraseguros %}
+            {# Contenido modelo Ultrasegur (CT - PEREZ VALENCIA); diseño del formato web. #}
+            <p class="parrafo">
+                El que suscribe, en representación de {{ cert.company_name or '' }} con RUC N° {{ cert.company_ruc or '' }}.
+            </p>
+
+            <div class="subtitulo-constar">Hace constar</div>
+
+            <p class="parrafo">
+                Que {{ tratamiento }}{{ cert.person_name or '' }}, identificado con {{ cert.person_document_type or 'DNI' }} N° {{ cert.person_document or '' }}, ha trabajado en la empresa desempeñando el cargo de {{ cert.person_position or '' }} desde el {{ cert.fecha_entry_day }} de {{ cert.fecha_entry_month }} del {{ cert.fecha_entry_year }} hasta el {{ cert.ceasedate_day }} de {{ cert.ceasedate_month }} del {{ cert.ceasedate_year }}.
+            </p>
+
+            <p class="parrafo">
+                Se expide el presente certificado a solicitud del interesado y para los fines que crea conveniente.
+            </p>
+            {% else %}
             <p class="parrafo">
                 Conste por el presente que {{ tratamiento }}{{ cert.person_name }}, con {{ cert.person_document_type }} N° {{ cert.person_document }}, laboró en la empresa {{ cert.company_name }} desempeñándose como {{ cert.person_position }} desde el {{ cert.fecha_entry_day }} de {{ cert.fecha_entry_month }} del {{ cert.fecha_entry_year }} hasta el {{ cert.ceasedate_day }} de {{ cert.ceasedate_month }} del {{ cert.ceasedate_year }}.
             </p>
@@ -137,6 +173,7 @@
             <p class="parrafo">
                 Se expide el presente certificado a solicitud del interesado y para los fines que crea conveniente.
             </p>
+            {% endif %}
 
             <div class="fecha-linea">{{ fecha_emision_texto }}</div>
 
@@ -149,6 +186,14 @@
                 <p class="rep-cargo">{{ cert.rep_position or 'REPRESENTANTE LEGAL' }}</p>
             </div>
         </div>
+
+        {% if es_ultraseguros and pie_lineas %}
+        <div class="pie">
+            {% for linea in pie_lineas %}
+            <div>{{ linea }}</div>
+            {% endfor %}
+        </div>
+        {% endif %}
     </div>
 </body>
 </html>

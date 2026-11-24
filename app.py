@@ -7137,6 +7137,7 @@ def generar_pdf_certificado_trabajo(params):
         )
     else:
         logo_src, firma_src = _boleta_logo_firma_src(cia)
+        es_ultra = _es_cliente_ultraseguros()
         html_renderizado = render_template(
             'certificado_trabajo_pdf.html',
             cert=cert,
@@ -7144,6 +7145,9 @@ def generar_pdf_certificado_trabajo(params):
             firma_src=firma_src,
             tratamiento=_tratamiento_certificado_trabajo(cert.get('sex')),
             fecha_emision_texto=_fecha_emision_certificado_trabajo(cert),
+            es_ultraseguros=es_ultra,
+            # Pie solo en hm_ultra (modelo CT Ultrasegur).
+            pie_lineas=_pie_retiro_cts(cert) if es_ultra else [],
         )
 
     if WEASYPRINT_AVAILABLE:

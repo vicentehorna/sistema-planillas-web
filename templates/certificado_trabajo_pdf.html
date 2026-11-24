@@ -20,6 +20,19 @@
             box-sizing: border-box;
             position: relative;
         }
+        /* hm_ultra: pie fijo al final de la hoja; reserva espacio para no traslapar la firma. */
+        .documento-con-pie {
+            height: 273mm;
+            min-height: 273mm;
+            padding-bottom: 30mm;
+        }
+        .documento-con-pie .fecha-linea {
+            margin-bottom: 36px;
+        }
+        .documento-con-pie .firma-block {
+            margin-top: 20px;
+            margin-bottom: 12px;
+        }
         .encabezado {
             display: table;
             width: 100%;
@@ -122,18 +135,20 @@
             position: absolute;
             left: 22px;
             right: 22px;
-            bottom: 14px;
+            bottom: 10px;
             text-align: center;
             font-family: Arial, Helvetica, sans-serif;
             font-size: 9px;
             color: #555;
             line-height: 1.45;
+            padding-top: 8px;
+            border-top: 0.6px solid #9a9a9a;
         }
         .pie div { margin: 0; }
     </style>
 </head>
 <body>
-    <div class="documento">
+    <div class="documento{% if es_ultraseguros and pie_lineas %} documento-con-pie{% endif %}">
         <div class="encabezado">
             <div class="logo-cell">
                 {% if logo_src %}

@@ -1316,6 +1316,16 @@ def _es_cliente_ultraseguros():
         return False
 
 
+def _boleta_firma_ampliada(cia=None):
+    """Firma más grande en boleta: ngservicios (sello) o ESCUELA INTEGRAL (SB01) en hm_ultra."""
+    if _es_cliente_ngservicios():
+        return True
+    cia_norm = str(cia or '').strip().upper()
+    if _es_cliente_ultraseguros() and cia_norm in ('SB01', 'ESCUELA'):
+        return True
+    return False
+
+
 def _es_cliente_elclan():
     """True cuando la BD activa es hm_elclan (formato solicitud de vacaciones)."""
     try:
@@ -6925,7 +6935,7 @@ def generar_pdf_en_memoria(params):
             'aportes': aportes,
             'logo_src': logo_src,
             'firma_src': firma_src,
-            'firma_ampliada': _es_cliente_ngservicios(),
+            'firma_ampliada': _boleta_firma_ampliada(cia),
             'cabecera_modelo_anterior': (
                 boleta_doble and (not boleta_cristal_dual) and _boleta_cabecera_modelo_anterior()
             ),
@@ -11951,10 +11961,30 @@ def _importacion_conceptos_guardar_fila(
 def _importacion_conceptos_cerrar_permanente_anterior(
     cursor, cia, person, concept, payrolltype, period, costcenter, xlastuser
 ):
-    """Cierra el permanente vigente iniciado antes de @period (pasa a temporal hasta el periodo previo).
+    """Prepara el alta/cambio de un permanente respetando la unicidad del SP.
 
-    Devuelve False si hay un permanente anterior pero la planilla no tiene un periodo previo donde cerrarlo.
+    sp_pr_guardarasignacionconcepto_web solo permite UN permanente del mismo
+    concepto por persona/empresa (sin filtrar planilla). Por eso:
+
+    1) Elimina permanentes del mismo concepto en OTRA planilla (huérfanos / ficha distinta).
+    2) Cierra permanentes de la misma planilla iniciados antes de @period
+       (pasan a temporal hasta el periodo previo).
+
+    Devuelve False si hay un permanente anterior en la misma planilla pero no
+    existe periodo previo donde cerrarlo.
     """
+    # 1) Permanentes en otra planilla bloquean el SP aunque la pantalla filtre por planilla.
+    cursor.execute(
+        """
+        DELETE FROM PR_EmployeeConcept
+        WHERE Company = ? AND Person = ? AND Concept = ?
+          AND PayRollType <> ?
+          AND UPPER(LTRIM(RTRIM(ISNULL(FlagFrecuencyType, 'P')))) = 'P'
+          AND (PRPeriodEnd IS NULL OR LTRIM(RTRIM(PRPeriodEnd)) = '')
+        """,
+        (cia, person, concept, payrolltype),
+    )
+
     cursor.execute(
         """
         SELECT TOP 1 LTRIM(RTRIM(p.PRPeriod))
@@ -35798,7 +35828,7 @@ def reporte_planilla_todas_planillas_post():
 @app.route('/reporte_vacaciones_detalle', methods=['POST'])
 @login_required
 def reporte_vacaciones_detalle_post():
-    """sp_pr_r019_vacationdetail_web @cia, @payrolltype, @period, @person."""
+    """sp_pr_r019_vacationdetail_web @cia, @payrolltype, @period, @person, @incluir_pagados."""
     body = request.get_json(silent=True) or {}
     cia = str(body.get('cia') or '').strip()
     payroll_type = str(body.get('payroll_type') or body.get('payrolltype') or '').strip()
@@ -35809,6 +35839,11 @@ def reporte_vacaciones_detalle_post():
     else:
         period = _normalize_pr_period(period_raw)
     person = str(body.get('person') or '0').strip() or '0'
+    incluir_raw = body.get('incluir_pagados')
+    if incluir_raw is True or str(incluir_raw or '').strip().upper() in ('Y', '1', 'TRUE', 'S', 'SI', 'SÍ'):
+        incluir_pagados = 'Y'
+    else:
+        incluir_pagados = 'N'
 
     if not cia:
         return jsonify({"error": "Seleccione una compañía."}), 400
@@ -35824,8 +35859,9 @@ def reporte_vacaciones_detalle_post():
         'Días',
         'Año control',
         'Cargo',
+        'Origen',
     ]
-    keys_datos = ['person', 'name', 'datebegin', 'dateend', 'days', 'controlyear', 'cargo']
+    keys_datos = ['person', 'name', 'datebegin', 'dateend', 'days', 'controlyear', 'cargo', 'origen']
 
     conn = None
     try:
@@ -35833,8 +35869,9 @@ def reporte_vacaciones_detalle_post():
         cursor = conn.cursor()
         _set_cursor_timeout_report(cursor)
         cursor.execute(
-            "EXEC sp_pr_r019_vacationdetail_web @cia=?, @payrolltype=?, @period=?, @person=?",
-            (cia, payroll_type, period, person),
+            "EXEC sp_pr_r019_vacationdetail_web "
+            "@cia=?, @payrolltype=?, @period=?, @person=?, @incluir_pagados=?",
+            (cia, payroll_type, period, person, incluir_pagados),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
         resultado = []
@@ -35847,6 +35884,8 @@ def reporte_vacaciones_detalle_post():
                         fila.append(int(round(float(val))))
                     except Exception:
                         fila.append(_jsonable_value(val))
+                elif key == 'origen':
+                    fila.append(_jsonable_value(val) or 'Utilización')
                 else:
                     fila.append(_jsonable_value(val))
             resultado.append(fila)

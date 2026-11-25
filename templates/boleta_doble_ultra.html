@@ -107,8 +107,9 @@
             width: 28%;
         }
 
-        .firmas-table { margin-top: 28px; margin-bottom: 0; text-align: center; }
+        .firmas-table { margin-top: 18px; margin-bottom: 0; text-align: center; }
         .linea-firma { border-top: 1px solid #000; width: 220px; margin: 0 auto; padding-top: 3px; font-weight: bold; font-size: 8px; }
+        .linea-firma.firma-ampliada { width: 320px; }
         .firma-img {
             max-height: 80px;
             max-width: 220px;
@@ -119,7 +120,15 @@
             margin: 0 auto 3px;
             display: block;
         }
+        /* ESCUELA INTEGRAL (SB01): sello con nombre/cargo — ~2x el tamaño base */
+        .firma-img.firma-ampliada {
+            max-height: none;
+            max-width: none;
+            height: 160px;
+            width: auto;
+        }
         .firma-spacer { height: 80px; }
+        .firma-spacer.firma-ampliada { height: 160px; }
         .firma-info { font-size: 7px; color: #555; }
     </style>
 </head>
@@ -133,12 +142,14 @@
     moneda_texto='',
     simbolo_neto='S/',
     tipocambio=None,
-    etiqueta_empleador='EMPLEADOR'
+    etiqueta_empleador='EMPLEADOR',
+    firma_grande=false
 ) %}
 {% set cab = cab if cab is not none else cabecera %}
 {% set ing = ing if ing is not none else ingresos %}
 {% set des = des if des is not none else descuentos %}
 {% set apo = apo if apo is not none else aportes %}
+{% set firma_grande = firma_grande if firma_grande else (firma_ampliada if firma_ampliada is defined else false) %}
 <div class="boleta {{ clase }}">
     {% if clase == 'copia' %}<div class="corte">&#9986; cortar aquí</div>{% endif %}
     <table class="header-table">
@@ -438,20 +449,20 @@
         <tr>
             <td width="50%">
                 {% if firma_src %}
-                <img src="{{ firma_src }}" class="firma-img" alt="Firma empleador">
+                <img src="{{ firma_src }}" class="firma-img{% if firma_grande %} firma-ampliada{% endif %}" alt="Firma empleador">
                 {% else %}
-                <div class="firma-spacer"></div>
+                <div class="firma-spacer{% if firma_grande %} firma-ampliada{% endif %}"></div>
                 {% endif %}
                 {% if ocultar_leyenda_firma_empleador %}
-                <div class="linea-firma"></div>
+                <div class="linea-firma{% if firma_grande %} firma-ampliada{% endif %}"></div>
                 {% else %}
-                <div class="linea-firma">{{ etiqueta_empleador }}</div>
+                <div class="linea-firma{% if firma_grande %} firma-ampliada{% endif %}">{{ etiqueta_empleador }}</div>
                 <div class="firma-info">{{ cab.nombre_representante }}{% if cab.cargo_representante %} — {{ cab.cargo_representante }}{% endif %}</div>
                 {% endif %}
             </td>
             <td width="50%">
-                <div class="firma-spacer"></div>
-                <div class="linea-firma">TRABAJADOR</div>
+                <div class="firma-spacer{% if firma_grande %} firma-ampliada{% endif %}"></div>
+                <div class="linea-firma{% if firma_grande %} firma-ampliada{% endif %}">TRABAJADOR</div>
                 <div class="firma-info">{{ cab.nombre_trabajador }} — DNI: {{ cab.dni }}</div>
             </td>
         </tr>
@@ -460,12 +471,13 @@
 {% endmacro %}
 
 {% set _emp = etiqueta_firma_empleador if etiqueta_firma_empleador is defined else 'EMPLEADOR' %}
+{% set _firma_grande = firma_ampliada if firma_ampliada is defined else false %}
 {% if boleta_dual_moneda %}
-{{ boleta_block('', cabecera_usd, ingresos_usd, descuentos_usd, aportes_usd, 'DOLARES', 'US$', tipocambio, _emp) }}
-{{ boleta_block('copia', cabecera_pen, ingresos_pen, descuentos_pen, aportes_pen, 'SOLES', 'S/', tipocambio, _emp) }}
+{{ boleta_block('', cabecera_usd, ingresos_usd, descuentos_usd, aportes_usd, 'DOLARES', 'US$', tipocambio, _emp, _firma_grande) }}
+{{ boleta_block('copia', cabecera_pen, ingresos_pen, descuentos_pen, aportes_pen, 'SOLES', 'S/', tipocambio, _emp, _firma_grande) }}
 {% else %}
-{{ boleta_block(etiqueta_empleador=_emp) }}
-{{ boleta_block('copia', etiqueta_empleador=_emp) }}
+{{ boleta_block(etiqueta_empleador=_emp, firma_grande=_firma_grande) }}
+{{ boleta_block('copia', etiqueta_empleador=_emp, firma_grande=_firma_grande) }}
 {% endif %}
 </body>
 </html>

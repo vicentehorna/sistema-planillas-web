@@ -91,11 +91,17 @@
                     <option value="">Todos (por defecto)</option>
                 </select>
             </div>
-            <div class="col-12 d-flex align-items-center flex-wrap gap-2 border-top pt-3 mt-3">
+            <div class="col-12 d-flex align-items-center flex-wrap gap-3 border-top pt-3 mt-3">
+                <div class="form-check mb-0">
+                    <input class="form-check-input" type="checkbox" id="chkIncluirPagados" value="Y">
+                    <label class="form-check-label small" for="chkIncluirPagados" title="Incluye pagos de vacaciones (PR_VacationPay) del periodo cuando no hay utilización registrada">
+                        Incluir días pagados sin utilización
+                    </label>
+                </div>
                 <button type="submit" class="btn btn-primary btn-sm px-4"><i class="bi bi-search"></i> Consultar</button>
                 <button type="button" class="btn btn-success btn-sm px-4" id="btnExportExcelVac" disabled><i class="bi bi-file-earmark-excel"></i> Exportar a Excel</button>
                 <span class="ms-auto text-muted small fw-bold">No. de Registros: <span id="lblRowCountVac">0</span></span>
-</div>
+            </div>
         </form>
     </div>
 </div>
@@ -123,8 +129,8 @@ document.addEventListener('DOMContentLoaded', async function () {
     const IDX_STICKY_1 = 1;
     const IDX_STICKY_2 = 2;
     const IDX_COL_DIAS = 5;
-    /** Centrados: Periodo (YYYY-MM), Fecha inicio, Fecha fin, Año control */
-    const IDX_CENTRO = new Set([0, 3, 4, 6]);
+    /** Centrados: Periodo (YYYY-MM), Fecha inicio, Fecha fin, Año control, Origen */
+    const IDX_CENTRO = new Set([0, 3, 4, 6, 8]);
 
     let lastExportVacaciones = null;
 
@@ -350,12 +356,13 @@ document.addEventListener('DOMContentLoaded', async function () {
         const period = document.getElementById('cboPeriodo').value.trim();
         let person = document.getElementById('cboTrabajador').value.trim();
         if (!person) person = '0';
+        const incluir_pagados = document.getElementById('chkIncluirPagados').checked ? 'Y' : 'N';
 
         try {
             const res = await fetch(URL_REPORTE, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cia, payroll_type, period, person })
+                body: JSON.stringify({ cia, payroll_type, period, person, incluir_pagados })
             });
             const payload = await res.json();
             if (!res.ok) {

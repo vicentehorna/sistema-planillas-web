@@ -2,8 +2,9 @@
     Validaciones previas al cálculo de planilla (módulo Procesar planilla).
 
     1) Asignaciones permanentes duplicadas (cualquier proceso):
-       Un trabajador no puede tener el mismo concepto más de una vez
-       con FlagFrecuencyType = 'P' en la planilla.
+       Un trabajador activo (PR_Employee.Status = 'N') no puede tener el
+       mismo concepto más de una vez con FlagFrecuencyType = 'P' en la planilla.
+       Los cesados no se reportan.
 
     2) Conceptos en más de una vía:
       MENSUAL / FIN_DE_MES:
@@ -96,7 +97,8 @@ BEGIN
         formulacode VARCHAR(50) NOT NULL PRIMARY KEY
     );
 
-    /* Permanentes duplicados: mismo concepto FlagFrecuencyType='P' más de una vez. */
+    /* Permanentes duplicados: mismo concepto FlagFrecuencyType='P' más de una vez.
+       Solo trabajadores activos (PR_Employee.Status = 'N'). */
     INSERT INTO #errores (person, name, observacion)
     SELECT
         D.Person,
@@ -126,6 +128,11 @@ BEGIN
             EC.Concept,
             COUNT(*) AS cnt
         FROM PR_EmployeeConcept EC (NOLOCK)
+            INNER JOIN PR_Employee E (NOLOCK)
+                ON E.Company = EC.Company
+               AND E.Person = EC.Person
+               AND E.PayRollType = EC.PayRollType
+               AND UPPER(LTRIM(RTRIM(ISNULL(E.Status, '')))) = 'N'
         WHERE EC.Company = @cia
           AND EC.PayRollType = @payrolltype
           AND EC.FlagFrecuencyType = 'P'

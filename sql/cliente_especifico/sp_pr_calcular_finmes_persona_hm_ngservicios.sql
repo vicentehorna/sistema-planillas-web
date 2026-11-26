@@ -105,11 +105,33 @@ begin
 			end
 		end
 	end
+
+	/*DESCUENTO DE PRESTAMO: de sp_pr_asignar_conceptos_persona.
+	  En NG la llamada completa a asignar_conceptos está comentada (días vienen del tareo);
+	  se mantiene aquí el alta del DSCTO_DE_PRESTAMO desde la amortización del periodo.*/
+	declare @prestamo numeric(19,4)
+	set @prestamo = isnull((select sum(AmountLo) from PR_EmployeeLoanAmortization
+		where Company = @company and PRperiod = @period and Person = @person),0)
+	if @prestamo > 0
+	begin
+		delete from PR_EmployeeConcept where company = @company and PayRollType = @payrolltype and Person = @person and PRPeriodStart = @period
+		and exists (select * from PR_Concept where Concept = PR_EmployeeConcept.Concept and Company = PR_EmployeeConcept.Company and FormulaCode = 'DSCTO_DE_PRESTAMO')
+
+		insert into PR_EmployeeConcept (Person, Company,Concept,PayRollType,PRPeriodStart, CostCenter, PRPeriodEnd, ConceptValue, Application,ConceptCurrency,
+		ConceptValueLo,ConceptValueEx,ExchangeRate,Comments,FlagApplyFormula,FlagFrecuencyType, ReplicationUnit,XLastUser,XLastDate,CostCenterCode,PercentageDistribution)
+		select
+			PR_Employee.Person,PR_Employee.Company,
+			(select Concept from PR_Concept where FormulaCode = 'DSCTO_DE_PRESTAMO' and Company = @company),
+			PR_Employee.PayRollType,@period,isnull(PR_Employee.CostCenter,''),@period,
+			@prestamo, 'PR', 'LO',NULL,NULL,NULL,'CALCULO FIN DE MES','N', 'T', SY_Person.ReplicationUnit,@UserID,getdate(),PR_Employee.Costcentername,'A'
+		from PR_Employee inner join SY_Person on (PR_Employee.Person = SY_Person.Person)
+		where PR_Employee.Status = 'N' and PR_Employee.Company = @company and PR_Employee.PayRollType = @payrolltype and PR_Employee.Person = @person
+	end
 	
 	/*INSERTAR CONCEPTOS DESDE ASIGNACION*/
-
 	
 
+	
 	delete from PR_EmployeePayRollConcept where Company = @company and PayRollType = @payrolltype and Person = @person
 	and ProcessType = @processtype and PRPeriod = @period
 

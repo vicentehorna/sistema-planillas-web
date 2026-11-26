@@ -13,6 +13,9 @@ RECETA_TEMP_USER = 'vhornac'
 RECETA_TEMP_PASSWORD = 'vhornac'
 RECETA_TEMP_DATABASE = 'hm_aci'
 
+# BD donde SY_User + SY_UserProfile bastan para entrar (sin SY_Person / PR_Employee).
+DBS_ALLOW_LOGIN_WITHOUT_PERSON = frozenset({'hm_aricruz'})
+
 
 def is_receta_only_user(username=None):
     """True si el usuario es el acceso temporal exclusivo a Receta."""
@@ -466,6 +469,30 @@ class User(UserMixin):
         return cursor.fetchone()
 
     @staticmethod
+    def _query_syuser_profile_login(cursor, username, password):
+        """
+        Login sin ficha de trabajador: SY_User + PasswordWeb + cualquier SY_UserProfile.
+        Usado en BD de DBS_ALLOW_LOGIN_WITHOUT_PERSON (p. ej. hm_aricruz).
+        """
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS Name,
+                p.email,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS DisplayName
+            FROM SY_User u
+            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
+            LEFT JOIN SY_Person p ON p.UserID = u.UserID
+            WHERE u.UserID = ?
+              AND u.PasswordWeb = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(u.Status, 'A')))) IN ('A', 'N', '')
+            """,
+            (username, password),
+        )
+        return cursor.fetchone()
+
+    @staticmethod
     def _query_employee_by_id(cursor, user_id):
         cursor.execute(
             """
@@ -505,6 +532,25 @@ class User(UserMixin):
             (user_id,),
         )
         return cursor.fetchone()
+
+    @staticmethod
+    def _query_syuser_profile_by_id(cursor, user_id):
+        cursor.execute(
+            """
+            SELECT
+                u.UserID,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS Name,
+                p.email,
+                ISNULL(NULLIF(LTRIM(RTRIM(p.Name)), ''), u.UserID) AS DisplayName
+            FROM SY_User u
+            INNER JOIN SY_UserProfile up ON up.UserID = u.UserID
+            LEFT JOIN SY_Person p ON p.UserID = u.UserID
+            WHERE u.UserID = ?
+              AND UPPER(LTRIM(RTRIM(ISNULL(u.Status, 'A')))) IN ('A', 'N', '')
+            """,
+            (user_id,),
+        )
+        return cursor.fetchone()
     
     @staticmethod
     def validate_user(username, password):
@@ -515,7 +561,9 @@ class User(UserMixin):
 
         Acepta:
           - Usuario ligado a trabajador (PR_Employee), o
-          - Usuario EMPWEB sin ficha (adminlumat, adminaci, etc.).
+          - Usuario EMPWEB sin ficha (adminlumat, adminaci, etc.), o
+          - En BD de DBS_ALLOW_LOGIN_WITHOUT_PERSON: SY_User + cualquier perfil
+            (sin exigir SY_Person / PR_Employee).
 
         Excepción temporal: vhornac/vhornac → solo Receta, BD fija hm_aci (sin router/BD).
         """
@@ -554,6 +602,9 @@ class User(UserMixin):
             if not row:
                 row = User._query_empweb_login(cursor, username, password)
                 login_mode = 'empweb'
+            if not row and target_db.strip().lower() in DBS_ALLOW_LOGIN_WITHOUT_PERSON:
+                row = User._query_syuser_profile_login(cursor, username, password)
+                login_mode = 'syuser_profile'
 
             cursor.close()
 
@@ -567,6 +618,8 @@ class User(UserMixin):
                     if has_request_context():
                         session['receta_only'] = False
                         session['web_login_mode'] = login_mode
+                        if login_mode in ('empweb', 'syuser_profile'):
+                            session['web_user_no_employee'] = True
                 except Exception:
                     pass
                 return user
@@ -604,6 +657,10 @@ class User(UserMixin):
             row = User._query_employee_by_id(cursor, user_id)
             if not row:
                 row = User._query_empweb_by_id(cursor, user_id)
+            if not row:
+                active_db = (get_active_database() or '').strip().lower()
+                if active_db in DBS_ALLOW_LOGIN_WITHOUT_PERSON:
+                    row = User._query_syuser_profile_by_id(cursor, user_id)
 
             cursor.close()
             conn.close()
@@ -616,7 +673,7 @@ class User(UserMixin):
 
 
 def _first_company_for_userid(userid):
-    """Primera compañía de SY_UserCompany (usuarios admin sin PR_Employee)."""
+    """Primera compañía de SY_UserCompany; si no hay, primera SY_Company de la BD."""
     conn = None
     try:
         conn = get_db_connection()
@@ -631,8 +688,20 @@ def _first_company_for_userid(userid):
             (userid,),
         )
         row = cursor.fetchone()
+        if row and row[0]:
+            cursor.close()
+            return str(row[0]).strip()
+        # Fallback: primera compañía (p. ej. PET TIME / BGT en hm_aricruz)
+        cursor.execute(
+            """
+            SELECT TOP 1 LTRIM(RTRIM(Company))
+            FROM SY_Company (NOLOCK)
+            ORDER BY CASE WHEN Company = 'BGT' THEN 0 ELSE 1 END, Company
+            """
+        )
+        row = cursor.fetchone()
         cursor.close()
-        return (row[0] if row and row[0] else None)
+        return (str(row[0]).strip() if row and row[0] else None)
     except Exception:
         return None
     finally:

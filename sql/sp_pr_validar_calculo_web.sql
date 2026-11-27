@@ -177,7 +177,11 @@ BEGIN
                AND E.Status = 'N'
             INNER JOIN #empleados_periodo EP ON E.Person = EP.person
             INNER JOIN SY_Person P (NOLOCK) ON E.Person = P.Person
-        WHERE ROUND(T.total_ingresos, 2) - ROUND(T.total_egresos, 2) <> ROUND(T.neto, 2);
+        /* Tolerancia 0.01: solo avisa si la diferencia supera un céntimo (redondeo). */
+        WHERE ABS(
+                (ROUND(T.total_ingresos, 2) - ROUND(T.total_egresos, 2))
+                - ROUND(T.neto, 2)
+              ) > 0.01;
     END
 
     /* Código PDT: solo conceptos de Ingresos (I) y Descuentos (D) con movimiento en el periodo. */

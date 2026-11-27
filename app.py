@@ -22037,10 +22037,11 @@ def api_configuraciones_guardar():
                 _xlastuser_id(),
             ),
         )
-        rows = _dicts_first_nonempty_resultset(cursor)
+        _dicts_first_nonempty_resultset(cursor)
         _drain_pyodbc_cursor(cursor)
         conn.commit()
-        mensaje = (rows[0].get('mensaje') if rows else None) or 'Configuración guardada correctamente.'
+        # Mensaje en Python (UTF-8): evita mojibake del SP vía sqlcmd.
+        mensaje = 'Configuración guardada correctamente.'
         return jsonify({"ok": True, "mensaje": mensaje, "company": company})
     except Exception as e:
         if conn:

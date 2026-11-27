@@ -281,15 +281,6 @@
                 <form id="frmCfg" class="row g-2" autocomplete="off">
                     <input type="hidden" id="hidCompanyCfg" value="">
 
-                    <div class="col-4 col-md-2">
-                        <label for="txtCompanyCfg" class="form-label fw-semibold text-muted">Código</label>
-                        <input type="text" id="txtCompanyCfg" class="form-control form-control-sm" readonly>
-                    </div>
-                    <div class="col-8 col-md-10">
-                        <label for="txtDescriptionCfg" class="form-label fw-semibold text-muted">Compañía</label>
-                        <input type="text" id="txtDescriptionCfg" class="form-control form-control-sm" readonly>
-                    </div>
-
                     <div class="col-12 cfg-seccion">Préstamos — conceptos por proceso</div>
                     <div class="col-12">
                         <p class="cfg-hint mb-1">
@@ -509,10 +500,11 @@ document.addEventListener('DOMContentLoaded', function () {
         seleccionada = row;
         renderLista(empresasCache);
         mostrarPanel(true);
-        document.getElementById('tituloEdicionCfg').textContent = `Configuración — ${row.company}`;
+        const tituloCia = row.description
+            ? `${row.company} — ${row.description}`
+            : (row.company || '');
+        document.getElementById('tituloEdicionCfg').textContent = `Configuración — ${tituloCia}`;
         document.getElementById('hidCompanyCfg').value = row.company;
-        document.getElementById('txtCompanyCfg').value = row.company || '';
-        document.getElementById('txtDescriptionCfg').value = row.description || '';
 
         try {
             const [conceptos, res] = await Promise.all([
@@ -530,7 +522,10 @@ document.addEventListener('DOMContentLoaded', function () {
             fillSelect(document.getElementById('cboLoanGratificacion'), conceptos, data.loanconceptgratificacion);
             document.getElementById('txtXLastUserCfg').value = data.xlastuser || '';
             document.getElementById('txtXLastDateCfg').value = formatearFecha(data.xlastdate);
-            if (data.description) document.getElementById('txtDescriptionCfg').value = data.description;
+            if (data.description) {
+                document.getElementById('tituloEdicionCfg').textContent =
+                    `Configuración — ${row.company} — ${data.description}`;
+            }
         } catch (err) {
             hmError(err.message || 'No se pudo cargar la configuración.');
         }

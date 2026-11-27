@@ -92,7 +92,7 @@ BEGIN
 
     SELECT
         'OK' AS ok,
-        'Configuración guardada correctamente.' AS mensaje,
+        N'Configuración guardada correctamente.' AS mensaje,
         @company AS company;
 END
 GO

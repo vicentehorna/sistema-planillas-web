@@ -12,6 +12,7 @@
       @activos             — Y = solo activos (Status='N'), N = solo inactivos
       @cesados             — T=todos, Y=con cese, N=sin cese
       @repunit             — unidad (SY_Person.ReplicationUnit); '0' = todas
+      @costcenter          — centro de costo (PR_Employee.CostCenter); '0' = todos
 
     Fecha ingreso efectiva: ISNULL(ReEntryDate, EntryDate).
     Dirección: SY_Person.Address.
@@ -26,7 +27,8 @@ CREATE OR ALTER PROCEDURE [dbo].[sp_pr_reportelistatrabajadores_web]
     @fecha_ingreso_hasta  VARCHAR(10)  = '',
     @activos              CHAR(1)      = 'Y',
     @cesados              CHAR(1)      = 'T',
-    @repunit              VARCHAR(20)  = '0'
+    @repunit              VARCHAR(20)  = '0',
+    @costcenter           VARCHAR(20)  = '0'
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -48,6 +50,8 @@ BEGIN
     SET @cesados = UPPER(LTRIM(RTRIM(ISNULL(@cesados, 'T'))));
     IF @cesados NOT IN ('T', 'Y', 'N') SET @cesados = 'T';
     IF RTRIM(ISNULL(@repunit, '')) = '' SET @repunit = '0';
+    SET @costcenter = LTRIM(RTRIM(ISNULL(@costcenter, '0')));
+    IF @costcenter = '' SET @costcenter = '0';
 
     IF @fecha_ingreso_desde <> '' AND ISDATE(@fecha_ingreso_desde) = 1
         SET @fd = CONVERT(DATE, @fecha_ingreso_desde, 120);
@@ -240,6 +244,7 @@ BEGIN
          OR (@cesados = 'N' AND e.CeaseDate IS NULL)
           )
       AND (@repunit = '0' OR p.ReplicationUnit = @repunit)
+      AND (@costcenter = '0' OR LTRIM(RTRIM(ISNULL(e.CostCenter, ''))) = @costcenter)
       AND (
             @fecha_ingreso_all = 'Y'
          OR (

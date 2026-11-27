@@ -36293,6 +36293,9 @@ def api_reporte_lista_trabajadores():
         activos = 'Y'
     cesados = _normalize_cesados_telecredito(body.get('cesados'))
     repunit = _normalize_replicationunit_asig(body.get('repunit') or body.get('unidad'))
+    costcenter = _normalize_replicationunit_asig(
+        body.get('costcenter') or body.get('centrocosto') or body.get('centro_costo')
+    )
     fecha_ingreso_all, fecha_ingreso_desde, fecha_ingreso_hasta = _trabajadores_fecha_ingreso_from_json(body)
 
     if not cia:
@@ -36377,11 +36380,11 @@ def api_reporte_lista_trabajadores():
             "EXEC sp_pr_reportelistatrabajadores_web "
             "@cia=?, @payrolltype=?, @nombre=?, @docnro=?, "
             "@fecha_ingreso_all=?, @fecha_ingreso_desde=?, @fecha_ingreso_hasta=?, "
-            "@activos=?, @cesados=?, @repunit=?",
+            "@activos=?, @cesados=?, @repunit=?, @costcenter=?",
             (
                 cia, payroll_type, nombre, docnro,
                 fecha_ingreso_all, fecha_desde_sql, fecha_hasta_sql,
-                activos, cesados, repunit,
+                activos, cesados, repunit, costcenter,
             ),
         )
         rows = _dicts_first_nonempty_resultset(cursor)
@@ -37964,7 +37967,7 @@ def api_prestamos_guardar_cuotas():
             or item.get('process')
             or 'F'
         ).strip().upper()[:1]
-        if proc not in ('F', 'G', 'V'):
+        if proc not in ('F', 'G', 'V', 'U'):
             proc = 'F'
         prperiod = _norm_prperiod_cuota(
             item.get('prperiod') or item.get('period') or item.get('periodo') or ''

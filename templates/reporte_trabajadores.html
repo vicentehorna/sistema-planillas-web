@@ -110,6 +110,12 @@
                     <option value="0">Todas</option>
                 </select>
             </div>
+            <div class="col-12 col-sm-6 col-md-4 col-lg-2">
+                <label for="cboCentroCosto" class="form-label small fw-bold text-muted">Centro de costo</label>
+                <select id="cboCentroCosto" class="form-select form-select-sm" disabled>
+                    <option value="0" selected>Todos</option>
+                </select>
+            </div>
             <div class="col-12 col-md-auto filtro-fecha-ingreso">
                 <label class="form-label small fw-bold text-muted d-block">Fecha de ingreso</label>
                 <div class="d-flex align-items-center flex-wrap gap-1">
@@ -164,6 +170,7 @@ document.addEventListener('DOMContentLoaded', async function () {
     const cboActivos = document.getElementById('cboActivos');
     const cboCesados = document.getElementById('cboCesados');
     const cboUnidad = document.getElementById('cboUnidad');
+    const cboCentroCosto = document.getElementById('cboCentroCosto');
     const chkFecha = document.getElementById('chkFechaIngreso');
     const txtDesde = document.getElementById('txtFechaIngresoDesde');
     const txtHasta = document.getElementById('txtFechaIngresoHasta');
@@ -241,13 +248,53 @@ document.addEventListener('DOMContentLoaded', async function () {
         });
     }
 
+    async function cargarCentrosCosto(cia) {
+        if (!cboCentroCosto) return false;
+        const prev = String(cboCentroCosto.value || '0').trim() || '0';
+        cboCentroCosto.innerHTML = '';
+        const optAll = document.createElement('option');
+        optAll.value = '0';
+        optAll.textContent = 'Todos';
+        cboCentroCosto.appendChild(optAll);
+        if (!cia) {
+            cboCentroCosto.value = '0';
+            cboCentroCosto.disabled = true;
+            return false;
+        }
+        cboCentroCosto.disabled = true;
+        try {
+            const res = await fetch(`/api/selectores/costcenter?cia=${encodeURIComponent(cia)}`);
+            const data = await res.json();
+            (Array.isArray(data) ? data : []).forEach((item) => {
+                const id = item.id != null ? String(item.id).trim() : '';
+                if (!id || id === '0') return;
+                const opt = document.createElement('option');
+                opt.value = id;
+                opt.textContent = item.text != null ? String(item.text) : id;
+                cboCentroCosto.appendChild(opt);
+            });
+            cboCentroCosto.disabled = false;
+            cboCentroCosto.value = Array.from(cboCentroCosto.options).some(
+                (o) => String(o.value).trim() === prev
+            ) ? prev : '0';
+            return true;
+        } catch (e) {
+            console.error(e);
+            cboCentroCosto.disabled = false;
+            cboCentroCosto.value = '0';
+            return false;
+        }
+    }
+
     async function cargarPlanillas() {
         const cia = CombosCarga.valorValido(cboCia);
         const planillaPrevia = CombosCarga.textoValido(cboPt);
         if (!cia) {
             CombosCarga.resetSelect(cboPt, 'Todos', '0');
+            await cargarCentrosCosto('');
             return false;
         }
+        await cargarCentrosCosto(cia);
         return CombosCarga.poblarSelect(`/api/selectores/planillas?cia=${encodeURIComponent(cia)}`, cboPt, {
             incluyeTodos: true, valorTodos: '0', textoTodos: 'Todos',
             alCargar: (sel) => CombosCarga.seleccionarPorTexto(sel, planillaPrevia)
@@ -330,6 +377,7 @@ document.addEventListener('DOMContentLoaded', async function () {
                     activos: cboActivos.value || 'Y',
                     cesados: cboCesados.value || 'T',
                     repunit: String(cboUnidad?.value || '0').trim() || '0',
+                    costcenter: String(cboCentroCosto?.value || '0').trim() || '0',
                     fecha_ingreso_activo: usarFecha,
                     fecha_ingreso_desde: usarFecha ? desde : '',
                     fecha_ingreso_hasta: usarFecha ? hasta : '',

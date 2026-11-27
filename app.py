@@ -295,6 +295,7 @@ def inject_now():
         'sql_database': sql_db,
         'es_multi_cia_apertura': sql_db_l in _APERTURAR_MASIVO_DBS,
         'es_garc': sql_db_l == 'hm_garc',
+        'es_globaltec': sql_db_l == 'hm_globaltec',
         'receta_only': es_vhornac,
         'mostrar_menu_receta': es_vhornac,
         'web_admin': bool(session.get('web_admin')) if current_user.is_authenticated else False,
@@ -11240,6 +11241,15 @@ def empresas_page():
     return render_template('maestro_empresas.html')
 
 
+@app.route('/configuraciones')
+@login_required
+def configuraciones_page():
+    """Configuraciones PR_Mapping2 por empresa (inicialmente préstamos)."""
+    if not _es_cliente_globaltec():
+        abort(404)
+    return render_template('maestro_configuraciones.html')
+
+
 @app.route('/conceptos')
 @login_required
 def conceptos_page():
@@ -21951,6 +21961,100 @@ def api_empresas_listado():
     except Exception as e:
         logging.exception("api_empresas_listado")
         return jsonify({"error": _concepto_error_sp_message(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/configuraciones/obtener', methods=['POST'])
+@login_required
+def api_configuraciones_obtener():
+    """sp_pr_obtenerconfiguracion_mapping2_web: PR_Mapping2 de una compañía."""
+    if not _es_cliente_globaltec():
+        return jsonify({"error": "Configuraciones solo está disponible en hm_globaltec."}), 403
+    body = request.get_json(silent=True) or {}
+    company = str(body.get('company') or body.get('cia') or '').strip()
+    if not company:
+        return jsonify({"error": "Seleccione una empresa."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("EXEC sp_pr_obtenerconfiguracion_mapping2_web @company=?", (company,))
+        rows = _dicts_first_nonempty_resultset(cursor)
+        if not rows:
+            return jsonify({"error": "La empresa no existe."}), 404
+        r = rows[0]
+        return jsonify({
+            "company": _jsonable_value(r.get('company')),
+            "description": _jsonable_value(r.get('description')),
+            "status": _jsonable_value(r.get('status')),
+            "loanconceptfinmes": _jsonable_value(r.get('loanconceptfinmes')),
+            "loanconceptvacaciones": _jsonable_value(r.get('loanconceptvacaciones')),
+            "loanconceptutilidades": _jsonable_value(r.get('loanconceptutilidades')),
+            "loanconceptgratificacion": _jsonable_value(r.get('loanconceptgratificacion')),
+            "xlastuser": _jsonable_value(r.get('xlastuser')),
+            "xlastdate": _jsonable_datetime_hm(r.get('xlastdate')),
+        })
+    except Exception as e:
+        logging.exception("api_configuraciones_obtener")
+        return jsonify({"error": str(e)}), 500
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
+@app.route('/api/configuraciones/guardar', methods=['POST'])
+@login_required
+def api_configuraciones_guardar():
+    """sp_pr_guardarconfiguracion_mapping2_web: conceptos de préstamo en PR_Mapping2."""
+    if not _es_cliente_globaltec():
+        return jsonify({"error": "Configuraciones solo está disponible en hm_globaltec."}), 403
+    body = request.get_json(silent=True) or {}
+    company = str(body.get('company') or body.get('cia') or '').strip()
+    if not company:
+        return jsonify({"error": "Seleccione una empresa."}), 400
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "EXEC sp_pr_guardarconfiguracion_mapping2_web "
+            "@company=?, @loanconceptfinmes=?, @loanconceptvacaciones=?, "
+            "@loanconceptutilidades=?, @loanconceptgratificacion=?, @xlastuser=?",
+            (
+                company,
+                str(body.get('loanconceptfinmes') or '').strip() or None,
+                str(body.get('loanconceptvacaciones') or '').strip() or None,
+                str(body.get('loanconceptutilidades') or '').strip() or None,
+                str(body.get('loanconceptgratificacion') or '').strip() or None,
+                _xlastuser_id(),
+            ),
+        )
+        rows = _dicts_first_nonempty_resultset(cursor)
+        _drain_pyodbc_cursor(cursor)
+        conn.commit()
+        mensaje = (rows[0].get('mensaje') if rows else None) or 'Configuración guardada correctamente.'
+        return jsonify({"ok": True, "mensaje": mensaje, "company": company})
+    except Exception as e:
+        if conn:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        logging.exception("api_configuraciones_guardar")
+        err = str(e)
+        if 'RAISERROR' in err or '50000' in err:
+            parts = err.split(']')
+            if len(parts) > 1:
+                err = parts[-1].strip(" ()'\"")
+        return jsonify({"error": err}), 500
     finally:
         if conn:
             try:

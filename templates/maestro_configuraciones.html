@@ -1,0 +1,585 @@
+{% extends "layout.html" %}
+
+{% block title %}Configuraciones{% endblock %}
+
+{% block extra_css %}
+<style>
+    .cfg-page {
+        display: flex;
+        flex-direction: column;
+        gap: 0.65rem;
+        min-height: 0;
+        height: calc(100vh - 7.5rem);
+        max-height: calc(100vh - 7.5rem);
+        overflow: hidden;
+    }
+    .cfg-filtros { flex-shrink: 0; }
+    .cfg-filtros .card-body { padding: 0.7rem 0.85rem; }
+    .cfg-layout {
+        display: flex;
+        gap: 0.85rem;
+        align-items: stretch;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .cfg-panel-izq {
+        flex: 0 0 38%;
+        max-width: 38%;
+        min-width: 260px;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .cfg-panel-der {
+        flex: 1 1 62%;
+        min-width: 0;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .cfg-grilla {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: hidden;
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+    }
+    .cfg-grilla-scroll {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+    .cfg-grilla-footer {
+        flex-shrink: 0;
+        padding: 0.3rem 0.5rem;
+        border-top: 1px solid #d7dee8;
+        background: #f1f4f8;
+        font-size: 0.8rem;
+        color: #6c757d;
+    }
+    .table-cfg-lista {
+        font-size: 11px;
+        white-space: nowrap;
+        margin-bottom: 0;
+    }
+    .table-cfg-lista th,
+    .table-cfg-lista td {
+        padding: 0.25rem 0.45rem;
+        vertical-align: middle;
+        border-color: #eef1f5;
+    }
+    .table-cfg-lista thead th {
+        position: sticky;
+        top: 0;
+        background: #f1f4f8;
+        color: #1a4b84;
+        font-weight: 700;
+        z-index: 2;
+        border-bottom: 1px solid #d7dee8;
+    }
+    .table-cfg-lista tbody tr.cfg-row { cursor: pointer; }
+    .table-cfg-lista tbody tr.cfg-row:hover { background: #eef4fb; }
+    .table-cfg-lista tbody tr.cfg-row.active {
+        background: #e7f1ff;
+        box-shadow: inset 3px 0 0 #1a4b84;
+    }
+    .table-cfg-lista tbody tr.cfg-row.active td { font-weight: 600; }
+    .table-cfg-lista .col-codigo { width: 4.5rem; }
+    .table-cfg-lista .col-nombre {
+        min-width: 10rem;
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .cfg-badge-estado {
+        font-size: 10px;
+        font-weight: 600;
+        padding: 0.1rem 0.4rem;
+        border-radius: 0.6rem;
+    }
+    .cfg-badge-estado.activo { background: #d1e7dd; color: #0f5132; }
+    .cfg-badge-estado.inactivo { background: #f8d7da; color: #842029; }
+    .cfg-dw-panel {
+        border: 1px solid #d7dee8;
+        border-radius: 0.4rem;
+        background: #fff;
+        box-shadow: 0 1px 2px rgba(26, 75, 132, 0.06);
+        overflow: hidden;
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+    .cfg-dw-titlebar {
+        background: #1a4b84;
+        padding: 0.45rem 0.75rem;
+        min-height: 2.1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.5rem;
+        flex-shrink: 0;
+        flex-wrap: wrap;
+    }
+    .cfg-dw-title-text {
+        color: #fff;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        font-size: 0.74rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    .cfg-titlebar-actions {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        margin-left: auto;
+    }
+    .cfg-btn-guardar {
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.78rem;
+        padding: 0.2rem 0.75rem;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+    }
+    .cfg-msg-guardado {
+        margin: 0;
+        min-width: 0;
+        max-width: 18rem;
+        font-size: 0.75rem;
+    }
+    .cfg-dw-body {
+        background: #fff;
+        padding: 0.7rem 0.75rem 0.85rem;
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow: auto;
+    }
+    .cfg-form-card .form-label {
+        font-size: 0.72rem;
+        margin-bottom: 0.12rem;
+    }
+    .cfg-form-card .form-control-sm,
+    .cfg-form-card .form-select-sm { font-size: 0.8rem; }
+    .cfg-seccion {
+        font-size: 0.72rem;
+        font-weight: 700;
+        color: #1a4b84;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        border-bottom: 1px solid #d7dee8;
+        padding-bottom: 0.15rem;
+        margin: 0.35rem 0 0.1rem;
+    }
+    .cfg-hint {
+        font-size: 0.72rem;
+        color: #6c757d;
+        margin-top: 0.15rem;
+    }
+    .cfg-auditoria .form-control {
+        background: #f1f4f8;
+        color: #495057;
+    }
+    .cfg-placeholder {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex: 1 1 auto;
+        min-height: 0;
+        color: #6c757d;
+        text-align: center;
+        border: 1px dashed #ced4da;
+        border-radius: 0.5rem;
+        background: #fafbfc;
+    }
+    @media (max-width: 991.98px) {
+        .cfg-page { height: auto; max-height: none; overflow: visible; }
+        .cfg-layout { flex-direction: column; overflow: visible; }
+        .cfg-panel-izq { flex: 1 1 auto; max-width: 100%; }
+        .cfg-grilla { max-height: 260px; }
+        .cfg-panel-der { min-height: 22rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="cfg-page">
+<div class="card shadow-sm border-0 cfg-filtros">
+    <div class="card-body">
+        <form id="frmFiltrosCfg" class="row g-2 align-items-end">
+            <div class="col-12 col-md-5 col-lg-4">
+                <label for="txtBuscarCfg" class="form-label small fw-bold text-muted mb-1">Buscar empresa</label>
+                <input type="search" id="txtBuscarCfg" class="form-control form-control-sm" placeholder="Código, razón social o RUC..." autocomplete="off">
+            </div>
+            <div class="col-6 col-md-3 col-lg-2">
+                <label for="cboFiltroEstadoCfg" class="form-label small fw-bold text-muted mb-1">Estado</label>
+                <select id="cboFiltroEstadoCfg" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    <option value="A" selected>Activos</option>
+                    <option value="I">Inactivos</option>
+                </select>
+            </div>
+            <div class="col-12 col-md-auto d-flex align-items-end flex-wrap gap-2">
+                <button type="submit" class="btn btn-primary btn-sm px-3">
+                    <i class="bi bi-search"></i> Consultar
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="cfg-layout">
+    <aside class="cfg-panel-izq">
+        <div class="cfg-grilla">
+            <div class="cfg-grilla-scroll" id="grillaScrollCfg" tabindex="0"
+                 role="listbox" aria-label="Lista de empresas">
+                <table class="table table-sm table-hover table-cfg-lista align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="col-codigo">Código</th>
+                            <th class="col-nombre">Compañía</th>
+                            <th style="width:4.5rem;text-align:center;">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tbodyCfgEmpresas">
+                        <tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div id="lblConteoCfg" class="cfg-grilla-footer">0 registros</div>
+        </div>
+    </aside>
+
+    <section class="cfg-panel-der">
+        <div id="placeholderCfg" class="cfg-placeholder">
+            <div>
+                <i class="bi bi-gear fs-2 d-block mb-2 opacity-50"></i>
+                Seleccione una empresa de la lista.
+            </div>
+        </div>
+
+        <div id="panelEdicionCfg" class="cfg-dw-panel cfg-form-card d-none">
+            <div class="cfg-dw-titlebar">
+                <span class="cfg-dw-title-text" id="tituloEdicionCfg">Configuración</span>
+                <div id="msgGuardadoCfg" class="cfg-msg-guardado d-none" role="status" aria-live="polite"></div>
+                <div class="cfg-titlebar-actions">
+                    <button type="button" class="btn btn-success btn-sm cfg-btn-guardar" id="btnGuardarCfg" title="Ctrl+S">
+                        <i class="bi bi-save"></i> Guardar
+                    </button>
+                </div>
+            </div>
+            <div class="cfg-dw-body">
+                <form id="frmCfg" class="row g-2" autocomplete="off">
+                    <input type="hidden" id="hidCompanyCfg" value="">
+
+                    <div class="col-4 col-md-2">
+                        <label for="txtCompanyCfg" class="form-label fw-semibold text-muted">Código</label>
+                        <input type="text" id="txtCompanyCfg" class="form-control form-control-sm" readonly>
+                    </div>
+                    <div class="col-8 col-md-10">
+                        <label for="txtDescriptionCfg" class="form-label fw-semibold text-muted">Compañía</label>
+                        <input type="text" id="txtDescriptionCfg" class="form-control form-control-sm" readonly>
+                    </div>
+
+                    <div class="col-12 cfg-seccion">Préstamos — conceptos por proceso</div>
+                    <div class="col-12">
+                        <p class="cfg-hint mb-1">
+                            Concepto que se inserta en asignación al amortizar la cuota según el proceso elegido en Préstamos
+                            (<code class="small">flagliquidation</code>: F / V / U / G.
+                        </p>
+                    </div>
+
+                    <div class="col-12 col-md-6">
+                        <label for="cboLoanFinMes" class="form-label fw-semibold text-muted">Fin de mes</label>
+                        <select id="cboLoanFinMes" class="form-select form-select-sm">
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="cboLoanVacaciones" class="form-label fw-semibold text-muted">Vacaciones</label>
+                        <select id="cboLoanVacaciones" class="form-select form-select-sm">
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="cboLoanUtilidades" class="form-label fw-semibold text-muted">Utilidades</label>
+                        <select id="cboLoanUtilidades" class="form-select form-select-sm">
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label for="cboLoanGratificacion" class="form-label fw-semibold text-muted">Gratificación</label>
+                        <select id="cboLoanGratificacion" class="form-select form-select-sm">
+                            <option value="">Seleccione...</option>
+                        </select>
+                    </div>
+
+                    <div class="col-12 cfg-seccion">Auditoría</div>
+                    <div class="col-12">
+                        <div class="row g-2 cfg-auditoria">
+                            <div class="col-6 col-md-6">
+                                <label for="txtXLastUserCfg" class="form-label fw-semibold text-muted">Modificado por</label>
+                                <input type="text" id="txtXLastUserCfg" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                            <div class="col-6 col-md-6">
+                                <label for="txtXLastDateCfg" class="form-label fw-semibold text-muted">Fecha modificación</label>
+                                <input type="text" id="txtXLastDateCfg" class="form-control form-control-sm" readonly tabindex="-1">
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </section>
+</div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const URL_LISTADO = {{ url_for('api_empresas_listado') | tojson }};
+    const URL_OBTENER = {{ url_for('api_configuraciones_obtener') | tojson }};
+    const URL_GUARDAR = {{ url_for('api_configuraciones_guardar') | tojson }};
+    const URL_CONCEPTOS = {{ url_for('api_conceptos') | tojson }};
+
+    const tbody = document.getElementById('tbodyCfgEmpresas');
+    const lblConteo = document.getElementById('lblConteoCfg');
+    const placeholder = document.getElementById('placeholderCfg');
+    const panel = document.getElementById('panelEdicionCfg');
+    const msgGuardado = document.getElementById('msgGuardadoCfg');
+    let empresasCache = [];
+    let seleccionada = null;
+    let msgTimer = null;
+    const conceptosCache = {};
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function hmAdvertencia(mensaje) {
+        if (window.HmUi) HmUi.advertencia(mensaje);
+        else alert(mensaje);
+    }
+    function hmError(mensaje) {
+        if (window.HmUi) HmUi.error(mensaje);
+        else alert(mensaje);
+    }
+    function hmExito(mensaje) {
+        if (window.HmUi) HmUi.exito(mensaje);
+        else alert(mensaje);
+    }
+
+    async function leerJson(res) {
+        const raw = await res.text();
+        let data = {};
+        if (raw) {
+            try { data = JSON.parse(raw); }
+            catch (e) { throw new Error('Respuesta no válida del servidor.'); }
+        }
+        if (!res.ok) throw new Error(data.error || 'Error en la solicitud.');
+        if (data.error) throw new Error(data.error);
+        return data;
+    }
+
+    function mostrarMensaje(texto, tipo) {
+        if (!msgGuardado) return;
+        if (window.HmUi) {
+            HmUi.showFormBanner(msgGuardado, texto || 'Guardado.', tipo || 'success', {
+                delay: 6000, scrollIntoView: false,
+            });
+            return;
+        }
+        if (msgTimer) clearTimeout(msgTimer);
+        msgGuardado.textContent = texto || 'Guardado.';
+        msgGuardado.classList.remove('d-none');
+        msgTimer = setTimeout(() => msgGuardado.classList.add('d-none'), 6000);
+    }
+
+    function formatearFecha(valor) {
+        if (!valor) return '';
+        const s = String(valor).trim();
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+        if (m) return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
+        return s;
+    }
+
+    function fillSelect(selectEl, items, selected) {
+        const cur = selected != null ? String(selected) : '';
+        selectEl.innerHTML = '<option value="">Seleccione...</option>';
+        (items || []).forEach((it) => {
+            const id = it.id != null ? String(it.id) : '';
+            const text = it.text != null ? String(it.text) : id;
+            if (!id) return;
+            const opt = document.createElement('option');
+            opt.value = id;
+            opt.textContent = text;
+            if (id === cur) opt.selected = true;
+            selectEl.appendChild(opt);
+        });
+        if (cur && !Array.from(selectEl.options).some((o) => o.value === cur)) {
+            const opt = document.createElement('option');
+            opt.value = cur;
+            opt.textContent = cur + ' (no listado)';
+            opt.selected = true;
+            selectEl.appendChild(opt);
+        }
+    }
+
+    async function cargarConceptos(cia) {
+        const key = String(cia || '').trim();
+        if (!key) return [];
+        if (conceptosCache[key]) return conceptosCache[key];
+        const res = await fetch(`${URL_CONCEPTOS}?cia=${encodeURIComponent(key)}`);
+        const data = await res.json();
+        const items = Array.isArray(data) ? data : [];
+        conceptosCache[key] = items;
+        return items;
+    }
+
+    function renderLista(rows) {
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Sin empresas</td></tr>';
+            lblConteo.textContent = '0 registros';
+            return;
+        }
+        tbody.innerHTML = rows.map((r) => {
+            const activo = seleccionada && seleccionada.company === r.company;
+            const est = String(r.status || r.estado || 'A').toUpperCase() === 'I' ? 'I' : 'A';
+            const badge = est === 'A'
+                ? '<span class="cfg-badge-estado activo">Activo</span>'
+                : '<span class="cfg-badge-estado inactivo">Inactivo</span>';
+            return `<tr class="cfg-row ${activo ? 'active' : ''}" data-company="${escHtml(r.company || '')}">
+                <td>${escHtml(r.company || '')}</td>
+                <td title="${escHtml(r.description || '')}">${escHtml(r.description || '')}</td>
+                <td class="text-center">${badge}</td>
+            </tr>`;
+        }).join('');
+        lblConteo.textContent = `${rows.length} registro${rows.length === 1 ? '' : 's'}`;
+        tbody.querySelectorAll('.cfg-row').forEach((tr) => {
+            tr.addEventListener('click', async function () {
+                const company = this.getAttribute('data-company');
+                const row = empresasCache.find((x) => x.company === company);
+                if (row) await seleccionarEmpresa(row);
+            });
+        });
+    }
+
+    async function cargarListado() {
+        tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3">Cargando...</td></tr>';
+        try {
+            const res = await fetch(URL_LISTADO, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    busqueda: document.getElementById('txtBuscarCfg').value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            let rows = data.rows || [];
+            const filtro = document.getElementById('cboFiltroEstadoCfg').value.trim().toUpperCase();
+            if (filtro) {
+                rows = rows.filter((r) => String(r.status || r.estado || 'A').toUpperCase() === filtro);
+            }
+            empresasCache = rows;
+            renderLista(rows);
+        } catch (err) {
+            tbody.innerHTML = `<tr><td colspan="3" class="text-center text-danger py-3">${escHtml(err.message)}</td></tr>`;
+        }
+    }
+
+    function mostrarPanel(visible) {
+        placeholder.classList.toggle('d-none', visible);
+        panel.classList.toggle('d-none', !visible);
+    }
+
+    async function seleccionarEmpresa(row) {
+        if (!row || !row.company) return;
+        seleccionada = row;
+        renderLista(empresasCache);
+        mostrarPanel(true);
+        document.getElementById('tituloEdicionCfg').textContent = `Configuración — ${row.company}`;
+        document.getElementById('hidCompanyCfg').value = row.company;
+        document.getElementById('txtCompanyCfg').value = row.company || '';
+        document.getElementById('txtDescriptionCfg').value = row.description || '';
+
+        try {
+            const [conceptos, res] = await Promise.all([
+                cargarConceptos(row.company),
+                fetch(URL_OBTENER, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ company: row.company }),
+                }),
+            ]);
+            const data = await leerJson(res);
+            fillSelect(document.getElementById('cboLoanFinMes'), conceptos, data.loanconceptfinmes);
+            fillSelect(document.getElementById('cboLoanVacaciones'), conceptos, data.loanconceptvacaciones);
+            fillSelect(document.getElementById('cboLoanUtilidades'), conceptos, data.loanconceptutilidades);
+            fillSelect(document.getElementById('cboLoanGratificacion'), conceptos, data.loanconceptgratificacion);
+            document.getElementById('txtXLastUserCfg').value = data.xlastuser || '';
+            document.getElementById('txtXLastDateCfg').value = formatearFecha(data.xlastdate);
+            if (data.description) document.getElementById('txtDescriptionCfg').value = data.description;
+        } catch (err) {
+            hmError(err.message || 'No se pudo cargar la configuración.');
+        }
+    }
+
+    async function guardarCfg() {
+        const company = document.getElementById('hidCompanyCfg').value.trim();
+        if (!company) {
+            hmAdvertencia('Seleccione una empresa.');
+            return;
+        }
+        try {
+            const res = await fetch(URL_GUARDAR, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    company,
+                    loanconceptfinmes: document.getElementById('cboLoanFinMes').value.trim(),
+                    loanconceptvacaciones: document.getElementById('cboLoanVacaciones').value.trim(),
+                    loanconceptutilidades: document.getElementById('cboLoanUtilidades').value.trim(),
+                    loanconceptgratificacion: document.getElementById('cboLoanGratificacion').value.trim(),
+                }),
+            });
+            const data = await leerJson(res);
+            mostrarMensaje(data.mensaje || 'Configuración guardada correctamente.');
+            hmExito(data.mensaje || 'Configuración guardada correctamente.');
+            const row = empresasCache.find((x) => x.company === company);
+            if (row) await seleccionarEmpresa(row);
+        } catch (err) {
+            hmError(err.message || 'No se pudo guardar.');
+        }
+    }
+
+    document.getElementById('frmFiltrosCfg').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        await cargarListado();
+    });
+    document.getElementById('cboFiltroEstadoCfg').addEventListener('change', cargarListado);
+    document.getElementById('btnGuardarCfg').addEventListener('click', guardarCfg);
+    document.addEventListener('keydown', function (e) {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+            if (!panel.classList.contains('d-none')) {
+                e.preventDefault();
+                guardarCfg();
+            }
+        }
+    });
+
+    cargarListado();
+});
+</script>
+{% endblock %}
